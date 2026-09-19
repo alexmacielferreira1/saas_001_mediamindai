@@ -1,0 +1,128 @@
+{
+  "product": "mediamind",
+  "current_milestone": "M0",
+  "milestones": {
+    "M0": {
+      "name": "bootstrap",
+      "status": "failed",
+      "checks": {
+        "backend_lint": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:24:52.826523+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/backend_lint.log"
+        },
+        "backend_format": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:24:53.124982+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/backend_format.log"
+        },
+        "unit_tests": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:24:53.436125+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/unit_tests.log"
+        },
+        "migration": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:24:56.617015+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/migration.log"
+        },
+        "database_integration": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:24:58.628051+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/database_integration.log"
+        },
+        "dependency_consistency": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:25:01.058082+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/dependency_consistency.log"
+        },
+        "frontend_build": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:25:02.495077+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/frontend_build.log"
+        },
+        "frontend_lint": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:25:08.919571+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/frontend_lint.log"
+        },
+        "frontend_typecheck": {
+          "status": "failed",
+          "updated_at": "2026-09-19T17:25:34.360792+00:00",
+          "notes": "Exit 2; evidence: .runtime/checks/frontend_typecheck.log"
+        },
+        "http_smoke": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:25:37.936453+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/http_smoke.log"
+        },
+        "original_frontend_integrity": {
+          "status": "passed",
+          "updated_at": "2026-09-19T17:25:38.910030+00:00",
+          "notes": "288 original files; 0 changed or missing. "
+        },
+        "frontend_functional_validation": {
+          "status": "blocked",
+          "updated_at": "2026-09-19T17:25:38.910030+00:00",
+          "notes": "Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient."
+        },
+        "git_clean_at_check": {
+          "status": "pending",
+          "updated_at": "2026-09-19T17:25:38.910030+00:00",
+          "notes": "Snapshot before writing this report. Verify and commit reviewed work separately."
+        }
+      },
+      "updated_at": "2026-09-19T17:25:38.910030+00:00",
+      "notes": "Partial M0; unresolved gates. Do not advance to M1."
+    },
+    "M1": {
+      "name": "foundation",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M2": {
+      "name": "hub_ready",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M3": {
+      "name": "domain_mvp",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M4": {
+      "name": "functional_parity",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M5": {
+      "name": "quality",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M6": {
+      "name": "staging",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    },
+    "M7": {
+      "name": "production",
+      "status": "pending",
+      "checks": {},
+      "updated_at": null,
+      "notes": "Aguardando marco anterior"
+    }
+  }
+}
