@@ -1,0 +1,70 @@
+{
+  "name": "Release",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "rascunho",
+        "publicado",
+        "agendado"
+      ],
+      "default": "rascunho"
+    },
+    "veiculos": {
+      "type": "number",
+      "default": 0,
+      "description": "N\u00famero de ve\u00edculos que publicaram o release"
+    },
+    "data": {
+      "type": "string",
+      "default": "",
+      "description": "Data leg\u00edvel (ex.: 10/09)"
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "titulo",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

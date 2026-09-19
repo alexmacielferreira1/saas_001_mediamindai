@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 215 50% 7%;
+    --foreground: 213 31% 91%;
+    --card: 213 40% 12%;
+    --card-foreground: 210 40% 98%;
+    --popover: 213 40% 12%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 191 83% 68%;
+    --primary-foreground: 205 80% 10%;
+    --secondary: 215 45% 18%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 35% 18%;
+    --muted-foreground: 210 20% 65%;
+    --accent: 215 45% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 35% 22%;
+    --input: 215 35% 22%;
+    --ring: 191 83% 68%;
+    --radius: 0.75rem;
+    --font-heading: 'Sora', ui-sans-serif, system-ui, sans-serif;
+    --font-body: 'Sora', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Sora', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    --sidebar-background: 213 55% 7%;
+    --sidebar-foreground: 210 30% 80%;
+    --sidebar-primary: 191 83% 68%;
+    --sidebar-primary-foreground: 205 80% 10%;
+    --sidebar-accent: 215 40% 15%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 35% 20%;
+    --sidebar-ring: 191 83% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    background: radial-gradient(circle at 15% 0%, #17325855, transparent 50%), hsl(213 50% 7%);
+    min-height: 100vh;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #21374f; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2a4a68; }
+}
+
+@layer components {
+  .mm-panel {
+    @apply rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 backdrop-blur-sm;
+  }
+  .mm-panel-title {
+    @apply mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400;
+  }
+  .mm-badge {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold;
+  }
+  .mm-badge-success { @apply bg-emerald-400/15 text-emerald-300; }
+  .mm-badge-pending { @apply bg-amber-400/15 text-amber-300; }
+  .mm-badge-info { @apply bg-sky-400/15 text-sky-300; }
+  .mm-badge-error { @apply bg-rose-400/15 text-rose-300; }
+  .mm-badge-violet { @apply bg-violet-400/15 text-violet-300; }
+  .mm-card-hover {
+    @apply transition-all duration-200 hover:border-sky-500/40 hover:-translate-y-0.5;
+  }
+}

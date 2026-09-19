@@ -1,0 +1,89 @@
+{
+  "name": "DireitoAsset",
+  "type": "object",
+  "properties": {
+    "asset_id": {
+      "type": "number",
+      "description": "ID do asset"
+    },
+    "asset_title": {
+      "type": "string",
+      "default": "",
+      "description": "T\u00edtulo denormalizado"
+    },
+    "titular": {
+      "type": "string",
+      "default": "",
+      "description": "Detentor dos direitos"
+    },
+    "tipo_direito": {
+      "type": "string",
+      "enum": [
+        "exclusivo",
+        "nao_exclusivo",
+        "cedido",
+        "dominio_publico"
+      ],
+      "default": "cedido"
+    },
+    "vigencia_inicio": {
+      "type": "string",
+      "format": "date",
+      "default": ""
+    },
+    "vigencia_fim": {
+      "type": "string",
+      "format": "date",
+      "default": "",
+      "description": "Vazio = vig\u00eancia indeterminada"
+    },
+    "restricoes": {
+      "type": "string",
+      "default": "",
+      "description": "Restri\u00e7\u00f5es de uso (geogr\u00e1fica, prazo, plataformas)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativo",
+        "expirado",
+        "pendente",
+        "renovacao"
+      ],
+      "default": "ativo"
+    }
+  },
+  "required": [
+    "asset_id",
+    "tipo_direito",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

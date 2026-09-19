@@ -1,0 +1,72 @@
+{
+  "name": "PendenciaCorp",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "segmento": {
+      "type": "string",
+      "description": "Segmento do Corp (producao, redacao, design, assessoria, audiovisual, revistas, endomarketing)"
+    },
+    "titulo": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pendente",
+        "em_andamento",
+        "concluido"
+      ],
+      "default": "pendente"
+    },
+    "responsavel": {
+      "type": "string",
+      "default": ""
+    },
+    "contexto": {
+      "type": "string",
+      "default": ""
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "segmento",
+    "titulo",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

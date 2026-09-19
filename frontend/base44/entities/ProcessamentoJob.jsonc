@@ -1,0 +1,84 @@
+{
+  "name": "ProcessamentoJob",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "Identifica\u00e7\u00e3o do processamento"
+    },
+    "modulo": {
+      "type": "string",
+      "default": "transcricao",
+      "description": "M\u00f3dulo respons\u00e1vel (transcricao, ocr, yolo, proxy, thumbnail)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "processing",
+        "waiting_review",
+        "completed",
+        "partial",
+        "failed",
+        "retrying",
+        "cancelled"
+      ],
+      "default": "queued"
+    },
+    "progresso": {
+      "type": "number",
+      "default": 0,
+      "description": "0-100"
+    },
+    "erro": {
+      "type": "string",
+      "default": "",
+      "description": "\u00daltimo erro leg\u00edvel"
+    },
+    "tentativas": {
+      "type": "number",
+      "default": 0
+    },
+    "asset_title": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "required": [
+    "titulo",
+    "modulo",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

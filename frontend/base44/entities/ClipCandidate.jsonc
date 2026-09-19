@@ -1,0 +1,185 @@
+{
+  "name": "ClipCandidate",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "asset_id": {
+      "type": "string",
+      "description": "ID do Asset master analisado"
+    },
+    "processing_job_id": {
+      "type": "string",
+      "default": "",
+      "description": "ProcessamentoJob que gerou a an\u00e1lise"
+    },
+    "start_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "end_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "duration": {
+      "type": "number",
+      "default": 0
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "summary": {
+      "type": "string",
+      "default": ""
+    },
+    "reason": {
+      "type": "string",
+      "default": ""
+    },
+    "overall_score": {
+      "type": "number",
+      "default": 0
+    },
+    "hook_score": {
+      "type": "number",
+      "default": 0
+    },
+    "hook_grade": {
+      "type": "string",
+      "default": ""
+    },
+    "hook_explanation": {
+      "type": "string",
+      "default": ""
+    },
+    "flow_score": {
+      "type": "number",
+      "default": 0
+    },
+    "flow_grade": {
+      "type": "string",
+      "default": ""
+    },
+    "flow_explanation": {
+      "type": "string",
+      "default": ""
+    },
+    "value_score": {
+      "type": "number",
+      "default": 0
+    },
+    "value_grade": {
+      "type": "string",
+      "default": ""
+    },
+    "value_explanation": {
+      "type": "string",
+      "default": ""
+    },
+    "trend_score": {
+      "type": "number",
+      "default": 0
+    },
+    "trend_grade": {
+      "type": "string",
+      "default": ""
+    },
+    "trend_explanation": {
+      "type": "string",
+      "default": ""
+    },
+    "relevance_score": {
+      "type": "number",
+      "default": 0
+    },
+    "autonomy_score": {
+      "type": "number",
+      "default": 0
+    },
+    "editorial_score": {
+      "type": "number",
+      "default": 0
+    },
+    "keywords": {
+      "type": "string",
+      "default": ""
+    },
+    "suggested_platforms": {
+      "type": "string",
+      "default": ""
+    },
+    "suggested_in_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "suggested_out_ms": {
+      "type": "number",
+      "default": 0
+    },
+    "prompt": {
+      "type": "string",
+      "default": ""
+    },
+    "purpose": {
+      "type": "string",
+      "default": "social"
+    },
+    "rank": {
+      "type": "number",
+      "default": 0
+    },
+    "selected": {
+      "type": "boolean",
+      "default": false
+    },
+    "favorite": {
+      "type": "boolean",
+      "default": false
+    },
+    "rejected": {
+      "type": "boolean",
+      "default": false
+    },
+    "promoted_clip_id": {
+      "type": "string",
+      "default": "",
+      "description": "ID do Clip criado quando o candidato \u00e9 promovido"
+    }
+  },
+  "required": [
+    "asset_id",
+    "title"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

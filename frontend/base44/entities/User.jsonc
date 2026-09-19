@@ -1,0 +1,30 @@
+{
+  "properties": {
+    "role": {
+      "type": "string",
+      "description": "The role of the user in the app",
+      "enum": [
+        "admin",
+        "user"
+      ]
+    },
+    "cargo": {
+      "type": "string",
+      "default": "",
+      "description": "Cargo/fun\u00e7\u00e3o no IAcervo Corp (producer, editor, cedoc, coordenador_comunicacao, admin, ...). Vazio = sem acesso ao Corp (negar por padr\u00e3o). Mapeado para user.role consumido pelo RBAC em permissions.js / roleCatalog.js."
+    },
+    "empresa_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "IDs das empresas (tenants) que o usu\u00e1rio pode acessar. Vazio + role admin = acesso a todas as empresas; vazio + usu\u00e1rio comum = sem empresa vinculada."
+    }
+  },
+  "required": [
+    "role"
+  ],
+  "name": "User",
+  "type": "object"
+}

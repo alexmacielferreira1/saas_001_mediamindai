@@ -1,0 +1,132 @@
+{
+  "name": "Asset",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "project_id": {
+      "type": "number",
+      "default": null
+    },
+    "filename": {
+      "type": "string",
+      "default": ""
+    },
+    "asset_type": {
+      "type": "string",
+      "enum": [
+        "video",
+        "audio",
+        "image",
+        "document"
+      ],
+      "default": "video"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "reviewed",
+        "indexed",
+        "processing",
+        "ready",
+        "pending"
+      ],
+      "default": "indexed"
+    },
+    "duration": {
+      "type": "number",
+      "default": 0
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "description": {
+      "type": "string",
+      "default": ""
+    },
+    "category": {
+      "type": "string",
+      "default": ""
+    },
+    "location": {
+      "type": "string",
+      "default": ""
+    },
+    "icon": {
+      "type": "string",
+      "default": "\ud83c\udfac"
+    },
+    "people": {
+      "type": "string",
+      "default": ""
+    },
+    "subjects": {
+      "type": "string",
+      "default": ""
+    },
+    "ai_status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "pending",
+        "processing",
+        "failed"
+      ],
+      "default": "pending"
+    },
+    "program_name": {
+      "type": "string",
+      "default": ""
+    },
+    "reference_date": {
+      "type": "string",
+      "default": ""
+    },
+    "file_size": {
+      "type": "number",
+      "default": 0
+    },
+    "path": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "required": [
+    "filename",
+    "asset_type",
+    "status",
+    "title"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "Jornalista",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "nome": {
+      "type": "string",
+      "default": ""
+    },
+    "veiculo": {
+      "type": "string",
+      "default": ""
+    },
+    "area": {
+      "type": "string",
+      "default": ""
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "nome"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

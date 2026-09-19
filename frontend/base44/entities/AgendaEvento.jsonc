@@ -1,0 +1,126 @@
+{
+  "name": "AgendaEvento",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "programa": {
+      "type": "string",
+      "default": ""
+    },
+    "episodio": {
+      "type": "string",
+      "default": ""
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "gravacao",
+        "aprovacao",
+        "publicacao",
+        "edicao"
+      ],
+      "default": "gravacao",
+      "description": "Tipo do compromisso da agenda"
+    },
+    "day": {
+      "type": "number",
+      "default": 0,
+      "description": "Dia do m\u00eas (1-31)"
+    },
+    "horario": {
+      "type": "string",
+      "default": ""
+    },
+    "duracao_prevista": {
+      "type": "string",
+      "default": ""
+    },
+    "estudio": {
+      "type": "string",
+      "default": ""
+    },
+    "convidado": {
+      "type": "string",
+      "default": ""
+    },
+    "convidado_cg": {
+      "type": "string",
+      "default": ""
+    },
+    "equipe": {
+      "type": "string",
+      "default": "",
+      "description": "Nomes separados por v\u00edrgula"
+    },
+    "equipamentos": {
+      "type": "string",
+      "default": ""
+    },
+    "status": {
+      "type": "string",
+      "default": ""
+    },
+    "pauta": {
+      "type": "string",
+      "default": ""
+    },
+    "descricao": {
+      "type": "string",
+      "default": ""
+    },
+    "tone": {
+      "type": "string",
+      "default": "",
+      "description": "Classe tailwind da cor do ponto no calend\u00e1rio"
+    },
+    "thumb": {
+      "type": "string",
+      "default": "",
+      "description": "URL da miniatura do programa"
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "titulo",
+    "type"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "AprovacaoItem",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "segmento": {
+      "type": "string",
+      "default": ""
+    },
+    "tipo": {
+      "type": "string",
+      "default": "",
+      "description": "Edi\u00e7\u00e3o, Arte, Release, Mat\u00e9ria, Comunicado..."
+    },
+    "solicitante": {
+      "type": "string",
+      "default": ""
+    },
+    "prioridade": {
+      "type": "string",
+      "enum": [
+        "alta",
+        "media",
+        "baixa"
+      ],
+      "default": "media"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pendente",
+        "aprovado",
+        "reprovado"
+      ],
+      "default": "pendente"
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "titulo",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

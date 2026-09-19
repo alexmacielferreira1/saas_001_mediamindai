@@ -1,0 +1,274 @@
+import React, { useState } from 'react';
+import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useToast } from '@/components/ui/use-toast';
+import { base44 } from '@/api/base44Client';
+import { useProducaoProjetos, updateProjeto, transicionar } from '../../lib/producaoStore';
+import { useModoTransicao, setModoTransicao, TRANSITION_MODES } from '../../lib/producaoConfig';
+import { useAuth } from '../../auth';
+
+// Gravações (Produção): o videomaker vê a gravação atribuída, marca o status
+// (agendada → gravando → gravada), sobe os arquivos gravados (drag-and-drop/ingest)
+// e sinaliza problema/regravação. A transição pra Em edição segue o modo da empresa:
+// editor puxa (padrão), auto-avança ao subir material, ou produtor designa editor.
+function formatBytes(b) {
+  if (!b) return '—';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0; let n = b;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(1)} ${u[i]}`;
+}
+
+const GRAV_STATUS = {
+  agendada: { label: 'Agendada', tone: 'bg-sky-500/15 text-sky-300' },
+  gravando: { label: 'Gravando', tone: 'bg-amber-500/15 text-amber-300' },
+  gravada: { label: 'Gravada', tone: 'bg-emerald-500/15 text-emerald-300' },
+  problema: { label: 'Problema', tone: 'bg-rose-500/15 text-rose-300' },
+};
+
+export default function GravacoesMateriais() {
+  const projetos = useProducaoProjetos();
+  const modo = useModoTransicao();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const editorName = user?.name || 'Editor';
+
+  const lista = projetos.filter((p) => p.etapa === 'gravacao');
+  const [selectedId, setSelectedId] = useState(lista[0]?.id ?? null);
+  const [preview, setPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [problemaOpen, setProblemaOpen] = useState(false);
+  const [problemaObs, setProblemaObs] = useState('');
+  const [editorDesignado, setEditorDesignado] = useState('');
+  const rec = lista.find((p) => p.id === selectedId) || lista[0];
+
+  if (!rec) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-sm text-slate-500">
+        Nenhuma gravação em andamento. Agende e designe um videomaker em
+        <span className="font-semibold text-slate-300">&nbsp;Agendamentos&nbsp;</span>.
+      </div>
+    );
+  }
+
+  const materiais = rec.materiais || [];
+  const st = GRAV_STATUS[rec.grav_status] || GRAV_STATUS.agendada;
+  const podeEnviar = materiais.length > 0 && rec.grav_status === 'gravada';
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length || !rec) return;
+    setUploading(true);
+    try {
+      const novos = [];
+      for (const file of files) {
+        const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+        novos.push({
+          id: `m${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          nome: file.name,
+          tamanho: formatBytes(file.size),
+          recebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          url: file_url,
+        });
+      }
+      const jaTem = (rec.materiais || []).length > 0;
+      updateProjeto(rec.id, { materiais: [...(rec.materiais || []), ...novos] });
+      // Auto-avanço: ao subir o primeiro material, o projeto cai em Em edição sozinho.
+      if (modo === 'auto_avanca' && !jaTem && rec.etapa === 'gravacao') {
+        transicionar(rec.id, 'em_edicao', { quem: editorName, obs: 'Auto-avanço ao subir material' });
+        toast({ title: 'Material recebido — projeto em edição', description: `${rec.titulo} avançou automaticamente.` });
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removerMaterial(mid) {
+    updateProjeto(rec.id, { materiais: materiais.filter((m) => m.id !== mid) });
+  }
+
+  function enviarEdicao() {
+    if (modo === 'editor_puxa') {
+      transicionar(rec.id, 'em_edicao', { quem: editorName, obs: 'Editor puxou pra editar' });
+      updateProjeto(rec.id, { editor: editorName });
+    } else if (modo === 'produtor_designa') {
+      if (!editorDesignado) return;
+      transicionar(rec.id, 'em_edicao', { quem: editorDesignado, obs: 'Produtor designou editor' });
+      updateProjeto(rec.id, { editor: editorDesignado });
+    }
+    const next = lista.find((p) => p.id !== rec.id);
+    setSelectedId(next?.id ?? null);
+  }
+
+  function registrarProblema() {
+    if (!problemaObs.trim()) return;
+    updateProjeto(rec.id, { grav_status: 'problema' });
+    transicionar(rec.id, 'gravacao', { quem: editorName, obs: `Problema/regravação: ${problemaObs.trim()}` });
+    setProblemaOpen(false);
+    setProblemaObs('');
+    toast({ title: 'Problema sinalizado', description: 'O produtor/videomaker foi avisado da regravação.' });
+  }
+
+  return (
+    <div className="grid h-full gap-4 lg:grid-cols-5">
+      {/* Gravações em andamento */}
+      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Gravações em andamento</p>
+          <label className="flex items-center gap-1 text-[10px] text-slate-500" title="Modo de transição pra Em edição">
+            <Settings2 size={11} />
+            <select value={modo} onChange={(e) => setModoTransicao(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[10px] text-slate-200 outline-none">
+              {TRANSITION_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+          {lista.map((r) => {
+            const n = (r.materiais || []).length;
+            const rs = GRAV_STATUS[r.grav_status] || GRAV_STATUS.agendada;
+            return (
+              <button
+                key={r.id}
+                onClick={() => setSelectedId(r.id)}
+                className={`w-full rounded-lg border p-3 text-left transition ${r.id === rec.id ? 'border-sky-600 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase text-sky-400">{r.episodio || '—'} · {r.programa}</p>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${rs.tone}`}>{rs.label}</span>
+                </div>
+                <p className="mt-1 text-sm font-medium text-slate-200">{r.titulo}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                  <span>{r.gravacao?.data || '—'} · {r.gravacao?.estudio || '—'}</span>
+                  {r.videomaker && <span>· 🎥 {r.videomaker}</span>}
+                  <span className={`rounded px-1.5 py-0.5 ${n > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/40 text-slate-400'}`}>{n > 0 ? `${n} material` : 'sem material'}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Detalhe: status + receber materiais + envio pra edição */}
+      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-3">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">{rec.episodio || '—'} · {rec.programa}</p>
+            <h2 className="truncate text-sm font-semibold text-slate-100">{rec.titulo}</h2>
+          </div>
+          <span className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase ${st.tone}`}>{st.label}</span>
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          {/* Status da gravação */}
+          <div className="flex flex-wrap items-center gap-2">
+            {rec.grav_status !== 'gravando' && rec.grav_status !== 'gravada' && (
+              <button onClick={() => updateProjeto(rec.id, { grav_status: 'gravando' })} className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-500">
+                <Clapperboard size={12} /> Iniciar gravação
+              </button>
+            )}
+            {rec.grav_status !== 'gravada' && (
+              <button onClick={() => updateProjeto(rec.id, { grav_status: 'gravada', gravada: true })} className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400">
+                <Clapperboard size={12} /> Registrar gravação concluída
+              </button>
+            )}
+            <button onClick={() => setProblemaOpen(true)} className="flex items-center gap-1.5 rounded-md border border-rose-700/50 px-3 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-950/40">
+              <AlertTriangle size={12} /> Sinalizar problema/regravação
+            </button>
+          </div>
+
+          {/* Upload */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+            className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-8 text-center transition ${dragOver ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-700 bg-slate-950/40 text-slate-400 hover:border-sky-600 hover:text-sky-300'}`}
+          >
+            <Upload size={22} className={uploading ? 'animate-pulse' : ''} />
+            <span className="text-xs font-semibold">{uploading ? 'Enviando arquivos…' : 'Arraste os arquivos gravados aqui'}</span>
+            <span className="text-[10px] text-slate-500">ou</span>
+            <label className="cursor-pointer rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800">
+              Ingest de arquivos
+              <input type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+            </label>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Materiais recebidos ({materiais.length})</p>
+            {materiais.length === 0 ? (
+              <p className="rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-6 text-center text-xs text-slate-500">Nenhum material recebido ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {materiais.map((m) => (
+                  <div key={m.id} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                    <FileVideo size={14} className="shrink-0 text-violet-300" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-slate-200">{m.nome}</p>
+                      <p className="text-[10px] text-slate-500">{m.tamanho} · recebido {m.recebido}</p>
+                    </div>
+                    <button onClick={() => setPreview(m)} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-sky-300" title="Ver material">
+                      <Eye size={13} />
+                    </button>
+                    <button onClick={() => removerMaterial(m.id)} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-rose-300" title="Remover">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Envio pra Em edição — varia com o modo configurado */}
+        <div className="border-t border-slate-800 px-4 py-3">
+          {modo === 'editor_puxa' && (
+            <button onClick={enviarEdicao} disabled={!podeEnviar} className="flex items-center gap-1.5 rounded-md bg-violet-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50">
+              <Hand size={12} /> Puxar pra editar (atribui a você)
+            </button>
+          )}
+          {modo === 'auto_avanca' && (
+            <p className="text-[11px] text-slate-400">Ao subir o primeiro material, o projeto avança sozinho pra <span className="font-semibold text-slate-200">Em edição</span>.</p>
+          )}
+          {modo === 'produtor_designa' && (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="block flex-1">
+                <span className="mb-0.5 block text-[9px] uppercase text-slate-500">Designar editor</span>
+                <input value={editorDesignado} onChange={(e) => setEditorDesignado(e.target.value)} placeholder="Nome do editor" className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
+              </label>
+              <button onClick={enviarEdicao} disabled={!podeEnviar || !editorDesignado} className="flex items-center gap-1.5 rounded-md bg-violet-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50">
+                <UserPlus size={12} /> Designar e enviar pra edição
+              </button>
+            </div>
+          )}
+          {!podeEnviar && modo !== 'auto_avanca' && <p className="mt-1 text-[10px] text-slate-500">Registre a gravação como concluída e receba ao menos um material antes de enviar.</p>}
+        </div>
+      </div>
+
+      <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100">{preview?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-black">
+            <video controls src={preview?.url || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'} className="w-full" />
+          </div>
+          <p className="text-xs text-slate-400">{preview?.tamanho} · recebido {preview?.recebido}</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={problemaOpen} onOpenChange={setProblemaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-100"><AlertTriangle size={16} className="text-rose-400" /> Sinalizar problema / regravação</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-slate-400">Descreva o problema. O projeto volta pra Gravação e o produtor/videomaker é avisado.</p>
+          <textarea value={problemaObs} onChange={(e) => setProblemaObs(e.target.value)} rows={3} placeholder="Ex.: áudio com ruído, câmera 2 fora de foco, precisa regravar a entrevista..." className="w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setProblemaOpen(false)} className="rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800">Cancelar</button>
+            <button onClick={registrarProblema} disabled={!problemaObs.trim()} className="rounded-md bg-rose-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-rose-400 disabled:opacity-50">Sinalizar</button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

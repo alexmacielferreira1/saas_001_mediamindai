@@ -1,0 +1,93 @@
+{
+  "name": "BriefingProducao",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "draft_id": {
+      "type": "number",
+      "description": "ID do rascunho/projeto vinculado"
+    },
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "programa": {
+      "type": "string",
+      "default": ""
+    },
+    "headline": {
+      "type": "string",
+      "default": ""
+    },
+    "descricao": {
+      "type": "string",
+      "default": ""
+    },
+    "convidado_nome": {
+      "type": "string",
+      "default": ""
+    },
+    "convidado_cg": {
+      "type": "string",
+      "default": ""
+    },
+    "apresentadores": {
+      "type": "string",
+      "default": "",
+      "description": "Nomes dos apresentadores separados por v\u00edrgula"
+    },
+    "checklist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Itens essenciais selecionados do pr\u00e9-checklist"
+    },
+    "gravacao": {
+      "type": "string",
+      "default": "",
+      "description": "Data/hor\u00e1rio/est\u00fadio concatenados"
+    },
+    "status": {
+      "type": "string",
+      "default": "rascunho"
+    }
+  },
+  "required": [
+    "draft_id",
+    "titulo"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

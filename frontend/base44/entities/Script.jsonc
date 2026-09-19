@@ -1,0 +1,68 @@
+{
+  "name": "Script",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "title": {
+      "type": "string",
+      "default": ""
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in_review",
+        "approved"
+      ],
+      "default": "draft"
+    },
+    "clip_count": {
+      "type": "number",
+      "default": 0
+    },
+    "duration_label": {
+      "type": "string",
+      "default": ""
+    },
+    "project_name": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "required": [
+    "title",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

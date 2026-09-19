@@ -1,0 +1,50 @@
+{
+  "name": "Empresa",
+  "type": "object",
+  "properties": {
+    "nome": {
+      "type": "string",
+      "description": "Nome da empresa/cliente (tenant)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ativa",
+        "inativa",
+        "suspensa"
+      ],
+      "default": "ativa"
+    },
+    "plano": {
+      "type": "string",
+      "default": "",
+      "description": "Plano/tier (ex.: Starter, Pro)"
+    },
+    "descricao": {
+      "type": "string",
+      "default": ""
+    }
+  },
+  "required": [
+    "nome",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "name": "Publicacao",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "descricao": {
+      "type": "string",
+      "default": ""
+    },
+    "plataforma": {
+      "type": "string",
+      "enum": [
+        "instagram",
+        "tiktok",
+        "youtube",
+        "facebook",
+        "linkedin"
+      ],
+      "default": "youtube"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "rascunho",
+        "programado",
+        "publicado",
+        "pending_review",
+        "aguardando_aprovacao"
+      ],
+      "default": "rascunho"
+    },
+    "duracao": {
+      "type": "string",
+      "default": ""
+    },
+    "views": {
+      "type": "string",
+      "default": "",
+      "description": "Contador leg\u00edvel (ex.: 2.1K) \u2014 vem do mock"
+    },
+    "likes": {
+      "type": "number",
+      "default": 0
+    },
+    "clip_id": {
+      "type": "number",
+      "default": null,
+      "description": "ID do clip de origem (quando vier de um corte)"
+    },
+    "published_at": {
+      "type": "string",
+      "default": "",
+      "description": "Timestamp ISO de publica\u00e7\u00e3o/agendamento"
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "titulo",
+    "plataforma",
+    "status"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

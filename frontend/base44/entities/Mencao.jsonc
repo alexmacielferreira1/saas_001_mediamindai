@@ -1,0 +1,78 @@
+{
+  "name": "Mencao",
+  "type": "object",
+  "properties": {
+    "empresa_id": {
+      "type": "string",
+      "default": "",
+      "description": "Tenant: id da empresa (Empresa) a que o registro pertence"
+    },
+    "veiculo": {
+      "type": "string",
+      "default": ""
+    },
+    "titulo": {
+      "type": "string",
+      "default": ""
+    },
+    "tom": {
+      "type": "string",
+      "enum": [
+        "positivo",
+        "neutro",
+        "negativo"
+      ],
+      "default": "neutro"
+    },
+    "data": {
+      "type": "string",
+      "default": "",
+      "description": "Data leg\u00edvel (ex.: h\u00e1 1h)"
+    },
+    "etapa": {
+      "type": "string",
+      "enum": [
+        "monitorada",
+        "classificada"
+      ],
+      "default": "monitorada"
+    },
+    "ordem": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "titulo",
+    "tom",
+    "etapa"
+  ],
+  "rls": {
+    "read": {},
+    "create": {},
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}
