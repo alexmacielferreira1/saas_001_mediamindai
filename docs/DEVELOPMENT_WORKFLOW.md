@@ -8,6 +8,10 @@
 6. Registrar estado, limitações e evidências; revisar antes de commit local. Publicação exige conta/destino definidos.
 7. Parar com `scripts/stop.ps1` quando necessário. Os volumes de banco são preservados.
 
+## Testes
+
+O roteiro do produto está em `docs/TESTING_STRATEGY.md`; o padrão comum do HUB está em `../../_documentacao/standards/17-TESTING-STANDARD.md`. Usar `test-fast` durante alterações locais e `test` para a suíte que inclui banco. Testes futuros permanecem documentados como planejados até existir implementação e evidência de execução.
+
 ## Evidências
 
 `project-status.json` e `docs/PROJECT_STATUS.md` guardam o resultado mais recente. Logs de comandos: `.runtime/checks/`. A verificação Git reflete o momento anterior à gravação do relatório; após revisar e commitar, conferir `git status` separadamente.

@@ -1,6 +1,6 @@
 # MediaMind AI
 
-Bootstrap local em andamento. Backend FastAPI e PostgreSQL independentes; frontend Base44 preservado. **M0 ainda não aprovado:** ver `docs/PROJECT_STATUS.md` e `docs/FRONTEND_BASELINE.md`.
+Bootstrap local em andamento. Backend FastAPI e PostgreSQL independentes; frontend Base44 preservado. **M0 ainda não aprovado:** ver `docs/PROJECT_STATUS.md`, `docs/FRONTEND_BASELINE.md` e `docs/TESTING_STRATEGY.md`.
 
 ## Uso no Windows
 
