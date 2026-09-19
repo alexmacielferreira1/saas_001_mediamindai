@@ -12,6 +12,6 @@ Não foram fornecidas credenciais, feitas publicações ou alterados dados exter
 
 ## Tratamento
 
-Preservar o estado original como baseline. A correção do frontend deve ser uma tarefa própria, com plano, comparação visual e testes, sem remover o SDK ou redesenhar telas de forma incidental. Não desabilitar typecheck/checkJs nem ocultar falhas para aprovar o marco.
+Preservar o estado original como baseline. A tag `base44-export` e `docs/history/base44-manifest.json` comprovam o conteúdo recebido. Correções intencionais posteriores devem constar em `docs/history/frontend-approved-changes.json` com hash original, hash aprovado e motivo; qualquer hash diferente continua falhando no readiness. A correção do frontend deve ser uma tarefa própria, com comparação visual e testes, sem remover o SDK ou redesenhar telas de forma incidental. Não desabilitar typecheck/checkJs nem ocultar falhas para aprovar o marco.
 
 A lista atualizada de verificações e seus logs está em PROJECT_STATUS.md e .runtime/checks/.

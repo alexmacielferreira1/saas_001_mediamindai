@@ -1,0 +1,44 @@
+[
+  {
+    "path": "jsconfig.json",
+    "baseline_sha256": "e73e9adf0fcd9194c496670efb5251825685314475c9548c3ec4d74056ccc75b",
+    "approved_sha256": "88f592af159674189821fa36088590245d27af63dd8062d2773e55d7b9299026",
+    "reason": "Load the Vite ImportMeta environment types used by the unchanged runtime configuration."
+  },
+  {
+    "path": "src/components/AuthLayout.jsx",
+    "baseline_sha256": "27191e5279ab7a6d30609f7954c64edf586ce11817ca50ca63ed03bd432629ce",
+    "approved_sha256": "1a00c2d0dc971d701fcacdbfb5a75b91195e9f90be34c7232d2c40802142d8e0",
+    "reason": "Describe optional React properties for static checking without changing rendered output."
+  },
+  {
+    "path": "src/components/ui/input-otp.jsx",
+    "baseline_sha256": "78a437a82203c1d9d22d47db830bdc67d49d6473c5c28ad77634eeb8c399a649",
+    "approved_sha256": "aa40a7b8be1e30b7a4935f4b27310f3fde5f07b48f1eed3a747ef0ee34c041a1",
+    "reason": "Describe forwarded OTP, group, slot, and separator properties without changing runtime behavior."
+  },
+  {
+    "path": "src/components/ui/label.jsx",
+    "baseline_sha256": "37c6425d2a5c798ade4e60f89f86054d703433a8977e12d796de2b5bb4e3d0b7",
+    "approved_sha256": "f3397d28aaf175f3a785d4385523cf2b7e23834026c8eb71dbb5d5a808576f16",
+    "reason": "Describe forwarded Radix label properties without changing runtime behavior."
+  },
+  {
+    "path": "src/components/ui/button.jsx",
+    "baseline_sha256": "6c28699c64ff8c36ec5a2baf835d6bfa141cedeaf472b97d64671dac6cf7cbf8",
+    "approved_sha256": "e3f41260438ec0bb6c663f935fe3d2de84e6a3ca05350e2a0b64e47f0fde9a71",
+    "reason": "Describe button variants and native properties without changing runtime behavior."
+  },
+  {
+    "path": "src/components/ui/input.jsx",
+    "baseline_sha256": "4455aea152904f128df0ecd82047bbceb23e06ffcc9ccc7cbb3bcc87df5bcc4f",
+    "approved_sha256": "64801e66f8a12685df2318c78c97299e5f7ab6de31cc0de5f47cb7261cc3f8a9",
+    "reason": "Describe native input properties without changing runtime behavior."
+  },
+  {
+    "path": "src/pages/OAuthConsent.jsx",
+    "baseline_sha256": "010ab0d83bb6b84c371b7895c99b8ae6fa21b06253c4a705bf3edea4d18d030a",
+    "approved_sha256": "00623d3a4023c297b253c155fdbffe41341151250d9020a3271621d6fcc1f72f",
+    "reason": "Describe mutable HTTP header maps without changing request values or flow."
+  }
+]

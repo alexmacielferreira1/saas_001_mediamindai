@@ -20,6 +20,33 @@ def evaluate_checks(checks):
     return "passed"
 
 
+def verify_frontend_integrity(frontend_root, manifest, approved_changes):
+    """Reject missing, unknown, or unexpectedly changed Base44 export files."""
+    approved_by_path = {item["path"]: item for item in approved_changes}
+    violations = []
+    approved_count = 0
+    for item in manifest:
+        path = item["path"]
+        file = frontend_root / path
+        if not file.exists():
+            violations.append(f"{path} (missing)")
+            continue
+        current_hash = hashlib.sha256(file.read_bytes()).hexdigest()
+        if current_hash == item["sha256"]:
+            continue
+        approval = approved_by_path.get(path)
+        if (
+            approval
+            and approval.get("baseline_sha256") == item["sha256"]
+            and approval.get("approved_sha256") == current_hash
+            and approval.get("reason")
+        ):
+            approved_count += 1
+            continue
+        violations.append(path)
+    return violations, approved_count
+
+
 def run_check(name, args, env=None):
     log = ROOT / ".runtime" / "checks" / f"{name}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -77,15 +104,18 @@ def main():
     checks = {name: run_check(name, args, env) for name, args, env in commands}
     now = datetime.now(UTC).isoformat()
     manifest = json.loads((ROOT / "docs/history/base44-manifest.json").read_text())
-    changed = []
-    for item in manifest:
-        file = ROOT / "frontend" / item["path"]
-        if not file.exists() or hashlib.sha256(file.read_bytes()).hexdigest() != item["sha256"]:
-            changed.append(item["path"])
+    approvals_file = ROOT / "docs/history/frontend-approved-changes.json"
+    approved_changes = json.loads(approvals_file.read_text()) if approvals_file.exists() else []
+    changed, approved_count = verify_frontend_integrity(
+        ROOT / "frontend", manifest, approved_changes
+    )
     checks["original_frontend_integrity"] = {
         "status": "passed" if not changed else "failed",
         "updated_at": now,
-        "notes": f"{len(manifest)} original files; {len(changed)} changed or missing. "
+        "notes": (
+            f"{len(manifest)} original files; {approved_count} approved typed corrections; "
+            f"{len(changed)} unapproved changes or missing. "
+        )
         + ", ".join(changed),
     }
     checks["frontend_functional_validation"] = state.get("manual_checks", {}).get(
@@ -120,7 +150,9 @@ def main():
             else "Partial M0; unresolved gates. Do not advance to M1."
         ),
     )
-    state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    state_file.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     report = [
         "# Estado do projeto",
         "",
@@ -138,7 +170,9 @@ def main():
         "M1–M7 continuam pendentes. Os relatórios não comprovam paridade nem uso em produção.",
         "Não ignorar testes nem desligar verificações. Resolver a causa e executar novamente.",
     ]
-    (ROOT / "docs/PROJECT_STATUS.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    (ROOT / "docs/PROJECT_STATUS.md").write_text(
+        "\n".join(report) + "\n", encoding="utf-8", newline="\n"
+    )
     return 0 if overall == "passed" else 1
 
 
