@@ -2,7 +2,7 @@
 
 Marco atual: **M0 — blocked**.
 
-Verificado em 2026-09-19T19:40:26.062456+00:00.
+Verificado em 2026-09-19T19:54:41.393901+00:00.
 
 | Verificação | Estado | Evidência |
 |---|---|---|
@@ -18,7 +18,7 @@ Verificado em 2026-09-19T19:40:26.062456+00:00.
 | http_smoke | passed | Exit 0; evidence: .runtime/checks/http_smoke.log |
 | original_frontend_integrity | passed | 288 original files; 7 approved typed corrections; 0 unapproved changes or missing.  |
 | frontend_functional_validation | blocked | Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient. |
-| git_clean_at_check | pending | Snapshot before writing this report. Verify and commit reviewed work separately. |
+| git_clean_at_check | passed | Snapshot before writing this report. Verify and commit reviewed work separately. |
 
 M1–M7 continuam pendentes. Os relatórios não comprovam paridade nem uso em produção.
 Não ignorar testes nem desligar verificações. Resolver a causa e executar novamente.
