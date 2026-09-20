@@ -12,12 +12,14 @@ O build não comprova login, persistência, isolamento de tenant ou paridade fun
 - 33 contas demo: seed idempotente somente para `local/test`, ainda aguardando execução no banco;
 - demais entidades, funções, uploads e módulos de negócio listados abaixo: pendentes.
 
-Último gate automatizado em 20/09/2026: backend 86 testes e frontend 28 testes, ambos
+Último gate automatizado em 20/09/2026: backend 89 testes e frontend 31 testes, ambos
 com 100% de cobertura do código próprio incluído. A validação PostgreSQL/navegador ficou pendente
 porque o serviço privilegiado do Docker estava indisponível; não foi declarada paridade funcional.
 
 A tela Administração de Acessos já lista memberships do tenant pela API local; catálogo visual e
-overrides individuais de telas ainda usam o mecanismo legado e não são considerados migrados.
+alteração de cargo agora persiste no backend com proteção adicional para papéis administrativos.
+O catálogo visual e overrides individuais de telas ainda usam o mecanismo legado e não são
+considerados migrados.
 
 ## Origem
 ZIP: `001_mediamindai.zip`; snapshot: tag `base44-export`.

@@ -14,7 +14,7 @@ documentada de não aplicabilidade.
 | Proteção contra força bruta | 12 | Bloqueio por conta portado e coberto; casos distribuídos e observabilidade avançada pendentes | Crítica |
 | Regras de acesso | 5 | Isolamento por tenant e papéis básicos cobertos; matriz completa pendente | Crítica |
 | Grupos de permissão | 16 | Núcleo tenant-scoped, CRUD, vínculo grupo↔membership, seed administrativo e listagem frontend local cobertos; overrides individuais, catálogo funcional completo e prova PostgreSQL pendentes | Crítica |
-| Usuários | 37 | Identidade base coberta; CRUD e políticas pendentes | Alta |
+| Usuários | 37 | Identidade, listagem tenant-scoped e alteração segura de cargo cobertas; CRUD, convites e demais políticas pendentes | Alta |
 | Aplicação/saúde | 4 | Coberto na fundação local | Alta |
 | Dependências | 1 | Coberto por verificações automatizadas; auditoria contínua | Alta |
 | Upload de ativos | 16 | Pendente | Alta |

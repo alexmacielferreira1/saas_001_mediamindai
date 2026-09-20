@@ -8,8 +8,8 @@ Autenticação, sessão, contas demo protegidas, isolamento básico por membersh
 foram reconstruídos fora do Base44. O layout foi preservado. O gate continua **blocked** porque a
 execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
 
-Última evidência automatizada: backend **86 passed, 2 skipped**, 100% linhas/branches; frontend
-**28 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
+Última evidência automatizada: backend **89 passed, 2 skipped**, 100% linhas/branches; frontend
+**31 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
 typecheck e build aprovados.
 Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
 parado e a sessão não tinha permissão para iniciá-lo.
@@ -17,7 +17,8 @@ parado e a sessão não tinha permissão para iniciá-lo.
 RBAC em andamento: catálogo e grupos por tenant, autorização deny-by-default, CRUD, vínculo com
 membership, seed administrativo e listagem local na tela de acessos foram implementados. Overrides
 individuais, catálogo funcional completo e prova PostgreSQL da migration `0004_permission_groups`
-permanecem pendentes.
+permanecem pendentes. Alterações de cargo já persistem por membership; CEDOC não pode conceder
+`admin/superadmin` sem a permissão separada `users.manage_admin`.
 
 | Verificação | Estado | Evidência |
 |---|---|---|
