@@ -12,6 +12,7 @@
 // Cargo id alinhado ao role do mock auth (admin/producer/editor/cedoc/...).
 // defaultTabs reference ids de CORP_TABS. '*' = acesso total.
 export const ROLE_CATALOG = [
+  { id: 'superadmin', name: 'Superadministrador', description: 'Acesso total ao sistema e às empresas.', defaultTabs: '*' },
   { id: 'admin', name: 'Administrador', description: 'Acesso total ao sistema.', defaultTabs: '*' },
   { id: 'producer', name: 'Produtor', description: 'Produção de conteúdo audiovisual.', defaultTabs: ['producao'] },
   { id: 'editor', name: 'Editor de vídeo', description: 'Edição e pós-produção.', defaultTabs: ['editor_video'] },
@@ -87,9 +88,10 @@ export function setUserAccess(userId, access) {
 // Admin vê tudo; demais cargos = padrão ∪ extraTabs − removedTabs.
 export function effectiveTabsForUser(user, allTabIds) {
   if (!user) return [];
+  if (user.role === 'admin' || user.role === 'superadmin') return allTabIds;
   const access = getUserAccess(user.id, user.role);
   const role = access.role || user.role;
-  if (role === 'admin') return allTabIds;
+  if (role === 'admin' || role === 'superadmin') return allTabIds;
   const def = getCargoDefaultTabs(role);
   const base = def === null ? allTabIds : (def || []);
   const set = new Set(base);
