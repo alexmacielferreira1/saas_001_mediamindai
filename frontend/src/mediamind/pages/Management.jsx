@@ -11,6 +11,10 @@ import ManagementProcessamentosTab from '../components/management/ManagementProc
 import ManagementAuditoriaTab from '../components/management/ManagementAuditoriaTab';
 import IndicadoresPipelinePanel from '../components/management/IndicadoresPipelinePanel';
 import { buildManagementAlerts, buildManagementKpis } from '../lib/managementViewModel';
+import { listMemberships } from '../../api/permissions';
+import { useProducaoProjetos } from '../lib/producaoStore';
+import { CARGO_BY_ID } from '../lib/roleCatalog';
+import { buildSectorRows, buildTeamRows } from '../lib/managementReportsViewModel';
 
 const MGMT_TABS = [
   { key: 'dashboards', label: 'Visão Geral', icon: BarChart3 },
@@ -151,10 +155,14 @@ export function DashboardsTab() {
 export function ReportsTab() {
   const [subTab, setSubTab] = useState('equipe');
   const [overview, setOverview] = useState(null);
+  const [memberships, setMemberships] = useState([]);
   const [error, setError] = useState(false);
+  const projects = useProducaoProjetos();
   useEffect(() => {
     let active = true;
-    getManagementOverview().then((data) => { if (active) setOverview(data); }).catch(() => { if (active) setError(true); });
+    Promise.all([getManagementOverview(), listMemberships()])
+      .then(([data, users]) => { if (active) { setOverview(data); setMemberships(users); } })
+      .catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, []);
   const subTabs = [
@@ -186,8 +194,8 @@ export function ReportsTab() {
         ))}
       </div>
 
-      {overview && subTab === 'equipe' && <EquipeReport />}
-      {overview && subTab === 'setores' && <SetoresReport />}
+      {overview && subTab === 'equipe' && <EquipeReport rows={buildTeamRows(memberships, projects)} />}
+      {overview && subTab === 'setores' && <SetoresReport rows={buildSectorRows(memberships, projects)} />}
       {overview && subTab === 'redes' && <RedesReport metrics={overview.social_metrics} />}
       {overview && subTab === 'conteudo' && <ConteudoReport overview={overview} />}
       {overview && subTab === 'acervo' && <AcervoReport assets={overview.assets} />}
@@ -196,18 +204,50 @@ export function ReportsTab() {
   );
 }
 
-function EquipeReport() {
+function EquipeReport({ rows }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = rows.find((row) => row.id === selectedId) || null;
   return (
-    <Panel title="Desempenho da equipe">
-      <p className="py-8 text-center text-sm text-slate-500">O desempenho será calculado quando tarefas reais forem atribuídas aos membros.</p>
-    </Panel>
+    <div className="space-y-4">
+      <Panel title="Desempenho da equipe">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-slate-800 text-xs uppercase text-slate-500"><th className="px-3 py-2 text-left">Membro</th><th className="px-3 py-2 text-left">Função</th><th className="px-3 py-2 text-right">Atribuídos</th><th className="px-3 py-2 text-right">Em andamento</th><th className="px-3 py-2 text-right">Concluídos</th></tr></thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} onClick={() => setSelectedId(row.id)} className={`cursor-pointer border-b border-slate-800/50 transition hover:bg-slate-800/40 ${selectedId === row.id ? 'bg-sky-500/5' : ''}`}>
+                  <td className="px-3 py-3"><p className="font-medium text-slate-200">{row.name}</p><p className="text-xs text-slate-500">{row.email}</p></td>
+                  <td className="px-3 py-3 text-slate-400">{CARGO_BY_ID[row.role]?.name || row.role}</td>
+                  <td className="px-3 py-3 text-right font-semibold text-slate-200">{row.assigned}</td>
+                  <td className="px-3 py-3 text-right text-amber-300">{row.active}</td>
+                  <td className="px-3 py-3 text-right text-emerald-300">{row.completed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+      {selected && (
+        <Panel title={`Carga atual · ${selected.name}`}>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4"><InfoRow label="Função" value={CARGO_BY_ID[selected.role]?.name || selected.role} /><InfoRow label="Trabalhos atribuídos" value={selected.assigned} /><InfoRow label="Em andamento" value={selected.active} /><InfoRow label="Concluídos" value={selected.completed} /></div>
+        </Panel>
+      )}
+    </div>
   );
 }
 
-function SetoresReport() {
+function SetoresReport({ rows }) {
   return (
     <Panel title="Carga de trabalho por pessoa">
-      <p className="py-8 text-center text-sm text-slate-500">Ainda não há carga de trabalho atribuída por setor.</p>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.role} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+            <p className="font-semibold text-slate-200">{CARGO_BY_ID[row.role]?.name || row.role}</p>
+            <p className="mt-1 text-xs text-slate-500">{row.people} pessoa(s)</p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center"><InfoRow label="Atribuídos" value={row.assigned} /><InfoRow label="Ativos" value={row.active} /><InfoRow label="Concluídos" value={row.completed} /></div>
+          </div>
+        ))}
+      </div>
     </Panel>
   );
 }

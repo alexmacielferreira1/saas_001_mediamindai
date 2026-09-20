@@ -200,11 +200,12 @@ function AcervoTab({ assets, summary }) {
       )}
 
       {selectedAsset && (
-        <Panel
-          title="Detalhes do arquivo"
-          right={<button type="button" onClick={() => setSelectedAsset(null)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200" aria-label="Fechar detalhes"><X size={15} /></button>}
-        >
-          <div className="grid gap-4 xl:grid-cols-[1fr_1fr_auto]">
+        <div className="fixed bottom-4 right-4 top-24 z-40 w-[min(34rem,calc(100vw-2rem))] overflow-y-auto rounded-xl shadow-2xl shadow-black/50">
+          <Panel
+            title="Detalhes do arquivo"
+            right={<button type="button" onClick={() => setSelectedAsset(null)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200" aria-label="Fechar detalhes"><X size={15} /></button>}
+          >
+          <div className="grid gap-4">
             <div className="space-y-2">
               <InfoRow label="Asset ID" value={selectedAsset.id} />
               <InfoRow label="Título" value={selectedAsset.title} />
@@ -223,7 +224,8 @@ function AcervoTab({ assets, summary }) {
               <button type="button" onClick={() => navigate(`/search?q=${encodeURIComponent(selectedAsset.title || selectedAsset.filename || '')}`)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Localizar relacionados</button>
             </div>
           </div>
-        </Panel>
+          </Panel>
+        </div>
       )}
     </div>
   );
@@ -300,8 +302,9 @@ function AdminTab({ logs, memberships }) {
         </Panel>
       </div>
       {selectedUser && (
-        <Panel title="Detalhes e acesso ao acervo" right={<button type="button" onClick={() => setSelectedUserId(null)} aria-label="Fechar detalhes" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800"><X size={15} /></button>}>
-          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+        <div className="fixed bottom-4 right-4 top-24 z-40 w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl shadow-2xl shadow-black/50">
+          <Panel title="Detalhes e acesso ao acervo" right={<button type="button" onClick={() => setSelectedUserId(null)} aria-label="Fechar detalhes" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800"><X size={15} /></button>}>
+          <div className="grid gap-4">
             <div className="space-y-2">
               <InfoRow label="Usuário" value={selectedUser.full_name || selectedUser.email} />
               <InfoRow label="E-mail" value={selectedUser.email} />
@@ -318,7 +321,8 @@ function AdminTab({ logs, memberships }) {
               {accessError && <p className="text-center text-[10px] text-rose-400">{accessError}</p>}
             </div>
           </div>
-        </Panel>
+          </Panel>
+        </div>
       )}
     </div>
   );
