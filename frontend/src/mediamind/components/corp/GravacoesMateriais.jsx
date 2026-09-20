@@ -111,11 +111,11 @@ export default function GravacoesMateriais() {
   }
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-5">
+    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(320px,38%)_1fr]">
       {/* Gravações em andamento */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
+      <div className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Gravações em andamento</p>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Captação</p><p className="text-sm font-semibold text-slate-100">Gravações em andamento</p><p className="text-[10px] text-slate-500">{lista.length} produções no fluxo</p></div>
           <label className="flex items-center gap-1 text-[10px] text-slate-500" title="Modo de transição pra Em edição">
             <Settings2 size={11} />
             <select value={modo} onChange={(e) => setModoTransicao(e.target.value)} className="rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[10px] text-slate-200 outline-none">
@@ -123,7 +123,7 @@ export default function GravacoesMateriais() {
             </select>
           </label>
         </div>
-        <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        <div className="flex-1 divide-y divide-slate-800 overflow-y-auto">
           {lista.map((r) => {
             const n = (r.materiais || []).length;
             const rs = GRAV_STATUS[r.grav_status] || GRAV_STATUS.agendada;
@@ -131,7 +131,7 @@ export default function GravacoesMateriais() {
               <button
                 key={r.id}
                 onClick={() => setSelectedId(r.id)}
-                className={`w-full rounded-lg border p-3 text-left transition ${r.id === rec.id ? 'border-sky-600 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'}`}
+                className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${r.id === rec.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent bg-transparent hover:bg-slate-900/60'}`}
               >
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-bold uppercase text-sky-400">{r.episodio || '—'} · {r.programa}</p>
@@ -150,7 +150,7 @@ export default function GravacoesMateriais() {
       </div>
 
       {/* Detalhe: status + receber materiais + envio pra edição */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-3">
+      <div className="flex min-h-0 flex-col bg-slate-900/20">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">{rec.episodio || '—'} · {rec.programa}</p>
@@ -182,7 +182,7 @@ export default function GravacoesMateriais() {
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-            className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-8 text-center transition ${dragOver ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-700 bg-slate-950/40 text-slate-400 hover:border-sky-600 hover:text-sky-300'}`}
+            className={`flex w-full flex-col items-center justify-center gap-2 border border-dashed py-7 text-center transition-colors ${dragOver ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-700 bg-slate-950/40 text-slate-400 hover:border-sky-600 hover:text-sky-300'}`}
           >
             <Upload size={22} className={uploading ? 'animate-pulse' : ''} />
             <span className="text-xs font-semibold">{uploading ? 'Enviando arquivos…' : 'Arraste os arquivos gravados aqui'}</span>
