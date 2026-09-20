@@ -15,6 +15,7 @@ build/
 .runtime/
 test-results/
 playwright-report/
+frontend/coverage/
 uploads/
 *.db
 *.log

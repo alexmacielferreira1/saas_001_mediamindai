@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException
 
 from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
-from app.core.errors import error_response
+from app.core.errors import PublicError, error_response
 from app.db.session import database_available, engine
 from app.observability.logging import configure_logging
 
@@ -79,6 +79,16 @@ def create_app() -> FastAPI:
             f"HTTP_{exc.status_code}",
             "Requisição não permitida ou recurso indisponível.",
             headers=exc.headers,
+        )
+
+    @app.exception_handler(PublicError)
+    async def public_error(request: Request, exc: PublicError):
+        return error_response(
+            request,
+            exc.status,
+            exc.code,
+            exc.message,
+            retryable=exc.retryable,
         )
 
     @app.exception_handler(RequestValidationError)

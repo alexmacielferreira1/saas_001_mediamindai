@@ -13,11 +13,13 @@ from app.schemas.auth import LoginRequest as LoginBody
 from app.schemas.auth import MembershipResponse, SessionResponse, UserResponse
 from app.security.sessions import hash_session_token
 from app.services.auth import authenticate
+from app.tenancy.context import CurrentSession, get_current_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE_NAME = "mediamind_session"
 DbSession = Annotated[Session, Depends(get_session)]
 SessionToken = Annotated[str | None, Cookie(alias=COOKIE_NAME)]
+Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 
 
 def session_payload(session: Session, auth_session) -> SessionResponse:
@@ -55,16 +57,10 @@ def login(body: LoginBody, request: Request, response: Response, session: DbSess
 
 @router.get("/session", response_model=SessionResponse)
 def current_session(
-    request: Request,
+    current: Authenticated,
     session: DbSession,
-    token: SessionToken = None,
 ):
-    auth_session = get_auth_session(session, hash_session_token(token)) if token else None
-    if auth_session is None or not auth_session.is_active(datetime.now(UTC)):
-        return error_response(request, 401, "AUTHENTICATION_REQUIRED", "Faça login para continuar.")
-    auth_session.last_seen_at = datetime.now(UTC)
-    session.commit()
-    return session_payload(session, auth_session)
+    return session_payload(session, current.auth_session)
 
 
 @router.post("/logout", status_code=204)

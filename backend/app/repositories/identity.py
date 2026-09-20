@@ -29,6 +29,19 @@ def get_auth_session(session: Session, token_hash: str) -> AuthSession | None:
     return session.scalar(select(AuthSession).where(AuthSession.token_hash == token_hash))
 
 
+def get_active_membership(session: Session, user_id, tenant_id) -> tuple[Membership, Tenant] | None:
+    return session.execute(
+        select(Membership, Tenant)
+        .join(Tenant, Tenant.id == Membership.tenant_id)
+        .where(
+            Membership.user_id == user_id,
+            Membership.tenant_id == tenant_id,
+            Membership.is_active.is_(True),
+            Tenant.is_active.is_(True),
+        )
+    ).one_or_none()
+
+
 def revoke_auth_session(session: Session, auth_session: AuthSession, revoked_at: datetime) -> None:
     auth_session.revoked_at = revoked_at
     session.commit()
