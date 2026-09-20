@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Upload, Music, Sparkles, Info, ChevronDown,
   FileVideo, FileAudio, FileImage, FileText, Check,
 } from 'lucide-react';
+import { uploadFile } from '../../api/uploads';
+import { base44 } from '../../api/base44Client';
 
 const PROGRAMS = ['Jornal do Meio Dia', 'Jornal da Noite', 'Especial Enchentes RS', 'Documentário Turismo', 'Campanha Institucional'];
 const STEPS = ['Criar pacote', 'Adicionar arquivos', 'Revisar e iniciar'];
@@ -20,20 +22,46 @@ export default function IngestNewPackage() {
   const [aiEnabled, setAiEnabled] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [audioDragOver, setAudioDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInput = useRef(null);
+  const audioInput = useRef(null);
   const navigate = useNavigate();
 
-  function addMockFile(type = 'video') {
-    const ext = { video: 'mp4', audio: 'mp3', image: 'jpg', document: 'pdf' }[type];
-    const size = { video: '1.2 GB', audio: '85 MB', image: '4.2 MB', document: '18 MB' }[type];
-    setFiles((prev) => [...prev, {
-      id: Date.now() + Math.random(),
-      name: `arquivo_${prev.length + 1}.${ext}`,
-      type, size,
-    }]);
+  function addFiles(selected) {
+    const entries = Array.from(selected || []).map((file) => ({
+      id: crypto.randomUUID(), file, name: file.name, type: classifyFile(file),
+      size: formatFileSize(file.size), status: 'pending',
+    }));
+    setFiles((prev) => [...prev, ...entries]);
   }
 
   function removeFile(id) {
     setFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  async function continueFlow() {
+    if (step < 3) { setStep(step + 1); return; }
+    if (!name || files.length === 0 || uploading) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      for (const entry of files) {
+        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploading' } : item));
+        const uploaded = await uploadFile(entry.file);
+        await base44.entities.Asset.create({
+          title: entry.name, filename: entry.name, asset_type: entry.type,
+          file_size: entry.file.size, file_url: uploaded.file_url,
+          package_name: name, folder, program_name: program, ai_status: aiEnabled ? 'pending' : 'disabled',
+        });
+        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploaded' } : item));
+      }
+      navigate('/ingest');
+    } catch {
+      setUploadError('Não foi possível enviar todos os arquivos. Os concluídos foram preservados; tente novamente.');
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -144,7 +172,7 @@ export default function IngestNewPackage() {
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); addMockFile('video'); }}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
               className={`rounded-xl border-2 border-dashed px-6 py-10 text-center transition ${
                 dragOver ? 'border-sky-500 bg-sky-950/20' : 'border-slate-700 bg-slate-950/40'
               }`}
@@ -155,9 +183,10 @@ export default function IngestNewPackage() {
               <p className="text-sm font-medium text-slate-300">Arraste e solte arquivos aqui</p>
               <p className="mt-1 text-xs text-slate-500">Vídeos, áudios, imagens ou documentos</p>
               <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                <button onClick={() => addMockFile('video')} className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-800">
+                <button onClick={() => fileInput.current?.click()} className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-400 hover:bg-slate-800">
                   <Plus size={12} /> Adicionar arquivos
                 </button>
+                <input ref={fileInput} type="file" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
               </div>
             </div>
 
@@ -171,6 +200,7 @@ export default function IngestNewPackage() {
                       <Icon size={15} className="text-slate-400" />
                       <span className="flex-1 text-sm text-slate-200">{f.name}</span>
                       <span className="text-xs text-slate-500">{f.size}</span>
+                      <span className="text-[10px] uppercase text-sky-400">{f.status === 'uploaded' ? 'Enviado' : f.status === 'uploading' ? 'Enviando' : 'Pendente'}</span>
                       <button onClick={() => removeFile(f.id)} className="text-slate-600 hover:text-rose-400">✕</button>
                     </div>
                   );
@@ -189,25 +219,26 @@ export default function IngestNewPackage() {
             <div
               onDragOver={(e) => { e.preventDefault(); setAudioDragOver(true); }}
               onDragLeave={() => setAudioDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setAudioDragOver(false); setAudioFile('audio_referencia.mp3'); }}
+              onDrop={(e) => { e.preventDefault(); setAudioDragOver(false); setAudioFile(e.dataTransfer.files?.[0] || null); }}
               className={`rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
                 audioDragOver ? 'border-sky-500 bg-sky-950/20' : 'border-slate-700 bg-slate-950/40'
               }`}
             >
               {audioFile ? (
                 <div className="flex items-center justify-center gap-2 text-sm text-slate-200">
-                  <Music size={14} className="text-sky-400" /> {audioFile}
+                  <Music size={14} className="text-sky-400" /> {audioFile.name}
                   <button onClick={() => setAudioFile(null)} className="ml-2 text-slate-600 hover:text-rose-400">✕</button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2">
                   <p className="text-sm text-slate-400">Arraste o áudio aqui ou</p>
                   <button
-                    onClick={() => setAudioFile('audio_referencia.mp3')}
+                    onClick={() => audioInput.current?.click()}
                     className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800"
                   >
                     Selecionar áudio
                   </button>
+                  <input ref={audioInput} type="file" accept="audio/*" className="hidden" onChange={(e) => setAudioFile(e.target.files?.[0] || null)} />
                   <p className="text-[11px] text-slate-600">Formatos: mp3, wav, m4a</p>
                 </div>
               )}
@@ -251,6 +282,7 @@ export default function IngestNewPackage() {
 
       {/* Footer actions */}
       <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-slate-800 bg-slate-950/80 px-6 py-3 backdrop-blur">
+        {uploadError && <p className="mr-auto text-xs text-rose-400">{uploadError}</p>}
         <button
           disabled
           title="Persistência de pacotes disponível após a conexão com o backend de ingestão"
@@ -259,12 +291,26 @@ export default function IngestNewPackage() {
           Salvar e criar outro
         </button>
         <button
-          onClick={() => setStep(Math.min(3, step + 1))}
+          onClick={continueFlow}
+          disabled={uploading || (step === 3 && (!name || files.length === 0))}
           className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-sky-400"
         >
-          Criar pacote e continuar →
+          {uploading ? 'Enviando…' : step === 3 ? 'Iniciar envio' : 'Criar pacote e continuar →'}
         </button>
       </div>
     </div>
   );
+}
+
+export function classifyFile(file) {
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  if (file.type.startsWith('image/')) return 'image';
+  return 'document';
+}
+
+export function formatFileSize(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }

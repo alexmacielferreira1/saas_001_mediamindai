@@ -15,6 +15,7 @@ export default defineConfig({
       include: [
         'src/api/httpClient.js',
         'src/api/dashboard.js',
+        'src/api/uploads.js',
         'src/api/permissions.js',
         'src/mediamind/auth.jsx',
         'src/mediamind/lib/empresaContext.jsx',
