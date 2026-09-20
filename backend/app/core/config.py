@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     demo_password: SecretStr | None = None
     login_max_attempts: int = Field(default=5, ge=2, le=20)
     login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    frontend_url: str = "http://127.0.0.1:5173"
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
 
     @property
     def version(self) -> str:

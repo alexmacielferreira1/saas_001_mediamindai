@@ -21,7 +21,14 @@ export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const googleError = new URLSearchParams(window.location.search).get('google_error');
+  const [error, setError] = useState(
+    googleError === 'account_not_allowed'
+      ? 'Conta Google não autorizada neste MediaMind.'
+      : googleError
+        ? 'Não foi possível concluir o login com Google.'
+        : '',
+  );
   const [loading, setLoading] = useState(false);
   const passwordRef = useRef(null);
 
@@ -100,6 +107,16 @@ export default function Login() {
           <p className="mt-1 text-sm text-slate-400">Acesse sua conta para continuar</p>
 
           <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
+            <a
+              href="/api/v1/auth/google/start"
+              className="flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-white py-2.5 font-semibold text-slate-900 transition hover:bg-slate-100"
+            >
+              <span className="text-lg font-bold text-blue-600">G</span>
+              Continuar com Google
+            </a>
+            <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-slate-600">
+              <span className="h-px flex-1 bg-slate-800" /> ou <span className="h-px flex-1 bg-slate-800" />
+            </div>
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-semibold text-slate-300">E-mail</span>
               <input

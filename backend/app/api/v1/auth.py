@@ -1,22 +1,32 @@
 from datetime import UTC, datetime
+from secrets import token_urlsafe
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Cookie, Depends, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import error_response
 from app.db.session import get_session
 from app.models.identity import User
-from app.repositories.identity import get_auth_session, list_active_memberships, revoke_auth_session
+from app.repositories.identity import (
+    get_auth_session,
+    get_user_by_email,
+    list_active_memberships,
+    revoke_auth_session,
+)
 from app.schemas.auth import LoginRequest as LoginBody
 from app.schemas.auth import MembershipResponse, SessionResponse, UserResponse
 from app.security.sessions import hash_session_token
-from app.services.auth import authenticate
+from app.services.auth import authenticate, create_session_for_user, normalize_email
+from app.services.google_oauth import authorization_url, exchange_google_code
 from app.tenancy.context import CurrentSession, get_current_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE_NAME = "mediamind_session"
+GOOGLE_STATE_COOKIE = "mediamind_google_state"
 DbSession = Annotated[Session, Depends(get_session)]
 SessionToken = Annotated[str | None, Cookie(alias=COOKIE_NAME)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
@@ -37,6 +47,18 @@ def session_payload(session: Session, auth_session) -> SessionResponse:
     )
 
 
+def set_session_cookie(response: Response, token: str, settings) -> None:
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        max_age=settings.session_hours * 3600,
+        path="/",
+    )
+
+
 @router.post("/login", response_model=SessionResponse)
 def login(body: LoginBody, request: Request, response: Response, session: DbSession):
     settings = get_settings()
@@ -50,16 +72,66 @@ def login(body: LoginBody, request: Request, response: Response, session: DbSess
     )
     if result is None:
         return error_response(request, 401, "INVALID_CREDENTIALS", "E-mail ou senha inválidos.")
+    set_session_cookie(response, result.token, settings)
+    return session_payload(session, result.auth_session)
+
+
+@router.get("/google/start")
+def google_start(request: Request):
+    settings = get_settings()
+    if not settings.google_client_id or not settings.google_client_secret:
+        return error_response(
+            request, 503, "GOOGLE_OAUTH_NOT_CONFIGURED", "Login Google ainda não configurado."
+        )
+    state = token_urlsafe(32)
+    response = RedirectResponse(
+        authorization_url(
+            client_id=settings.google_client_id,
+            redirect_uri=settings.google_redirect_uri,
+            state=state,
+        )
+    )
     response.set_cookie(
-        COOKIE_NAME,
-        result.token,
+        GOOGLE_STATE_COOKIE,
+        state,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
-        max_age=settings.session_hours * 3600,
-        path="/",
+        max_age=600,
+        path="/api/v1/auth/google",
     )
-    return session_payload(session, result.auth_session)
+    return response
+
+
+@router.get("/google/callback")
+async def google_callback(
+    code: str,
+    state: str,
+    session: DbSession,
+    oauth_state: Annotated[str | None, Cookie(alias=GOOGLE_STATE_COOKIE)] = None,
+):
+    settings = get_settings()
+    error_base = f"{settings.frontend_url}/login?google_error="
+    if not oauth_state or state != oauth_state:
+        return RedirectResponse(error_base + "invalid_state")
+    try:
+        profile = await exchange_google_code(
+            code=code,
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret.get_secret_value(),
+            redirect_uri=settings.google_redirect_uri,
+        )
+    except (httpx.HTTPError, KeyError):
+        return RedirectResponse(error_base + "provider_failed")
+    email = normalize_email(profile.get("email", ""))
+    user = get_user_by_email(session, email)
+    if not profile.get("email_verified") or user is None or not user.is_active:
+        return RedirectResponse(error_base + "account_not_allowed")
+    result = create_session_for_user(session, user, session_hours=settings.session_hours)
+    response = RedirectResponse(f"{settings.frontend_url}/corp?tab=producao")
+    set_session_cookie(response, result.token, settings)
+    response.delete_cookie(GOOGLE_STATE_COOKIE, path="/api/v1/auth/google")
+    return response
 
 
 @router.get("/session", response_model=SessionResponse)
