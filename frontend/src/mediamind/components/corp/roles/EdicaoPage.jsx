@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2 } from 'lucide-react';
+import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, moverEtapa, transicionar } from '../../../lib/producaoStore';
@@ -31,6 +31,7 @@ export default function EdicaoPage({ disableBack = false }) {
   const sel = emEdicao.find((p) => p.id === selId) || emEdicao[0] || null;
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteObs, setAjusteObs] = useState('');
+  const [queueFilter, setQueueFilter] = useState('em_edicao');
 
   function nova() {
     const id = addProjeto({ etapa: 'em_edicao', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
@@ -63,6 +64,19 @@ export default function EdicaoPage({ disableBack = false }) {
   const comPrazo = emEdicao.filter((p) => p.edicao_prazo).length;
   const emRevisao = emEdicao.filter((p) => p.edicao_status === 'revisao_interna').length;
   const prontas = emEdicao.filter((p) => p.edicao_status === 'pronto_para_aprovacao').length;
+  const queueCounts = {
+    para_editar: emEdicao.filter((p) => !p.edicao_status || p.edicao_status === 'rascunho_corte').length,
+    em_edicao: emEdicao.filter((p) => p.edicao_status !== 'pronto_para_aprovacao').length,
+    aguardando: prontas,
+  };
+  const filteredQueue = emEdicao.filter((p) => queueFilter === 'aguardando' ? p.edicao_status === 'pronto_para_aprovacao' : queueFilter === 'para_editar' ? (!p.edicao_status || p.edicao_status === 'rascunho_corte') : p.edicao_status !== 'pronto_para_aprovacao');
+  const mediaGroups = [
+    { label: 'Vídeos', Icon: Video, count: Math.max(8, materiais.filter((m) => /video|mp4|mov/i.test(`${m.tipo || ''}${m.nome || ''}`)).length), files: materiais.filter((m) => /mp4|mov/i.test(m.nome || '')).map((m) => m.nome).slice(0, 3), fallback: ['CAM_A_001.mp4', 'CAM_B_001.mp4', 'CAM_C_001.mp4'] },
+    { label: 'Áudio', Icon: AudioLines, count: 4, files: [], fallback: ['AUDIO_MASTER.wav', 'LAPELA_001.wav', 'AMBIENTE.wav'] },
+    { label: 'Imagens', Icon: Image, count: 6, files: [], fallback: ['thumbnail.jpg', 'background.png', 'grafico_01.png'] },
+    { label: 'Documentos', Icon: FileText, count: 4, files: [], fallback: ['roteiro.pdf', 'briefing.docx', 'pauta.docx'] },
+    { label: 'Referências', Icon: Link2, count: 2, files: [], fallback: ['referencia_visual.mp4', 'case_similar.mp4'] },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col border border-slate-800 bg-slate-950/35">
@@ -101,16 +115,23 @@ export default function EdicaoPage({ disableBack = false }) {
             <p className="mt-0.5 text-[10px] text-slate-500">Selecione uma entrega para trabalhar no painel ao lado.</p>
           </div>
         </div>
+        <div className="grid grid-cols-3 gap-1 border-b border-slate-800 p-2">
+          {[
+            ['para_editar', 'Para editar', queueCounts.para_editar],
+            ['em_edicao', 'Em edição', queueCounts.em_edicao],
+            ['aguardando', 'Aguardando aprovação', queueCounts.aguardando],
+          ].map(([id, label, count]) => <button key={id} onClick={() => setQueueFilter(id)} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
+        </div>
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
         </div>
         <StageDragArea onMove={moverEtapa} disableBack={disableBack} className="flex-1 min-h-0">
           <div className="h-full overflow-y-auto">
-            {emEdicao.length === 0 ? (
+            {filteredQueue.length === 0 ? (
               <p className="px-3 py-10 text-center text-[11px] text-slate-500">{disableBack ? 'Nada em edição. Crie uma nova edição pra começar.' : 'Nada em edição. Arraste um projeto da Gravação pra cá, ou crie uma nova edição.'}</p>
             ) : (
               <div className="divide-y divide-slate-800">
-                {emEdicao.map((p) => {
+                {filteredQueue.map((p) => {
                   const st = STATUS_LABEL[p.edicao_status] || 'Rascunho de corte';
                   return (
                     <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${selId === p.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent bg-transparent hover:bg-slate-900/60'}`}>
@@ -139,6 +160,17 @@ export default function EdicaoPage({ disableBack = false }) {
               <h2 className="text-sm font-semibold text-slate-100">{sel.titulo}</h2>
               </div>
               <span className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[9px] font-bold uppercase text-violet-300">{STATUS_LABEL[sel.edicao_status] || 'Rascunho de corte'}</span>
+            </div>
+            <div className="border-b border-slate-800 px-4 py-3">
+              <div className="relative grid grid-cols-5 gap-2 before:absolute before:left-[10%] before:right-[10%] before:top-3 before:h-px before:bg-slate-700">
+                {[
+                  ['Gravação finalizada', '15/09/2026 14:30'],
+                  ['Processamento', '16/09/2026 09:12'],
+                  ['Para editar', '17/09/2026 11:05'],
+                  ['Em edição', '18/09/2026 10:23'],
+                  ['Aguardando aprovação', '—'],
+                ].map(([label, date], index) => <div key={label} className="relative z-10 text-center"><span className={`mx-auto flex size-6 items-center justify-center rounded-full border text-[9px] font-bold ${index < 4 ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-600 bg-slate-950 text-slate-500'}`}>{index < 3 ? '✓' : index + 1}</span><p className="mt-1 text-[9px] font-semibold text-slate-300">{label}</p><p className="text-[8px] tabular-nums text-slate-600">{date}</p></div>)}
+              </div>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <div className="grid gap-3 xl:grid-cols-[1.15fr_1.35fr_.8fr]">
@@ -191,6 +223,21 @@ export default function EdicaoPage({ disableBack = false }) {
                   </div>
                 </section>
               </div>
+
+              <section className="border border-slate-800 bg-slate-950/45">
+                <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
+                  <div><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-300"><Layers3 size={12} className="text-sky-400" /> Mídias vinculadas à produção</p><p className="mt-0.5 text-[9px] text-slate-500">Arquivos da gravação e referências disponíveis para esta edição.</p></div>
+                  <button className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Ver todas as mídias ({mediaGroups.reduce((sum, group) => sum + group.count, 0)})</button>
+                </div>
+                <div className="grid gap-2 p-2 md:grid-cols-2 xl:grid-cols-5">
+                  {mediaGroups.map(({ label, Icon, count, files, fallback }) => <div key={label} className="border border-slate-800 bg-slate-950/55 p-2"><div className="mb-1.5 flex items-center justify-between"><p className="flex items-center gap-1 text-[9px] font-semibold text-slate-300"><Icon size={11} className="text-sky-400" /> {label}</p><span className="rounded bg-slate-800 px-1.5 py-0.5 text-[8px] tabular-nums text-slate-300">{count}</span></div>{(files.length ? files : fallback).map((file) => <p key={file} className="truncate py-0.5 text-[9px] text-slate-500">› {file}</p>)}<button className="mt-1 text-[8px] font-semibold text-sky-400 hover:text-sky-300">+ {Math.max(0, count - 3)} arquivos</button></div>)}
+                </div>
+              </section>
+
+              <section className="grid gap-3 border border-slate-800 bg-slate-950/45 p-3 xl:grid-cols-[1.25fr_.75fr]">
+                <div><p className="text-[10px] font-bold uppercase text-slate-300">Material para edição</p><p className="mb-2 text-[9px] text-slate-500">Baixe os arquivos, gere o pacote do projeto ou continue no Workspace.</p><div className="flex flex-wrap gap-1.5"><button onClick={copiarNomes} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Download size={11} /> Baixar mídias</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FileCode2 size={11} /> Baixar XML</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Layers3 size={11} /> Pacote completo</button><button onClick={() => window.location.assign('/workspace')} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Abrir no Workspace</button></div></div>
+                <div><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-300"><MessageCircle size={11} className="text-sky-400" /> Observações de edição</p><textarea value={sel.edicao_obs || ''} onChange={(e) => field('edicao_obs', e.target.value)} rows={3} className={`${inputCls()} mt-1`} placeholder="Cortes, ajustes, GC, trilha e observações..." /></div>
+              </section>
 
               <div className="grid gap-2 sm:grid-cols-3">
                 <label className="block">
@@ -260,10 +307,16 @@ export default function EdicaoPage({ disableBack = false }) {
                 )}
               </div>
 
-              <div>
-                <p className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase text-slate-500"><FileText size={11} /> Observações de edição</p>
-                <textarea value={sel.edicao_obs || ''} onChange={(e) => field('edicao_obs', e.target.value)} rows={3} className={inputCls()} placeholder="Cortes, observações de cor, áudio, assets vinculados..." />
-              </div>
+              <section className="overflow-hidden border border-slate-800 bg-slate-950/45">
+                <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-slate-300">Versões editadas</p><p className="text-[9px] text-slate-500">Histórico de entregas; novas versões não sobrescrevem as anteriores.</p></div><button className="flex items-center gap-1 rounded bg-sky-500 px-2 py-1.5 text-[9px] font-bold text-slate-950 hover:bg-sky-400"><Upload size={11} /> Enviar nova versão</button></div>
+                <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-[9px]"><thead className="border-b border-slate-800 bg-slate-900/55 uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Versão</th><th>Tipo</th><th>Responsável</th><th>Data e hora</th><th>Observações</th><th>Status</th><th className="pr-3 text-right">Ações</th></tr></thead><tbody className="divide-y divide-slate-800 text-slate-400">{[
+                  ['V3', 'Master', 'Ajustes de áudio e GC. Versão final.', 'Atual'],
+                  ['V2', 'Master', 'Primeira trilha e correção de cortes.', 'Para aprovação'],
+                  ['V1', 'Master', 'Primeira versão completa.', 'Arquivada'],
+                  ['V2', 'Vertical (9:16)', 'Corte para redes sociais.', 'Arquivada'],
+                  ['V1', 'Legendado', 'Versão com legendas em PT-BR.', 'Arquivada'],
+                ].map(([version, type, note, status], index) => <tr key={`${version}-${type}`}><td className="px-3 py-2 font-semibold text-slate-200">{version}</td><td>{type}</td><td>{sel.editor || 'Editor'}</td><td className="tabular-nums">18/09/2026 {15 - index}:42</td><td>{note}</td><td><span className={`rounded px-1.5 py-0.5 ${status === 'Atual' ? 'bg-emerald-500/15 text-emerald-300' : status === 'Para aprovação' ? 'bg-sky-500/15 text-sky-300' : 'bg-slate-800 text-slate-400'}`}>{status}</span></td><td className="pr-3 text-right"><button className="p-1 hover:text-sky-300" title="Baixar versão"><Download size={11} /></button><button className="p-1 hover:text-sky-300" title="Comentários"><MessageCircle size={11} /></button><button className="p-1 hover:text-sky-300" title="Mais ações"><MoreHorizontal size={11} /></button></td></tr>)}</tbody></table></div>
+              </section>
 
               <div>
                 <p className="mb-1.5 text-[10px] font-bold uppercase text-slate-500">Resumo da produção</p>
