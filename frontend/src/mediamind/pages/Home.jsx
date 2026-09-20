@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PlayCircle, Package, FolderKanban, FileText, CheckCircle2,
   Search, Sparkles, Activity, Archive, Clock, ArrowRight,
+  CalendarClock, AlertTriangle, Send, Film,
 } from 'lucide-react';
+import { getMyDashboard } from '../../api/dashboard';
 import { Panel, Stat, Badge, StatusBadge, Button } from '../ui';
 import { formatDuration } from '../data';
 import { useMamData } from '../lib/mamData';
@@ -16,6 +18,7 @@ function getGreeting() {
 }
 
 export default function Home() {
+  const [dashboard, setDashboard] = useState(null);
   const { projects, assets, tasks, scripts, savedSearches, recentActivity, loading } = useMamData();
   const today = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
@@ -25,6 +28,25 @@ export default function Home() {
   const activeProjects = projects.filter((p) => p.status === 'active');
   const reviewingScripts = scripts.filter((s) => s.status !== 'approved');
   const completedAssets = assets.filter((a) => a.ai_status === 'complete').length;
+  useEffect(() => {
+    let active = true;
+    getMyDashboard().then((data) => { if (active) setDashboard(data); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const fallbackKpis = [
+    { id: 'projects', label: 'Projetos ativos', value: activeProjects.length },
+    { id: 'assets', label: 'Acervo', value: assets.length },
+    { id: 'processing', label: 'Processados IA', value: completedAssets },
+    { id: 'tasks', label: 'Tarefas hoje', value: tasks.length },
+    { id: 'editing', label: 'Em edição', value: inProgressTasks.length },
+    { id: 'approvals', label: 'Aprovações', value: reviewingScripts.length },
+    { id: 'publications', label: 'Publicações', value: 0 },
+    { id: 'pending', label: 'Pendências', value: tasks.filter((t) => t.status !== 'approved').length },
+  ];
+  const kpis = dashboard?.kpis || fallbackKpis;
+  const kpiIcons = [FolderKanban, Archive, Sparkles, CheckCircle2, Film, CalendarClock, Send, AlertTriangle];
+  const kpiTones = ['sky', 'violet', 'emerald', 'amber', 'sky', 'violet', 'emerald', 'amber'];
 
   if (loading) {
     return (
@@ -52,11 +74,10 @@ export default function Home() {
       </header>
 
       {/* Top stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat title="Projetos ativos" value={activeProjects.length} icon={FolderKanban} tone="sky" />
-        <Stat title="Acervo" value={assets.length} icon={Archive} tone="violet" />
-        <Stat title="Processados IA" value={completedAssets} icon={Sparkles} tone="emerald" />
-        <Stat title="Tarefas hoje" value={tasks.length} icon={CheckCircle2} tone="amber" />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+        {kpis.map((item, index) => (
+          <Stat key={item.id} title={item.label} value={item.value} icon={kpiIcons[index]} tone={kpiTones[index]} />
+        ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_0.9fr]">

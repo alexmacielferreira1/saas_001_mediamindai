@@ -14,6 +14,7 @@ export default defineConfig({
       provider: 'v8',
       include: [
         'src/api/httpClient.js',
+        'src/api/dashboard.js',
         'src/api/permissions.js',
         'src/mediamind/auth.jsx',
         'src/mediamind/lib/empresaContext.jsx',
