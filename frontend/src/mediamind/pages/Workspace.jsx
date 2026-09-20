@@ -13,6 +13,7 @@ import WorkspaceRoteiroPanel from '../components/WorkspaceRoteiroPanel';
 import WorkspaceTimelineBar from '../components/WorkspaceTimelineBar';
 import { MOCK_ASSETS, formatDuration, parseTime } from '../data';
 import { useSearchParams } from 'react-router-dom';
+import { findAssetById, workspaceAssetId } from '../lib/assetIdentity';
 
 const STORAGE_KEY = 'mm_workspace_layouts';
 
@@ -31,9 +32,9 @@ export default function Workspace() {
   const initialTc = searchParams.get('tc') || '';
 
   useEffect(() => {
-    const assetId = Number(searchParams.get('asset'));
+    const assetId = workspaceAssetId(searchParams);
     if (assetId) {
-      const found = MOCK_ASSETS.find((a) => a.id === assetId);
+      const found = findAssetById(MOCK_ASSETS, assetId);
       if (found) setSelectedAsset(found);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,8 +228,8 @@ export default function Workspace() {
     const isRoteiroDrop = destination.droppableId === 'roteiro';
 
     if ((source.droppableId === 'medias' || source.droppableId === 'preview') && (isRoteiroDrop || isTimelineDrop)) {
-      const assetId = Number(result.draggableId.replace(/^(media|preview)-/, ''));
-      const asset = MOCK_ASSETS.find((a) => a.id === assetId) || filteredAssets[source.index];
+      const assetId = result.draggableId.replace(/^(media|preview)-/, '');
+      const asset = findAssetById(MOCK_ASSETS, assetId) || filteredAssets[source.index];
       if (asset) {
         let track = 'v1';
         if (isTimelineDrop) {
