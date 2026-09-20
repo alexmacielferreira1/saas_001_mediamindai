@@ -250,7 +250,7 @@ export default function GravacoesMateriais() {
             <DialogTitle className="text-slate-100">{preview?.nome}</DialogTitle>
           </DialogHeader>
           <div className="overflow-hidden rounded-lg border border-slate-700 bg-black">
-            <video controls src={preview?.url || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'} className="w-full" />
+            {preview?.url ? <video controls src={preview.url} className="w-full" /> : <div className="flex min-h-48 items-center justify-center px-6 text-center text-sm text-slate-500">Prévia indisponível: este material ainda não possui arquivo local vinculado.</div>}
           </div>
           <p className="text-xs text-slate-400">{preview?.tamanho} · recebido {preview?.recebido}</p>
         </DialogContent>

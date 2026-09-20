@@ -190,7 +190,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
 
   // Sincroniza selecionados no formato esperado pela etapa de legendas (clip.viral).
   function syncViral() {
-    const viral = candidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, selected: true, score: c.overall_score }));
+    const viral = candidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, summary: c.summary || c.reason || '', texto: c.transcript || c.summary || '', selected: true, score: c.overall_score }));
     onChange({ viral });
   }
 

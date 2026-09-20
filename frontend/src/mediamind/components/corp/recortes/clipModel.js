@@ -1,7 +1,7 @@
 import { MOCK_CORP_RECORTES } from '../../../data';
 
 let counter = 100;
-export const SAMPLE_VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+export const SAMPLE_VIDEO = '';
 
 export function fmt(ms) {
   if (!ms || ms < 0) ms = 0;
@@ -79,21 +79,14 @@ export function gerarLegendas(clip) {
   const base = virais.length ? virais : [{ start_ms: clip.in_ms, end_ms: clip.out_ms }];
   const out = [];
   let k = 0;
-  const exemplos = ['texto transcrito...', 'fala do convidado', 'destaque do trecho', 'continuação da fala', 'comentário do apresentador'];
   for (const v of base) {
-    const dur = v.end_ms - v.start_ms;
-    const lines = Math.max(1, Math.round(dur / 3500));
-    for (let i = 0; i < lines; i++) {
-      const ls = v.start_ms + (dur / lines) * i;
-      const le = v.start_ms + (dur / lines) * (i + 1);
-      out.push({
-        id: `l-${Date.now()}-${k++}`,
-        start_ms: Math.round(ls),
-        end_ms: Math.round(le),
-        texto: exemplos[(k + i) % exemplos.length],
-        cortar_audio: false,
-      });
-    }
+    out.push({
+      id: `l-${Date.now()}-${k++}`,
+      start_ms: Math.round(v.start_ms),
+      end_ms: Math.round(v.end_ms),
+      texto: v.texto || v.summary || v.titulo || '',
+      cortar_audio: false,
+    });
   }
   return out;
 }
