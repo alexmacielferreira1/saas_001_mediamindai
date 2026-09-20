@@ -60,6 +60,32 @@ def test_records_reject_unknown_type_and_unauthenticated_access(permission_clien
     assert response.status_code == 404
 
 
+def test_record_mutations_create_server_audit_and_audit_is_append_only(permission_client):
+    client, _ = permission_client
+    login(client)
+    created = client.post("/api/v1/records/AgendaEvento", json={"data": {"titulo": "Auditada"}})
+    record_id = created.json()["id"]
+
+    logs = client.get("/api/v1/records/LogAuditoria").json()["records"]
+    assert logs[-1]["action"] == "record.created"
+    assert logs[-1]["entity_type"] == "AgendaEvento"
+    assert logs[-1]["entity_id"] == record_id
+    assert "user_id" in logs[-1]
+
+    direct = client.post("/api/v1/records/LogAuditoria", json={"data": {"action": "forged"}})
+    changed = client.patch(f"/api/v1/records/LogAuditoria/{logs[-1]['id']}", json={"data": {"action": "forged"}})
+    deleted = client.delete(f"/api/v1/records/LogAuditoria/{logs[-1]['id']}")
+    assert direct.status_code == changed.status_code == deleted.status_code == 403
+
+
+def test_viewer_can_read_but_cannot_mutate_tenant_records(permission_client):
+    client, _ = permission_client
+    login(client, "viewer@mediamind.ai")
+    assert client.get("/api/v1/records/AgendaEvento").status_code == 200
+    response = client.post("/api/v1/records/AgendaEvento", json={"data": {"titulo": "Negada"}})
+    assert response.status_code == 403
+
+
 def test_record_from_other_tenant_is_not_visible(permission_client):
     client, ids = permission_client
     login(client)
