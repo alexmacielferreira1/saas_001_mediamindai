@@ -2,7 +2,16 @@
 
 Marco atual: **M0 — blocked**.
 
-Verificado em 2026-09-19T19:54:41.393901+00:00.
+Atualizado em 20/09/2026 após a primeira fatia de identidade/tenancy local.
+
+Autenticação, sessão, contas demo protegidas, isolamento básico por membership e seleção de empresa
+foram reconstruídos fora do Base44. O layout foi preservado. O gate continua **blocked** porque a
+execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
+
+Última evidência automatizada: backend **63 passed, 2 skipped**, 100% linhas/branches; frontend
+**24 passed**, 100% statements/branches/functions/lines; lint, format, typecheck e build aprovados.
+Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
+parado e a sessão não tinha permissão para iniciá-lo.
 
 | Verificação | Estado | Evidência |
 |---|---|---|

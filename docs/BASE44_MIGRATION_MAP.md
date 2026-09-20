@@ -1,8 +1,20 @@
 # Mapa de migração Base44
 
-Inventário estático do export original. Nenhuma funcionalidade foi convertida.
+Inventário estático do export original, preservado como referência de migração.
 Ocorrências são candidatas à revisão; ausência de padrão não prova ausência de dependência.
 O build não comprova login, persistência, isolamento de tenant ou paridade funcional.
+
+## Progresso verificado da migração
+
+- autenticação local, sessão opaca, logout e proteção contra força bruta: implementados e cobertos;
+- usuários, memberships, tenants e troca de empresa: implementados e cobertos;
+- contexto React de autenticação e empresa: removido do runtime Base44/localStorage;
+- 33 contas demo: seed idempotente somente para `local/test`, ainda aguardando execução no banco;
+- demais entidades, funções, uploads e módulos de negócio listados abaixo: pendentes.
+
+Último gate automatizado em 20/09/2026: backend 63 testes e frontend 24 testes, ambos
+com 100% de cobertura do código próprio incluído. A validação PostgreSQL/navegador ficou pendente
+porque o serviço privilegiado do Docker estava indisponível; não foi declarada paridade funcional.
 
 ## Origem
 ZIP: `001_mediamindai.zip`; snapshot: tag `base44-export`.

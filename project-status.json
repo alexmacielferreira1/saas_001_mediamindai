@@ -63,8 +63,18 @@
         },
         "frontend_functional_validation": {
           "status": "blocked",
-          "updated_at": "2026-09-19T19:54:41.393901+00:00",
-          "notes": "Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient."
+          "updated_at": "2026-09-20T11:05:00+00:00",
+          "notes": "Identity/tenancy journey no longer uses Base44, but browser validation after migration is pending because Docker/PostgreSQL was unavailable. See docs/FRONTEND_VALIDATION_MATRIX.md."
+        },
+        "local_identity_unit_coverage": {
+          "status": "passed",
+          "updated_at": "2026-09-20T11:05:00+00:00",
+          "notes": "Backend 63 passed at 100% line/branch coverage; frontend 24 passed at 100% statement/branch/function/line coverage."
+        },
+        "local_identity_postgres_browser": {
+          "status": "blocked",
+          "updated_at": "2026-09-20T11:05:00+00:00",
+          "notes": "WSL responded, but com.docker.service remained stopped and could not be started by this session; migration/seed/browser proof must be rerun when Docker is operational."
         },
         "git_clean_at_check": {
           "status": "passed",
@@ -72,8 +82,8 @@
           "notes": "Snapshot before writing this report. Verify and commit reviewed work separately."
         }
       },
-      "updated_at": "2026-09-19T19:54:41.393901+00:00",
-      "notes": "Partial M0; unresolved gates. Do not advance to M1."
+      "updated_at": "2026-09-20T11:05:00+00:00",
+      "notes": "Partial M0; identity/tenancy slice implemented outside Base44, but PostgreSQL/browser evidence and remaining migration gates are unresolved. Do not declare M1 complete."
     },
     "M1": {
       "name": "foundation",
