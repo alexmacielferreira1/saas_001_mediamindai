@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 
+from app.api.v1 import router as api_v1_router
 from app.core.config import get_settings
 from app.core.errors import error_response
 from app.db.session import database_available, engine
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     logger = configure_logging()
     app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
+    app.include_router(api_v1_router)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):

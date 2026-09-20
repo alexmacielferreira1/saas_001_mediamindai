@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     )
     api_port: int = Field(default=8001 if PRODUCT == "central" else 8000, ge=1024, le=65535)
     frontend_port: int = Field(default=5174 if PRODUCT == "central" else 5173, ge=1024, le=65535)
+    session_hours: int = Field(default=8, ge=1, le=168)
+    session_cookie_secure: bool = False
 
     @property
     def version(self) -> str:
