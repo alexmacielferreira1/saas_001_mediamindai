@@ -153,19 +153,19 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
   const st = STATUS[selected.etapa];
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-5">
+    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(300px,38%)_1fr]">
       {/* Lista de rascunhos */}
-      <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
+      <div className="flex h-full min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 p-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Rascunhos</p>
-          <button onClick={addDraft} className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1.5 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Novo</button>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Pré-produção</p><p className="text-sm font-semibold text-slate-100">Rascunhos e pautas</p><p className="text-[10px] text-slate-500">{meus.length} itens no fluxo</p></div>
+          <button onClick={addDraft} className="flex min-h-9 items-center gap-1 rounded-md bg-sky-500 px-3 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Novo rascunho</button>
         </div>
         <StageDragArea onMove={moverEtapa} className="flex-1 min-h-0">
-          <div className="h-full overflow-y-auto p-2">
+          <div className="h-full overflow-y-auto divide-y divide-slate-800">
             {meus.map((d) => {
               const ds = STATUS[d.etapa];
               return (
-                <DraggableStageCard key={d.id} id={d.id} etapa={d.etapa} onClick={() => setSelectedId(d.id)} className={`mb-1.5 w-full rounded-lg border px-3 py-2 text-left transition ${selectedId === d.id ? 'border-sky-600 bg-sky-950/30' : 'border-slate-800 hover:bg-slate-800/30'}`}>
+                <DraggableStageCard key={d.id} id={d.id} etapa={d.etapa} onClick={() => setSelectedId(d.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${selectedId === d.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}>
                   <p className="truncate text-xs font-medium text-slate-200">{d.titulo}</p>
                   <p className="truncate text-[10px] text-slate-500">{d.programa}{d.episodio ? ` · ${d.episodio}` : ''}</p>
                   {ds && <span className={`mt-1.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ds.tone}`}>{ds.label}</span>}
@@ -177,7 +177,7 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
       </div>
 
       {/* Editor */}
-      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-3">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-900/20">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">Rascunho de produção</p>
