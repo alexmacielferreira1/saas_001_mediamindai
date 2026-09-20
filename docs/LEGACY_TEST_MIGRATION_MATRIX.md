@@ -13,7 +13,7 @@ documentada de não aplicabilidade.
 | Autenticação | 13 | Sessão local básica coberta; recuperação de senha pendente | Crítica |
 | Proteção contra força bruta | 12 | Bloqueio por conta portado e coberto; casos distribuídos e observabilidade avançada pendentes | Crítica |
 | Regras de acesso | 5 | Isolamento por tenant e papéis básicos cobertos; matriz completa pendente | Crítica |
-| Grupos de permissão | 16 | Núcleo tenant-scoped, decisão deny-by-default e vínculo ao membership cobertos; CRUD HTTP e administração pendentes | Crítica |
+| Grupos de permissão | 16 | Núcleo tenant-scoped e CRUD HTTP seguro cobertos; vínculo administrativo grupo↔membership, catálogo inicial e prova PostgreSQL pendentes | Crítica |
 | Usuários | 37 | Identidade base coberta; CRUD e políticas pendentes | Alta |
 | Aplicação/saúde | 4 | Coberto na fundação local | Alta |
 | Dependências | 1 | Coberto por verificações automatizadas; auditoria contínua | Alta |
