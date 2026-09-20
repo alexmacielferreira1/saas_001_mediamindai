@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Plus, Trash2, Flag, Film, Send } from 'lucide-react';
+import { Check, Plus, Trash2, Flag, Film, Send, Play, Download, Scissors, CalendarClock, FileVideo, User, Clock3, Copy } from 'lucide-react';
 import { useProducaoProjetos, updateProjeto } from '../../lib/producaoStore';
 
 const STAGES = [
@@ -54,6 +54,8 @@ export default function FinalizadoTimeline({ onNavigate }) {
   const [selId, setSelId] = useState(finalizados[0]?.id);
   const proj = finalizados.find((p) => p.id === selId) || finalizados[0];
   const [novo, setNovo] = useState('');
+  const [inPoint, setInPoint] = useState('00:00:00');
+  const [outPoint, setOutPoint] = useState('00:08:42');
 
   if (!proj) {
     return (
@@ -73,79 +75,24 @@ export default function FinalizadoTimeline({ onNavigate }) {
   function remove(id) { setTarefas(tarefas.filter((t) => t.id !== id)); }
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-5">
-      {/* Timeline vertical */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
-        <div className="border-b border-slate-800 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">Linha do tempo da produção</p>
-          <h2 className="truncate text-sm font-semibold text-slate-100">{proj.titulo}</h2>
-          {finalizados.length > 1 && (
-            <select value={proj.id} onChange={(e) => setSelId(e.target.value)} className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 outline-none">
-              {finalizados.map((p) => <option key={p.id} value={p.id}>{p.titulo}</option>)}
-            </select>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          <ol className="space-y-0">
-            {history.map((e, i) => (
-              <li key={e.id} className="relative flex gap-3 pb-4 last:pb-0">
-                <div className="flex flex-col items-center">
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${e.done ? 'bg-sky-500 text-slate-950' : 'border border-slate-700 text-slate-500'}`}>{i + 1}</div>
-                  {i < history.length - 1 && <span className="mt-1 w-px flex-1 bg-gradient-to-b from-sky-600/60 to-slate-700" />}
-                </div>
-                <div className="flex-1 pb-1">
-                  <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-slate-200">{e.name}</p>
-                      <span className="mm-badge mm-badge-success">concluído</span>
-                    </div>
-                    <p className="mt-1 text-[10px] text-slate-500">{e.who} · {fmtDate(e.when)}</p>
-                    {e.obs && <p className="mt-1 text-[10px] italic text-slate-400">↳ {e.obs}</p>}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
+    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(300px,30%)_1fr]">
+      <aside className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
+        <div className="border-b border-slate-800 px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Acervo oficial</p><h2 className="text-sm font-semibold text-slate-100">Produções finalizadas</h2><p className="text-[10px] text-slate-500">{finalizados.length} mídia(s) aprovadas</p></div>
+        <div className="flex-1 divide-y divide-slate-800 overflow-y-auto">{finalizados.map((p) => <button key={p.id} onClick={() => setSelId(p.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${p.id === proj.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}><div className="flex items-center justify-between gap-2"><p className="text-[10px] font-bold uppercase text-sky-400">{p.episodio || '—'} · {p.programa}</p><span className="mm-badge mm-badge-success">oficial</span></div><p className="mt-1 text-xs font-semibold text-slate-200">{p.titulo}</p><p className="mt-1 text-[10px] text-slate-500">Versão aprovada · {p.responsavel || 'Equipe'}</p></button>)}</div>
+      </aside>
 
-      {/* Passo a passo */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-3">
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Passo a passo</p>
-            <p className="text-xs text-slate-300">Status: <span className="font-semibold text-emerald-300">{feitas}/{tarefas.length} tarefas</span> · Produção finalizada</p>
-          </div>
-          <span className="mm-badge mm-badge-success"><Flag size={11} /> Finalizado</span>
-        </div>
+      <main className="flex min-h-0 flex-col bg-slate-900/20">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">Finalizado · versão oficial</p><h2 className="text-base font-semibold text-slate-100">{proj.titulo}</h2><p className="text-[11px] text-slate-500">{proj.programa} · {proj.episodio} · aprovado pela Direção</p></div><div className="flex gap-2"><button className="flex items-center gap-1 rounded border border-slate-700 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-800"><Download size={11} /> Baixar master</button><button className="flex items-center gap-1 rounded border border-slate-700 px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-800"><Copy size={11} /> Copiar link</button></div></div>
 
-        {onNavigate && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-4 py-2.5">
-            <button onClick={() => onNavigate('cortes')} className="flex items-center gap-1.5 rounded-md bg-violet-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-violet-400">
-              <Film size={12} /> Enviar pra Cortes
-            </button>
-            <button onClick={() => onNavigate('publicacoes')} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">
-              <Send size={12} /> Agendar publicação
-            </button>
-          </div>
-        )}
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          <section className="grid gap-3 xl:grid-cols-[1.3fr_.7fr]">
+            <div className="overflow-hidden border border-slate-800 bg-slate-950/65"><div className="flex aspect-video items-center justify-center bg-[radial-gradient(circle_at_center,_#172033,_#050914_70%)]"><button className="flex size-12 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25"><Play size={20} className="ml-0.5" /></button></div><div className="p-3"><div className="relative h-2 rounded bg-slate-800"><div className="absolute inset-y-0 left-[18%] right-[24%] rounded bg-sky-500/55" /><span className="absolute left-[18%] top-1/2 size-3 -translate-y-1/2 rounded-full bg-emerald-400" /><span className="absolute right-[24%] top-1/2 size-3 -translate-y-1/2 rounded-full bg-rose-400" /></div><div className="mt-2 grid grid-cols-2 gap-2"><label className="text-[9px] uppercase text-slate-500">IN<input value={inPoint} onChange={(e) => setInPoint(e.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-emerald-300" /></label><label className="text-[9px] uppercase text-slate-500">OUT<input value={outPoint} onChange={(e) => setOutPoint(e.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-rose-300" /></label></div></div></div>
+            <div className="space-y-3"><section className="border border-slate-800 bg-slate-950/45 p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Dados da versão oficial</p><div className="mt-2 grid grid-cols-2 gap-3 text-[10px]"><div><p className="text-slate-600">Versão</p><p className="text-slate-300">V3 Master</p></div><div><p className="text-slate-600">Duração</p><p className="text-slate-300">00:08:42</p></div><div><p className="text-slate-600">Formato</p><p className="text-slate-300">16:9 · 4K</p></div><div><p className="text-slate-600">Aprovado em</p><p className="text-slate-300">18/09/2026</p></div><div><p className="text-slate-600">Responsável</p><p className="text-slate-300">{proj.responsavel || 'Equipe'}</p></div><div><p className="text-slate-600">Status</p><p className="text-emerald-300">Oficial</p></div></div></section>{onNavigate && <section className="border border-slate-800 bg-slate-950/45 p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Próximas ações</p><div className="mt-2 space-y-2"><button onClick={() => onNavigate('redes_sociais')} className="flex w-full items-center justify-center gap-1.5 rounded bg-violet-500 px-3 py-2 text-[11px] font-bold text-slate-950 hover:bg-violet-400"><Scissors size={12} /> Enviar trecho para Cortes</button><button onClick={() => onNavigate('publicacoes')} className="flex w-full items-center justify-center gap-1.5 rounded bg-sky-500 px-3 py-2 text-[11px] font-bold text-slate-950 hover:bg-sky-400"><CalendarClock size={12} /> Agendar publicação</button></div></section>}</div>
+          </section>
 
-        <div className="flex-1 space-y-2 overflow-y-auto p-4">
-          {tarefas.length === 0 && <p className="py-6 text-center text-[11px] text-slate-500">Nenhuma tarefa. Adicione os passos da produção.</p>}
-          {tarefas.map((t) => (
-            <div key={t.id} className="flex items-center gap-2.5 rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
-              <button onClick={() => toggle(t.id)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${t.feito ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-600'}`}>{t.feito && <Check size={12} />}</button>
-              <span className={`flex-1 text-xs ${t.feito ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{t.texto}</span>
-              <button onClick={() => remove(t.id)} className="rounded-md border border-slate-700 px-1.5 py-1 text-slate-400 hover:bg-rose-950/40 hover:text-rose-300"><Trash2 size={12} /></button>
-            </div>
-          ))}
+          <section className="grid gap-3 xl:grid-cols-2"><div className="border border-slate-800 bg-slate-950/45"><div className="border-b border-slate-800 px-3 py-2"><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400"><Clock3 size={11} /> Histórico da produção</p></div><div className="grid grid-cols-2 gap-2 p-3">{history.map((e, i) => <div key={e.id} className="border border-slate-800 bg-slate-950/45 p-2"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold text-slate-200">{i + 1}. {e.name}</p><Check size={11} className="text-emerald-400" /></div><p className="mt-1 text-[9px] text-slate-500">{e.who} · {fmtDate(e.when)}</p></div>)}</div></div><div className="border border-slate-800 bg-slate-950/45"><div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><p className="text-[10px] font-bold uppercase text-slate-400">Checklist final · {feitas}/{tarefas.length}</p><FileVideo size={12} className="text-sky-400" /></div><div className="max-h-44 divide-y divide-slate-800 overflow-y-auto">{tarefas.map((t) => <div key={t.id} className="flex items-center gap-2 px-3 py-2"><button onClick={() => toggle(t.id)} className={`flex size-5 items-center justify-center rounded border ${t.feito ? 'border-emerald-500 bg-emerald-500 text-slate-950' : 'border-slate-600'}`}>{t.feito && <Check size={12} />}</button><span className={`flex-1 text-[10px] ${t.feito ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{t.texto}</span><button onClick={() => remove(t.id)} className="text-slate-600 hover:text-rose-300"><Trash2 size={11} /></button></div>)}</div><div className="flex gap-2 border-t border-slate-800 p-2"><input value={novo} onChange={(e) => setNovo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Nova tarefa..." className="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-200" /><button onClick={add} className="rounded bg-sky-500 px-2 text-slate-950"><Plus size={12} /></button></div></div></section>
         </div>
-
-        <div className="flex items-center gap-2 border-t border-slate-800 p-3">
-          <input value={novo} onChange={(e) => setNovo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Nova tarefa do passo a passo..." className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
-          <button onClick={add} className="flex items-center gap-1 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={12} /> Adicionar</button>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
