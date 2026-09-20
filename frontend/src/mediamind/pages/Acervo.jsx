@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Archive, Shield, MonitorCog, Grid3X3, List, Download,
-  AlertTriangle, CheckCircle2, Play, FileText, Music, Image, Scissors,
+  Archive, Shield, MonitorCog, Grid3X3, List,
+  AlertTriangle, CheckCircle2, Play, FileText, Music, Image,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Button, InfoRow, Loading } from '../ui';
-import {
-  MOCK_ASSETS, MOCK_LIBRARIES, MOCK_AUDIT_LOGS, MOCK_MONITORING,
-  ACERVO_STATS, MEDIA_TYPES, formatDuration, formatSize, formatBytes,
-} from '../data';
+import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, EmptyState } from '../ui';
+import { formatDuration, formatSize, formatBytes } from '../data';
+import { base44 } from '@/api/base44Client';
+import { getManagementOverview } from '../../api/management';
 
 const ACERVO_TABS = [
   { key: 'acervo', label: 'Arquivos', icon: Archive },
@@ -24,6 +23,20 @@ export default function Acervo() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabParam || 'acervo');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getManagementOverview(),
+      base44.entities.Asset.list('-created_date', 500),
+      base44.entities.LogAuditoria.list('-created_date', 100),
+    ])
+      .then(([overview, assets, logs]) => { if (active) setData({ overview, assets, logs }); })
+      .catch(() => { if (active) setError(true); });
+    return () => { active = false; };
+  }, []);
 
   function handleTabChange(key) {
     setActiveTab(key);
@@ -39,19 +52,21 @@ export default function Acervo() {
 
       <Tabs tabs={ACERVO_TABS} active={activeTab} onChange={handleTabChange} />
 
-      {activeTab === 'acervo' && <AcervoTab />}
-      {activeTab === 'admin' && <AdminTab />}
-      {activeTab === 'monitoring' && <MonitoringTab />}
+      {error && <EmptyState icon={AlertTriangle} title="Não foi possível carregar o acervo" description="Verifique o serviço local e tente novamente." />}
+      {!error && !data && <Loading label="Carregando acervo..." />}
+      {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
+      {data && activeTab === 'admin' && <AdminTab logs={data.logs} />}
+      {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} />}
     </div>
   );
 }
 
-function AcervoTab() {
+function AcervoTab({ assets, summary }) {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list');
 
-  const filtered = MOCK_ASSETS.filter((a) => {
+  const filtered = assets.filter((a) => {
     if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
     if (query && !`${a.title} ${a.filename} ${a.subjects} ${a.people}`.toLowerCase().includes(query.toLowerCase())) return false;
     return true;
@@ -61,11 +76,10 @@ function AcervoTab() {
     <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat title="Total de arquivos" value={ACERVO_STATS.totalAssets.toLocaleString('pt-BR')} icon={Archive} tone="sky" />
-        <Stat title="Bibliotecas" value={ACERVO_STATS.totalLibraries} icon={FolderIcon} tone="violet" />
-        <Stat title="Indexados IA" value={ACERVO_STATS.indexedAssets.toLocaleString('pt-BR')} icon={CheckCircle2} tone="emerald" />
-        <Stat title="Falhas" value={ACERVO_STATS.failedAssets} icon={AlertTriangle} tone="amber" />
-        <Stat title="Storage" value={`${ACERVO_STATS.storageUsagePercent}%`} icon={MonitorCog} tone="sky" />
+        <Stat title="Total de arquivos" value={summary.total.toLocaleString('pt-BR')} icon={Archive} tone="sky" />
+        <Stat title="Indexados IA" value={summary.indexed.toLocaleString('pt-BR')} icon={CheckCircle2} tone="emerald" />
+        <Stat title="Falhas" value={summary.failures} icon={AlertTriangle} tone="amber" />
+        <Stat title="Storage utilizado" value={formatBytes(summary.storage_bytes)} icon={MonitorCog} tone="sky" />
       </div>
 
       {/* Tipos de mídia */}
@@ -76,13 +90,16 @@ function AcervoTab() {
         >
           Todos
         </button>
-        {MEDIA_TYPES.map((m) => (
+        {[
+          ['video', '🎬', 'Vídeos'], ['audio', '🎙️', 'Áudios'],
+          ['image', '🖼️', 'Imagens'], ['document', '📄', 'Documentos'],
+        ].map(([type, icon, label]) => (
           <button
-            key={m.label}
-            onClick={() => setTypeFilter(m.label === 'Vídeos' ? 'video' : m.label === 'Áudios' ? 'audio' : m.label === 'Imagens' ? 'image' : 'document')}
-            className={`mm-badge ${typeFilter === (m.label === 'Vídeos' ? 'video' : m.label === 'Áudios' ? 'audio' : m.label === 'Imagens' ? 'image' : 'document') ? 'bg-sky-500 text-slate-950' : 'border border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+            key={type}
+            onClick={() => setTypeFilter(type)}
+            className={`mm-badge ${typeFilter === type ? 'bg-sky-500 text-slate-950' : 'border border-slate-700 text-slate-400 hover:bg-slate-800'}`}
           >
-            {m.icon} {m.label} <span className="opacity-60">{m.badge}</span>
+            {icon} {label} <span className="opacity-60">{assets.filter((asset) => asset.asset_type === type).length}</span>
           </button>
         ))}
       </div>
@@ -178,30 +195,21 @@ function AcervoTab() {
   );
 }
 
-function AdminTab() {
+function AdminTab({ logs }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Bibliotecas">
-          <div className="flex flex-col gap-2">
-            {MOCK_LIBRARIES.map((lib) => (
-              <div key={lib.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
-                <div>
-                  <p className="font-medium text-slate-200">{lib.name}</p>
-                  <p className="text-xs text-slate-500">{lib.asset_count.toLocaleString('pt-BR')} arquivos · {formatBytes(lib.storage_bytes)}</p>
-                </div>
-                <StatusBadge status={lib.status} />
-              </div>
-            ))}
-          </div>
+          <p className="py-6 text-center text-sm text-slate-500">Nenhuma biblioteca cadastrada nesta empresa.</p>
         </Panel>
         <Panel title="Logs de auditoria">
           <div className="flex flex-col gap-2">
-            {MOCK_AUDIT_LOGS.map((log) => (
+            {logs.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum evento de auditoria.</p>}
+            {logs.map((log) => (
               <div key={log.id} className="flex items-center gap-3 rounded-lg border border-slate-800/50 px-3 py-2 text-sm">
-                <Badge tone={log.action.includes('Falha') ? 'error' : 'info'}>{log.action}</Badge>
-                <span className="flex-1 truncate text-slate-300">{log.asset}</span>
-                <span className="text-xs text-slate-500">{log.date}</span>
+                <Badge tone="info">{log.action || 'evento'}</Badge>
+                <span className="flex-1 truncate text-slate-300">{log.entity_type || log.entidade || 'registro'}</span>
+                <span className="text-xs text-slate-500">{log.created_date ? new Date(log.created_date).toLocaleString('pt-BR') : ''}</span>
               </div>
             ))}
           </div>
@@ -211,26 +219,20 @@ function AdminTab() {
   );
 }
 
-function MonitoringTab() {
-  const m = MOCK_MONITORING;
-  const memPct = m.resources.memory_used_bytes && m.resources.memory_total_bytes
-    ? Math.round((m.resources.memory_used_bytes / m.resources.memory_total_bytes) * 100) : 0;
-  const gpuPct = m.resources.gpu_percent ?? 0;
-  const cpuPct = m.resources.cpu_percent ?? 0;
-  const storagePct = m.storage.total_bytes ? Math.round((m.storage.used_bytes / m.storage.total_bytes) * 100) : 0;
-
+function MonitoringTab({ overview }) {
+  const processing = overview.processing;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Stat title="Processando" value={m.processing} icon={MonitorCog} tone="info" />
-        <Stat title="Concluídos" value={m.completed.toLocaleString('pt-BR')} icon={CheckCircle2} tone="success" />
-        <Stat title="Falhas" value={m.failed} icon={AlertTriangle} tone="error" />
+        <Stat title="Processando" value={processing.active} icon={MonitorCog} tone="sky" />
+        <Stat title="Concluídos" value={processing.completed.toLocaleString('pt-BR')} icon={CheckCircle2} tone="emerald" />
+        <Stat title="Falhas" value={processing.failed} icon={AlertTriangle} tone="amber" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Serviços">
           <div className="flex flex-col gap-2">
-            {m.services.map((s) => (
+            {overview.services.map((s) => (
               <div key={s.key} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
                 <div>
                   <p className="font-medium text-slate-200">{s.label}</p>
@@ -243,47 +245,13 @@ function MonitoringTab() {
         </Panel>
 
         <Panel title="Recursos do sistema">
-          <div className="flex flex-col gap-4">
-            <ResourceBar label="CPU" percent={cpuPct} detail={`${m.resources.cpu_logical_cores} núcleos`} />
-            <ResourceBar label="Memória" percent={memPct} detail={`${formatBytes(m.resources.memory_used_bytes)} / ${formatBytes(m.resources.memory_total_bytes)}`} />
-            <ResourceBar label="GPU" percent={gpuPct} detail={`${formatBytes(m.resources.gpu_memory_used_bytes)} / ${formatBytes(m.resources.gpu_memory_total_bytes)}`} />
-            <ResourceBar label="Storage" percent={storagePct} detail={`${formatBytes(m.storage.used_bytes)} / ${formatBytes(m.storage.total_bytes)}`} />
-          </div>
+          <p className="py-6 text-center text-sm text-slate-500">Métricas de CPU, memória e GPU serão exibidas quando o agente de monitoramento local estiver habilitado.</p>
         </Panel>
       </div>
 
       <Panel title="Modelos de IA">
-        <div className="flex flex-wrap gap-2">
-          {m.ai_models.map((model) => (
-            <div key={model.key} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2">
-              <span className="text-sm text-slate-200">{model.label}</span>
-              <StatusBadge status={model.status} />
-            </div>
-          ))}
-        </div>
+        <p className="text-sm text-slate-500">Nenhum modelo local configurado.</p>
       </Panel>
     </div>
   );
-}
-
-function ResourceBar({ label, percent, detail }) {
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between text-sm">
-        <span className="text-slate-300">{label}</span>
-        <span className="text-xs text-slate-500">{detail}</span>
-      </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-slate-800">
-        <div
-          className={`h-full rounded-full ${percent > 80 ? 'bg-rose-500' : percent > 60 ? 'bg-amber-500' : 'bg-gradient-to-r from-sky-400 to-violet-500'}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <p className="mt-1 text-right text-xs text-slate-500">{percent}%</p>
-    </div>
-  );
-}
-
-function FolderIcon(props) {
-  return <Archive {...props} />;
 }

@@ -34,7 +34,9 @@ def management_client():
             TenantRecord(tenant_id=tenant.id, entity_type="Publicacao", data={}),
             TenantRecord(tenant_id=tenant.id, entity_type="Asset", data={"status": "Indexado", "file_size": 20}),
             TenantRecord(tenant_id=tenant.id, entity_type="Asset", data={"situacao": "failed", "size": "30"}),
-            TenantRecord(tenant_id=tenant.id, entity_type="ProcessamentoJob", data={}),
+            TenantRecord(tenant_id=tenant.id, entity_type="ProcessamentoJob", data={"status": "processing"}),
+            TenantRecord(tenant_id=tenant.id, entity_type="ProcessamentoJob", data={"status": "completed"}),
+            TenantRecord(tenant_id=tenant.id, entity_type="ProcessamentoJob", data={"status": "failed"}),
             TenantRecord(tenant_id=tenant.id, entity_type="LogAuditoria", data={}),
             TenantRecord(tenant_id=other.id, entity_type="Asset", data={"status": "Indexado", "size": 999}),
         ])
@@ -89,8 +91,12 @@ def test_management_returns_real_tenant_aggregates(management_client):
     }
     assert body["social_metrics"] == []
     assert body["assets"] == {"total": 2, "indexed": 1, "failures": 1, "storage_bytes": 50}
-    assert body["processing"] == {"total": 1}
+    assert body["processing"] == {"total": 3, "active": 1, "completed": 1, "failed": 1}
     assert body["audit_events"] == 1
+    assert body["services"] == [
+        {"key": "api", "label": "API local", "status": "ok", "detail": "Operacional"},
+        {"key": "database", "label": "Banco de dados", "status": "ok", "detail": "Operacional"},
+    ]
 
 
 def test_management_zero_denominator_and_superadmin_access(management_client):

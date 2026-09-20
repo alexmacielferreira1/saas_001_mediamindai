@@ -21,14 +21,15 @@ def _status(data: dict[str, Any]) -> str:
 @router.get("/overview")
 def management_overview(current: Authenticated, session: DbSession):
     membership = require_membership(current)
-    if membership.role not in {"admin", "superadmin"}:
-        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil não acessa a visão gerencial.")
+    if membership.role not in {"admin", "superadmin", "cedoc", "editor", "producer", "reporter", "journalist"}:
+        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil não acessa os indicadores do acervo.")
 
     rows = list(session.scalars(select(TenantRecord).where(
         TenantRecord.tenant_id == membership.tenant_id,
     )))
     publications = [row for row in rows if row.entity_type == "Publicacao"]
     assets = [row for row in rows if row.entity_type == "Asset"]
+    jobs = [row for row in rows if row.entity_type == "ProcessamentoJob"]
     published = sum(_status(row.data) in {"publicado", "published"} for row in publications)
     scheduled = sum(_status(row.data) in {"agendado", "scheduled"} for row in publications)
     pending = len(publications) - published - scheduled
@@ -68,7 +69,14 @@ def management_overview(current: Authenticated, session: DbSession):
             "storage_bytes": storage_bytes,
         },
         "processing": {
-            "total": sum(row.entity_type == "ProcessamentoJob" for row in rows),
+            "total": len(jobs),
+            "active": sum(_status(row.data) in {"processando", "processing", "queued", "na_fila"} for row in jobs),
+            "completed": sum(_status(row.data) in {"concluido", "completed"} for row in jobs),
+            "failed": sum(_status(row.data) in {"falha", "failed", "erro", "error"} for row in jobs),
         },
         "audit_events": sum(row.entity_type == "LogAuditoria" for row in rows),
+        "services": [
+            {"key": "api", "label": "API local", "status": "ok", "detail": "Operacional"},
+            {"key": "database", "label": "Banco de dados", "status": "ok", "detail": "Operacional"},
+        ],
     }
