@@ -69,7 +69,7 @@
         "local_identity_unit_coverage": {
           "status": "passed",
           "updated_at": "2026-09-20T11:05:00+00:00",
-          "notes": "Backend 89 passed at 100% line/branch coverage, including tenant-scoped permission groups and protected membership role changes; frontend 31 passed at 100% configured migrated-code coverage, including local access administration clients."
+          "notes": "Backend 114 passed at 100% line/branch coverage; frontend 46 passed at 100% configured migrated-code coverage. Includes tenant-scoped permissions, restricted Google OAuth, real Management aggregates and Acervo without simulated monitoring values."
         },
         "local_identity_postgres_browser": {
           "status": "blocked",

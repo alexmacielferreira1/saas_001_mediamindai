@@ -2,14 +2,16 @@
 
 Marco atual: **M0 — blocked**.
 
-Atualizado em 20/09/2026 após a primeira fatia de identidade/tenancy local.
+Atualizado em 20/09/2026 após identidade local, Google restrito e migração de Gestão/Acervo.
 
 Autenticação, sessão, contas demo protegidas, isolamento básico por membership e seleção de empresa
-foram reconstruídos fora do Base44. O layout foi preservado. O gate continua **blocked** porque a
+foram reconstruídos fora do Base44. O login Google agora existe, mas somente aceita conta já
+cadastrada e ativa; as contas demo locais continuam disponíveis. Gestão e Acervo usam agregados
+tenant-scoped e não exibem métricas inventadas. O layout foi preservado. O gate continua **blocked** porque a
 execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
 
-Última evidência automatizada: backend **101 passed, 2 skipped**, 100% linhas/branches; frontend
-**43 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
+Última evidência automatizada: backend **114 passed, 2 skipped**, 100% linhas/branches; frontend
+**46 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
 typecheck e build aprovados.
 Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
 parado e a sessão não tinha permissão para iniciá-lo.
