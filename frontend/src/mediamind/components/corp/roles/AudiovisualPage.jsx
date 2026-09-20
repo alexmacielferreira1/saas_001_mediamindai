@@ -33,7 +33,7 @@ export default function AudiovisualPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="audiovisual" />
+          <RoleInicio roleId="audiovisual" onNavigate={setSub} />
         )}
 
         {sub === 'edicoes' && (

@@ -56,7 +56,7 @@ export const ACTIONS = [
   // Edição & Cortes
   { id: 'nova_publicacao', label: 'Novo corte com IA', icon: Scissors, group: 'edicao', path: '/social', param: 'publicacao', roles: '*', entity: 'Clip' },
   { id: 'nova_edicao', label: 'Nova edição', icon: Film, group: 'edicao', path: '/corp', param: 'editor_video', tab: 'editor_video', roles: EDICAO, entity: 'Edição' },
-  { id: 'nova_revisao', label: 'Nova revisão', icon: FileText, group: 'edicao', path: '/corp', param: 'revisor', tab: 'revisor', roles: REVISAO, entity: 'Revisão' },
+  { id: 'nova_revisao', label: 'Nova revisão', icon: FileText, group: 'edicao', path: '/corp', param: 'revisor', roles: REVISAO, entity: 'Revisão' },
   { id: 'nova_pesquisa', label: 'Nova pesquisa no acervo', icon: Search, group: 'edicao', path: '/search', roles: '*', entity: 'Busca' },
 
   // Publicação & Social
@@ -88,6 +88,7 @@ export function getAction(id) {
 //     ter acesso a ela (filterTabsForUser — respeita overrides individuais).
 export function canRunAction(action, user) {
   if (!action || !user) return false;
+  if (user.role === 'superadmin') return true;
   if (Array.isArray(action.roles) && !action.roles.includes(user.role)) return false;
   if (action.tab) {
     const allowed = new Set(filterTabsForUser(CORP_TABS, user).map((t) => t.id));

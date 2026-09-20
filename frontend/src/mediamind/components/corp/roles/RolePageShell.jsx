@@ -17,7 +17,7 @@ export default function RolePageShell({ ownSubtabs, active, onChange, children, 
     <div className="space-y-4">
       <SubTabsBar tabs={tabs} active={safeActive} onChange={onChange} />
       <div className="h-[calc(100vh-16rem)]">
-        {isCommon ? <CommonScreen active={safeActive} /> : isOverview && roleId ? <RoleInicio roleId={roleId} /> : children}
+        {isCommon ? <CommonScreen active={safeActive} /> : isOverview && roleId ? <RoleInicio roleId={roleId} onNavigate={onChange} /> : children}
       </div>
     </div>
   );

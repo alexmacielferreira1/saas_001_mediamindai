@@ -32,7 +32,7 @@ export default function DesignPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="design" />
+          <RoleInicio roleId="design" onNavigate={setSub} />
         )}
 
         {sub === 'solicitacoes' && (

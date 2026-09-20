@@ -20,7 +20,7 @@ export default function DocumentacaoPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="documentacao" />
+          <RoleInicio roleId="documentacao" onNavigate={setSub} />
         )}
         {sub === 'docs' && (
           <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-900/30 px-6 py-20 text-center">

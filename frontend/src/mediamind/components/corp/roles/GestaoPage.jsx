@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
 import { BarChart3, TrendingUp, Activity, ScrollText } from 'lucide-react';
-import { DashboardsTab, ReportsTab } from '../../../pages/Management';
+import { ReportsTab } from '../../../pages/Management';
 import ManagementProcessamentosTab from '../../management/ManagementProcessamentosTab';
 import ManagementAuditoriaTab from '../../management/ManagementAuditoriaTab';
 import { COMMON_SUBTABS, CommonScreen, COMMON_IDS } from './CommonScreens';
+import RoleInicio from '../RoleInicio';
 
 // Gestão — função de back-office do Corp: visão geral, relatórios, processamentos
 // e auditoria. Antes era uma coluna separada (/management); agora mora como um
@@ -42,7 +43,7 @@ export default function GestaoPage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {sub === 'visao_geral' && <DashboardsTab />}
+        {sub === 'visao_geral' && <RoleInicio roleId="gestao" onNavigate={setSub} />}
         {sub === 'relatorios' && <ReportsTab />}
         {sub === 'processamentos' && <ManagementProcessamentosTab />}
         {sub === 'auditoria' && <ManagementAuditoriaTab />}

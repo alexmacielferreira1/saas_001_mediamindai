@@ -29,7 +29,7 @@ export default function EndomarketingPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="endomarketing" />
+          <RoleInicio roleId="endomarketing" onNavigate={setSub} />
         )}
 
         {sub === 'campanhas' && (

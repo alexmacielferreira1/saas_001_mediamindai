@@ -3,7 +3,7 @@ import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
 import {
   LayoutDashboard, Scissors as EditIcon, CheckCircle2, Flag, Send, BarChart3, Calendar, Clapperboard, Share2,
 } from 'lucide-react';
-import EditorOverview from './EditorOverview';
+import RoleInicio from '../RoleInicio';
 import ViralClips from '../../../pages/ViralClips';
 import EditorEmEdicaoView from './EditorEmEdicaoView';
 import AgendamentosView from './AgendamentosView';
@@ -38,7 +38,7 @@ export default function EditorVideoPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
 
       <div className="min-h-0 flex-1">
-        {sub === 'visao_geral' && <div className="h-[calc(100vh-16rem)]"><EditorOverview /></div>}
+        {sub === 'visao_geral' && <RoleInicio roleId="editor" onNavigate={setSub} />}
         {sub === 'agendamentos' && <div className="h-full"><AgendamentosView /></div>}
         {sub === 'gravacoes' && <div className="h-full"><GravacoesMateriais /></div>}
         {sub === 'em_edicao' && <div className="h-full"><EditorEmEdicaoView onNavigate={setSub} /></div>}

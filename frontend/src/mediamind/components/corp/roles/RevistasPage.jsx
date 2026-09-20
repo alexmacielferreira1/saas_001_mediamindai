@@ -30,7 +30,7 @@ export default function RevistasPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="revistas" />
+          <RoleInicio roleId="revistas" onNavigate={setSub} />
         )}
 
         {sub === 'edicoes' && (

@@ -28,6 +28,7 @@ import PanelSplit from '../../ui/PanelSplit';
 import RelatoriosEquipePanel from '../RelatoriosEquipePanel';
 import { SubTabsBar } from '../../shared';
 import { COMMON_SUBTABS, CommonScreen, COMMON_IDS } from './CommonScreens';
+import RoleInicio from '../RoleInicio';
 
 // Pipeline unificado de Produção (podcast): o projeto evolui por estágios.
 // Cada guia mostra os projetos do seu contexto — rascunho → gravação → edição →
@@ -99,7 +100,8 @@ export default function ProdutoraPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
 
       <div className="h-[calc(100vh-16rem)]">
-        {sub === 'overview' && (
+        {sub === 'overview' && <RoleInicio roleId="producer" onNavigate={setSub} />}
+        {false && (
           <div className="flex h-full flex-col gap-3">
             <CorpHeader onNavigate={setSub} />
             <div className="min-h-0 flex-1">

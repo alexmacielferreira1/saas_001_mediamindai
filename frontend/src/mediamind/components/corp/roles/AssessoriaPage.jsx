@@ -40,7 +40,7 @@ export default function AssessoriaPage() {
       )}
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="assessoria" />
+          <RoleInicio roleId="assessoria" onNavigate={setSub} />
         )}
 
         {sub === 'releases' && (

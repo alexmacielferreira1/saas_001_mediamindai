@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
 import { LayoutDashboard, Calendar, Clapperboard } from 'lucide-react';
-import VideomakerOverview from './VideomakerOverview';
+import RoleInicio from '../RoleInicio';
 import GravacoesMateriais from '../GravacoesMateriais';
 import AgendamentosView from './AgendamentosView';
 import { SubTabsBar } from '../../shared';
@@ -24,7 +24,7 @@ export default function VideomakerPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
 
       <div className="min-h-0 flex-1">
-        {sub === 'visao_geral' && <div className="h-[calc(100vh-16rem)]"><VideomakerOverview /></div>}
+        {sub === 'visao_geral' && <RoleInicio roleId="videomaker" onNavigate={setSub} />}
         {sub === 'agendamentos' && <div className="h-full"><AgendamentosView /></div>}
         {sub === 'gravacoes' && <div className="h-full"><GravacoesMateriais /></div>}
         {COMMON_IDS.includes(sub) && <CommonScreen active={sub} />}

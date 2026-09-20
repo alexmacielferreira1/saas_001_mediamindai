@@ -14,6 +14,7 @@ import {
   MOCK_CEDOC_INGEST, MOCK_CEDOC_MIDIAS, MOCK_CEDOC_TAREFAS,
   MOCK_CEDOC_GRUPOS, MOCK_CEDOC_USUARIOS, PERMISSOES_CEDOC, CEDOC_FUNCIONARIO_EXEMPLO,
 } from '../../../data';
+import RoleInicio from '../RoleInicio';
 
 // Cedoc / Administrador de Acervo — diretor do Cedoc de várias TVs + funcionários.
 // O Administrador vê tudo (ingest, mídias, tarefas) MAIS gestão de usuários e
@@ -164,7 +165,8 @@ export default function CedocPage() {
       <SubTabsBar tabs={subtabs} active={sub} onChange={setSub} />
 
       <div className="h-[calc(100vh-19rem)]">
-        {sub === 'overview' && (
+        {sub === 'overview' && <RoleInicio roleId="cedoc" onNavigate={setSub} />}
+        {false && (
           <div className="h-full space-y-4 overflow-y-auto">
             {/* Indicadores principais */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   PlayCircle, CheckCircle2, Search, Activity, ArrowRight, FileText, Check, X,
+  CalendarDays,
 } from 'lucide-react';
 import { Panel, Stat } from '../../ui';
 import { StatusBadge, ListSkeleton, EmptyState } from '../shared';
@@ -9,6 +10,9 @@ import { useRoleInicioData } from '../../lib/roleInicioData';
 import { useProducaoProjetos } from '../../lib/producaoStore';
 import { decidirAprovacao } from '../../lib/corpAprovacoes';
 import { MOCK_SAVED_SEARCHES, MOCK_RECENT_ACTIVITY } from '../../data';
+import CorpAgenda from './CorpAgenda';
+import AgendaEventDetail from './AgendaEventDetail';
+import { base44 } from '@/api/base44Client';
 
 const APPROVAL_ROLES = ['coordenador_comunicacao', 'qualidade'];
 const DECISAO_LABEL = { aprovado: 'Aprovado', reprovado: 'Reprovado', pendente: 'Pendente' };
@@ -18,11 +22,18 @@ const DECISAO_LABEL = { aprovado: 'Aprovado', reprovado: 'Reprovado', pendente: 
 // O conteúdo vem do trabalho específico da função (useRoleInicioData), agora
 // carregado das entidades persistentes (Publicacao/AprovacaoItem/Release) +
 // producaoStore. Roles de aprovação ganham Aprovar/Reprovar na lista de tarefas.
-export default function RoleInicio({ roleId }) {
+export default function RoleInicio({ roleId, onNavigate }) {
   const { data: d, loading } = useRoleInicioData(roleId);
   const projetos = useProducaoProjetos();
   const [filter, setFilter] = useState('all');
   const [overrides, setOverrides] = useState({});
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [agendaEvents, setAgendaEvents] = useState([]);
+
+  useEffect(() => {
+    setAgendaEvents(d?.agenda || []);
+    setSelectedEventId((current) => (d?.agenda.some((event) => event.id === current) ? current : null));
+  }, [d]);
 
   if (loading) {
     return (
@@ -42,6 +53,12 @@ export default function RoleInicio({ roleId }) {
   if (!d) return null;
 
   const isApproval = APPROVAL_ROLES.includes(roleId);
+  const selectedEvent = agendaEvents.find((event) => event.id === selectedEventId) || null;
+
+  function updateAgendaEvent(id, patch) {
+    setAgendaEvents((events) => events.map((event) => (event.id === id ? { ...event, ...patch } : event)));
+    base44.entities.AgendaEvento.update(String(id), patch).catch(() => {});
+  }
 
   // Aplica decisões de aprovação otimistas sobre as tarefas do hook, sem
   // depender de reload da entidade (mutação local + persistência em background).
@@ -62,6 +79,12 @@ export default function RoleInicio({ roleId }) {
 
   return (
     <div className="h-full space-y-4 overflow-y-auto pb-4">
+      <div className="flex flex-col gap-1 rounded-xl border border-slate-800 bg-gradient-to-r from-slate-900/90 to-sky-950/30 px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">Visão geral</p>
+        <h2 className="text-xl font-bold text-slate-100">{d.roleName}</h2>
+        <p className="text-sm text-slate-400">{d.roleDescription}</p>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {d.stats.map((s, i) => (
           <Stat key={i} title={s.title} value={s.value} icon={s.icon} tone={s.tone} />
@@ -77,16 +100,17 @@ export default function RoleInicio({ roleId }) {
                 <p className="px-2 py-3 text-xs text-slate-500">Tudo em dia — nada pendente.</p>
               )}
               {d.resumeItems.map((it) => (
-                <Link
+                <button
                   key={it.id}
-                  to={it.to}
+                  type="button"
+                  onClick={() => onNavigate?.(it.workTab)}
                   className="flex items-center gap-2 rounded-md bg-slate-950/50 px-2.5 py-1.5 transition hover:bg-slate-900"
                 >
                   <FileText size={13} className="shrink-0 text-slate-500" />
                   <span className="truncate text-xs font-medium text-slate-200">{it.title}</span>
                   <span className="truncate text-[11px] text-slate-500">{it.subtitle}</span>
                   <span className="ml-auto shrink-0"><StatusBadge status={it.status} /></span>
-                </Link>
+                </button>
               ))}
             </div>
           </Panel>
@@ -117,7 +141,7 @@ export default function RoleInicio({ roleId }) {
               {filtered.map((t) => {
                 const pendente = overrides[t.id] ? overrides[t.id] === 'pendente' : (t.status === 'pendente' || t.statusLabel === 'Pendente');
                 return (
-                  <div key={t.id} className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+                  <div key={t.id} role="button" tabIndex={0} onClick={() => onNavigate?.(t.workTab)} onKeyDown={(event) => { if (event.key === 'Enter') onNavigate?.(t.workTab); }} className="cursor-pointer rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 transition hover:border-sky-500/50 hover:bg-slate-900/70">
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-800">
                         <FileText size={13} className="text-slate-400" />
@@ -132,8 +156,8 @@ export default function RoleInicio({ roleId }) {
                     </div>
                     {isApproval && pendente && (
                       <div className="mt-2 flex items-center justify-end gap-1.5 border-t border-slate-800 pt-2">
-                        <button onClick={() => decidir(t, 'reprovado')} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1 text-[11px] text-slate-400 hover:bg-slate-800"><X size={11} /> Reprovar</button>
-                        <button onClick={() => decidir(t, 'aprovado')} className="flex items-center gap-1 rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Check size={11} /> Aprovar</button>
+                        <button onClick={(event) => { event.stopPropagation(); decidir(t, 'reprovado'); }} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1 text-[11px] text-slate-400 hover:bg-slate-800"><X size={11} /> Reprovar</button>
+                        <button onClick={(event) => { event.stopPropagation(); decidir(t, 'aprovado'); }} className="flex items-center gap-1 rounded-md bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Check size={11} /> Aprovar</button>
                       </div>
                     )}
                   </div>
@@ -173,18 +197,44 @@ export default function RoleInicio({ roleId }) {
         </div>
       </div>
 
+      <Panel title={`Agenda personalizada · ${d.roleName}`} right={<CalendarDays size={16} className="text-sky-400" />}>
+        {agendaEvents.length > 0 ? (
+          <div className={`grid min-h-[25rem] gap-3 ${selectedEvent ? 'lg:grid-cols-[minmax(0,1fr)_22rem]' : ''}`}>
+            <div className="h-[25rem] min-w-0">
+              <CorpAgenda
+                events={agendaEvents}
+                selectedEventId={selectedEventId}
+                onSelectEvent={setSelectedEventId}
+              />
+            </div>
+            {selectedEvent && (
+              <div className="h-[25rem] overflow-y-auto">
+                <AgendaEventDetail
+                  event={selectedEvent}
+                  onClose={() => setSelectedEventId(null)}
+                  onNavigate={onNavigate}
+                  onUpdate={(patch) => updateAgendaEvent(selectedEvent.id, patch)}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState icon={CalendarDays} title="Agenda livre" description="Não há compromissos desta função no período." />
+        )}
+      </Panel>
+
       {/* Projetos recentes */}
       <Panel title="Projetos recentes" right={<Link to="/corp" className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><ArrowRight size={13} /> Ver todos</Link>}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {d.projects.map((p) => (
-            <Link key={p.id} to={p.to} className="mm-panel mm-card-hover group">
+            <button key={p.id} type="button" onClick={() => onNavigate?.(p.workTab)} className="mm-panel mm-card-hover group text-left">
               <div className="mb-2 flex items-center justify-between">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-lg">{p.emoji}</div>
                 <StatusBadge status={p.status} />
               </div>
               <p className="truncate font-semibold text-slate-100">{p.name}</p>
               <p className="mt-1 text-xs text-slate-500">{p.meta}</p>
-            </Link>
+            </button>
           ))}
         </div>
       </Panel>

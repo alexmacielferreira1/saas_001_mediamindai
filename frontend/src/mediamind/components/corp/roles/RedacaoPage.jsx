@@ -32,7 +32,7 @@ export default function RedacaoPage() {
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
       <div className="h-[calc(100vh-16rem)]">
         {sub === 'overview' && (
-          <RoleInicio roleId="redacao" />
+          <RoleInicio roleId="redacao" onNavigate={setSub} />
         )}
 
         {sub === 'pautas' && (
