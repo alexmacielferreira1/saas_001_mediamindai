@@ -29,6 +29,13 @@ def list_tenants(current: Authenticated, session: DbSession):
 
 @router.put("/auth/session/tenant", response_model=SessionResponse)
 def select_tenant(body: TenantSelection, current: Authenticated, session: DbSession):
+    if body.tenant_id is None:
+        memberships = list_active_memberships(session, current.user.id)
+        if not any(item.role in {"admin", "superadmin"} for item, _tenant in memberships):
+            raise PublicError(403, "TENANT_ACCESS_DENIED", "Acesso global não autorizado.")
+        current.auth_session.selected_tenant_id = None
+        session.commit()
+        return session_payload(session, current.auth_session)
     membership = get_active_membership(session, current.user.id, body.tenant_id)
     if membership is None:
         raise PublicError(403, "TENANT_ACCESS_DENIED", "Acesso à empresa não autorizado.")

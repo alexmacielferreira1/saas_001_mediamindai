@@ -9,7 +9,11 @@ export default defineConfig({
     setupFiles: './src/test/setup.js',
     coverage: {
       provider: 'v8',
-      include: ['src/api/httpClient.js', 'src/mediamind/auth.jsx'],
+      include: [
+        'src/api/httpClient.js',
+        'src/mediamind/auth.jsx',
+        'src/mediamind/lib/empresaContext.jsx',
+      ],
       thresholds: {
         branches: 100,
         functions: 100,

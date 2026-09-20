@@ -1,80 +1,84 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-// ============================================================================
-// Contexto de empresa (multi-tenant). Define em qual empresa o usuário está
-// trabalhando (ou 'all' = visão geral/todas as empresas). Regra:
-//  - admin/superadmin enxerga TODAS as empresas + opção "Todas as empresas".
-//  - demais usuários enxergam só as empresas em user.empresa_ids.
-//  - Se há só UMA empresa acessível, entra direto (sem tela de seleção).
-//  - Se há 2+, mostra a tela de seleção (EmpresaSelector) via EmpresaGate.
-// O current persiste em localStorage; o switcher (Shell) chama clear() pra
-// reabrir a seleção. O escopo dos dados do Corp por empresa é um passo futuro.
-// ============================================================================
+import { request } from '../../api/httpClient';
 
 const Ctx = createContext(null);
-const STORAGE_KEY = 'mm_current_empresa_v1';
+
+function toEmpresa(tenant) {
+  return {
+    id: tenant.id,
+    nome: tenant.name,
+    descricao: tenant.name,
+    status: 'ativa',
+    plano: null,
+    role: tenant.role,
+  };
+}
 
 export function EmpresaProvider({ user, children }) {
+  const initialCurrent = user?.selected_tenant_id ?? (user?.role === 'admin' || user?.role === 'superadmin' ? 'all' : null);
   const [empresas, setEmpresas] = useState([]);
+  const [current, setCurrentState] = useState(initialCurrent);
   const [loading, setLoading] = useState(true);
-  const [current, setCurrentState] = useState(() => localStorage.getItem(STORAGE_KEY) || null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    let alive = true;
-    base44.entities.Empresa.list('-created_date', 200)
-      .then((rows) => { if (alive) setEmpresas(rows || []); })
-      .catch(() => {})
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+    let active = true;
+    request('/tenants')
+      .then((payload) => {
+        if (active) setEmpresas(payload.tenants.map(toEmpresa));
+      })
+      .catch(() => {
+        if (active) setError('Não foi possível carregar suas empresas.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const accessible = isAdmin
-    ? empresas
-    : empresas.filter((e) => (user?.empresa_ids || []).includes(e.id));
+  const isAdmin = empresas.some((empresa) => ['admin', 'superadmin'].includes(empresa.role));
+  const accessible = empresas;
 
-  // Auto-seleciona quando há só uma empresa (entra direto, sem confirmação).
-  useEffect(() => {
-    if (loading || current) return;
-    if (accessible.length === 1) setCurrentState(accessible[0].id);
-    else if (accessible.length === 0 && isAdmin) setCurrentState('all');
-  }, [loading, current, accessible, isAdmin]);
-
-  // Limpa current se a empresa escolhida deixou de existir.
-  useEffect(() => {
-    if (loading || !current || current === 'all') return;
-    if (!empresas.find((e) => e.id === current)) {
-      setCurrentState(null);
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [loading, current, empresas]);
-
-  function setCurrent(id) {
+  const setCurrent = useCallback(async (id) => {
+    setError('');
+    const tenantId = id === 'all' ? null : id;
+    await request('/auth/session/tenant', {
+      method: 'PUT',
+      body: { tenant_id: tenantId },
+    });
     setCurrentState(id);
-    if (id) localStorage.setItem(STORAGE_KEY, id);
-    else localStorage.removeItem(STORAGE_KEY);
-  }
-  function clear() {
-    setCurrentState(null);
-    localStorage.removeItem(STORAGE_KEY);
-  }
+  }, []);
 
-  const currentEmpresa = current === 'all' ? null : empresas.find((e) => e.id === current) || null;
+  const clear = useCallback(() => setCurrentState(null), []);
+  const currentEmpresa = current === 'all' ? null : empresas.find((item) => item.id === current) || null;
   const isGlobal = current === 'all';
   const needsSelector = accessible.length > 1;
 
-  return (
-    <Ctx.Provider value={{ empresas, accessible, current, currentEmpresa, isGlobal, setCurrent, clear, loading, needsSelector, isAdmin }}>
-      {children}
-    </Ctx.Provider>
+  const value = useMemo(
+    () => ({
+      empresas,
+      accessible,
+      current,
+      currentEmpresa,
+      isGlobal,
+      setCurrent,
+      clear,
+      loading,
+      error,
+      needsSelector,
+      isAdmin,
+    }),
+    [empresas, accessible, current, currentEmpresa, isGlobal, setCurrent, clear, loading, error, needsSelector, isAdmin],
   );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useEmpresa() {
-  const ctx = useContext(Ctx);
-  if (!ctx) {
-    return { loading: true, empresas: [], accessible: [], current: null, currentEmpresa: null, isGlobal: false, setCurrent: () => {}, clear: () => {}, needsSelector: false, isAdmin: false };
-  }
-  return ctx;
+  const context = useContext(Ctx);
+  if (!context) throw new Error('useEmpresa deve ser usado dentro de EmpresaProvider');
+  return context;
 }

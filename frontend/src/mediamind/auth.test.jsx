@@ -37,6 +37,7 @@ describe('MediaMind local authentication', () => {
       name: 'Alex Maciel Ferreira',
       role: 'superadmin',
       empresa_ids: ['tenant-1', 'tenant-2'],
+      selected_tenant_id: 'tenant-1',
     });
     expect(mapSessionUser(null)).toBeNull();
     expect(mapSessionUser({
@@ -49,6 +50,7 @@ describe('MediaMind local authentication', () => {
       name: 'editor@mediamind.ai',
       role: 'editor',
       empresa_ids: ['tenant-2'],
+      selected_tenant_id: 'unknown',
     });
     expect(mapSessionUser({
       user: { id: 'user-3', email: 'user@mediamind.ai', full_name: 'Usuário' },

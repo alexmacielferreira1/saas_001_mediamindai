@@ -30,16 +30,23 @@ def tenant_client():
             password_hash=hash_password(PASSWORD),
             full_name="Alex Maciel Ferreira",
         )
+        editor = User(
+            email="editor@mediamind.ai",
+            email_normalized="editor@mediamind.ai",
+            password_hash=hash_password(PASSWORD),
+            full_name="Editor",
+        )
         primary = Tenant(name="Empresa Principal", slug="empresa-principal")
         secondary = Tenant(name="Empresa Secundária", slug="empresa-secundaria")
         inactive = Tenant(name="Empresa Inativa", slug="empresa-inativa", is_active=False)
-        session.add_all([user, primary, secondary, inactive])
+        session.add_all([user, editor, primary, secondary, inactive])
         session.flush()
         session.add_all(
             [
                 Membership(user_id=user.id, tenant_id=primary.id, role="superadmin"),
                 Membership(user_id=user.id, tenant_id=secondary.id, role="editor"),
                 Membership(user_id=user.id, tenant_id=inactive.id, role="admin"),
+                Membership(user_id=editor.id, tenant_id=secondary.id, role="editor"),
             ]
         )
         session.commit()
@@ -114,6 +121,30 @@ def test_switch_tenant_persists_only_an_active_membership(tenant_client):
     assert response.status_code == 200
     assert response.json()["selected_tenant_id"] == str(ids["secondary"])
     assert client.get("/api/v1/auth/session").json()["selected_tenant_id"] == str(ids["secondary"])
+
+
+def test_superadmin_can_select_explicit_global_context(tenant_client):
+    client, _ = tenant_client
+    sign_in(client)
+
+    response = client.put("/api/v1/auth/session/tenant", json={"tenant_id": None})
+
+    assert response.status_code == 200
+    assert response.json()["selected_tenant_id"] is None
+
+
+def test_non_admin_cannot_select_global_context(tenant_client):
+    client, _ = tenant_client
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "editor@mediamind.ai", "password": PASSWORD},
+    )
+    assert response.status_code == 200
+
+    response = client.put("/api/v1/auth/session/tenant", json={"tenant_id": None})
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "TENANT_ACCESS_DENIED"
 
 
 @pytest.mark.parametrize("target", ["inactive", "unknown"])

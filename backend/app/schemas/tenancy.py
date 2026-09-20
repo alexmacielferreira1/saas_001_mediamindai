@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class TenantSelection(BaseModel):
-    tenant_id: UUID
+    tenant_id: UUID | None
 
 
 class TenantResponse(BaseModel):

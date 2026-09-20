@@ -17,6 +17,7 @@ export function mapSessionUser(session) {
     name: session.user.full_name || session.user.email,
     role: selected?.role || session.memberships[0]?.role || 'user',
     empresa_ids: session.memberships.map((membership) => membership.tenant_id),
+    selected_tenant_id: session.selected_tenant_id,
   };
 }
 
