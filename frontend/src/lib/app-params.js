@@ -1,5 +1,3 @@
-import { getAccessToken } from '@base44/sdk';
-
 const isNode = typeof window === 'undefined';
 
 const isClearAccessTokenRequested = () =>
@@ -16,7 +14,7 @@ const getAppParams = () => {
 	}
 	return {
 		appId: import.meta.env.VITE_BASE44_APP_ID,
-		token: getAccessToken(),
+		token: null,
 		functionsVersion: import.meta.env.VITE_BASE44_FUNCTIONS_VERSION,
 		appBaseUrl: import.meta.env.VITE_BASE44_APP_BASE_URL,
 	}

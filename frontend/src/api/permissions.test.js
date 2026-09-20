@@ -11,6 +11,7 @@ import {
   listMemberships,
   listPermissionGroups,
   updateMembershipRole,
+  updateMembershipScreens,
 } from './permissions';
 
 describe('permission administration API', () => {
@@ -56,6 +57,15 @@ describe('permission administration API', () => {
     expect(requestMock).toHaveBeenCalledWith('/memberships/membership-1/role', {
       method: 'PUT',
       body: { role: 'editor' },
+    });
+  });
+
+  it('persists individual screen overrides on the tenant membership', async () => {
+    requestMock.mockResolvedValue({ membership_id: 'membership-1' });
+    await updateMembershipScreens('membership-1', ['cedoc'], ['producao']);
+    expect(requestMock).toHaveBeenCalledWith('/memberships/membership-1/screens', {
+      method: 'PUT',
+      body: { extra_screens: ['cedoc'], restricted_screens: ['producao'] },
     });
   });
 });

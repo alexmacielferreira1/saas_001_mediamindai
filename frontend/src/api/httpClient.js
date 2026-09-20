@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, options = {}) {
+export async function request(path, /** @type {Omit<RequestInit, 'body'> & {body?: any}} */ options = {}) {
   const headers = {
     Accept: 'application/json',
     ...options.headers,
@@ -25,9 +25,10 @@ export async function request(path, options = {}) {
 
   const body = options.body === undefined || isMultipart ? options.body : JSON.stringify(options.body);
 
+  /** @type {RequestInit} */
   const requestOptions = {
     ...options,
-    credentials: 'include',
+    credentials: /** @type {RequestCredentials} */ ('include'),
     headers,
   };
   if (body !== undefined) requestOptions.body = body;
