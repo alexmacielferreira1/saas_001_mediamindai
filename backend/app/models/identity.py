@@ -1,8 +1,17 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
@@ -41,6 +50,54 @@ class Tenant(Base):
     )
 
 
+permission_group_permissions = Table(
+    "permission_group_permissions",
+    Base.metadata,
+    Column(
+        "permission_group_id",
+        ForeignKey("permission_groups.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "permission_id",
+        ForeignKey("permissions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    code: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class PermissionGroup(Base):
+    __tablename__ = "permission_groups"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_permission_group_tenant_name"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(String(300), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    permissions: Mapped[list[Permission]] = relationship(
+        secondary=permission_group_permissions,
+        lazy="selectin",
+    )
+
+
 class Membership(Base):
     __tablename__ = "memberships"
     __table_args__ = (UniqueConstraint("user_id", "tenant_id", name="uq_membership_user_tenant"),)
@@ -51,6 +108,9 @@ class Membership(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(String(80))
+    permission_group_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("permission_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
