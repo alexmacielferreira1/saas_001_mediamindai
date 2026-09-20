@@ -16,6 +16,8 @@ from app.schemas.permissions import (
     MembershipResponse,
     MembershipRoleResponse,
     MembershipRoleUpdate,
+    MembershipScreensResponse,
+    MembershipScreensUpdate,
 )
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -25,6 +27,14 @@ DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 ALLOWED_ROLES = {role for _email, _name, role in DEMO_ACCOUNTS}
 ADMINISTRATIVE_ROLES = {"admin", "superadmin"}
+ALLOWED_SCREENS = {
+    "producao", "videomaker", "editor_video", "reporter", "produtor_reportagem",
+    "diretor_programa", "estagiario", "programacao", "qualidade", "redacao",
+    "design", "assessoria", "audiovisual", "revistas", "endomarketing",
+    "documentacao", "gestao", "cedoc", "apresentador", "locutor", "sonoplasta",
+    "fotografo", "motion_designer", "cenografo", "roteirista", "revisor", "tradutor",
+    "social_media", "coordenador_comunicacao", "juridico", "ti_suporte",
+}
 
 
 @router.get("", response_model=MembershipListResponse)
@@ -46,6 +56,8 @@ def list_memberships(current: Authenticated, session: DbSession):
                 full_name=user.full_name,
                 role=membership.role,
                 permission_group_id=membership.permission_group_id,
+                extra_screens=membership.extra_screens or [],
+                restricted_screens=membership.restricted_screens or [],
             )
             for membership, user in rows
         ]
@@ -118,3 +130,34 @@ def update_membership_role(
     target.role = body.role
     session.commit()
     return MembershipRoleResponse(membership_id=target.id, role=target.role)
+
+
+@router.put("/{membership_id}/screens", response_model=MembershipScreensResponse)
+def update_membership_screens(
+    membership_id: UUID,
+    body: MembershipScreensUpdate,
+    current: Authenticated,
+    session: DbSession,
+):
+    selected_membership = require_membership(current)
+    require_permission(session, current, "users.manage")
+    extra = set(body.extra_screens)
+    restricted = set(body.restricted_screens)
+    if not extra.union(restricted).issubset(ALLOWED_SCREENS) or extra.intersection(restricted):
+        raise PublicError(422, "VALIDATION_ERROR", "Ajustes de telas inválidos.")
+    target = session.scalar(
+        select(Membership).where(
+            Membership.id == membership_id,
+            Membership.tenant_id == selected_membership.tenant_id,
+        )
+    )
+    if target is None:
+        raise PublicError(404, "MEMBERSHIP_NOT_FOUND", "Vínculo de usuário não encontrado.")
+    target.extra_screens = sorted(extra)
+    target.restricted_screens = sorted(restricted)
+    session.commit()
+    return MembershipScreensResponse(
+        membership_id=target.id,
+        extra_screens=target.extra_screens,
+        restricted_screens=target.restricted_screens,
+    )

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Users, UserCog } from 'lucide-react';
-import { listMemberships, updateMembershipRole } from '../../../../api/permissions';
+import { listMemberships, updateMembershipRole, updateMembershipScreens } from '../../../../api/permissions';
 import { ROLE_CATALOG } from '../../../lib/roleCatalog';
 import { ALL_SUBTABS, isTotalAccess, getActiveSubtabs, toggleSubtab } from '../../../lib/roleSubtabs';
 import { useAuth } from '../../../auth';
@@ -30,6 +30,8 @@ export default function AdminAcessosPage() {
           name: u.full_name || u.email,
           role: u.role || 'user',
           permissionGroupId: u.permission_group_id,
+          extraScreens: u.extra_screens || [],
+          restrictedScreens: u.restricted_screens || [],
         })));
       })
       .catch(() => { if (alive) setEmployees([]); })
@@ -41,6 +43,33 @@ export default function AdminAcessosPage() {
   function onToggle(cargoId, entry) {
     toggleSubtab(cargoId, entry);
     setBump((n) => n + 1);
+  }
+
+  async function onScreensChange(user, extraScreens, restrictedScreens) {
+    setAccessError('');
+    try {
+      await updateMembershipScreens(user.membershipId, extraScreens, restrictedScreens);
+      setEmployees((current) => current.map((item) => (
+        item.membershipId === user.membershipId ? { ...item, extraScreens, restrictedScreens } : item
+      )));
+    } catch {
+      setAccessError('Não foi possível alterar as telas. Tente novamente.');
+    }
+  }
+
+  async function onCopyAccess(user, source) {
+    setAccessError('');
+    try {
+      await updateMembershipRole(user.membershipId, source.role);
+      await updateMembershipScreens(user.membershipId, source.extraScreens || [], source.restrictedScreens || []);
+      setEmployees((current) => current.map((item) => (
+        item.membershipId === user.membershipId
+          ? { ...item, role: source.role, extraScreens: source.extraScreens || [], restrictedScreens: source.restrictedScreens || [] }
+          : item
+      )));
+    } catch {
+      setAccessError('Não foi possível copiar o acesso. Tente novamente.');
+    }
   }
 
   async function onRoleChange(user, role) {
@@ -126,11 +155,11 @@ export default function AdminAcessosPage() {
             <p className="text-sm text-slate-500">Nenhum funcionário cadastrado. Convide usuários pela plataforma para gerenciar acessos.</p>
           ) : (
             employees.map((u) => (
-              <EmployeeAccessRow key={u.id} user={u} isSelf={u.id === currentUser?.id} peers={employees} onRoleChange={onRoleChange} />
+              <EmployeeAccessRow key={u.id} user={u} isSelf={u.id === currentUser?.id} peers={employees} onRoleChange={onRoleChange} onScreensChange={onScreensChange} onCopyAccess={onCopyAccess} />
             ))
           )}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">Funcionários vêm dos vínculos da empresa selecionada. A migração dos ajustes individuais de telas para o backend ainda está em andamento.</p>
+        <p className="mt-3 text-[11px] text-slate-500">Funcionários e ajustes individuais vêm dos vínculos da empresa selecionada.</p>
       </section>
 
       <AcessoIAPanel />

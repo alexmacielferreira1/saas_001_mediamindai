@@ -32,4 +32,13 @@ describe('EmployeeAccessRow role persistence', () => {
       expect(onRoleChange).toHaveBeenCalledWith(user, 'reporter');
     });
   });
+
+  it('persists an individual screen override through the membership callback', async () => {
+    const onScreensChange = vi.fn();
+    const user = { id: 'u1', membershipId: 'm1', name: 'Editor', email: 'e@x.test', role: 'editor', extraScreens: [], restrictedScreens: [] };
+    render(<EmployeeAccessRow user={user} isSelf={false} peers={[user]} onScreensChange={onScreensChange} />);
+    fireEvent.click(screen.getByRole('button', { name: '' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cedoc' }));
+    expect(onScreensChange).toHaveBeenCalledWith(user, ['cedoc'], []);
+  });
 });

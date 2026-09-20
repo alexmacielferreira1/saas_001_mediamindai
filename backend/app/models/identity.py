@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Table,
     UniqueConstraint,
@@ -111,6 +112,8 @@ class Membership(Base):
     permission_group_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("permission_groups.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    extra_screens: Mapped[list[str]] = mapped_column(JSON, default=list)
+    restricted_screens: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

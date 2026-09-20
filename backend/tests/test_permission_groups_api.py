@@ -144,6 +144,8 @@ def test_manager_lists_memberships_without_sensitive_identity_data(permission_cl
     assert memberships[0]["permission_group_id"] is not None
     assert memberships[1]["permission_group_id"] is not None
     assert memberships[2]["permission_group_id"] is None
+    assert memberships[2]["extra_screens"] == []
+    assert memberships[2]["restricted_screens"] == []
     assert "password_hash" not in response.text
 
 
@@ -339,6 +341,53 @@ def test_role_update_rejects_unknown_role_or_membership(permission_client):
     assert invalid_role.json()["error_code"] == "VALIDATION_ERROR"
     assert missing.status_code == 404
     assert missing.json()["error_code"] == "MEMBERSHIP_NOT_FOUND"
+
+
+def test_manager_can_persist_membership_screen_overrides(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/screens",
+        json={"extra_screens": ["cedoc"], "restricted_screens": ["producao"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "membership_id": str(ids["viewer_membership"]),
+        "extra_screens": ["cedoc"],
+        "restricted_screens": ["producao"],
+    }
+
+
+def test_screen_overrides_reject_invalid_or_overlapping_codes(permission_client):
+    client, ids = permission_client
+    login(client)
+    url = f"/api/v1/memberships/{ids['viewer_membership']}/screens"
+
+    unknown = client.put(url, json={"extra_screens": ["inventada"], "restricted_screens": []})
+    overlap = client.put(url, json={"extra_screens": ["cedoc"], "restricted_screens": ["cedoc"]})
+
+    assert unknown.status_code == 422
+    assert overlap.status_code == 422
+
+
+def test_screen_overrides_require_manage_permission_and_selected_tenant(permission_client):
+    client, _ids = permission_client
+    login(client, "viewer@mediamind.ai")
+    forbidden = client.put(
+        f"/api/v1/memberships/{uuid4()}/screens",
+        json={"extra_screens": [], "restricted_screens": []},
+    )
+    assert forbidden.status_code == 403
+
+    client.post("/api/v1/auth/logout")
+    login(client)
+    missing = client.put(
+        f"/api/v1/memberships/{uuid4()}/screens",
+        json={"extra_screens": [], "restricted_screens": []},
+    )
+    assert missing.status_code == 404
 
 
 def test_update_can_rename_and_rejects_duplicate_name(permission_client):

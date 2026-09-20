@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Minus, RotateCcw } from 'lucide-react';
-import { ROLE_CATALOG, getCargoDefaultTabs, getUserAccess, setUserAccess } from '../../../lib/roleCatalog';
+import { ROLE_CATALOG, getCargoDefaultTabs } from '../../../lib/roleCatalog';
 import { CORP_SCREENS } from '../../../lib/corpTabs';
 
 // Linha de funcionário com seletor de cargo e personalização de acessos por
 // pessoa (3 estados por tela: padrão do cargo → incluir → remover).
-export default function EmployeeAccessRow({ user, isSelf, peers = [], onRoleChange }) {
+export default function EmployeeAccessRow({ user, isSelf, peers = [], onRoleChange, onScreensChange, onCopyAccess }) {
   const [open, setOpen] = useState(false);
-  const [, forceRefresh] = useState(0);
-  const access = getUserAccess(user.id, user.role);
+  const access = { extraTabs: user.extraScreens || [], removedTabs: user.restrictedScreens || [] };
   const cargoId = user.role;
   const def = getCargoDefaultTabs(cargoId);
   const isAll = def === null;
@@ -40,13 +39,11 @@ export default function EmployeeAccessRow({ user, isSelf, peers = [], onRoleChan
       next.extraTabs = [...(next.extraTabs || []), id];
       next.removedTabs = (next.removedTabs || []).filter((t) => t !== id);
     }
-    setUserAccess(user.id, next);
-    forceRefresh((n) => n + 1);
+    onScreensChange?.(user, next.extraTabs || [], next.removedTabs || []);
   }
 
   function resetOverrides() {
-    setUserAccess(user.id, { role: cargoId, extraTabs: [], removedTabs: [] });
-    forceRefresh((n) => n + 1);
+    onScreensChange?.(user, [], []);
   }
 
   return (
@@ -124,9 +121,7 @@ export default function EmployeeAccessRow({ user, isSelf, peers = [], onRoleChan
                   onChange={(e) => {
                     const other = peers.find((u) => String(u.id) === e.target.value);
                     if (other) {
-                      const o = getUserAccess(other.id, other.role);
-                      setUserAccess(user.id, { role: o.role || other.role, extraTabs: [...(o.extraTabs || [])], removedTabs: [...(o.removedTabs || [])] });
-                      forceRefresh((n) => n + 1);
+                      onCopyAccess?.(user, other);
                     }
                   }}
                   className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300"

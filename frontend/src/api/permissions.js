@@ -23,3 +23,10 @@ export function updateMembershipRole(membershipId, role) {
     body: { role },
   });
 }
+
+export function updateMembershipScreens(membershipId, extraScreens, restrictedScreens) {
+  return request(`/memberships/${membershipId}/screens`, {
+    method: 'PUT',
+    body: { extra_screens: extraScreens, restricted_screens: restrictedScreens },
+  });
+}

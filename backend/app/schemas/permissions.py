@@ -43,6 +43,8 @@ class MembershipResponse(BaseModel):
     full_name: str
     role: str
     permission_group_id: UUID | None
+    extra_screens: list[str]
+    restricted_screens: list[str]
 
 
 class MembershipListResponse(BaseModel):
@@ -56,3 +58,12 @@ class MembershipRoleUpdate(BaseModel):
 class MembershipRoleResponse(BaseModel):
     membership_id: UUID
     role: str
+
+
+class MembershipScreensUpdate(BaseModel):
+    extra_screens: list[str] = Field(default_factory=list)
+    restricted_screens: list[str] = Field(default_factory=list)
+
+
+class MembershipScreensResponse(MembershipScreensUpdate):
+    membership_id: UUID
