@@ -21,6 +21,7 @@ import Workspace from './mediamind/pages/Workspace';
 import Timeline from './mediamind/pages/Timeline';
 import SearchPage from './mediamind/pages/Search';
 import AssistenteIA from './mediamind/pages/AssistenteIA';
+import { canAccessModule } from './mediamind/lib/moduleAccess';
 
 const AuthenticatedApp = () => {
   const { loading: mmLoading } = useMmAuth();
@@ -41,23 +42,28 @@ const AuthenticatedApp = () => {
       <Route element={<MmProtectedRoute />}>
         <Route path="/" element={<Shell><Home /></Shell>} />
         <Route path="/search" element={<Shell><SearchPage /></Shell>} />
-        <Route path="/ingest" element={<Shell><Ingest /></Shell>} />
-        <Route path="/workspace" element={<Shell><Workspace /></Shell>} />
-        <Route path="/workspace/timeline" element={<Shell><Workspace /></Shell>} />
-        <Route path="/timeline" element={<Shell><Timeline /></Shell>} />
-        <Route path="/social" element={<Shell><ViralClips /></Shell>} />
+        <Route path="/ingest" element={<ModuleRoute moduleId="ingest"><Shell><Ingest /></Shell></ModuleRoute>} />
+        <Route path="/workspace" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
+        <Route path="/workspace/timeline" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
+        <Route path="/timeline" element={<ModuleRoute moduleId="timeline"><Shell><Timeline /></Shell></ModuleRoute>} />
+        <Route path="/social" element={<ModuleRoute moduleId="social"><Shell><ViralClips /></Shell></ModuleRoute>} />
         <Route path="/clips" element={<Navigate to="/social" replace />} />
         <Route path="/publish" element={<Navigate to="/social" replace />} />
-        <Route path="/acervo" element={<Shell><Acervo /></Shell>} />
-        <Route path="/management" element={<Shell><Management /></Shell>} />
+        <Route path="/acervo" element={<ModuleRoute moduleId="acervo"><Shell><Acervo /></Shell></ModuleRoute>} />
+        <Route path="/management" element={<ModuleRoute moduleId="management"><Shell><Management /></Shell></ModuleRoute>} />
         <Route path="/reports" element={<Navigate to="/management?tab=reports" replace />} />
-        <Route path="/corp" element={<Shell><Corp /></Shell>} />
+        <Route path="/corp" element={<ModuleRoute moduleId="corp"><Shell><Corp /></Shell></ModuleRoute>} />
         <Route path="/assistente" element={<Shell><AssistenteIA /></Shell>} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
 };
+
+function ModuleRoute({ moduleId, children }) {
+  const { user } = useMmAuth();
+  return canAccessModule(user?.role, moduleId) ? children : <Navigate to="/" replace />;
+}
 
 function MmProtectedRoute() {
   const { user } = useMmAuth();
