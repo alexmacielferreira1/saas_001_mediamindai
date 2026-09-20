@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Users, UserCog } from 'lucide-react';
-import { listMemberships } from '../../../../api/permissions';
+import { listMemberships, updateMembershipRole } from '../../../../api/permissions';
 import { ROLE_CATALOG } from '../../../lib/roleCatalog';
 import { ALL_SUBTABS, isTotalAccess, getActiveSubtabs, toggleSubtab } from '../../../lib/roleSubtabs';
 import { useAuth } from '../../../auth';
@@ -14,6 +14,7 @@ export default function AdminAcessosPage() {
   const [, setBump] = useState(0);
   const [employees, setEmployees] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [accessError, setAccessError] = useState('');
 
   // Lista memberships do tenant selecionado (admin autorizado pode listar). Mapeia para o
   // contrato do EmployeeAccessRow: role = cargo || role da plataforma.
@@ -40,6 +41,18 @@ export default function AdminAcessosPage() {
   function onToggle(cargoId, entry) {
     toggleSubtab(cargoId, entry);
     setBump((n) => n + 1);
+  }
+
+  async function onRoleChange(user, role) {
+    setAccessError('');
+    try {
+      await updateMembershipRole(user.membershipId, role);
+      setEmployees((current) => current.map((item) => (
+        item.membershipId === user.membershipId ? { ...item, role } : item
+      )));
+    } catch {
+      setAccessError('Não foi possível alterar o cargo. Tente novamente.');
+    }
   }
 
   return (
@@ -106,13 +119,14 @@ export default function AdminAcessosPage() {
           <h3 className="text-sm font-bold uppercase tracking-wide text-slate-300">Funcionários & acessos por pessoa</h3>
         </div>
         <div className="space-y-2">
+          {accessError && <p className="text-sm text-rose-400">{accessError}</p>}
           {loadingUsers ? (
             <p className="text-sm text-slate-500">Carregando funcionários…</p>
           ) : employees.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum funcionário cadastrado. Convide usuários pela plataforma para gerenciar acessos.</p>
           ) : (
             employees.map((u) => (
-              <EmployeeAccessRow key={u.id} user={u} isSelf={u.id === currentUser?.id} peers={employees} />
+              <EmployeeAccessRow key={u.id} user={u} isSelf={u.id === currentUser?.id} peers={employees} onRoleChange={onRoleChange} />
             ))
           )}
         </div>

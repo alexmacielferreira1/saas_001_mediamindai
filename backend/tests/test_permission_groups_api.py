@@ -35,14 +35,37 @@ def permission_client():
             email_normalized="viewer@mediamind.ai",
             password_hash=hash_password(PASSWORD),
         )
+        cedoc = User(
+            email="cedoc@mediamind.ai",
+            email_normalized="cedoc@mediamind.ai",
+            password_hash=hash_password(PASSWORD),
+        )
         manage = Permission(code="permissions.manage", description="Gerenciar permissões")
+        manage_users = Permission(code="users.manage", description="Gerenciar usuários")
+        manage_admins = Permission(code="users.manage_admin", description="Gerenciar admins")
         publish = Permission(code="assets.publish", description="Publicar ativos")
-        session.add_all([tenant, other, manager, viewer, manage, publish])
+        session.add_all(
+            [
+                tenant,
+                other,
+                manager,
+                viewer,
+                cedoc,
+                manage,
+                manage_users,
+                manage_admins,
+                publish,
+            ]
+        )
         session.flush()
         admin_group = PermissionGroup(tenant_id=tenant.id, name="Administradores")
         session.add(admin_group)
         session.flush()
-        admin_group.permissions.append(manage)
+        admin_group.permissions.extend([manage, manage_users, manage_admins])
+        cedoc_group = PermissionGroup(tenant_id=tenant.id, name="Gestores CEDOC")
+        session.add(cedoc_group)
+        session.flush()
+        cedoc_group.permissions.extend([manage, manage_users])
         manager_membership = Membership(
             user_id=manager.id,
             tenant_id=tenant.id,
@@ -50,7 +73,13 @@ def permission_client():
             permission_group_id=admin_group.id,
         )
         viewer_membership = Membership(user_id=viewer.id, tenant_id=tenant.id, role="viewer")
-        session.add_all([manager_membership, viewer_membership])
+        cedoc_membership = Membership(
+            user_id=cedoc.id,
+            tenant_id=tenant.id,
+            role="cedoc",
+            permission_group_id=cedoc_group.id,
+        )
+        session.add_all([manager_membership, viewer_membership, cedoc_membership])
         session.commit()
         ids = {
             "tenant": tenant.id,
@@ -92,7 +121,10 @@ def test_authenticated_member_can_list_only_selected_tenant_groups(permission_cl
     response = client.get("/api/v1/permission-groups")
 
     assert response.status_code == 200
-    assert [item["name"] for item in response.json()["permission_groups"]] == ["Administradores"]
+    assert [item["name"] for item in response.json()["permission_groups"]] == [
+        "Administradores",
+        "Gestores CEDOC",
+    ]
 
 
 def test_manager_lists_memberships_without_sensitive_identity_data(permission_client):
@@ -105,11 +137,13 @@ def test_manager_lists_memberships_without_sensitive_identity_data(permission_cl
     memberships = response.json()["memberships"]
     assert [item["email"] for item in memberships] == [
         "admin@mediamind.ai",
+        "cedoc@mediamind.ai",
         "viewer@mediamind.ai",
     ]
-    assert [item["role"] for item in memberships] == ["admin", "viewer"]
+    assert [item["role"] for item in memberships] == ["admin", "cedoc", "viewer"]
     assert memberships[0]["permission_group_id"] is not None
-    assert memberships[1]["permission_group_id"] is None
+    assert memberships[1]["permission_group_id"] is not None
+    assert memberships[2]["permission_group_id"] is None
     assert "password_hash" not in response.text
 
 
@@ -257,6 +291,54 @@ def test_manager_can_explicitly_unassign_permission_group(permission_client):
 
     assert response.status_code == 200
     assert response.json()["permission_group_id"] is None
+
+
+def test_authorized_manager_can_update_membership_role(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/role",
+        json={"role": "editor"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "membership_id": str(ids["viewer_membership"]),
+        "role": "editor",
+    }
+
+
+def test_cedoc_cannot_grant_administrative_role(permission_client):
+    client, ids = permission_client
+    login(client, "cedoc@mediamind.ai")
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/role",
+        json={"role": "admin"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "PERMISSION_DENIED"
+
+
+def test_role_update_rejects_unknown_role_or_membership(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    invalid_role = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/role",
+        json={"role": "invented-role"},
+    )
+    missing = client.put(
+        f"/api/v1/memberships/{uuid4()}/role",
+        json={"role": "editor"},
+    )
+
+    assert invalid_role.status_code == 422
+    assert invalid_role.json()["error_code"] == "VALIDATION_ERROR"
+    assert missing.status_code == 404
+    assert missing.json()["error_code"] == "MEMBERSHIP_NOT_FOUND"
 
 
 def test_update_can_rename_and_rejects_duplicate_name(permission_client):

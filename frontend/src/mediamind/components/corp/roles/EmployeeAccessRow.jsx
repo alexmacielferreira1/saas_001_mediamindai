@@ -5,11 +5,11 @@ import { CORP_SCREENS } from '../../../lib/corpTabs';
 
 // Linha de funcionário com seletor de cargo e personalização de acessos por
 // pessoa (3 estados por tela: padrão do cargo → incluir → remover).
-export default function EmployeeAccessRow({ user, isSelf, peers = [] }) {
+export default function EmployeeAccessRow({ user, isSelf, peers = [], onRoleChange }) {
   const [open, setOpen] = useState(false);
   const [, forceRefresh] = useState(0);
   const access = getUserAccess(user.id, user.role);
-  const cargoId = access.role || user.role;
+  const cargoId = user.role;
   const def = getCargoDefaultTabs(cargoId);
   const isAll = def === null;
   const defaultSet = new Set(isAll ? CORP_SCREENS.map((s) => s.id) : (def || []));
@@ -22,8 +22,7 @@ export default function EmployeeAccessRow({ user, isSelf, peers = [] }) {
   });
 
   function changeRole(e) {
-    setUserAccess(user.id, { role: e.target.value, extraTabs: [], removedTabs: [] });
-    forceRefresh((n) => n + 1);
+    onRoleChange?.(user, e.target.value);
   }
 
   function cycle(id) {

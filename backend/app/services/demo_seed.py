@@ -21,32 +21,45 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
         tenant.name = "MediaMind Demonstração"
         tenant.is_active = True
 
-    manage_permission = session.scalar(
-        select(Permission).where(Permission.code == "permissions.manage")
-    )
-    if manage_permission is None:
-        manage_permission = Permission(
-            code="permissions.manage",
-            description="Gerenciar grupos e atribuições de permissões",
+    permissions = {}
+    for code, description in (
+        ("permissions.manage", "Gerenciar grupos e atribuições de permissões"),
+        ("users.manage", "Gerenciar vínculos e cargos de usuários"),
+        ("users.manage_admin", "Conceder cargos administrativos"),
+    ):
+        permission = session.scalar(select(Permission).where(Permission.code == code))
+        if permission is None:
+            permission = Permission(code=code, description=description)
+            session.add(permission)
+            session.flush()
+        permissions[code] = permission
+
+    groups = {}
+    for name, description, codes in (
+        (
+            "Administradores de permissões",
+            "Bootstrap local para administradores demo",
+            ("permissions.manage", "users.manage", "users.manage_admin"),
+        ),
+        (
+            "Gestores CEDOC",
+            "Bootstrap local para gestão de usuários sem promoção administrativa",
+            ("permissions.manage", "users.manage"),
+        ),
+    ):
+        group = session.scalar(
+            select(PermissionGroup).where(
+                PermissionGroup.tenant_id == tenant.id,
+                PermissionGroup.name == name,
+            )
         )
-        session.add(manage_permission)
-        session.flush()
-    admin_group = session.scalar(
-        select(PermissionGroup).where(
-            PermissionGroup.tenant_id == tenant.id,
-            PermissionGroup.name == "Administradores de permissões",
-        )
-    )
-    if admin_group is None:
-        admin_group = PermissionGroup(
-            tenant_id=tenant.id,
-            name="Administradores de permissões",
-            description="Bootstrap local para administrar permissões demo",
-        )
-        session.add(admin_group)
-        session.flush()
-    admin_group.is_active = True
-    admin_group.permissions = [manage_permission]
+        if group is None:
+            group = PermissionGroup(tenant_id=tenant.id, name=name, description=description)
+            session.add(group)
+            session.flush()
+        group.is_active = True
+        group.permissions = [permissions[code] for code in codes]
+        groups[name] = group
 
     created = 0
     updated = 0
@@ -83,7 +96,11 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
                     tenant_id=tenant.id,
                     role=role,
                     permission_group_id=(
-                        admin_group.id if role in {"admin", "cedoc", "superadmin"} else None
+                        groups["Administradores de permissões"].id
+                        if role in {"admin", "superadmin"}
+                        else groups["Gestores CEDOC"].id
+                        if role == "cedoc"
+                        else None
                     ),
                 )
             )
@@ -91,7 +108,11 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
             membership.role = role
             membership.is_active = True
             membership.permission_group_id = (
-                admin_group.id if role in {"admin", "cedoc", "superadmin"} else None
+                groups["Administradores de permissões"].id
+                if role in {"admin", "superadmin"}
+                else groups["Gestores CEDOC"].id
+                if role == "cedoc"
+                else None
             )
 
     session.commit()

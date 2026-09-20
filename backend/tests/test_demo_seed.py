@@ -53,12 +53,29 @@ def test_seed_creates_idempotent_permission_bootstrap_for_administrators(db_sess
     groups = db_session.scalars(select(PermissionGroup)).all()
     memberships = db_session.scalars(select(Membership)).all()
 
-    assert [item.code for item in permissions] == ["permissions.manage"]
-    assert len(groups) == 1
-    assert groups[0].name == "Administradores de permissões"
-    assert [item.code for item in groups[0].permissions] == ["permissions.manage"]
-    assigned_roles = {item.role for item in memberships if item.permission_group_id == groups[0].id}
-    assert assigned_roles == {"admin", "cedoc", "superadmin"}
+    assert sorted(item.code for item in permissions) == [
+        "permissions.manage",
+        "users.manage",
+        "users.manage_admin",
+    ]
+    assert [item.name for item in groups] == [
+        "Administradores de permissões",
+        "Gestores CEDOC",
+    ]
+    admin_group, cedoc_group = groups
+    assert sorted(item.code for item in admin_group.permissions) == [
+        "permissions.manage",
+        "users.manage",
+        "users.manage_admin",
+    ]
+    assert sorted(item.code for item in cedoc_group.permissions) == [
+        "permissions.manage",
+        "users.manage",
+    ]
+    admin_roles = {item.role for item in memberships if item.permission_group_id == admin_group.id}
+    cedoc_roles = {item.role for item in memberships if item.permission_group_id == cedoc_group.id}
+    assert admin_roles == {"admin", "superadmin"}
+    assert cedoc_roles == {"cedoc"}
     assert all(
         item.permission_group_id is None
         for item in memberships

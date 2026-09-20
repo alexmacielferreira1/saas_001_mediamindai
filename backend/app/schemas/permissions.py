@@ -47,3 +47,12 @@ class MembershipResponse(BaseModel):
 
 class MembershipListResponse(BaseModel):
     memberships: list[MembershipResponse]
+
+
+class MembershipRoleUpdate(BaseModel):
+    role: str = Field(min_length=1, max_length=80)
+
+
+class MembershipRoleResponse(BaseModel):
+    membership_id: UUID
+    role: str

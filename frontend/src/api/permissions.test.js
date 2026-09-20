@@ -10,6 +10,7 @@ import {
   assignPermissionGroup,
   listMemberships,
   listPermissionGroups,
+  updateMembershipRole,
 } from './permissions';
 
 describe('permission administration API', () => {
@@ -45,5 +46,16 @@ describe('permission administration API', () => {
       '/memberships/membership-1/permission-group',
       { method: 'PUT', body: { permission_group_id: null } },
     );
+  });
+
+  it('updates the role on the tenant membership rather than the global user', async () => {
+    requestMock.mockResolvedValue({ membership_id: 'membership-1', role: 'editor' });
+
+    await updateMembershipRole('membership-1', 'editor');
+
+    expect(requestMock).toHaveBeenCalledWith('/memberships/membership-1/role', {
+      method: 'PUT',
+      body: { role: 'editor' },
+    });
   });
 });

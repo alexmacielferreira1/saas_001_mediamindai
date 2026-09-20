@@ -16,3 +16,10 @@ export function assignPermissionGroup(membershipId, permissionGroupId) {
     body: { permission_group_id: permissionGroupId },
   });
 }
+
+export function updateMembershipRole(membershipId, role) {
+  return request(`/memberships/${membershipId}/role`, {
+    method: 'PUT',
+    body: { role },
+  });
+}

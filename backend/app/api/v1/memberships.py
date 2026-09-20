@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PublicError
 from app.db.session import get_session
+from app.demo_accounts import DEMO_ACCOUNTS
 from app.models.identity import Membership, PermissionGroup, User
 from app.schemas.permissions import (
     MembershipListResponse,
     MembershipPermissionGroupResponse,
     MembershipPermissionGroupUpdate,
     MembershipResponse,
+    MembershipRoleResponse,
+    MembershipRoleUpdate,
 )
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -20,6 +23,8 @@ from app.tenancy.permissions import require_permission
 router = APIRouter(prefix="/memberships", tags=["permissions"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
+ALLOWED_ROLES = {role for _email, _name, role in DEMO_ACCOUNTS}
+ADMINISTRATIVE_ROLES = {"admin", "superadmin"}
 
 
 @router.get("", response_model=MembershipListResponse)
@@ -87,3 +92,29 @@ def assign_permission_group(
         membership_id=target.id,
         permission_group_id=target.permission_group_id,
     )
+
+
+@router.put("/{membership_id}/role", response_model=MembershipRoleResponse)
+def update_membership_role(
+    membership_id: UUID,
+    body: MembershipRoleUpdate,
+    current: Authenticated,
+    session: DbSession,
+):
+    selected_membership = require_membership(current)
+    require_permission(session, current, "users.manage")
+    if body.role not in ALLOWED_ROLES:
+        raise PublicError(422, "VALIDATION_ERROR", "Cargo informado não é reconhecido.")
+    if body.role in ADMINISTRATIVE_ROLES:
+        require_permission(session, current, "users.manage_admin")
+    target = session.scalar(
+        select(Membership).where(
+            Membership.id == membership_id,
+            Membership.tenant_id == selected_membership.tenant_id,
+        )
+    )
+    if target is None:
+        raise PublicError(404, "MEMBERSHIP_NOT_FOUND", "Vínculo de usuário não encontrado.")
+    target.role = body.role
+    session.commit()
+    return MembershipRoleResponse(membership_id=target.id, role=target.role)
