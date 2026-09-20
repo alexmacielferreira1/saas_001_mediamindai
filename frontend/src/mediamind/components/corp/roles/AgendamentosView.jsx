@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Calendar, Edit3 } from 'lucide-react';
+import { Plus, Search, Calendar, Edit3, Clock3, Video, CircleAlert } from 'lucide-react';
 import PanelSplit from '../../ui/PanelSplit';
 import CorpAgenda from '../CorpAgenda';
 import AgendamentoDetail from './AgendamentoDetail';
@@ -39,6 +39,9 @@ export default function AgendamentosView() {
   });
 
   const rec = gravacoes.find((p) => p.id === selectedId) || gravacoes[0];
+  const confirmadas = gravacoes.filter((p) => p.gravacao?.data && p.gravacao?.horario).length;
+  const incompletas = gravacoes.length - confirmadas;
+  const estudios = new Set(gravacoes.map((p) => p.gravacao?.estudio).filter(Boolean)).size;
 
   function nova() {
     const id = addProjeto({
@@ -87,15 +90,24 @@ export default function AgendamentosView() {
   ];
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2.5">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Agenda de gravações</p>
+    <div className="flex h-full min-h-0 flex-col border border-slate-800 bg-slate-950/35">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Agenda</p><h2 className="text-base font-semibold text-slate-100">Agenda de gravações</h2><p className="text-[11px] text-slate-500">Selecione um compromisso para editar os detalhes no painel ao lado.</p></div>
         <button onClick={nova} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">
-          <Plus size={13} /> Nova
+          <Plus size={13} /> Novo agendamento
         </button>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="grid border-b border-slate-800 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['Gravações no calendário', gravacoes.length, Calendar, 'text-sky-300'],
+          ['Confirmadas', confirmadas, Clock3, 'text-emerald-300'],
+          ['Pendentes de dados', incompletas, CircleAlert, 'text-amber-300'],
+          ['Estúdios em uso', estudios, Video, 'text-violet-300'],
+        ].map(([label, value, Icon, tone]) => <div key={label} className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 last:border-b-0 sm:border-b-0 sm:border-r"><Icon size={15} className={tone} /><div><p className={`text-lg font-semibold tabular-nums ${tone}`}>{value}</p><p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p></div></div>)}
+      </div>
+
+      <div className="min-h-0 flex-1 p-3">
         <PanelSplit panels={panels} storageKey="mm_layout_agendamentos" />
       </div>
     </div>
