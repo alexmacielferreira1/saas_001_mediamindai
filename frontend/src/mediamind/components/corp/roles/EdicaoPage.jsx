@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare } from 'lucide-react';
+import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, moverEtapa, transicionar } from '../../../lib/producaoStore';
@@ -60,34 +60,66 @@ export default function EdicaoPage({ disableBack = false }) {
   }
 
   const materiais = sel?.materiais || [];
+  const comPrazo = emEdicao.filter((p) => p.edicao_prazo).length;
+  const emRevisao = emEdicao.filter((p) => p.edicao_status === 'revisao_interna').length;
+  const prontas = emEdicao.filter((p) => p.edicao_status === 'pronto_para_aprovacao').length;
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-5">
+    <div className="flex h-full min-h-0 flex-col border border-slate-800 bg-slate-950/35">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Pós-produção</p>
+          <h2 className="mt-0.5 text-base font-semibold text-slate-100">Central de edição</h2>
+          <p className="text-[11px] text-slate-500">Acompanhe a fila, edite os metadados e encaminhe cada entrega sem sair desta tela.</p>
+        </div>
+        <button onClick={nova} className="flex min-h-9 items-center gap-1.5 rounded-md bg-sky-500 px-3 text-[11px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={13} /> Nova edição</button>
+      </div>
+
+      <div className="grid border-b border-slate-800 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Na fila de edição', value: emEdicao.length, Icon: Scissors, tone: 'text-sky-300' },
+          { label: 'Com prazo definido', value: comPrazo, Icon: Clock3, tone: 'text-violet-300' },
+          { label: 'Em revisão interna', value: emRevisao, Icon: CircleAlert, tone: 'text-amber-300' },
+          { label: 'Prontas para aprovação', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
+        ].map(({ label, value, Icon, tone }) => (
+          <div key={label} className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 last:border-b-0 sm:border-r xl:border-b-0">
+            <Icon size={15} className={tone} />
+            <div className="min-w-0">
+              <p className={`text-lg font-semibold tabular-nums ${tone}`}>{value}</p>
+              <p className="truncate text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(300px,38%)_1fr]">
       {/* Lista */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
+      <div className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div>
-            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300"><Scissors size={14} className="text-sky-400" /> Em edição</p>
-            <p className="mt-0.5 text-[10px] text-slate-500">{emEdicao.length} projeto(s) em edição</p>
+            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300"><Scissors size={14} className="text-sky-400" /> Fila de trabalho</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">Selecione uma entrega para trabalhar no painel ao lado.</p>
           </div>
-          <button onClick={nova} className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Nova</button>
+        </div>
+        <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+          <span>Entrega / responsável</span><span>Etapa</span>
         </div>
         <StageDragArea onMove={moverEtapa} disableBack={disableBack} className="flex-1 min-h-0">
-          <div className="h-full overflow-y-auto p-3">
+          <div className="h-full overflow-y-auto">
             {emEdicao.length === 0 ? (
               <p className="px-3 py-10 text-center text-[11px] text-slate-500">{disableBack ? 'Nada em edição. Crie uma nova edição pra começar.' : 'Nada em edição. Arraste um projeto da Gravação pra cá, ou crie uma nova edição.'}</p>
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-slate-800">
                 {emEdicao.map((p) => {
                   const st = STATUS_LABEL[p.edicao_status] || 'Rascunho de corte';
                   return (
-                    <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`w-full rounded-lg border p-3 text-left transition ${selId === p.id ? 'border-sky-600 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'}`}>
+                    <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${selId === p.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent bg-transparent hover:bg-slate-900/60'}`}>
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] font-bold uppercase text-sky-400">{p.episodio || '—'} · {p.programa}</p>
                         <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-violet-500/15 text-violet-300">{st}</span>
                       </div>
-                      <p className="mt-1 text-sm font-medium text-slate-200">{p.titulo}</p>
-                      <p className="mt-1 text-[10px] text-slate-500">resp. {p.editor || p.responsavel || '—'}</p>
+                      <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-200">{p.titulo}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">Responsável: <span className="text-slate-400">{p.editor || p.responsavel || '—'}</span></p>
                     </DraggableStageCard>
                   );
                 })}
@@ -98,14 +130,68 @@ export default function EdicaoPage({ disableBack = false }) {
       </div>
 
       {/* Detalhamento de edição */}
-      <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-3">
+      <div className="flex min-h-0 flex-col bg-slate-900/20">
         {sel ? (
           <>
-            <div className="border-b border-slate-800 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+              <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">{sel.episodio || '—'} · {sel.programa}</p>
               <h2 className="text-sm font-semibold text-slate-100">{sel.titulo}</h2>
+              </div>
+              <span className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[9px] font-bold uppercase text-violet-300">{STATUS_LABEL[sel.edicao_status] || 'Rascunho de corte'}</span>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              <div className="grid gap-3 xl:grid-cols-[1.15fr_1.35fr_.8fr]">
+                <section className="overflow-hidden border border-slate-800 bg-slate-950/65">
+                  <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Play size={11} /> Preview</p>
+                    <span className="font-mono text-[10px] tabular-nums text-sky-300">00:00:38:12</span>
+                  </div>
+                  <div className="flex aspect-video items-center justify-center bg-[radial-gradient(circle_at_center,_#172033,_#050914_70%)]">
+                    <button className="flex size-10 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25" title="Reproduzir prévia"><Play size={17} className="ml-0.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-3 border-t border-slate-800 text-center text-[9px] uppercase text-slate-500">
+                    <span className="border-r border-slate-800 py-1.5">IN 00:00:00</span><span className="border-r border-slate-800 py-1.5">OUT 00:12:48</span><span className="py-1.5">12m48s</span>
+                  </div>
+                </section>
+
+                <section className="border border-slate-800 bg-slate-950/45">
+                  <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Layers3 size={11} /> Timeline da entrega</p>
+                    <span className="text-[9px] text-slate-500">V1 · corte bruto</span>
+                  </div>
+                  <div className="space-y-2 p-3">
+                    {[
+                      ['V2', 'bg-sky-500/55', 'w-[82%]'],
+                      ['V1', 'bg-violet-500/50', 'w-[68%]'],
+                      ['A1', 'bg-emerald-500/45', 'w-[91%]'],
+                      ['A2', 'bg-amber-500/45', 'w-[58%]'],
+                    ].map(([track, color, width]) => (
+                      <div key={track} className="grid grid-cols-[22px_1fr] items-center gap-2">
+                        <span className="font-mono text-[9px] text-slate-500">{track}</span>
+                        <div className="h-5 overflow-hidden border border-slate-800 bg-slate-900/80 p-0.5"><div className={`h-full ${width} ${color}`} /></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 border-t border-slate-800 px-3 py-2 text-[9px] text-slate-500">
+                    <span>Marcadores: 4</span><span>Cortes: 17</span><span>Áudio: -3 LUFS</span>
+                  </div>
+                </section>
+
+                <section className="border border-slate-800 bg-slate-950/45">
+                  <div className="border-b border-slate-800 px-3 py-2"><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><GitBranch size={11} /> Versões e revisão</p></div>
+                  <div className="divide-y divide-slate-800">
+                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-slate-200">V1 · Corte bruto</span><span className="text-[9px] text-emerald-300">Atual</span></div><p className="mt-0.5 text-[9px] text-slate-500">Salva agora · {sel.editor || 'Editor'}</p></div>
+                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] text-slate-300">Briefing recebido</span><CheckSquare2 size={12} className="text-emerald-400" /></div><p className="mt-0.5 text-[9px] text-slate-500">Pauta, roteiro e mídias vinculados</p></div>
+                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] text-slate-300">Comentários</span><span className="text-[10px] font-semibold text-amber-300">2 abertos</span></div><p className="mt-0.5 text-[9px] text-slate-500">1 do produtor · 1 técnico</p></div>
+                  </div>
+                  <div className="grid grid-cols-2 border-t border-slate-800">
+                    <button className="flex items-center justify-center gap-1 border-r border-slate-800 py-2 text-[10px] text-slate-300 hover:bg-slate-800"><MessageCircle size={11} /> Comentários</button>
+                    <button className="flex items-center justify-center gap-1 py-2 text-[10px] text-slate-300 hover:bg-slate-800"><History size={11} /> Histórico</button>
+                  </div>
+                </section>
+              </div>
+
               <div className="grid gap-2 sm:grid-cols-3">
                 <label className="block">
                   <span className="mb-0.5 block text-[9px] uppercase text-slate-500">Título</span>
@@ -205,6 +291,7 @@ export default function EdicaoPage({ disableBack = false }) {
             Selecione um projeto na lista para ver o detalhamento da edição.
           </div>
         )}
+      </div>
       </div>
 
       <Dialog open={ajusteOpen} onOpenChange={setAjusteOpen}>
