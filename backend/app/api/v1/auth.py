@@ -40,7 +40,14 @@ def session_payload(session: Session, auth_session) -> SessionResponse:
 @router.post("/login", response_model=SessionResponse)
 def login(body: LoginBody, request: Request, response: Response, session: DbSession):
     settings = get_settings()
-    result = authenticate(session, body.email, body.password, session_hours=settings.session_hours)
+    result = authenticate(
+        session,
+        body.email,
+        body.password,
+        session_hours=settings.session_hours,
+        max_attempts=settings.login_max_attempts,
+        lockout_minutes=settings.login_lockout_minutes,
+    )
     if result is None:
         return error_response(request, 401, "INVALID_CREDENTIALS", "E-mail ou senha inválidos.")
     response.set_cookie(

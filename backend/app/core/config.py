@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     session_hours: int = Field(default=8, ge=1, le=168)
     session_cookie_secure: bool = False
     demo_password: SecretStr | None = None
+    login_max_attempts: int = Field(default=5, ge=2, le=20)
+    login_lockout_minutes: int = Field(default=15, ge=1, le=1440)
 
     @property
     def version(self) -> str:

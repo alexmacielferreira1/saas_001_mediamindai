@@ -67,7 +67,9 @@ Não haverá um adaptador genérico que replique indefinidamente a API do SDK. A
 
 ## Autenticação inicial
 
-A primeira entrega usa contas locais, senha armazenada apenas como hash forte, cookie de sessão `HttpOnly`, `SameSite=Lax` e expiração no servidor. Os usuários de demonstração existentes serão semeados no backend somente em ambiente local/teste; `alexmacielferreira@gmail.com` é o superadmin e os demais e-mails/papéis permanecem os exibidos pelo produto. A senha vem de configuração local não versionada. O processo deve recusar seeds demo em produção. MFA, identidade global e federação pertencem a evolução posterior, mas IDs e boundaries serão compatíveis.
+A primeira entrega usa contas locais, senha armazenada apenas como hash forte, cookie de sessão `HttpOnly`, `SameSite=Lax` e expiração no servidor. Os usuários de demonstração existentes serão semeados no backend somente em ambiente local/teste; `alexmacielferreira@gmail.com` é o superadmin e os demais e-mails/papéis permanecem os exibidos pelo produto. A senha vem de configuração local não versionada. O processo deve recusar seeds demo em produção.
+
+Quando houver clientes reais, a prioridade será autenticação pelo Google. E-mail corporativo e contas convidadas/cadastradas pelo RH ou por administrador serão alternativas controladas, com convite por e-mail e vínculo explícito a empresa e papel. Essa federação não será antecipada durante a reconstrução local; o modelo de usuário, membership e tenant deve permitir acrescentá-la sem alterar o layout ou misturar identidades reais com contas demo. MFA e identidade global pertencem à mesma evolução posterior.
 
 ## Compatibilidade e remoção
 
