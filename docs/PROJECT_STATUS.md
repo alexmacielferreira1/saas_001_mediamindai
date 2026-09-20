@@ -8,8 +8,8 @@ Autenticação, sessão, contas demo protegidas, isolamento básico por membersh
 foram reconstruídos fora do Base44. O layout foi preservado. O gate continua **blocked** porque a
 execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
 
-Última evidência automatizada: backend **89 passed, 2 skipped**, 100% linhas/branches; frontend
-**31 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
+Última evidência automatizada: backend **101 passed, 2 skipped**, 100% linhas/branches; frontend
+**43 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
 typecheck e build aprovados.
 Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
 parado e a sessão não tinha permissão para iniciá-lo.
