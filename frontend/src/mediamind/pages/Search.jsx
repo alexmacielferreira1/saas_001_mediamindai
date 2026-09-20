@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Search, Play, Music, Image, FileText, Filter, X, Clock,
+  Scissors, Film, Clapperboard, Download,
 } from 'lucide-react';
 import { Panel, Badge, StatusBadge, SearchInput, Button, InfoRow, EmptyState } from '../ui';
 import { formatDuration, formatSize } from '../data';
@@ -19,10 +20,17 @@ export default function SearchPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [inPoint, setInPoint] = useState('');
+  const [outPoint, setOutPoint] = useState('');
 
   useEffect(() => {
     setQuery(searchParams.get('q') || '');
   }, [searchParams]);
+
+  useEffect(() => {
+    setInPoint('');
+    setOutPoint('');
+  }, [selected?.id]);
 
   const filtered = assets.filter((a) => {
     if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
@@ -139,9 +147,15 @@ export default function SearchPage() {
         {/* Detalhe */}
         {selected ? (
           <Panel title="Detalhes do arquivo">
-            <div className="mb-3 flex h-32 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-5xl">
-              {selected.icon}
-            </div>
+            {selected.file_url && selected.asset_type === 'video' ? (
+              <video controls src={selected.file_url} className="mb-3 aspect-video w-full rounded-xl bg-black object-contain" />
+            ) : selected.file_url && selected.asset_type === 'audio' ? (
+              <audio controls src={selected.file_url} className="mb-3 w-full" />
+            ) : selected.file_url && selected.asset_type === 'image' ? (
+              <img src={selected.file_url} alt={selected.title} className="mb-3 h-40 w-full rounded-xl object-contain" />
+            ) : (
+              <div className="mb-3 flex h-32 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-5xl">{selected.icon || '📄'}</div>
+            )}
             <div className="flex flex-col gap-1">
               <InfoRow label="Título" value={selected.title} />
               <InfoRow label="Arquivo" value={selected.filename} />
@@ -161,9 +175,18 @@ export default function SearchPage() {
                 <p className="text-xs text-slate-400">{selected.description}</p>
               </div>
             )}
-            <div className="mt-3 flex gap-2">
+            {(selected.asset_type === 'video' || selected.asset_type === 'audio') && (
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                <label className="text-[10px] uppercase text-slate-500">IN (segundos)<input type="number" min="0" value={inPoint} onChange={(e) => setInPoint(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" /></label>
+                <label className="text-[10px] uppercase text-slate-500">OUT (segundos)<input type="number" min="0" value={outPoint} onChange={(e) => setOutPoint(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" /></label>
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
               <Link to={`/workspace?assetId=${selected.id}&title=${encodeURIComponent(selected.title)}`}><Button size="sm">Abrir no workspace</Button></Link>
-              <Button variant="secondary" size="sm" disabled title="Disponível após a ingestão real do arquivo">Download</Button>
+              <Link to={`/timeline?assetId=${selected.id}&in=${inPoint}&out=${outPoint}`}><Button variant="secondary" size="sm" icon={<Film size={13} />}>Timeline</Button></Link>
+              <Link to={`/social?assetId=${selected.id}&in=${inPoint}&out=${outPoint}`}><Button variant="secondary" size="sm" icon={<Scissors size={13} />}>Gerar corte</Button></Link>
+              <Link to={`/corp?tab=producao&assetId=${selected.id}`}><Button variant="secondary" size="sm" icon={<Clapperboard size={13} />}>Usar na produção</Button></Link>
+              {selected.file_url && <a href={selected.file_url} download={selected.filename}><Button variant="secondary" size="sm" icon={<Download size={13} />}>Download</Button></a>}
             </div>
           </Panel>
         ) : (
