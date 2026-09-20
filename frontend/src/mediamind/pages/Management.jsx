@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Building2, BarChart3, Users, TrendingUp, Calendar, AlertCircle,
   CheckCircle2, Clock, Activity, ScrollText,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, InfoRow, MockBanner } from '../ui';
+import { Panel, Stat, Tabs, Badge, StatusBadge, InfoRow, MockBanner, Loading, EmptyState } from '../ui';
+import { getManagementOverview } from '../../api/management';
 import {
-  MOCK_TEAM_PERFORMANCE, MOCK_TEAM_WORKLOAD, MOCK_PUBLICATION_SUMMARY,
-  MOCK_PUBLICATION_CALENDAR, MOCK_SOCIAL_METRICS, PUBLICATION_PLATFORM_LABELS,
+  MOCK_TEAM_PERFORMANCE, MOCK_TEAM_WORKLOAD, MOCK_SOCIAL_METRICS, PUBLICATION_PLATFORM_LABELS,
 } from '../data';
 import ManagementProcessamentosTab from '../components/management/ManagementProcessamentosTab';
 import ManagementAuditoriaTab from '../components/management/ManagementAuditoriaTab';
@@ -48,33 +48,47 @@ export default function Management() {
 }
 
 export function DashboardsTab() {
+  const [overview, setOverview] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getManagementOverview()
+      .then((data) => { if (active) setOverview(data); })
+      .catch(() => { if (active) setError(true); });
+    return () => { active = false; };
+  }, []);
+
+  if (error) return <EmptyState icon={AlertCircle} title="Não foi possível carregar a visão gerencial" description="Tente novamente em alguns instantes." />;
+  if (!overview) return <Loading label="Carregando visão gerencial..." />;
+
+  const summary = overview.publications;
   return (
     <div className="space-y-4">
-      <MockBanner note="Dashboards agregados — dados de exemplo." />
-
       <IndicadoresPipelinePanel />
 
       {/* Resumo de publicações */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat title="Publicados (mês)" value={MOCK_PUBLICATION_SUMMARY.total_published} icon={CheckCircle2} tone="emerald" />
-        <Stat title="Agendados" value={MOCK_PUBLICATION_SUMMARY.total_scheduled} icon={Clock} tone="sky" />
-        <Stat title="Pendentes" value={MOCK_PUBLICATION_SUMMARY.total_pending} icon={AlertCircle} tone="amber" />
-        <Stat title="Taxa aprovação" value={`${MOCK_PUBLICATION_SUMMARY.avg_approval_rate}%`} icon={TrendingUp} tone="violet" />
+        <Stat title="Publicados" value={summary.published} icon={CheckCircle2} tone="emerald" />
+        <Stat title="Agendados" value={summary.scheduled} icon={Clock} tone="sky" />
+        <Stat title="Pendentes" value={summary.pending} icon={AlertCircle} tone="amber" />
+        <Stat title="Taxa aprovação" value={`${summary.approval_rate}%`} icon={TrendingUp} tone="violet" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Calendário */}
         <Panel title="Calendário de publicações" right={<Calendar size={16} className="text-slate-500" />}>
           <div className="flex flex-col gap-2">
-            {MOCK_PUBLICATION_CALENDAR.map((c, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+            {summary.calendar.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhuma publicação cadastrada.</p>}
+            {summary.calendar.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
                 <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-slate-800">
-                  <span className="text-xs font-bold text-sky-300">{c.date.split('/')[0]}</span>
-                  <span className="text-[10px] text-slate-500">{c.date.split('/')[1]}</span>
+                  <span className="text-xs font-bold text-sky-300">{c.date ? c.date.slice(8, 10) || '—' : '—'}</span>
+                  <span className="text-[10px] text-slate-500">{c.date ? c.date.slice(5, 7) || '' : ''}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-200">{c.title}</p>
-                  <p className="text-xs text-slate-500">{PUBLICATION_PLATFORM_LABELS[c.platform] || c.platform}</p>
+                  <p className="text-xs text-slate-500">{PUBLICATION_PLATFORM_LABELS[c.platform] || c.platform || 'Canal não informado'}</p>
                 </div>
                 <Badge tone={c.status === 'Agendado' ? 'info' : 'pending'}>{c.status}</Badge>
               </div>
@@ -85,7 +99,10 @@ export function DashboardsTab() {
         {/* Métricas por rede */}
         <Panel title="Métricas por rede social" right={<BarChart3 size={16} className="text-slate-500" />}>
           <div className="flex flex-col gap-3">
-            {MOCK_SOCIAL_METRICS.map((s) => (
+            {overview.social_metrics.length === 0 && (
+              <p className="py-6 text-center text-sm text-slate-500">Métricas aparecerão após a conexão autorizada das redes sociais.</p>
+            )}
+            {overview.social_metrics.map((s) => (
               <div key={s.platform} className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-3">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-semibold text-slate-200">{s.platform}</span>
