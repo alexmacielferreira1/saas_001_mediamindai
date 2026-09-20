@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, BarChart3, Users, TrendingUp, Calendar, AlertCircle,
   CheckCircle2, Clock, Activity, ScrollText,
@@ -47,6 +47,7 @@ export default function Management() {
 }
 
 export function DashboardsTab() {
+  const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState(false);
 
@@ -65,11 +66,14 @@ export function DashboardsTab() {
   const kpis = buildManagementKpis(overview);
   const alerts = buildManagementAlerts(overview);
   const KPI_ICONS = [CheckCircle2, Calendar, AlertCircle, TrendingUp, Building2, CheckCircle2, Activity, AlertCircle];
+  const KPI_DESTINATIONS = ['/corp?tab=social_media', '/corp?tab=programacao', '/corp?tab=coordenador_comunicacao', '/management?tab=reports', '/acervo', '/acervo', '/management?tab=processamentos', '/management?tab=processamentos'];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         {kpis.map((item, index) => (
-          <Stat key={item.id} title={item.label} value={item.value} icon={KPI_ICONS[index]} tone={item.tone} />
+          <button type="button" key={item.id} onClick={() => navigate(KPI_DESTINATIONS[index])} className="text-left transition hover:-translate-y-0.5">
+            <Stat title={item.label} value={item.value} icon={KPI_ICONS[index]} tone={item.tone} />
+          </button>
         ))}
       </div>
 
@@ -79,10 +83,10 @@ export function DashboardsTab() {
           <div className="space-y-2">
             {alerts.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum alerta operacional com os dados atuais.</p>}
             {alerts.map((alert) => (
-              <div key={alert.kind} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3">
+              <button type="button" key={alert.kind} onClick={() => navigate(alert.kind === 'publication' ? '/corp?tab=coordenador_comunicacao' : '/management?tab=processamentos')} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3 text-left transition hover:border-sky-500/50 hover:bg-slate-900/80">
                 <AlertCircle size={15} className={alert.tone === 'rose' ? 'text-rose-400' : alert.tone === 'amber' ? 'text-amber-400' : 'text-sky-400'} />
                 <span className="text-sm text-slate-300">{alert.label}</span>
-              </div>
+              </button>
             ))}
           </div>
         </Panel>
@@ -94,7 +98,7 @@ export function DashboardsTab() {
           <div className="flex flex-col gap-2">
             {summary.calendar.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhuma publicação cadastrada.</p>}
             {summary.calendar.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+              <button type="button" key={c.id} onClick={() => navigate('/corp?tab=social_media')} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-left transition hover:border-sky-500/50 hover:bg-slate-900/70">
                 <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-slate-800">
                   <span className="text-xs font-bold text-sky-300">{c.date ? c.date.slice(8, 10) || '—' : '—'}</span>
                   <span className="text-[10px] text-slate-500">{c.date ? c.date.slice(5, 7) || '' : ''}</span>
@@ -104,7 +108,7 @@ export function DashboardsTab() {
                   <p className="text-xs text-slate-500">{PUBLICATION_PLATFORM_LABELS[c.platform] || c.platform || 'Canal não informado'}</p>
                 </div>
                 <Badge tone={c.status === 'Agendado' ? 'info' : 'pending'}>{c.status}</Badge>
-              </div>
+              </button>
             ))}
           </div>
         </Panel>

@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Archive, Shield, MonitorCog, Grid3X3, List,
   AlertTriangle, CheckCircle2, Play, FileText, Music, Image,
+  ExternalLink, Scissors, X,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, EmptyState } from '../ui';
+import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, EmptyState, InfoRow } from '../ui';
 import { formatDuration, formatSize, formatBytes } from '../data';
 import { base44 } from '@/api/base44Client';
 import { getManagementOverview } from '../../api/management';
 import { buildAcervoSystemSummary } from '../lib/acervoSystemViewModel';
-import { listMemberships } from '../../api/permissions';
+import { listMemberships, updateMembershipScreens } from '../../api/permissions';
 import { CARGO_BY_ID } from '../lib/roleCatalog';
 
 const ACERVO_TABS = [
@@ -66,9 +67,11 @@ export default function Acervo() {
 }
 
 function AcervoTab({ assets, summary }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list');
+  const [selectedAsset, setSelectedAsset] = useState(null);
 
   const filtered = assets.filter((a) => {
     if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
@@ -152,7 +155,7 @@ function AcervoTab({ assets, summary }) {
                 {filtered.map((a) => {
                   const Icon = ASSET_TYPE_ICONS[a.asset_type] || FileText;
                   return (
-                    <tr key={a.id} className="border-b border-slate-800/50 transition hover:bg-slate-800/30 cursor-pointer">
+                    <tr key={a.id} onClick={() => setSelectedAsset(a)} className="cursor-pointer border-b border-slate-800/50 transition hover:bg-slate-800/30">
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800 text-lg">{a.icon}</div>
@@ -181,7 +184,7 @@ function AcervoTab({ assets, summary }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((a) => (
-            <div key={a.id} className="mm-panel mm-card-hover group cursor-pointer">
+            <button key={a.id} type="button" onClick={() => setSelectedAsset(a)} className="mm-panel mm-card-hover group cursor-pointer text-left">
               <div className="mb-3 flex h-28 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-4xl">
                 {a.icon}
               </div>
@@ -191,30 +194,83 @@ function AcervoTab({ assets, summary }) {
                 <StatusBadge status={a.status} />
                 <span className="text-xs text-slate-500">{formatDuration(a.duration)}</span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
+      )}
+
+      {selectedAsset && (
+        <Panel
+          title="Detalhes do arquivo"
+          right={<button type="button" onClick={() => setSelectedAsset(null)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200" aria-label="Fechar detalhes"><X size={15} /></button>}
+        >
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr_auto]">
+            <div className="space-y-2">
+              <InfoRow label="Asset ID" value={selectedAsset.id} />
+              <InfoRow label="Título" value={selectedAsset.title} />
+              <InfoRow label="Arquivo" value={selectedAsset.filename} />
+              <InfoRow label="Categoria" value={selectedAsset.category || '—'} />
+            </div>
+            <div className="space-y-2">
+              <InfoRow label="Tipo" value={selectedAsset.asset_type || '—'} />
+              <InfoRow label="Duração" value={formatDuration(selectedAsset.duration)} />
+              <InfoRow label="Tamanho" value={formatSize(selectedAsset.file_size)} />
+              <InfoRow label="Status" value={selectedAsset.status || '—'} />
+            </div>
+            <div className="flex min-w-48 flex-col gap-2">
+              <button type="button" onClick={() => navigate(`/workspace?asset=${encodeURIComponent(selectedAsset.id)}`)} className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400"><ExternalLink size={14} /> Abrir no Workspace</button>
+              <button type="button" onClick={() => navigate(`/social?novo=publicacao&asset=${encodeURIComponent(selectedAsset.id)}`)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"><Scissors size={14} /> Criar corte</button>
+              <button type="button" onClick={() => navigate(`/search?q=${encodeURIComponent(selectedAsset.title || selectedAsset.filename || '')}`)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Localizar relacionados</button>
+            </div>
+          </div>
+        </Panel>
       )}
     </div>
   );
 }
 
 function AdminTab({ logs, memberships }) {
-  const activeUsers = memberships.filter((membership) => membership.status !== 'inactive').length;
+  const [users, setUsers] = useState(memberships);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
+  const activeUsers = users.filter((membership) => membership.status !== 'inactive').length;
+  const selectedUser = users.find((membership) => membership.id === selectedUserId) || null;
+
+  const hasAcervoAccess = (membership) => !((membership.restricted_screens || []).includes('acervo'));
+
+  async function toggleAcervoAccess(membership) {
+    const currentlyAllowed = hasAcervoAccess(membership);
+    const restricted = new Set(membership.restricted_screens || []);
+    if (currentlyAllowed) restricted.add('acervo'); else restricted.delete('acervo');
+    setSavingAccess(true);
+    setAccessError('');
+    try {
+      const restrictedScreens = [...restricted];
+      await updateMembershipScreens(membership.id, membership.extra_screens || [], restrictedScreens);
+      setUsers((current) => current.map((item) => (
+        item.id === membership.id ? { ...item, restricted_screens: restrictedScreens } : item
+      )));
+    } catch {
+      setAccessError('Não foi possível alterar o acesso ao acervo.');
+    } finally {
+      setSavingAccess(false);
+    }
+  }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat title="Usuários com acesso" value={memberships.length} icon={Shield} tone="sky" />
+        <Stat title="Usuários com acesso" value={users.filter(hasAcervoAccess).length} icon={Shield} tone="sky" />
         <Stat title="Acessos ativos" value={activeUsers} icon={CheckCircle2} tone="emerald" />
-        <Stat title="Perfis distintos" value={new Set(memberships.map((item) => item.role)).size} icon={Shield} tone="violet" />
+        <Stat title="Perfis distintos" value={new Set(users.map((item) => item.role)).size} icon={Shield} tone="violet" />
         <Stat title="Eventos auditados" value={logs.length} icon={Archive} tone="amber" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Usuários e permissões do acervo">
           <div className="space-y-2">
-            {memberships.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum usuário disponível para este tenant.</p>}
-            {memberships.map((membership) => (
-              <div key={membership.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+            {users.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum usuário disponível para este tenant.</p>}
+            {users.map((membership) => (
+              <button type="button" key={membership.id} onClick={() => setSelectedUserId(membership.id)} className={`flex w-full items-center gap-3 rounded-xl border bg-slate-900/40 px-3 py-2.5 text-left transition hover:border-sky-500/50 hover:bg-slate-900/70 ${selectedUserId === membership.id ? 'border-sky-500/70' : 'border-slate-800'}`}>
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500/15 text-xs font-bold text-sky-300">
                   {(membership.full_name || membership.email || '?').slice(0, 2).toUpperCase()}
                 </div>
@@ -224,9 +280,9 @@ function AdminTab({ logs, memberships }) {
                 </div>
                 <div className="text-right">
                   <Badge tone="info">{CARGO_BY_ID[membership.role]?.name || membership.role}</Badge>
-                  <p className="mt-1 text-[10px] text-slate-500">{membership.status || 'ativo'}</p>
+                  <p className={`mt-1 text-[10px] ${hasAcervoAccess(membership) ? 'text-emerald-400' : 'text-rose-400'}`}>{hasAcervoAccess(membership) ? 'acervo permitido' : 'acervo restrito'}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </Panel>
@@ -243,16 +299,47 @@ function AdminTab({ logs, memberships }) {
           </div>
         </Panel>
       </div>
+      {selectedUser && (
+        <Panel title="Detalhes e acesso ao acervo" right={<button type="button" onClick={() => setSelectedUserId(null)} aria-label="Fechar detalhes" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800"><X size={15} /></button>}>
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+            <div className="space-y-2">
+              <InfoRow label="Usuário" value={selectedUser.full_name || selectedUser.email} />
+              <InfoRow label="E-mail" value={selectedUser.email} />
+            </div>
+            <div className="space-y-2">
+              <InfoRow label="Perfil" value={CARGO_BY_ID[selectedUser.role]?.name || selectedUser.role} />
+              <InfoRow label="Acesso ao acervo" value={hasAcervoAccess(selectedUser) ? 'Permitido' : 'Restrito'} />
+            </div>
+            <div className="flex min-w-52 flex-col justify-center gap-2">
+              <button type="button" disabled={savingAccess || selectedUser.role === 'superadmin'} onClick={() => toggleAcervoAccess(selectedUser)} className={`rounded-lg px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${hasAcervoAccess(selectedUser) ? 'border border-rose-500/40 text-rose-300 hover:bg-rose-500/10' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'}`}>
+                {savingAccess ? 'Salvando...' : hasAcervoAccess(selectedUser) ? 'Restringir acesso ao acervo' : 'Permitir acesso ao acervo'}
+              </button>
+              {selectedUser.role === 'superadmin' && <p className="text-center text-[10px] text-slate-500">Superadministrador mantém acesso total.</p>}
+              {accessError && <p className="text-center text-[10px] text-rose-400">{accessError}</p>}
+            </div>
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }
 
 function MonitoringTab({ overview }) {
-  const summary = buildAcervoSystemSummary(overview);
+  const navigate = useNavigate();
+  const [liveOverview, setLiveOverview] = useState(overview);
+  const [selectedServiceKey, setSelectedServiceKey] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const summary = buildAcervoSystemSummary(liveOverview);
   const ICONS = [MonitorCog, CheckCircle2, AlertTriangle, CheckCircle2, MonitorCog];
+  const selectedService = liveOverview.services.find((service) => service.key === selectedServiceKey) || null;
   const incidents = [];
-  if (overview.processing.failed) incidents.push(`${overview.processing.failed} processamento(s) com falha`);
-  if (overview.assets.failures) incidents.push(`${overview.assets.failures} arquivo(s) com falha de indexação`);
+  if (liveOverview.processing.failed) incidents.push(`${liveOverview.processing.failed} processamento(s) com falha`);
+  if (liveOverview.assets.failures) incidents.push(`${liveOverview.assets.failures} arquivo(s) com falha de indexação`);
+
+  async function refreshSystem() {
+    setRefreshing(true);
+    try { setLiveOverview(await getManagementOverview()); } finally { setRefreshing(false); }
+  }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -262,19 +349,19 @@ function MonitoringTab({ overview }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Serviços e pipelines">
+        <Panel title="Serviços e pipelines" right={<button type="button" onClick={refreshSystem} disabled={refreshing} className="text-xs font-semibold text-sky-400 hover:text-sky-300 disabled:opacity-50">{refreshing ? 'Atualizando...' : 'Atualizar status'}</button>}>
           <div className="overflow-hidden rounded-xl border border-slate-800">
             <div className="grid grid-cols-[1fr_auto] bg-slate-950/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <span>Serviço</span><span>Status</span>
             </div>
-            {overview.services.map((s) => (
-              <div key={s.key} className="flex items-center justify-between border-t border-slate-800 bg-slate-900/40 px-3 py-2.5">
+            {liveOverview.services.map((s) => (
+              <button type="button" key={s.key} onClick={() => setSelectedServiceKey(s.key)} className={`flex w-full items-center justify-between border-t bg-slate-900/40 px-3 py-2.5 text-left transition hover:bg-slate-800/60 ${selectedServiceKey === s.key ? 'border-sky-500/60' : 'border-slate-800'}`}>
                 <div>
                   <p className="font-medium text-slate-200">{s.label}</p>
                   <p className="text-xs text-slate-500">{s.detail}</p>
                 </div>
                 <StatusBadge status={s.status} />
-              </div>
+              </button>
             ))}
           </div>
         </Panel>
@@ -284,6 +371,19 @@ function MonitoringTab({ overview }) {
         </Panel>
       </div>
 
+      {selectedService && (
+        <Panel title={`Diagnóstico · ${selectedService.label}`} right={<button type="button" onClick={() => setSelectedServiceKey(null)} aria-label="Fechar diagnóstico" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800"><X size={15} /></button>}>
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+            <InfoRow label="Serviço" value={selectedService.label} />
+            <InfoRow label="Diagnóstico atual" value={selectedService.detail || 'Sem detalhes adicionais'} />
+            <div className="flex items-center gap-2">
+              <StatusBadge status={selectedService.status} />
+              <button type="button" onClick={refreshSystem} disabled={refreshing} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:opacity-50">Revalidar agora</button>
+            </div>
+          </div>
+        </Panel>
+      )}
+
       <Panel title="Modelos de IA">
         <p className="text-sm text-slate-500">Nenhum modelo local configurado.</p>
       </Panel>
@@ -292,8 +392,10 @@ function MonitoringTab({ overview }) {
         <div className="space-y-2">
           {incidents.length === 0 && <p className="py-4 text-center text-sm text-slate-500">Nenhum incidente técnico aberto.</p>}
           {incidents.map((incident) => (
-            <div key={incident} className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-sm text-rose-200">
+            <div key={incident} className="flex w-full items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-left text-sm text-rose-200">
               <AlertTriangle size={14} /> {incident}
+              <button type="button" onClick={refreshSystem} className="ml-auto text-[11px] font-semibold text-sky-300 hover:text-sky-200">Revalidar</button>
+              <button type="button" onClick={() => navigate('/management?tab=processamentos')} className="text-[11px] font-semibold text-slate-400 hover:text-slate-200">Ver fila</button>
             </div>
           ))}
         </div>
