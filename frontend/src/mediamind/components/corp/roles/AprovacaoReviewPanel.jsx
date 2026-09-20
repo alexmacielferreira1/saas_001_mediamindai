@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, Save, CheckCircle2, Trash2, MousePointer2, Pen, Highlighter,
-  LogIn, LogOut, MessageSquare, Eraser,
+  LogIn, LogOut, MessageSquare, Eraser, ArrowUpRight, Square, Circle, Type, Download, FileVideo, FileText, History, XCircle, RotateCcw,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
@@ -72,6 +72,14 @@ const TOOLS = [
   { id: 'pen', name: 'Caneta', Icon: Pen },
   { id: 'highlighter', name: 'Marca-texto', Icon: Highlighter },
   { id: 'eraser', name: 'Borracha', Icon: Eraser },
+];
+
+const DEMO_COMMENTS = [
+  { at: '00:01:15', author: 'Marcelo Silva', text: 'Diminuir o tempo desta fala. Está muito longa para o ritmo do jornal.', tone: 'bg-rose-400' },
+  { at: '00:03:42', author: 'Elisa Pereira', text: 'Ajustar enquadramento. Deixar mais centralizado no rosto.', tone: 'bg-amber-400' },
+  { at: '00:08:21', author: 'Alex Maciel', text: 'Verificar grafismo e ortografia. O nome do projeto está incorreto.', tone: 'bg-sky-400' },
+  { at: '00:12:10', author: 'Marcelo Silva', text: 'Inserir imagem de apoio aqui.', tone: 'bg-rose-400' },
+  { at: '00:18:33', author: 'Diretor', text: 'Verificar transição para o próximo bloco.', tone: 'bg-emerald-400' },
 ];
 
 // Player de conferência com camada de anotação acima do vídeo.
@@ -199,119 +207,30 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-900/20">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
-        <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Aprovação — V3 · Rodada 3</p>
-        <h2 className="text-base font-semibold text-slate-100">{project.titulo}</h2>
-        <p className="text-[11px] text-slate-500">{project.programa} · {project.episodio} · responsável {project.responsavel || '—'}</p>
-        {project.revisao_intermediaria && (
-          <span className="mt-1 inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-300">Revisão intermediária do produtor</span>
-        )}
-        </div>
-        <div className="text-right"><span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[9px] font-bold uppercase text-amber-300">Em aprovação</span><p className="mt-1 text-[9px] text-slate-500">Revisor: Marcelo · enviada em 18/09/2026</p></div>
+      <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Aprovação da produção</p><h2 className="text-base font-semibold text-slate-100">{project.titulo}</h2><p className="text-[10px] text-slate-500">Revise a versão, adicione comentários e solicite ajustes se necessário.</p></div><div className="text-right"><p className="text-[11px] font-semibold text-slate-200">{project.programa} · {project.episodio}</p><span className="mt-1 inline-block rounded bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-300">V3 · Rodada 3 · Em aprovação</span></div></header>
+
+      <div className="grid grid-cols-6 border-b border-slate-800 bg-slate-950/25">{['Planejamento','Gravação','Edição','Aprovação','Publicação','Concluído'].map((stage, i) => <div key={stage} className={`flex items-center gap-2 border-r border-slate-800 px-3 py-2 ${i === 3 ? 'bg-sky-500/15' : ''}`}><span className={`flex size-6 items-center justify-center rounded-full text-[10px] font-bold ${i <= 3 ? 'bg-sky-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>{i + 1}</span><div><p className={`text-[9px] font-semibold ${i === 3 ? 'text-sky-300' : 'text-slate-400'}`}>{stage}</p><p className="text-[8px] text-slate-600">{i === 3 ? 'Revisar e aprovar' : i < 3 ? 'Concluído' : 'Pendente'}</p></div></div>)}</div>
+
+      <div className="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[205px_minmax(420px,1fr)_270px]">
+        <aside className="min-h-0 overflow-y-auto border-b border-slate-800 bg-slate-950/25 xl:border-b-0 xl:border-r">
+          <section className="border-b border-slate-800 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Informações da produção</p><button className="rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300">Editar</button></div><div className="mt-3 flex items-center gap-2"><div className="flex size-11 items-center justify-center rounded bg-sky-950 text-sm font-bold text-sky-300">{project.programa?.slice(0,2).toUpperCase()}</div><div><p className="text-[11px] font-semibold text-slate-200">{project.programa}</p><p className="text-[10px] text-slate-500">{project.titulo}</p></div></div><p className="mt-3 text-[9px] leading-relaxed text-slate-500">{project.pauta || 'Conteúdo audiovisual em revisão final para distribuição.'}</p><div className="mt-3 grid grid-cols-2 gap-2 text-[9px]"><div><p className="text-slate-600">Duração</p><p className="text-slate-300">00:28:40</p></div><div><p className="text-slate-600">Editor</p><p className="text-slate-300">{project.editor || project.responsavel || 'Equipe'}</p></div><div><p className="text-slate-600">Status</p><p className="text-amber-300">Em aprovação</p></div><div><p className="text-slate-600">Prazo</p><p className="text-slate-300">19/09 18:00</p></div></div></section>
+          <section className="p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Versões da edição</p><button className="rounded bg-sky-500 px-2 py-1 text-[9px] font-bold text-slate-950">+ Nova versão</button></div><div className="mt-2 space-y-2">{[['V3','Em aprovação','Alex Maciel','text-amber-300'],['V2','Alterações solicitadas','Elisa Pereira','text-rose-300'],['V1','Aprovada (anterior)','Marcelo Silva','text-emerald-300']].map(([v,s,a,t],i)=><button key={v} className={`w-full rounded border p-2 text-left ${i===0?'border-sky-500 bg-sky-950/30':'border-slate-800 bg-slate-950/30'}`}><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-200">{v}</span><span className={`text-[8px] font-bold ${t}`}>{s}</span></div><p className="mt-1 text-[8px] text-slate-500">10/09/2026 · {a}</p></button>)}</div><button className="mt-2 w-full rounded border border-slate-700 py-1.5 text-[9px] text-sky-300">Comparar versões</button></section>
+        </aside>
+
+        <main className="min-h-0 overflow-y-auto p-2">
+          <div className="flex flex-wrap items-center gap-1 border border-slate-800 bg-slate-950/45 p-1">{TOOLS.map((t)=>{const Icon=t.Icon;return <button key={t.id} onClick={()=>setTool(t.id)} className={`flex items-center gap-1 rounded px-2 py-1 text-[9px] ${tool===t.id?'bg-sky-500 text-slate-950':'text-slate-400 hover:bg-slate-800'}`}><Icon size={11}/>{t.name}</button>;})}<button className="flex items-center gap-1 px-2 py-1 text-[9px] text-slate-400 hover:bg-slate-800"><ArrowUpRight size={11}/>Seta</button><button className="flex items-center gap-1 px-2 py-1 text-[9px] text-slate-400 hover:bg-slate-800"><Square size={11}/>Retângulo</button><button className="flex items-center gap-1 px-2 py-1 text-[9px] text-slate-400 hover:bg-slate-800"><Circle size={11}/>Círculo</button><button className="flex items-center gap-1 px-2 py-1 text-[9px] text-slate-400 hover:bg-slate-800"><Type size={11}/>Texto</button></div>
+
+          <div className="relative mt-2 aspect-video overflow-hidden border border-slate-700 bg-[radial-gradient(circle_at_50%_35%,_#315070,_#132238_48%,_#060a12_80%)]"><div className="absolute inset-x-[22%] bottom-0 top-[14%] rounded-t-[45%] bg-gradient-to-b from-slate-600 via-slate-800 to-slate-950"/><div className="absolute left-[8%] top-[26%] rounded border-2 border-amber-400 bg-amber-950/75 px-3 py-2 text-xs font-bold text-amber-300">Ajustar<br/>enquadramento</div><div className="absolute right-[7%] top-[30%] rounded border-2 border-rose-400 bg-rose-950/80 px-3 py-2 text-xs font-bold text-rose-200">Reduzir tempo<br/>desta fala</div><div className="absolute bottom-[12%] left-[30%] rounded bg-white px-3 py-2 text-xs font-semibold text-slate-900">Verificar grafismo<br/>e ortografia</div><button onClick={()=>setPlaying((p)=>!p)} className="absolute inset-0 flex items-center justify-center text-white/80">{playing?<Pause size={36}/>:<Play size={42}/>}</button><svg viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none" style={{touchAction:'none'}} className={`absolute inset-0 h-full w-full ${tool==='play'?'pointer-events-none':tool==='eraser'?'cursor-cell':'cursor-crosshair'}`} onPointerDown={pDown} onPointerMove={pMove} onPointerUp={pUp}>{draws.map((d,i)=><path key={i} d={toPath(d.points)} fill="none" strokeLinecap="round" strokeLinejoin="round" {...strokeStyle(d.tool)}/>)}{drawing&&<path d={toPath(drawing.points)} fill="none" strokeLinecap="round" strokeLinejoin="round" {...strokeStyle(drawing.tool)}/>}</svg><span className="absolute bottom-2 left-3 font-mono text-[9px] text-white">{fmt(time)} / 28:40</span></div>
+
+          <div className="mt-2 border border-slate-800 bg-slate-950/45 p-2"><div onClick={seek} className="relative h-9 cursor-pointer overflow-hidden bg-slate-900"><div className="absolute inset-x-0 bottom-1 h-2 bg-[repeating-linear-gradient(90deg,#29445c_0,#29445c_5px,#17202d_5px,#17202d_8px)]"/>{[18,36,52,68,84].map((x,i)=><span key={x} className={`absolute bottom-0 top-0 w-0.5 ${['bg-amber-400','bg-rose-400','bg-sky-400','bg-emerald-400','bg-rose-400'][i]}`} style={{left:`${x}%`}}/>)}<div className="absolute bottom-0 top-0 w-0.5 bg-sky-300" style={{left:`${(time/DURATION)*100}%`}}/></div><div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2"><button onClick={markIn} className="rounded border border-slate-700 px-2 py-1 text-[9px] text-emerald-300">IN · {fmt(time)}</button><button onClick={markOut} className="rounded border border-slate-700 px-2 py-1 text-[9px] text-rose-300">OUT · 28:40</button><button className="rounded border border-sky-700 px-3 py-1 text-[9px] text-sky-300">Ir para timecode</button></div></div>
+
+          <div className="mt-2 grid gap-2 lg:grid-cols-[1fr_.7fr]"><label className="border border-slate-800 bg-slate-950/45 p-2"><span className="text-[9px] font-bold text-slate-300">Observação geral desta rodada</span><textarea value={generalComment} onChange={(e)=>setGeneralComment(e.target.value)} rows={3} className="mt-1 w-full resize-none bg-transparent text-[10px] text-slate-300 outline-none" placeholder="Ajustes principais desta revisão..."/></label><div className="border border-slate-800 bg-slate-950/45 p-2"><p className="text-[9px] font-bold text-slate-300">Arquivos e materiais</p><div className="mt-2 space-y-1"><button className="flex w-full items-center justify-between rounded border border-slate-800 px-2 py-1.5 text-[9px] text-slate-400"><span className="flex items-center gap-1"><FileVideo size={11}/>Jornal_da_Cidade_V3.mp4</span><Download size={11}/></button><button className="flex w-full items-center justify-between rounded border border-slate-800 px-2 py-1.5 text-[9px] text-slate-400"><span className="flex items-center gap-1"><FileText size={11}/>Roteiro_JC_Ep235.pdf</span><Download size={11}/></button></div></div></div>
+        </main>
+
+        <aside className="min-h-0 overflow-y-auto border-t border-slate-800 bg-slate-950/25 xl:border-l xl:border-t-0"><div className="flex items-center justify-between border-b border-slate-800 p-2"><div className="flex gap-1"><button className="rounded bg-sky-500/15 px-2 py-1 text-[9px] text-sky-300">Comentários ({DEMO_COMMENTS.length+annotations.length})</button><button className="rounded px-2 py-1 text-[9px] text-slate-500">Por timecode</button></div><button onClick={()=>document.getElementById('approval-comment-input')?.focus()} className="rounded bg-sky-500 px-2 py-1 text-[9px] font-bold text-slate-950">+ Novo</button></div><div className="divide-y divide-slate-800">{DEMO_COMMENTS.map((c,i)=><button key={i} onClick={()=>setTime([75000,222000,501000,730000,1113000][i]%DURATION)} className="w-full p-2 text-left hover:bg-slate-900/60"><div className="flex items-center gap-2"><span className={`size-2 rounded-full ${c.tone}`}/><span className="text-[9px] font-semibold text-slate-300">{c.author}</span><span className="ml-auto font-mono text-[8px] text-slate-600">{c.at}</span></div><p className="mt-1 pl-4 text-[9px] leading-relaxed text-slate-500">{c.text}</p></button>)}</div><div className="border-t border-slate-800 p-2"><div className="flex gap-1"><input id="approval-comment-input" value={newText} onChange={(e)=>setNewText(e.target.value)} onKeyDown={(e)=>e.key==='Enter'&&addText()} placeholder="Comentar neste timecode..." className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-[9px] text-slate-200"/><button onClick={addText} className="rounded bg-sky-500 px-2 text-[9px] font-bold text-slate-950">Adicionar</button></div></div><section className="border-t border-slate-800 p-3"><div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[9px] font-bold text-slate-300"><History size={11}/>Histórico da revisão</p><button className="text-[8px] text-sky-400">Ver completo</button></div><div className="mt-2 space-y-2 text-[8px] text-slate-500"><p>10/09 14:32 · Alex enviou V3 para aprovação</p><p>10/09 11:18 · Marcelo solicitou alterações na V2</p><p>09/09 16:20 · João enviou V2 para aprovação</p></div></section></aside>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-
-      {/* Toolbar de marcação */}
-      <div className="mb-2 flex flex-wrap items-center gap-1 rounded-md border border-slate-700 bg-slate-950/50 p-1">
-        {TOOLS.map((t) => {
-          const Icon = t.Icon;
-          return (
-            <button key={t.id} onClick={() => setTool(t.id)} title={t.name}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold transition ${tool === t.id ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800'}`}>
-              <Icon size={12} /> {t.name}
-            </button>
-          );
-        })}
-        <div className="mx-1 h-4 w-px bg-slate-700" />
-        <button onClick={markIn} title="Marcar IN no frame atual" className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/10"><LogIn size={12} /> IN</button>
-        <button onClick={markOut} title="Marcar OUT no frame atual" className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/10"><LogOut size={12} /> OUT</button>
-        <button onClick={clearDrawings} title="Limpar desenhos" className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold text-slate-400 hover:bg-slate-800"><Eraser size={12} /> Limpar</button>
-      </div>
-
-      {/* Player + camada de anotação */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-950">
-        <button onClick={() => setPlaying((p) => !p)} className="absolute inset-0 flex items-center justify-center text-slate-200/80 hover:text-white">
-          {playing ? <Pause size={40} /> : <Play size={48} />}
-        </button>
-        <svg
-          viewBox={`0 0 ${VW} ${VH}`}
-          preserveAspectRatio="none"
-          style={{ touchAction: 'none' }}
-          className={`absolute inset-0 h-full w-full ${tool === 'play' ? 'pointer-events-none' : tool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'}`}
-          onPointerDown={pDown}
-          onPointerMove={pMove}
-          onPointerUp={pUp}
-        >
-          {draws.map((d, i) => (
-            <path key={i} d={toPath(d.points)} fill="none" strokeLinecap="round" strokeLinejoin="round" {...strokeStyle(d.tool)} />
-          ))}
-          {drawing && (
-            <path d={toPath(drawing.points)} fill="none" strokeLinecap="round" strokeLinejoin="round" {...strokeStyle(drawing.tool)} />
-          )}
-        </svg>
-        <span className="absolute right-2 top-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-slate-200">{fmt(time)} / {fmt(DURATION)}</span>
-      </div>
-
-      {/* Scrubber com marcadores por tipo */}
-      <div className="mt-2">
-        <div onClick={seek} className="relative h-2 cursor-pointer rounded-full bg-slate-800">
-          <div className="absolute left-0 top-0 h-full rounded-full bg-sky-500" style={{ width: `${(time / DURATION) * 100}%` }} />
-          <div className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-sky-300" style={{ left: `calc(${(time / DURATION) * 100}% - 6px)` }} />
-          {annotations.map((a, i) => {
-            const meta = KIND_META[a.kind];
-            return <div key={i} className={`absolute top-1/2 h-2 w-0.5 -translate-y-1/2 ${meta.mark}`} style={{ left: `${(a.timecode_ms / DURATION) * 100}%` }} title={`${meta.label}: ${a.kind === 'desenho' ? a.note : a.texto}`} />;
-          })}
-        </div>
-      </div>
-
-      {/* Anotar texto no frame */}
-      <div className="mt-3 flex items-center gap-2">
-        <input value={newText} onChange={(e) => setNewText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addText(); }} placeholder="Anotar texto no frame atual..." className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
-        <button onClick={addText} className="rounded-md bg-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-200 hover:bg-slate-600">Add</button>
-      </div>
-
-      {/* Lista de marcações */}
-      <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-        {annotations.length === 0 && <p className="text-[11px] text-slate-500">Sem marcações. Use caneta/marca-texto sobre o vídeo, IN/OUT ou anote um texto.</p>}
-        {annotations.map((a, i) => {
-          const meta = KIND_META[a.kind];
-          const Icon = meta.Icon;
-          return (
-            <div key={i} className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2">
-              <button onClick={() => setTime(a.timecode_ms)} className="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[10px] text-sky-300 hover:bg-sky-500/25">{a.timecode_label}</button>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${meta.chip}`}><Icon size={10} className="-mt-0.5 mr-0.5 inline" />{meta.label}</span>
-              <input
-                value={a.kind === 'desenho' ? a.note || '' : a.texto || ''}
-                onChange={(e) => updateTextAt(i, e.target.value)}
-                placeholder={a.kind === 'desenho' ? 'Nota sobre o desenho...' : a.kind === 'in' ? 'Texto do IN...' : a.kind === 'out' ? 'Texto do OUT...' : 'Descrição...'}
-                className="flex-1 bg-transparent text-[11px] text-slate-200 outline-none"
-              />
-              <button onClick={() => toggleStatus(i)} title="Alternar resolvida" className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${a.status === 'resolvida' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700/50 text-slate-400'}`}>{a.status === 'resolvida' ? 'ok' : 'aberta'}</button>
-              <button onClick={() => removeAt(i)} className="shrink-0 text-slate-500 hover:text-rose-400"><Trash2 size={12} /></button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Ações */}
-      <div className="mt-3 grid gap-3 border border-slate-800 bg-slate-950/45 p-3 lg:grid-cols-2">
-        <div><p className="text-[10px] font-bold uppercase text-slate-400">Versões</p><div className="mt-2 space-y-1 text-[11px] text-slate-400"><p><span className="font-semibold text-emerald-300">V3</span> · Em aprovação</p><p><span className="font-semibold text-amber-300">V2</span> · Alterações solicitadas</p><p><span className="font-semibold text-slate-300">V1</span> · Alterações solicitadas</p></div></div>
-        <div><p className="text-[10px] font-bold uppercase text-slate-400">Detalhes da revisão</p><div className="mt-2 space-y-1 text-[11px] text-slate-400"><p>Rodada 3</p><p>{annotations.length} apontamento(s)</p><p>Revisor: Marcelo</p></div></div>
-      </div>
-
-      <label className="mt-3 block"><span className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Observação geral</span><textarea value={generalComment} onChange={(e) => setGeneralComment(e.target.value)} rows={2} placeholder="Registre a decisão geral desta rodada..." className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500" /></label>
-
-      </div>
-      <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-4 py-3">
-        <button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50">
-          <Save size={12} /> Solicitar alterações
-        </button>
-        <button onClick={() => onAprovar?.(project.id)} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50">
-          <CheckCircle2 size={12} /> Aprovar V3
-        </button>
-      </div>
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3"><p className="text-[9px] text-slate-500"><span className="font-semibold text-rose-300">Existem {DEMO_COMMENTS.length+annotations.length} apontamentos nesta revisão.</span><br/>A produção retornará para edição se houver solicitação de ajustes.</p><div className="flex gap-2"><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-amber-500 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/10"><RotateCcw size={12}/>Solicitar alterações</button><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-rose-500 px-3 py-2 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"><XCircle size={12}/>Rejeitar</button><button onClick={()=>onAprovar?.(project.id)} disabled={loading} className="flex items-center gap-1 rounded bg-emerald-500 px-4 py-2 text-[10px] font-bold text-slate-950 hover:bg-emerald-400"><CheckCircle2 size={12}/>Aprovar versão</button></div></footer>
     </div>
   );
 }
