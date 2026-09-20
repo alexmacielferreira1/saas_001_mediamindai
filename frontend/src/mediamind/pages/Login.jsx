@@ -7,7 +7,7 @@ import { ROLE_CATALOG } from '../lib/roleCatalog';
 // com a senha já digitada, o clique entra direto (auth real exige a senha).
 // Pré-requisito: as contas precisam existir na plataforma com esses e-mails.
 const ADMIN_TILES = [
-  { label: 'Superadmin (eu)', email: 'superadmin@mediamind.ai', accent: true },
+  { label: 'Superadmin (eu)', email: 'alexmacielferreira@gmail.com', accent: true },
   { label: 'Administrador', email: 'admin@mediamind.ai', accent: true },
 ];
 const ROLE_TILES = [
@@ -146,7 +146,7 @@ export default function Login() {
               Acesso rápido por papel
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-              Clique num papel pra entrar direto (modo demo, sem autenticação).
+              Digite a senha local e clique num papel para usar a conta demo correspondente.
             </p>
             <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
               {ROLE_TILES.map((t) => (
@@ -175,7 +175,7 @@ export default function Login() {
           </div>
 
           <p className="mt-6 text-xs text-slate-500">
-            Modo demonstração — clique num papel para entrar. Autenticação real será reativada depois.
+            Modo demonstração local — as contas serão removidas somente na produção.
           </p>
         </div>
       </div>

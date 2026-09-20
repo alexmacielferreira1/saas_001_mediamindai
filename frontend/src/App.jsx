@@ -3,8 +3,6 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, Navigate, Outlet } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 
 // MediaMind AI — frontend remontado (dados mockados centralizados)
@@ -25,24 +23,16 @@ import SearchPage from './mediamind/pages/Search';
 import AssistenteIA from './mediamind/pages/AssistenteIA';
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const { loading: mmLoading } = useMmAuth();
 
   // Show loading spinner while checking app public settings or auth
-  if (isLoadingPublicSettings || isLoadingAuth || mmLoading) {
+  if (mmLoading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-slate-950">
         <div className="w-8 h-8 border-4 border-slate-700 border-t-sky-400 rounded-full animate-spin"></div>
       </div>
     );
   }
-
-  // Handle authentication errors
-  if (authError?.type === 'user_not_registered') {
-    return <UserNotRegisteredError />;
-  }
-  // auth_required from platform auth falls through to routes —
-  // the MediaMind mock auth gate (MmProtectedRoute) handles login redirect.
 
   // Render the main app
   return (
@@ -83,17 +73,15 @@ function MmProtectedRoute() {
 
 function App() {
   return (
-    <AuthProvider>
-      <MmAuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <ScrollToTop />
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </MmAuthProvider>
-    </AuthProvider>
+    <MmAuthProvider>
+      <QueryClientProvider client={queryClientInstance}>
+        <Router>
+          <ScrollToTop />
+          <AuthenticatedApp />
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
+    </MmAuthProvider>
   )
 }
 

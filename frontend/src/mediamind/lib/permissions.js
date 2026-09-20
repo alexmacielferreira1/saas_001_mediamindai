@@ -11,6 +11,7 @@ import { effectiveTabsForUser } from './roleCatalog';
 
 // Mapa: papel (do mock auth) -> lista de ids de abas do Corp permitidos.
 export const ROLE_CORP_ACCESS = {
+  superadmin: '*',
   admin: '*',
   producer: ['producao'],
   editor: ['editor_video'],
