@@ -8,14 +8,16 @@ Autenticação, sessão, contas demo protegidas, isolamento básico por membersh
 foram reconstruídos fora do Base44. O layout foi preservado. O gate continua **blocked** porque a
 execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
 
-Última evidência automatizada: backend **79 passed, 2 skipped**, 100% linhas/branches; frontend
-**24 passed**, 100% statements/branches/functions/lines; lint, format, typecheck e build aprovados.
+Última evidência automatizada: backend **86 passed, 2 skipped**, 100% linhas/branches; frontend
+**28 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
+typecheck e build aprovados.
 Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
 parado e a sessão não tinha permissão para iniciá-lo.
 
-RBAC em andamento: catálogo e grupos de permissões por tenant, autorização deny-by-default e CRUD
-HTTP protegido por `permissions.manage` foram implementados. Vínculo administrativo com membership,
-seed do catálogo e prova PostgreSQL da migration `0004_permission_groups` permanecem pendentes.
+RBAC em andamento: catálogo e grupos por tenant, autorização deny-by-default, CRUD, vínculo com
+membership, seed administrativo e listagem local na tela de acessos foram implementados. Overrides
+individuais, catálogo funcional completo e prova PostgreSQL da migration `0004_permission_groups`
+permanecem pendentes.
 
 | Verificação | Estado | Evidência |
 |---|---|---|
