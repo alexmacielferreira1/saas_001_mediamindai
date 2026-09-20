@@ -43,19 +43,22 @@ def permission_client():
         session.add(admin_group)
         session.flush()
         admin_group.permissions.append(manage)
-        session.add_all(
-            [
-                Membership(
-                    user_id=manager.id,
-                    tenant_id=tenant.id,
-                    role="admin",
-                    permission_group_id=admin_group.id,
-                ),
-                Membership(user_id=viewer.id, tenant_id=tenant.id, role="viewer"),
-            ]
+        manager_membership = Membership(
+            user_id=manager.id,
+            tenant_id=tenant.id,
+            role="admin",
+            permission_group_id=admin_group.id,
         )
+        viewer_membership = Membership(user_id=viewer.id, tenant_id=tenant.id, role="viewer")
+        session.add_all([manager_membership, viewer_membership])
         session.commit()
-        ids = {"tenant": tenant.id, "other": other.id, "publish": publish.id}
+        ids = {
+            "tenant": tenant.id,
+            "other": other.id,
+            "publish": publish.id,
+            "viewer_membership": viewer_membership.id,
+            "session_factory": testing_session,
+        }
 
     def override_session():
         with testing_session() as session:
@@ -157,6 +160,75 @@ def test_manager_can_update_and_soft_delete_group(permission_client):
     assert updated.json()["name"] == "Editores"
     assert updated.json()["permission_codes"] == ["assets.publish"]
     assert deleted.status_code == 204
+
+
+def test_manager_can_assign_group_to_membership_and_delete_unassigns_it(permission_client):
+    client, ids = permission_client
+    login(client)
+    created = client.post(
+        "/api/v1/permission-groups",
+        json={"name": "Editores", "permission_codes": ["assets.publish"]},
+    ).json()
+
+    assigned = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/permission-group",
+        json={"permission_group_id": created["id"]},
+    )
+
+    assert assigned.status_code == 200
+    assert assigned.json() == {
+        "membership_id": str(ids["viewer_membership"]),
+        "permission_group_id": created["id"],
+    }
+    assert client.delete(f"/api/v1/permission-groups/{created['id']}").status_code == 204
+    with ids["session_factory"]() as session:
+        membership = session.get(Membership, ids["viewer_membership"])
+        assert membership.permission_group_id is None
+
+
+def test_assignment_rejects_group_or_membership_outside_selected_tenant(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    unknown_group = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/permission-group",
+        json={"permission_group_id": str(uuid4())},
+    )
+    unknown_membership = client.put(
+        f"/api/v1/memberships/{uuid4()}/permission-group",
+        json={"permission_group_id": None},
+    )
+
+    assert unknown_group.status_code == 404
+    assert unknown_group.json()["error_code"] == "PERMISSION_GROUP_NOT_FOUND"
+    assert unknown_membership.status_code == 404
+    assert unknown_membership.json()["error_code"] == "MEMBERSHIP_NOT_FOUND"
+
+
+def test_member_without_manage_permission_cannot_assign_group(permission_client):
+    client, ids = permission_client
+    login(client, "viewer@mediamind.ai")
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/permission-group",
+        json={"permission_group_id": None},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "PERMISSION_DENIED"
+
+
+def test_manager_can_explicitly_unassign_permission_group(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/permission-group",
+        json={"permission_group_id": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["permission_group_id"] is None
 
 
 def test_update_can_rename_and_rejects_duplicate_name(permission_client):

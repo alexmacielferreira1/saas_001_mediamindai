@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.demo_accounts import DEMO_ACCOUNTS
-from app.models.identity import Membership, Tenant, User
+from app.models.identity import Membership, Permission, PermissionGroup, Tenant, User
 from app.security.passwords import hash_password
 
 
@@ -20,6 +20,33 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
     else:
         tenant.name = "MediaMind Demonstração"
         tenant.is_active = True
+
+    manage_permission = session.scalar(
+        select(Permission).where(Permission.code == "permissions.manage")
+    )
+    if manage_permission is None:
+        manage_permission = Permission(
+            code="permissions.manage",
+            description="Gerenciar grupos e atribuições de permissões",
+        )
+        session.add(manage_permission)
+        session.flush()
+    admin_group = session.scalar(
+        select(PermissionGroup).where(
+            PermissionGroup.tenant_id == tenant.id,
+            PermissionGroup.name == "Administradores de permissões",
+        )
+    )
+    if admin_group is None:
+        admin_group = PermissionGroup(
+            tenant_id=tenant.id,
+            name="Administradores de permissões",
+            description="Bootstrap local para administrar permissões demo",
+        )
+        session.add(admin_group)
+        session.flush()
+    admin_group.is_active = True
+    admin_group.permissions = [manage_permission]
 
     created = 0
     updated = 0
@@ -50,10 +77,22 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
             )
         )
         if membership is None:
-            session.add(Membership(user_id=user.id, tenant_id=tenant.id, role=role))
+            session.add(
+                Membership(
+                    user_id=user.id,
+                    tenant_id=tenant.id,
+                    role=role,
+                    permission_group_id=(
+                        admin_group.id if role in {"admin", "cedoc", "superadmin"} else None
+                    ),
+                )
+            )
         else:
             membership.role = role
             membership.is_active = True
+            membership.permission_group_id = (
+                admin_group.id if role in {"admin", "cedoc", "superadmin"} else None
+            )
 
     session.commit()
     return {"created": created, "updated": updated, "tenant_id": str(tenant.id)}

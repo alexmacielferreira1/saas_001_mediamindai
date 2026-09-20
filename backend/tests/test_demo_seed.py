@@ -1,7 +1,7 @@
 import pytest
 from app.db.session import Base
 from app.demo_accounts import DEMO_ACCOUNTS
-from app.models.identity import Membership, Tenant, User
+from app.models.identity import Membership, Permission, PermissionGroup, Tenant, User
 from app.security.passwords import verify_password
 from app.services.demo_seed import seed_demo_accounts
 from sqlalchemy import create_engine, select
@@ -43,6 +43,27 @@ def test_seed_is_idempotent_and_refreshes_existing_local_accounts(db_session):
     assert result["updated"] == len(DEMO_ACCOUNTS)
     assert len(users) == len(DEMO_ACCOUNTS)
     assert all(verify_password("segunda-senha-segura", user.password_hash) for user in users)
+
+
+def test_seed_creates_idempotent_permission_bootstrap_for_administrators(db_session):
+    seed_demo_accounts(db_session, "senha-demo-local-segura", "local")
+    seed_demo_accounts(db_session, "senha-demo-local-segura", "local")
+
+    permissions = db_session.scalars(select(Permission)).all()
+    groups = db_session.scalars(select(PermissionGroup)).all()
+    memberships = db_session.scalars(select(Membership)).all()
+
+    assert [item.code for item in permissions] == ["permissions.manage"]
+    assert len(groups) == 1
+    assert groups[0].name == "Administradores de permissões"
+    assert [item.code for item in groups[0].permissions] == ["permissions.manage"]
+    assigned_roles = {item.role for item in memberships if item.permission_group_id == groups[0].id}
+    assert assigned_roles == {"admin", "cedoc", "superadmin"}
+    assert all(
+        item.permission_group_id is None
+        for item in memberships
+        if item.role not in {"admin", "cedoc", "superadmin"}
+    )
 
 
 @pytest.mark.parametrize("environment", ["production", "staging", ""])

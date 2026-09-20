@@ -2,13 +2,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import PublicError
 from app.db.session import get_session
-from app.models.identity import Permission, PermissionGroup
+from app.models.identity import Membership, Permission, PermissionGroup
 from app.schemas.permissions import (
     PermissionGroupCreate,
     PermissionGroupListResponse,
@@ -125,5 +125,10 @@ def delete_permission_group(
     require_permission(session, current, "permissions.manage")
     group = find_group(session, membership.tenant_id, group_id)
     group.is_active = False
+    session.execute(
+        update(Membership)
+        .where(Membership.permission_group_id == group.id)
+        .values(permission_group_id=None)
+    )
     session.commit()
     return Response(status_code=204)

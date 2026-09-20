@@ -25,3 +25,12 @@ class PermissionGroupResponse(BaseModel):
 
 class PermissionGroupListResponse(BaseModel):
     permission_groups: list[PermissionGroupResponse]
+
+
+class MembershipPermissionGroupUpdate(BaseModel):
+    permission_group_id: UUID | None
+
+
+class MembershipPermissionGroupResponse(BaseModel):
+    membership_id: UUID
+    permission_group_id: UUID | None
