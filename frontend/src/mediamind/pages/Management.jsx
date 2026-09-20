@@ -4,11 +4,9 @@ import {
   Building2, BarChart3, Users, TrendingUp, Calendar, AlertCircle,
   CheckCircle2, Clock, Activity, ScrollText,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, InfoRow, MockBanner, Loading, EmptyState } from '../ui';
+import { Panel, Stat, Tabs, Badge, StatusBadge, InfoRow, Loading, EmptyState } from '../ui';
 import { getManagementOverview } from '../../api/management';
-import {
-  MOCK_TEAM_PERFORMANCE, MOCK_TEAM_WORKLOAD, MOCK_SOCIAL_METRICS, PUBLICATION_PLATFORM_LABELS,
-} from '../data';
+import { PUBLICATION_PLATFORM_LABELS, formatBytes } from '../data';
 import ManagementProcessamentosTab from '../components/management/ManagementProcessamentosTab';
 import ManagementAuditoriaTab from '../components/management/ManagementAuditoriaTab';
 import IndicadoresPipelinePanel from '../components/management/IndicadoresPipelinePanel';
@@ -124,6 +122,13 @@ export function DashboardsTab() {
 
 export function ReportsTab() {
   const [subTab, setSubTab] = useState('equipe');
+  const [overview, setOverview] = useState(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getManagementOverview().then((data) => { if (active) setOverview(data); }).catch(() => { if (active) setError(true); });
+    return () => { active = false; };
+  }, []);
   const subTabs = [
     { key: 'equipe', label: 'Equipe' },
     { key: 'setores', label: 'Setor(es)' },
@@ -135,7 +140,8 @@ export function ReportsTab() {
 
   return (
     <div className="space-y-4">
-      <MockBanner note="Relatórios agregados — dados de exemplo." />
+      {error && <EmptyState icon={AlertCircle} title="Não foi possível carregar os relatórios" />}
+      {!error && !overview && <Loading label="Carregando relatórios..." />}
 
       {/* Sub-tabs */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
@@ -152,12 +158,12 @@ export function ReportsTab() {
         ))}
       </div>
 
-      {subTab === 'equipe' && <EquipeReport />}
-      {subTab === 'setores' && <SetoresReport />}
-      {subTab === 'redes' && <RedesReport />}
-      {subTab === 'conteudo' && <ConteudoReport />}
-      {subTab === 'acervo' && <AcervoReport />}
-      {subTab === 'sugestoes' && <SugestoesReport />}
+      {overview && subTab === 'equipe' && <EquipeReport />}
+      {overview && subTab === 'setores' && <SetoresReport />}
+      {overview && subTab === 'redes' && <RedesReport metrics={overview.social_metrics} />}
+      {overview && subTab === 'conteudo' && <ConteudoReport overview={overview} />}
+      {overview && subTab === 'acervo' && <AcervoReport assets={overview.assets} />}
+      {overview && subTab === 'sugestoes' && <SugestoesReport overview={overview} />}
     </div>
   );
 }
@@ -165,39 +171,7 @@ export function ReportsTab() {
 function EquipeReport() {
   return (
     <Panel title="Desempenho da equipe">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-800 text-xs uppercase text-slate-500">
-              <th className="px-3 py-2 text-left">Membro</th>
-              <th className="px-3 py-2 text-left">Função</th>
-              <th className="px-3 py-2 text-left">Concluídas</th>
-              <th className="px-3 py-2 text-left">Total</th>
-              <th className="px-3 py-2 text-left">Entrega média</th>
-              <th className="px-3 py-2 text-left">Aprovação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {MOCK_TEAM_PERFORMANCE.map((p, i) => (
-              <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                <td className="px-3 py-3 font-medium text-slate-200">{p.user}</td>
-                <td className="px-3 py-3 text-slate-400">{p.role}</td>
-                <td className="px-3 py-3 text-emerald-300">{p.tasks_completed}</td>
-                <td className="px-3 py-3 text-slate-400">{p.tasks_total}</td>
-                <td className="px-3 py-3 text-slate-400">{p.avg_delivery_days} dias</td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full rounded-full bg-sky-400" style={{ width: `${p.approval_rate}%` }} />
-                    </div>
-                    <span className="text-xs text-slate-400">{p.approval_rate}%</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <p className="py-8 text-center text-sm text-slate-500">O desempenho será calculado quando tarefas reais forem atribuídas aos membros.</p>
     </Panel>
   );
 }
@@ -205,24 +179,12 @@ function EquipeReport() {
 function SetoresReport() {
   return (
     <Panel title="Carga de trabalho por pessoa">
-      <div className="flex flex-col gap-2">
-        {MOCK_TEAM_WORKLOAD.map((w, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
-            <div className="flex-1">
-              <p className="font-medium text-slate-200">{w.name}</p>
-              <p className="text-xs text-slate-500">{w.role} · {w.active_tasks} tarefas ativas</p>
-            </div>
-            <Badge tone={w.deadline_risk === 'Baixo' ? 'success' : w.deadline_risk === 'Alto' ? 'error' : 'pending'}>
-              Risco {w.deadline_risk}
-            </Badge>
-          </div>
-        ))}
-      </div>
+      <p className="py-8 text-center text-sm text-slate-500">Ainda não há carga de trabalho atribuída por setor.</p>
     </Panel>
   );
 }
 
-function RedesReport() {
+function RedesReport({ metrics }) {
   return (
     <Panel title="Métricas de redes sociais">
       <div className="overflow-x-auto">
@@ -237,8 +199,8 @@ function RedesReport() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_SOCIAL_METRICS.map((s, i) => (
-              <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+            {metrics.map((s) => (
+              <tr key={s.platform} className="border-b border-slate-800/50 hover:bg-slate-800/30">
                 <td className="px-3 py-3 font-medium text-slate-200">{s.platform}</td>
                 <td className="px-3 py-3 text-slate-400">{s.followers}</td>
                 <td className="px-3 py-3 text-sky-300">{s.engagement}</td>
@@ -248,50 +210,47 @@ function RedesReport() {
             ))}
           </tbody>
         </table>
+        {metrics.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Conecte uma rede social autorizada para obter métricas reais.</p>}
       </div>
     </Panel>
   );
 }
 
-function ConteudoReport() {
+function ConteudoReport({ overview }) {
   return (
     <Panel title="Relatório de conteúdo">
       <p className="text-sm text-slate-400">Análise de conteúdo por programa, categoria e período.</p>
       <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <InfoRow label="Programas ativos" value="4" />
-        <InfoRow label="Categorias" value="12" />
-        <InfoRow label="Conteúdo produzido (mês)" value="87 peças" />
+        <InfoRow label="Publicados" value={overview.publications.published} />
+        <InfoRow label="Agendados" value={overview.publications.scheduled} />
+        <InfoRow label="Pendentes" value={overview.publications.pending} />
       </div>
     </Panel>
   );
 }
 
-function AcervoReport() {
+function AcervoReport({ assets }) {
   return (
     <Panel title="Relatório de acervo">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <InfoRow label="Total de arquivos" value="18.542" />
-        <InfoRow label="Indexados IA" value="14.908" />
-        <InfoRow label="Falhas" value="37" />
-        <InfoRow label="Storage usado" value="72%" />
-        <InfoRow label="Bibliotecas" value="12" />
-        <InfoRow label="Crescimento semanal" value="+8%" />
+        <InfoRow label="Total de arquivos" value={assets.total.toLocaleString('pt-BR')} />
+        <InfoRow label="Indexados IA" value={assets.indexed.toLocaleString('pt-BR')} />
+        <InfoRow label="Falhas" value={assets.failures} />
+        <InfoRow label="Storage utilizado" value={formatBytes(assets.storage_bytes)} />
       </div>
     </Panel>
   );
 }
 
-function SugestoesReport() {
-  const sugestoes = [
-    '24 vídeos similares a "chuva em porto alegre"',
-    '5 novos clipes com "apresentador joão"',
-    '12 entrevistas sobre "economia" ainda não utilizadas',
-    'Seu acervo cresceu 8% esta semana',
-    'Editor Carlos Lima está acima da capacidade recomendada',
-  ];
+function SugestoesReport({ overview }) {
+  const sugestoes = [];
+  if (overview.assets.failures) sugestoes.push(`Revisar ${overview.assets.failures} arquivo(s) com falha de processamento.`);
+  if (overview.publications.pending) sugestoes.push(`Há ${overview.publications.pending} publicação(ões) aguardando decisão.`);
+  if (overview.processing.active) sugestoes.push(`${overview.processing.active} processamento(s) ainda em andamento.`);
   return (
     <Panel title="Sugestões da IA">
       <div className="flex flex-col gap-2">
+        {sugestoes.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Nenhuma recomendação pendente com os dados atuais.</p>}
         {sugestoes.map((s, i) => (
           <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-sm text-slate-300">
             <Activity size={15} className="shrink-0 text-sky-400" />
