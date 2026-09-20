@@ -10,6 +10,7 @@ import { PUBLICATION_PLATFORM_LABELS, formatBytes } from '../data';
 import ManagementProcessamentosTab from '../components/management/ManagementProcessamentosTab';
 import ManagementAuditoriaTab from '../components/management/ManagementAuditoriaTab';
 import IndicadoresPipelinePanel from '../components/management/IndicadoresPipelinePanel';
+import { buildManagementAlerts, buildManagementKpis } from '../lib/managementViewModel';
 
 const MGMT_TABS = [
   { key: 'dashboards', label: 'Visão Geral', icon: BarChart3 },
@@ -61,19 +62,33 @@ export function DashboardsTab() {
   if (!overview) return <Loading label="Carregando visão gerencial..." />;
 
   const summary = overview.publications;
+  const kpis = buildManagementKpis(overview);
+  const alerts = buildManagementAlerts(overview);
+  const KPI_ICONS = [CheckCircle2, Calendar, AlertCircle, TrendingUp, Building2, CheckCircle2, Activity, AlertCircle];
   return (
     <div className="space-y-4">
-      <IndicadoresPipelinePanel />
-
-      {/* Resumo de publicações */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat title="Publicados" value={summary.published} icon={CheckCircle2} tone="emerald" />
-        <Stat title="Agendados" value={summary.scheduled} icon={Clock} tone="sky" />
-        <Stat title="Pendentes" value={summary.pending} icon={AlertCircle} tone="amber" />
-        <Stat title="Taxa aprovação" value={`${summary.approval_rate}%`} icon={TrendingUp} tone="violet" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+        {kpis.map((item, index) => (
+          <Stat key={item.id} title={item.label} value={item.value} icon={KPI_ICONS[index]} tone={item.tone} />
+        ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <IndicadoresPipelinePanel />
+        <Panel title="Alertas e gargalos" right={<AlertCircle size={16} className="text-amber-400" />}>
+          <div className="space-y-2">
+            {alerts.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum alerta operacional com os dados atuais.</p>}
+            {alerts.map((alert) => (
+              <div key={alert.kind} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3">
+                <AlertCircle size={15} className={alert.tone === 'rose' ? 'text-rose-400' : alert.tone === 'amber' ? 'text-amber-400' : 'text-sky-400'} />
+                <span className="text-sm text-slate-300">{alert.label}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.8fr]">
         {/* Calendário */}
         <Panel title="Calendário de publicações" right={<Calendar size={16} className="text-slate-500" />}>
           <div className="flex flex-col gap-2">
@@ -113,6 +128,15 @@ export function DashboardsTab() {
                 </div>
               </div>
             ))}
+          </div>
+        </Panel>
+
+        <Panel title="Resumo operacional" right={<Activity size={16} className="text-slate-500" />}>
+          <div className="space-y-3">
+            <InfoRow label="Processamentos concluídos" value={overview.processing.completed} />
+            <InfoRow label="Itens no acervo" value={overview.assets.total.toLocaleString('pt-BR')} />
+            <InfoRow label="Indexados pela IA" value={overview.assets.indexed.toLocaleString('pt-BR')} />
+            <InfoRow label="Armazenamento" value={formatBytes(overview.assets.storage_bytes)} />
           </div>
         </Panel>
       </div>
