@@ -8,6 +8,9 @@ import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, EmptyState
 import { formatDuration, formatSize, formatBytes } from '../data';
 import { base44 } from '@/api/base44Client';
 import { getManagementOverview } from '../../api/management';
+import { buildAcervoSystemSummary } from '../lib/acervoSystemViewModel';
+import { listMemberships } from '../../api/permissions';
+import { CARGO_BY_ID } from '../lib/roleCatalog';
 
 const ACERVO_TABS = [
   { key: 'acervo', label: 'Arquivos', icon: Archive },
@@ -32,8 +35,9 @@ export default function Acervo() {
       getManagementOverview(),
       base44.entities.Asset.list('-created_date', 500),
       base44.entities.LogAuditoria.list('-created_date', 100),
+      listMemberships().catch(() => []),
     ])
-      .then(([overview, assets, logs]) => { if (active) setData({ overview, assets, logs }); })
+      .then(([overview, assets, logs, memberships]) => { if (active) setData({ overview, assets, logs, memberships }); })
       .catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, []);
@@ -55,7 +59,7 @@ export default function Acervo() {
       {error && <EmptyState icon={AlertTriangle} title="Não foi possível carregar o acervo" description="Verifique o serviço local e tente novamente." />}
       {!error && !data && <Loading label="Carregando acervo..." />}
       {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
-      {data && activeTab === 'admin' && <AdminTab logs={data.logs} />}
+      {data && activeTab === 'admin' && <AdminTab logs={data.logs} memberships={data.memberships} />}
       {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} />}
     </div>
   );
@@ -195,12 +199,36 @@ function AcervoTab({ assets, summary }) {
   );
 }
 
-function AdminTab({ logs }) {
+function AdminTab({ logs, memberships }) {
+  const activeUsers = memberships.filter((membership) => membership.status !== 'inactive').length;
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat title="Usuários com acesso" value={memberships.length} icon={Shield} tone="sky" />
+        <Stat title="Acessos ativos" value={activeUsers} icon={CheckCircle2} tone="emerald" />
+        <Stat title="Perfis distintos" value={new Set(memberships.map((item) => item.role)).size} icon={Shield} tone="violet" />
+        <Stat title="Eventos auditados" value={logs.length} icon={Archive} tone="amber" />
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Bibliotecas">
-          <p className="py-6 text-center text-sm text-slate-500">Nenhuma biblioteca cadastrada nesta empresa.</p>
+        <Panel title="Usuários e permissões do acervo">
+          <div className="space-y-2">
+            {memberships.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum usuário disponível para este tenant.</p>}
+            {memberships.map((membership) => (
+              <div key={membership.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500/15 text-xs font-bold text-sky-300">
+                  {(membership.full_name || membership.email || '?').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-200">{membership.full_name || membership.email}</p>
+                  <p className="truncate text-xs text-slate-500">{membership.email}</p>
+                </div>
+                <div className="text-right">
+                  <Badge tone="info">{CARGO_BY_ID[membership.role]?.name || membership.role}</Badge>
+                  <p className="mt-1 text-[10px] text-slate-500">{membership.status || 'ativo'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </Panel>
         <Panel title="Logs de auditoria">
           <div className="flex flex-col gap-2">
@@ -220,20 +248,27 @@ function AdminTab({ logs }) {
 }
 
 function MonitoringTab({ overview }) {
-  const processing = overview.processing;
+  const summary = buildAcervoSystemSummary(overview);
+  const ICONS = [MonitorCog, CheckCircle2, AlertTriangle, CheckCircle2, MonitorCog];
+  const incidents = [];
+  if (overview.processing.failed) incidents.push(`${overview.processing.failed} processamento(s) com falha`);
+  if (overview.assets.failures) incidents.push(`${overview.assets.failures} arquivo(s) com falha de indexação`);
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Stat title="Processando" value={processing.active} icon={MonitorCog} tone="sky" />
-        <Stat title="Concluídos" value={processing.completed.toLocaleString('pt-BR')} icon={CheckCircle2} tone="emerald" />
-        <Stat title="Falhas" value={processing.failed} icon={AlertTriangle} tone="amber" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {summary.map((item, index) => (
+          <Stat key={item.id} title={item.label} value={item.value} icon={ICONS[index]} tone={item.tone} />
+        ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Serviços">
-          <div className="flex flex-col gap-2">
+        <Panel title="Serviços e pipelines">
+          <div className="overflow-hidden rounded-xl border border-slate-800">
+            <div className="grid grid-cols-[1fr_auto] bg-slate-950/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <span>Serviço</span><span>Status</span>
+            </div>
             {overview.services.map((s) => (
-              <div key={s.key} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+              <div key={s.key} className="flex items-center justify-between border-t border-slate-800 bg-slate-900/40 px-3 py-2.5">
                 <div>
                   <p className="font-medium text-slate-200">{s.label}</p>
                   <p className="text-xs text-slate-500">{s.detail}</p>
@@ -251,6 +286,17 @@ function MonitoringTab({ overview }) {
 
       <Panel title="Modelos de IA">
         <p className="text-sm text-slate-500">Nenhum modelo local configurado.</p>
+      </Panel>
+
+      <Panel title="Incidentes recentes">
+        <div className="space-y-2">
+          {incidents.length === 0 && <p className="py-4 text-center text-sm text-slate-500">Nenhum incidente técnico aberto.</p>}
+          {incidents.map((incident) => (
+            <div key={incident} className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-sm text-rose-200">
+              <AlertTriangle size={14} /> {incident}
+            </div>
+          ))}
+        </div>
       </Panel>
     </div>
   );
