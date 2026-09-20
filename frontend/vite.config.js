@@ -7,6 +7,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
+    coverage: {
+      provider: 'v8',
+      include: ['src/api/httpClient.js'],
+      thresholds: {
+        branches: 100,
+        functions: 100,
+        lines: 100,
+        statements: 100,
+      },
+    },
   },
   plugins: [
     base44({

@@ -9,6 +9,7 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
@@ -88,6 +89,7 @@
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.8.32",
     "eslint": "^9.19.0",

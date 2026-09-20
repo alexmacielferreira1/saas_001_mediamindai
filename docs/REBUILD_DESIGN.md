@@ -67,7 +67,7 @@ Não haverá um adaptador genérico que replique indefinidamente a API do SDK. A
 
 ## Autenticação inicial
 
-A primeira entrega usa contas locais, senha armazenada apenas como hash forte, cookie de sessão `HttpOnly`, `SameSite=Lax` e expiração no servidor. O seed local cria usuário somente por comando explícito e credencial fornecida via ambiente/entrada segura; não haverá senha padrão versionada. MFA, identidade global e federação pertencem a evolução posterior, mas IDs e boundaries serão compatíveis.
+A primeira entrega usa contas locais, senha armazenada apenas como hash forte, cookie de sessão `HttpOnly`, `SameSite=Lax` e expiração no servidor. Os usuários de demonstração existentes serão semeados no backend somente em ambiente local/teste; `alexmacielferreira@gmail.com` é o superadmin e os demais e-mails/papéis permanecem os exibidos pelo produto. A senha vem de configuração local não versionada. O processo deve recusar seeds demo em produção. MFA, identidade global e federação pertencem a evolução posterior, mas IDs e boundaries serão compatíveis.
 
 ## Compatibilidade e remoção
 

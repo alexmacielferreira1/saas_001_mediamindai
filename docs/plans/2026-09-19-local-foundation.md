@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Não alterar layout, rotas ou vocabulário visual sem evidência de defeito.
-- Não versionar senha, token ou segredo.
+- Não versionar senha, token ou segredo; contas demo usam senha local comum somente fora de produção.
 - Não confiar em `tenant_id` enviado pelo navegador sem validar membership.
 - Não criar pacote compartilhado nesta fase.
 - MediaMind deve iniciar e autenticar com a Central desligada.
@@ -133,9 +133,9 @@
 - Create: `backend/tests/test_create_local_admin.py`
 
 **Interfaces:**
-- Produces: comando idempotente que recebe email/senha por argumentos seguros ou ambiente e cria tenant/membership admin local.
+- Produces: comando idempotente que recebe senha por ambiente/entrada segura e cria o superadmin `alexmacielferreira@gmail.com`, os papéis demo existentes, tenant e memberships somente em local/teste.
 
-- [ ] Escrever testes de criação, repetição idempotente, recusa de senha vazia e ausência de impressão da senha.
+- [ ] Escrever testes de criação, repetição idempotente, recusa de senha vazia, bloqueio em produção e ausência de impressão da senha.
 - [ ] Confirmar falha por comando ausente.
 - [ ] Implementar transação única e mensagens sem segredos.
 - [ ] Documentar preparo local sem credenciais padrão.

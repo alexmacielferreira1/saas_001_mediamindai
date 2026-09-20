@@ -1,3 +1,4 @@
+import app.models  # noqa: F401
 from app.core.config import get_settings
 from app.db.session import Base, engine
 

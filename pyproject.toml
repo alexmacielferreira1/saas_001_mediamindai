@@ -19,6 +19,15 @@ testpaths = ["backend/tests", "tests"]
 pythonpath = ["backend"]
 markers = ["integration: requires local PostgreSQL"]
 
+[tool.coverage.run]
+branch = true
+source = ["backend/app"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

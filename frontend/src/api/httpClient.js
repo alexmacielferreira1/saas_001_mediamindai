@@ -18,16 +18,25 @@ export async function request(path, options = {}) {
     ...options.headers,
   };
 
-  if (options.body !== undefined && !(options.body instanceof FormData)) {
+  const isMultipart = options.body instanceof FormData;
+  if (options.body !== undefined && !isMultipart) {
     headers['Content-Type'] ??= 'application/json';
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const body = options.body === undefined || isMultipart ? options.body : JSON.stringify(options.body);
+
+  const requestOptions = {
     ...options,
     credentials: 'include',
     headers,
-  });
-  const payload = response.status === 204 ? null : await response.json();
+  };
+  if (body !== undefined) requestOptions.body = body;
+
+  const response = await fetch(`${API_BASE_URL}${path}`, requestOptions);
+  const contentType = response.headers.get('Content-Type') || '';
+  const payload = response.status === 204 || !contentType.includes('application/json')
+    ? null
+    : await response.json();
 
   if (!response.ok) {
     throw new ApiError({

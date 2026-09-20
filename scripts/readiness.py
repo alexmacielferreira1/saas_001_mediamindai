@@ -92,13 +92,32 @@ def main():
             [py, "-m", "ruff", "format", "--check", "backend", "tests", "alembic", "scripts"],
             None,
         ),
-        ("unit_tests", [py, "-m", "pytest", "backend/tests", "-q"], None),
+        (
+            "unit_tests",
+            [
+                py,
+                "-m",
+                "pytest",
+                "backend/tests",
+                "-q",
+                "--cov=backend/app",
+                "--cov-branch",
+                "--cov-report=term-missing",
+                "--cov-fail-under=100",
+            ],
+            None,
+        ),
         ("migration", [py, "-m", "alembic", "upgrade", "head"], None),
         ("database_integration", [py, "-m", "pytest", "tests/integration", "-q"], integration_env),
         ("dependency_consistency", [py, "-m", "pip", "check"], None),
         ("frontend_build", [npm or "npm", "--prefix", "frontend", "run", "build"], None),
         ("frontend_lint", [npm or "npm", "--prefix", "frontend", "run", "lint"], None),
         ("frontend_typecheck", [npm or "npm", "--prefix", "frontend", "run", "typecheck"], None),
+        (
+            "frontend_unit_tests",
+            [npm or "npm", "--prefix", "frontend", "run", "test:coverage"],
+            None,
+        ),
         ("http_smoke", [py, "scripts/smoke.py"], None),
     ]
     checks = {name: run_check(name, args, env) for name, args, env in commands}
