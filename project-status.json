@@ -69,7 +69,7 @@
         "local_identity_unit_coverage": {
           "status": "passed",
           "updated_at": "2026-09-20T11:05:00+00:00",
-          "notes": "Backend 63 passed at 100% line/branch coverage; frontend 24 passed at 100% statement/branch/function/line coverage."
+          "notes": "Backend 79 passed at 100% line/branch coverage, including tenant-scoped permission core and secure permission-group CRUD; frontend 24 passed at 100% statement/branch/function/line coverage."
         },
         "local_identity_postgres_browser": {
           "status": "blocked",

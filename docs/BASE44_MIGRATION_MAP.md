@@ -12,7 +12,7 @@ O build não comprova login, persistência, isolamento de tenant ou paridade fun
 - 33 contas demo: seed idempotente somente para `local/test`, ainda aguardando execução no banco;
 - demais entidades, funções, uploads e módulos de negócio listados abaixo: pendentes.
 
-Último gate automatizado em 20/09/2026: backend 63 testes e frontend 24 testes, ambos
+Último gate automatizado em 20/09/2026: backend 79 testes e frontend 24 testes, ambos
 com 100% de cobertura do código próprio incluído. A validação PostgreSQL/navegador ficou pendente
 porque o serviço privilegiado do Docker estava indisponível; não foi declarada paridade funcional.
 
