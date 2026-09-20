@@ -95,6 +95,34 @@ def test_authenticated_member_can_list_only_selected_tenant_groups(permission_cl
     assert [item["name"] for item in response.json()["permission_groups"]] == ["Administradores"]
 
 
+def test_manager_lists_memberships_without_sensitive_identity_data(permission_client):
+    client, _ = permission_client
+    login(client)
+
+    response = client.get("/api/v1/memberships")
+
+    assert response.status_code == 200
+    memberships = response.json()["memberships"]
+    assert [item["email"] for item in memberships] == [
+        "admin@mediamind.ai",
+        "viewer@mediamind.ai",
+    ]
+    assert [item["role"] for item in memberships] == ["admin", "viewer"]
+    assert memberships[0]["permission_group_id"] is not None
+    assert memberships[1]["permission_group_id"] is None
+    assert "password_hash" not in response.text
+
+
+def test_member_without_manage_permission_cannot_list_memberships(permission_client):
+    client, _ = permission_client
+    login(client, "viewer@mediamind.ai")
+
+    response = client.get("/api/v1/memberships")
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "PERMISSION_DENIED"
+
+
 def test_manager_can_create_group_with_known_permissions(permission_client):
     client, _ = permission_client
     login(client)

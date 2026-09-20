@@ -34,3 +34,16 @@ class MembershipPermissionGroupUpdate(BaseModel):
 class MembershipPermissionGroupResponse(BaseModel):
     membership_id: UUID
     permission_group_id: UUID | None
+
+
+class MembershipResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    email: str
+    full_name: str
+    role: str
+    permission_group_id: UUID | None
+
+
+class MembershipListResponse(BaseModel):
+    memberships: list[MembershipResponse]

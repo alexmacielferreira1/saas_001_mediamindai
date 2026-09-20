@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PublicError
 from app.db.session import get_session
-from app.models.identity import Membership, PermissionGroup
+from app.models.identity import Membership, PermissionGroup, User
 from app.schemas.permissions import (
+    MembershipListResponse,
     MembershipPermissionGroupResponse,
     MembershipPermissionGroupUpdate,
+    MembershipResponse,
 )
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -18,6 +20,31 @@ from app.tenancy.permissions import require_permission
 router = APIRouter(prefix="/memberships", tags=["permissions"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
+
+
+@router.get("", response_model=MembershipListResponse)
+def list_memberships(current: Authenticated, session: DbSession):
+    selected_membership = require_membership(current)
+    require_permission(session, current, "permissions.manage")
+    rows = session.execute(
+        select(Membership, User)
+        .join(User, User.id == Membership.user_id)
+        .where(Membership.tenant_id == selected_membership.tenant_id)
+        .order_by(User.email_normalized)
+    ).all()
+    return MembershipListResponse(
+        memberships=[
+            MembershipResponse(
+                id=membership.id,
+                user_id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                role=membership.role,
+                permission_group_id=membership.permission_group_id,
+            )
+            for membership, user in rows
+        ]
+    )
 
 
 @router.put(

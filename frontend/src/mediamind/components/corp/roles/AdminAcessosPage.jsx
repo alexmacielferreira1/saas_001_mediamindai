@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Users, UserCog } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { listMemberships } from '../../../../api/permissions';
 import { ROLE_CATALOG } from '../../../lib/roleCatalog';
 import { ALL_SUBTABS, isTotalAccess, getActiveSubtabs, toggleSubtab } from '../../../lib/roleSubtabs';
 import { useAuth } from '../../../auth';
@@ -15,18 +15,20 @@ export default function AdminAcessosPage() {
   const [employees, setEmployees] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Lista usuários reais da plataforma (admin pode listar). Mapeia para o
+  // Lista memberships do tenant selecionado (admin autorizado pode listar). Mapeia para o
   // contrato do EmployeeAccessRow: role = cargo || role da plataforma.
   useEffect(() => {
     let alive = true;
-    base44.entities.User.list()
+    listMemberships()
       .then((rows) => {
         if (!alive) return;
         setEmployees((rows || []).map((u) => ({
-          id: u.id,
+          id: u.user_id,
+          membershipId: u.id,
           email: u.email,
           name: u.full_name || u.email,
-          role: u.cargo || u.role || 'user',
+          role: u.role || 'user',
+          permissionGroupId: u.permission_group_id,
         })));
       })
       .catch(() => { if (alive) setEmployees([]); })
@@ -114,7 +116,7 @@ export default function AdminAcessosPage() {
             ))
           )}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">As alterações são salvas localmente e aplicadas a cada login. Funcionários vêm do cadastro de usuários da plataforma.</p>
+        <p className="mt-3 text-[11px] text-slate-500">Funcionários vêm dos vínculos da empresa selecionada. A migração dos ajustes individuais de telas para o backend ainda está em andamento.</p>
       </section>
 
       <AcessoIAPanel />
