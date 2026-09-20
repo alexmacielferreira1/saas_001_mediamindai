@@ -4,6 +4,7 @@ import {
   PlayCircle, Package, FolderKanban, FileText, CheckCircle2,
   Search, Sparkles, Activity, Archive, Clock, ArrowRight,
   CalendarClock, AlertTriangle, Send, Film,
+  CalendarDays,
 } from 'lucide-react';
 import { getMyDashboard } from '../../api/dashboard';
 import { Panel, Stat, Badge, StatusBadge, Button } from '../ui';
@@ -176,6 +177,27 @@ export default function Home() {
           </Panel>
         </div>
       </div>
+
+      <Panel title="Agenda & Calendário" right={<Link to="/corp" className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><CalendarDays size={13} /> Ver agenda</Link>}>
+        {dashboard?.upcoming_events?.length ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {dashboard.upcoming_events.map((event, index) => (
+              <div key={`${event.title}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-sm font-medium text-slate-200">{event.title}</p>
+                  <span className="shrink-0 text-xs font-semibold text-sky-300">{event.time || 'A definir'}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span className="truncate">{event.project || 'Agenda da empresa'}</span>
+                  <span className="rounded bg-slate-800 px-1.5 py-0.5 uppercase">{event.status || 'planejado'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="py-3 text-sm text-slate-500">Nenhum compromisso registrado para esta empresa.</p>
+        )}
+      </Panel>
 
       {/* Projetos recentes */}
       <Panel title="Projetos recentes" right={<Link to="/workspace" className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300"><ArrowRight size={13} /> Ver todos</Link>}>

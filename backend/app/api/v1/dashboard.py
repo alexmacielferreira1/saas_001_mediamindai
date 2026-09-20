@@ -41,10 +41,23 @@ def dashboard_me(current: Authenticated, session: DbSession):
     ]
     ids = ["productions", "finished", "editing", "approvals", "processing", "publications", "pending", "projects"]
     labels = ROLE_LABELS.get(membership.role, ROLE_LABELS["default"])
+    events = sorted(
+        by_type.get("AgendaEvento", []),
+        key=lambda item: (item.data.get("day", 999), item.data.get("horario", "")),
+    )[:6]
     return {
         "role": membership.role,
         "kpis": [
             {"id": identifier, "label": label, "value": value}
             for identifier, label, value in zip(ids, labels, values, strict=True)
+        ],
+        "upcoming_events": [
+            {
+                "title": item.data.get("titulo", "Evento"),
+                "time": item.data.get("horario", ""),
+                "status": item.data.get("status", ""),
+                "project": item.data.get("programa", ""),
+            }
+            for item in events
         ],
     }
