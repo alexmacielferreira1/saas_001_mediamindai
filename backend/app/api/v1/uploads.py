@@ -1,3 +1,4 @@
+from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -31,19 +32,25 @@ async def upload_file(current: Authenticated, file: Annotated[UploadFile, File()
     stored_name = f"{uuid4()}{suffix}"
     destination = tenant_dir / stored_name
     size = 0
+    digest = sha256()
     try:
         with destination.open("wb") as output:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
                 if size > MAX_UPLOAD_BYTES:
                     raise PublicError(413, "FILE_TOO_LARGE", "Arquivo excede o limite permitido.")
+                digest.update(chunk)
                 output.write(chunk)
     except Exception:
         destination.unlink(missing_ok=True)
         raise
     finally:
         await file.close()
-    return {"file_url": f"/api/v1/uploads/{stored_name}", "size": size}
+    return {
+        "file_url": f"/api/v1/uploads/{stored_name}",
+        "size": size,
+        "sha256": digest.hexdigest(),
+    }
 
 
 @router.get("/{stored_name}")

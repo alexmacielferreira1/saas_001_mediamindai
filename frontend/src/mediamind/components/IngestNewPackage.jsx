@@ -52,6 +52,7 @@ export default function IngestNewPackage() {
         await base44.entities.Asset.create({
           title: entry.name, filename: entry.name, asset_type: entry.type,
           file_size: entry.file.size, file_url: uploaded.file_url,
+          file_sha256: uploaded.sha256,
           package_name: name, folder, program_name: program, ai_status: aiEnabled ? 'pending' : 'disabled',
         });
         setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploaded' } : item));

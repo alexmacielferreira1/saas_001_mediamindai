@@ -100,6 +100,7 @@ def test_authenticated_upload_round_trip_and_validation(permission_client, monke
 
     uploaded = client.post("/api/v1/uploads", files={"file": ("audio.mp3", b"media", "audio/mpeg")})
     assert uploaded.status_code == 201
+    assert uploaded.json()["sha256"] == "721c9525ade2ea8903d343ef25cf68b9bf4ab0aad56bb7b01fbe48d09bc7fcf4"
     file_url = uploaded.json()["file_url"]
     downloaded = client.get(file_url)
     assert downloaded.status_code == 200
