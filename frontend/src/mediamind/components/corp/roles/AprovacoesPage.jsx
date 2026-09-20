@@ -18,21 +18,22 @@ export default function AprovacoesPage() {
   }
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-5">
-      <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-2">
+    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(290px,30%)_1fr]">
+      <div className="flex h-full min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="border-b border-slate-800 p-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Review & Approval</p>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300">
             <CheckCircle2 size={14} className="text-emerald-400" /> Em aprovação
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">{emAprov.length} projeto(s) aguardando conferência</p>
         </div>
         <StageDragArea onMove={moverEtapa} className="flex-1 min-h-0">
-          <div className="h-full overflow-y-auto p-2">
+          <div className="h-full divide-y divide-slate-800 overflow-y-auto">
             {emAprov.length === 0 ? (
               <p className="px-3 py-8 text-center text-[11px] text-slate-500">Nenhum projeto em aprovação.</p>
             ) : (
               emAprov.map((p) => (
-                <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`mb-1.5 w-full rounded-lg border px-3 py-2 text-left transition ${sel?.id === p.id ? 'border-sky-600 bg-sky-950/30' : 'border-slate-800 hover:bg-slate-800/30'}`}>
+                <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${sel?.id === p.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}>
                   <p className="truncate text-xs font-medium text-slate-200">{p.titulo}</p>
                   <p className="truncate text-[10px] text-slate-500">{p.programa} · {p.episodio}</p>
                   <p className="mt-1 text-[10px] text-slate-500">resp. {p.responsavel || '—'}</p>
@@ -43,7 +44,7 @@ export default function AprovacoesPage() {
         </StageDragArea>
       </div>
 
-      <div className="lg:col-span-3">
+      <div className="min-h-0">
         {sel ? (
           <AprovacaoReviewPanel
             key={sel.id}

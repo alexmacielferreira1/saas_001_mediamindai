@@ -85,6 +85,7 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
   const [drawing, setDrawing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newText, setNewText] = useState('');
+  const [generalComment, setGeneralComment] = useState('');
   const timerRef = useRef(null);
   const erasingRef = useRef(false);
 
@@ -197,15 +198,20 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
   const draws = annotations.filter((a) => a.kind === 'desenho');
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-      <div className="mb-2">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">Player de conferência</p>
-        <h2 className="text-sm font-semibold text-slate-100">{project.titulo}</h2>
-        <p className="text-[11px] text-slate-500">{project.programa} · {project.episodio} · resp. {project.responsavel || '—'}</p>
+    <div className="flex h-full min-h-0 flex-col bg-slate-900/20">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Aprovação — V3 · Rodada 3</p>
+        <h2 className="text-base font-semibold text-slate-100">{project.titulo}</h2>
+        <p className="text-[11px] text-slate-500">{project.programa} · {project.episodio} · responsável {project.responsavel || '—'}</p>
         {project.revisao_intermediaria && (
           <span className="mt-1 inline-flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-300">Revisão intermediária do produtor</span>
         )}
+        </div>
+        <div className="text-right"><span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[9px] font-bold uppercase text-amber-300">Em aprovação</span><p className="mt-1 text-[9px] text-slate-500">Revisor: Marcelo · enviada em 18/09/2026</p></div>
       </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
 
       {/* Toolbar de marcação */}
       <div className="mb-2 flex flex-wrap items-center gap-1 rounded-md border border-slate-700 bg-slate-950/50 p-1">
@@ -290,12 +296,20 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
       </div>
 
       {/* Ações */}
-      <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-800 pt-3">
+      <div className="mt-3 grid gap-3 border border-slate-800 bg-slate-950/45 p-3 lg:grid-cols-2">
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Versões</p><div className="mt-2 space-y-1 text-[11px] text-slate-400"><p><span className="font-semibold text-emerald-300">V3</span> · Em aprovação</p><p><span className="font-semibold text-amber-300">V2</span> · Alterações solicitadas</p><p><span className="font-semibold text-slate-300">V1</span> · Alterações solicitadas</p></div></div>
+        <div><p className="text-[10px] font-bold uppercase text-slate-400">Detalhes da revisão</p><div className="mt-2 space-y-1 text-[11px] text-slate-400"><p>Rodada 3</p><p>{annotations.length} apontamento(s)</p><p>Revisor: Marcelo</p></div></div>
+      </div>
+
+      <label className="mt-3 block"><span className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Observação geral</span><textarea value={generalComment} onChange={(e) => setGeneralComment(e.target.value)} rows={2} placeholder="Registre a decisão geral desta rodada..." className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500" /></label>
+
+      </div>
+      <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-4 py-3">
         <button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50">
-          <Save size={12} /> Reprovar com ajustes (volta pra edição)
+          <Save size={12} /> Solicitar alterações
         </button>
         <button onClick={() => onAprovar?.(project.id)} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50">
-          <CheckCircle2 size={12} /> Aprovar (→ Finalizado)
+          <CheckCircle2 size={12} /> Aprovar V3
         </button>
       </div>
     </div>
