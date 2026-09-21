@@ -18,7 +18,7 @@ const ROLE_TILES = [
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginDemo } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const googleError = new URLSearchParams(window.location.search).get('google_error');
@@ -54,7 +54,15 @@ export default function Login() {
   async function quickLogin(tile) {
     setError('');
     setEmail(tile.email);
-    await doLogin(tile.email, password);
+    setLoading(true);
+    try {
+      await loginDemo(tile.email);
+      window.location.href = '/corp?tab=producao';
+    } catch (err) {
+      setError(err.message || 'Não foi possível acessar a conta demo.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -163,7 +171,7 @@ export default function Login() {
               Acesso rápido por papel
             </div>
             <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-              Digite a senha local e clique num papel para usar a conta demo correspondente.
+              Clique num papel para entrar diretamente na conta demo correspondente.
             </p>
             <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
               {ROLE_TILES.map((t) => (

@@ -5,6 +5,38 @@ import { USER_ROLE_LABELS } from './data';
 import { hasCorpAccess } from './lib/permissions';
 
 const AuthContext = createContext(null);
+const DEMO_SESSION_KEY = 'mm_demo_session_v1';
+const DEMO_TENANT_ID = 'mediamind-demo';
+
+function localDemoAvailable() {
+  return import.meta.env.DEV && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
+function readDemoUser() {
+  if (!localDemoAvailable()) return null;
+  try {
+    return JSON.parse(localStorage.getItem(DEMO_SESSION_KEY) || 'null');
+  } catch {
+    localStorage.removeItem(DEMO_SESSION_KEY);
+    return null;
+  }
+}
+
+function createDemoUser(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  const account = normalized.split('@')[0];
+  const role = normalized === 'alexmacielferreira@gmail.com' ? 'superadmin' : account;
+  return {
+    id: `demo-${role}`,
+    email: normalized,
+    name: normalized === 'alexmacielferreira@gmail.com'
+      ? 'Alex Maciel Ferreira'
+      : account.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+    role,
+    empresa_ids: [DEMO_TENANT_ID],
+    selected_tenant_id: DEMO_TENANT_ID,
+  };
+}
 
 export function mapSessionUser(session) {
   if (!session?.user) return null;
@@ -30,10 +62,19 @@ export function AuthProvider({ children }) {
     let active = true;
     request('/auth/session')
       .then((session) => {
-        if (active) setUser(mapSessionUser(session));
+        if (active) {
+          localStorage.removeItem(DEMO_SESSION_KEY);
+          setUser(mapSessionUser(session));
+        }
       })
       .catch((reason) => {
-        if (active && !(reason instanceof ApiError && reason.status === 401)) {
+        if (!active) return;
+        const demoUser = readDemoUser();
+        if (demoUser) {
+          setUser(demoUser);
+          return;
+        }
+        if (!(reason instanceof ApiError && reason.status === 401)) {
           setError('Não foi possível verificar sua sessão. Tente novamente.');
         }
       })
@@ -51,13 +92,26 @@ export function AuthProvider({ children }) {
       method: 'POST',
       body: { email, password },
     });
+    localStorage.removeItem(DEMO_SESSION_KEY);
     setUser(mapSessionUser(session));
+  }, []);
+
+  const loginDemo = useCallback(async (email) => {
+    if (!localDemoAvailable()) {
+      throw new Error('O acesso rápido está disponível somente no ambiente local.');
+    }
+    const demoUser = createDemoUser(email);
+    localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(demoUser));
+    setError('');
+    setUser(demoUser);
+    return demoUser;
   }, []);
 
   const logout = useCallback(async () => {
     try {
       await request('/auth/logout', { method: 'POST' });
     } finally {
+      localStorage.removeItem(DEMO_SESSION_KEY);
       setUser(null);
     }
   }, []);
@@ -68,8 +122,8 @@ export function AuthProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ user, loading, error, login, logout, hasScreenAccess, roleLabels: USER_ROLE_LABELS }),
-    [user, loading, error, login, logout, hasScreenAccess],
+    () => ({ user, loading, error, login, loginDemo, logout, hasScreenAccess, roleLabels: USER_ROLE_LABELS }),
+    [user, loading, error, login, loginDemo, logout, hasScreenAccess],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -28,7 +28,10 @@ const session = {
 const wrapper = ({ children }) => <AuthProvider>{children}</AuthProvider>;
 
 describe('MediaMind local authentication', () => {
-  beforeEach(() => requestMock.mockReset());
+  beforeEach(() => {
+    requestMock.mockReset();
+    localStorage.clear();
+  });
 
   it('maps the server session without storing a token in browser storage', () => {
     expect(mapSessionUser(session)).toEqual({
@@ -115,6 +118,38 @@ describe('MediaMind local authentication', () => {
     await act(() => result.current.logout());
     expect(requestMock).toHaveBeenLastCalledWith('/auth/logout', { method: 'POST' });
     expect(result.current.user).toBeNull();
+  });
+
+  it('allows a local-only demo role without depending on the backend', async () => {
+    requestMock.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(() => result.current.loginDemo('alexmacielferreira@gmail.com'));
+
+    expect(result.current.user).toEqual(expect.objectContaining({
+      email: 'alexmacielferreira@gmail.com',
+      role: 'superadmin',
+    }));
+    expect(localStorage.getItem('mm_demo_session_v1')).toContain('alexmacielferreira@gmail.com');
+  });
+
+  it('restores a local demo session after a page reload while the API is offline', async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({
+      id: 'demo-editor',
+      email: 'editor@mediamind.ai',
+      name: 'Editor de vídeo',
+      role: 'editor',
+      empresa_ids: ['mediamind-demo'],
+      selected_tenant_id: 'mediamind-demo',
+    }));
+    requestMock.mockRejectedValueOnce(new Error('offline'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.user).toEqual(expect.objectContaining({ role: 'editor' }));
+    expect(result.current.error).toBe('');
   });
 
   it('clears local identity even when logout cannot reach the backend', async () => {
