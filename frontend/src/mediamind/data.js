@@ -379,6 +379,9 @@ export const MOCK_CORP_RECORDINGS = [
 
 export const MOCK_CORP_PRECHECKLIST = [
   'Confirmar disponibilidade do convidado',
+  'Validar pauta com o apresentador',
+  'Separar materiais de apoio',
+  'Agendar gravação e reservar estúdio',
 ];
 
 // --- IAcervo Corp — Produção unificada (fluxo Kanban) ---

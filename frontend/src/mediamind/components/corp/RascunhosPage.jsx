@@ -165,10 +165,11 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
             {meus.map((d) => {
               const ds = STATUS[d.etapa];
               return (
-                <DraggableStageCard key={d.id} id={d.id} etapa={d.etapa} onClick={() => setSelectedId(d.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${selectedId === d.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}>
-                  <p className="truncate text-xs font-medium text-slate-200">{d.titulo}</p>
+                <DraggableStageCard key={d.id} id={d.id} etapa={d.etapa} onClick={() => setSelectedId(d.id)} className={`flex w-full gap-3 border-l-2 px-3 py-2 text-left transition-colors ${selectedId === d.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}>
+                  <div className="grid h-12 w-16 shrink-0 place-items-center rounded bg-[radial-gradient(circle_at_50%_35%,#2563eb,#111827_68%)] text-xl">{d.programa?.includes('Mentes') ? '🧠' : d.programa?.includes('Prescrição') ? '🎙️' : '🎬'}</div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-xs font-medium text-slate-200">{d.titulo}</p>
                   <p className="truncate text-[10px] text-slate-500">{d.programa}{d.episodio ? ` · ${d.episodio}` : ''}</p>
-                  {ds && <span className={`mt-1.5 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ds.tone}`}>{ds.label}</span>}
+                  {ds && <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[8px] font-bold uppercase ${ds.tone}`}>{ds.label}</span>}</div>
                 </DraggableStageCard>
               );
             })}
@@ -186,60 +187,12 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
           <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${st.tone}`}>{st.label}</span>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-4">
-          <Section title="Identificação">
-            <Field label="Título de trabalho">
-              <input disabled={!editable} value={selected.titulo} onChange={(e) => field('titulo', e.target.value)} className={inputCls(editable)} />
-            </Field>
-            <Field label="Programa">
-              <select disabled={!editable} value={selected.programa} onChange={(e) => field('programa', e.target.value)} className={inputCls(editable)}>
-                <option value="">—</option>
-                {PROGRAMAS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </Field>
-            <Field label="Episódio">
-              <input disabled={!editable} value={selected.episodio || ''} onChange={(e) => field('episodio', e.target.value)} placeholder="EP054" className={inputCls(editable)} />
-            </Field>
-          </Section>
-
-          <Section title="Conteúdo">
-            <Field label="Headline">
-              <input disabled={!editable} value={selected.headline} onChange={(e) => field('headline', e.target.value)} placeholder="Título da matéria/episódio" className={inputCls(editable)} />
-            </Field>
-            <Field label="Descrição">
-              <textarea disabled={!editable} value={selected.descricao} onChange={(e) => field('descricao', e.target.value)} rows={3} placeholder="Sinopse / pauta" className={inputCls(editable)} />
-            </Field>
-          </Section>
-
-          <Section
-            title="Pessoas"
-            action={editable && (
-              <button onClick={loadDefaults} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"><Sparkles size={11} /> Apresentadores padrão</button>
-            )}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Convidado — nome">
-                <input disabled={!editable} value={selected.convidado_nome} onChange={(e) => field('convidado_nome', e.target.value)} className={inputCls(editable)} />
-              </Field>
-              <Field label="Convidado — CG">
-                <input disabled={!editable} value={selected.convidado_cg} onChange={(e) => field('convidado_cg', e.target.value)} placeholder="Cargo / CRM / título" className={inputCls(editable)} />
-              </Field>
-            </div>
-            <div>
-              <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-slate-500"><Users size={11} /> Apresentadores</div>
-              <div className="space-y-1.5">
-                {(selected.apresentadores || []).map((a, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input disabled={!editable} value={a.nome} onChange={(e) => setPresenter(i, 'nome', e.target.value)} placeholder="Nome" className={inputCls(editable)} />
-                    <input disabled={!editable} value={a.cg} onChange={(e) => setPresenter(i, 'cg', e.target.value)} placeholder="CG (cargo/CRM)" className={inputCls(editable)} />
-                    {editable && <button onClick={() => removePresenter(i)} className="shrink-0 rounded-md border border-slate-700 px-2 py-1.5 text-slate-400 hover:bg-slate-800"><Trash2 size={12} /></button>}
-                  </div>
-                ))}
-                {editable && <button onClick={addPresenter} className="flex items-center gap-1 rounded-md border border-dashed border-slate-700 px-2 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800"><Plus size={11} /> Adicionar apresentador</button>}
-                {(!selected.apresentadores || selected.apresentadores.length === 0) && <p className="text-[10px] text-slate-600">Nenhum apresentador. Use "Apresentadores padrão" para preencher os fixos.</p>}
-              </div>
-            </div>
-          </Section>
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          <div className="grid gap-3 xl:grid-cols-[.8fr_1.35fr]">
+            <section className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3"><p className="text-[10px] font-bold uppercase text-slate-500">Thumbnail / Capa</p><div className="grid aspect-video place-items-center rounded-lg bg-[radial-gradient(circle_at_50%_38%,#2563eb,#111827_70%)] text-6xl">{selected.programa?.includes('Mentes') ? '🧠' : '🎬'}</div><button className="w-full rounded bg-sky-500 px-3 py-2 text-[10px] font-bold text-slate-950">Alterar thumbnail</button><div className="flex items-center justify-between"><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-500"><Users size={11}/>Apresentadores</p>{editable&&<button onClick={loadDefaults} className="text-[9px] text-sky-400"><Sparkles size={10} className="inline"/> Usar padrão</button>}</div><div className="space-y-1.5">{(selected.apresentadores||[]).map((a,i)=><div key={i} className="flex gap-1"><input disabled={!editable} value={a.nome} onChange={(e)=>setPresenter(i,'nome',e.target.value)} placeholder="Nome" className={inputCls(editable)}/><button onClick={()=>removePresenter(i)} className="rounded border border-slate-700 px-2 text-slate-500"><Trash2 size={11}/></button></div>)}{editable&&<button onClick={addPresenter} className="rounded border border-dashed border-slate-700 px-2 py-1.5 text-[9px] text-slate-400"><Plus size={10} className="inline"/> Adicionar apresentador</button>}</div></section>
+            <section className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/30 p-3"><p className="text-[10px] font-bold uppercase text-slate-500">Informações básicas</p><div className="grid gap-2 sm:grid-cols-2"><Field label="Título de trabalho"><input disabled={!editable} value={selected.titulo} onChange={(e)=>field('titulo',e.target.value)} className={inputCls(editable)}/></Field><Field label="Programa"><select disabled={!editable} value={selected.programa} onChange={(e)=>field('programa',e.target.value)} className={inputCls(editable)}>{PROGRAMAS.map((p)=><option key={p}>{p}</option>)}</select></Field><Field label="Episódio"><input disabled={!editable} value={selected.episodio||''} onChange={(e)=>field('episodio',e.target.value)} className={inputCls(editable)}/></Field><Field label="Categoria"><input disabled={!editable} value={selected.categoria||'Saúde e Bem-estar'} onChange={(e)=>field('categoria',e.target.value)} className={inputCls(editable)}/></Field></div><Field label="Descrição"><textarea disabled={!editable} value={selected.descricao||'Discussão sobre saúde mental no ambiente de trabalho, com especialistas, exemplos práticos e orientações para empresas e colaboradores.'} onChange={(e)=>field('descricao',e.target.value)} rows={4} className={inputCls(editable)}/></Field><div className="grid gap-2 sm:grid-cols-2"><Field label="Convidado — nome"><input disabled={!editable} value={selected.convidado_nome} onChange={(e)=>field('convidado_nome',e.target.value)} className={inputCls(editable)}/></Field><Field label="Convidado — cargo"><input disabled={!editable} value={selected.convidado_cg} onChange={(e)=>field('convidado_cg',e.target.value)} className={inputCls(editable)}/></Field></div><div className="flex flex-wrap gap-1">{['saúde mental','trabalho','bem-estar','empresa'].map((tag)=><span key={tag} className="rounded bg-slate-800 px-2 py-1 text-[9px] text-slate-300">{tag} ×</span>)}<button className="rounded border border-dashed border-slate-700 px-2 py-1 text-[9px] text-slate-400">+ Adicionar tag</button></div></section>
+          </div>
+          <div className="grid gap-3 xl:grid-cols-[1.2fr_.8fr]"><section className="rounded-lg border border-slate-800 bg-slate-950/30 p-3"><p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Resumo / Pauta inicial</p><div className="mb-2 flex gap-3 border-b border-slate-800 pb-2 text-xs text-slate-400"><b>B</b><i>I</i><u>U</u><span>☷</span></div><textarea disabled={!editable} value={selected.pauta||'1. Abertura\n2. Cenário atual da saúde mental no trabalho\n3. Entrevista com especialista\n4. Exemplos de boas práticas\n5. Encerramento'} onChange={(e)=>field('pauta',e.target.value)} rows={6} className="w-full resize-none bg-transparent text-xs leading-6 text-slate-300 outline-none"/></section><BriefingChecklistPanel draft={selected}/></div>
 
           <Section title="Gravação">
             {selected.gravacao ? (
@@ -253,7 +206,6 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
             )}
           </Section>
 
-          <BriefingChecklistPanel draft={selected} />
         </div>
 
         <div className="border-t border-slate-800 px-4 py-3">
