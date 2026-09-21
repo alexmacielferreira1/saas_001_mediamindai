@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand, CheckCircle2, Database, CalendarDays, MapPin, Clock3 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
@@ -160,8 +160,11 @@ export default function GravacoesMateriais() {
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="grid grid-cols-6 border-y border-slate-800 py-3">{['Confirmada','Em gravação','Gravada','Mídias enviadas','Processando','Concluída'].map((label,index)=><div key={label} className="relative text-center"><div className={`mx-auto grid size-5 place-items-center rounded-full text-[9px] font-bold ${index===0?'bg-sky-500 text-slate-950':index<3?'border border-sky-500 text-sky-300':'bg-slate-800 text-slate-500'}`}>{index===0?<CheckCircle2 size={12}/>:index+1}</div><p className="mt-1 text-[8px] text-slate-500">{label}</p></div>)}</div>
+
+          <div className="grid gap-3 xl:grid-cols-[1fr_.9fr]"><section className="rounded-lg border border-slate-800 bg-slate-950/35 p-3"><div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-bold uppercase text-slate-500">Informações da gravação</p><button className="text-[9px] text-sky-400">Editar</button></div><div className="grid grid-cols-2 gap-x-5 gap-y-2 text-[10px]"><span className="flex items-center gap-1 text-slate-500"><CalendarDays size={11}/>Data</span><b className="text-slate-300">{rec.gravacao?.data||'—'}</b><span className="flex items-center gap-1 text-slate-500"><Clock3 size={11}/>Horário</span><b className="text-slate-300">{rec.gravacao?.horario||'—'}</b><span className="flex items-center gap-1 text-slate-500"><MapPin size={11}/>Estúdio</span><b className="text-slate-300">{rec.gravacao?.estudio||'—'}</b><span className="text-slate-500">Videomaker</span><b className="text-slate-300">{rec.videomaker||rec.responsavel||'A definir'}</b><span className="text-slate-500">Equipe básica</span><b className="text-slate-300">{(rec.equipe||[]).join(', ')||'—'}</b></div></section>
           {/* Status da gravação */}
-          <div className="flex flex-wrap items-center gap-2">
+          <section className="rounded-lg border border-slate-800 bg-slate-950/35 p-3"><p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Ações da sessão</p><div className="grid gap-2 sm:grid-cols-2">
             {rec.grav_status !== 'gravando' && rec.grav_status !== 'gravada' && (
               <button onClick={() => updateProjeto(rec.id, { grav_status: 'gravando' })} className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-500">
                 <Clapperboard size={12} /> Iniciar gravação
@@ -175,10 +178,10 @@ export default function GravacoesMateriais() {
             <button onClick={() => setProblemaOpen(true)} className="flex items-center gap-1.5 rounded-md border border-rose-700/50 px-3 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-950/40">
               <AlertTriangle size={12} /> Sinalizar problema/regravação
             </button>
-          </div>
+          </div></section></div>
 
           {/* Upload */}
-          <div
+          <div className="grid gap-3 xl:grid-cols-[1.4fr_.6fr]"><div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
@@ -191,7 +194,7 @@ export default function GravacoesMateriais() {
               Ingest de arquivos
               <input type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
             </label>
-          </div>
+          </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Novo Ingest será criado automaticamente</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Ao enviar as mídias, o sistema valida os arquivos, calcula checksum, gera proxy, processa com IA e vincula tudo ao projeto.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação dos arquivos','Cálculo de checksum','Geração de proxy','Processamento com IA','Vínculo automático ao projeto'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
 
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Materiais recebidos ({materiais.length})</p>
