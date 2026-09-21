@@ -1,57 +1,32 @@
-import React from 'react';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
-import { TrendingUp } from 'lucide-react';
+import React, { useState } from 'react';
+import { LineChart, Line, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
+import { BarChart3, TrendingUp, Eye, Users, MousePointer2, Clock3, Heart, MessageCircle, Share2, Bookmark, FileText, Sparkles, Download, Send, Instagram, Youtube, Facebook } from 'lucide-react';
 import { MOCK_CORP_ANALYTICS } from '../../data';
+
+const TABS = ['Visão geral','Canais','Conteúdos','Campanhas','Orgânico','Pago','Audiência','Engajamento','Crescimento','Relatórios','Sugestões da IA'];
+const KPIS = [
+  ['Visualizações','1.284.520','+18,7%',Eye],['Alcance','842.410','+12,4%',Users],['Impressões','2.403.881','+21,3%',BarChart3],['Tempo assistido','18.420 h','+22,6%',Clock3],
+  ['Curtidas','84.320','+16,8%',Heart],['Comentários','7.841','+24,1%',MessageCircle],['Compartilhamentos','13.421','+19,5%',Share2],['Salvamentos','9.208','+28,4%',Bookmark],
+  ['Seguidores ganhos','+4.821','+12,4%',Users],['Engajamento médio','6,8%','+1,2 p.p.',TrendingUp],['CTR (cliques)','4,2%','+0,6 p.p.',MousePointer2],['Publicações','87','+11,5%',FileText],
+];
+const CHANNELS = [[Instagram,'Instagram','482,1K','24 Reels · 18 Posts'],[Youtube,'YouTube','1,28M','32 vídeos · 48 Shorts'],[BarChart3,'TikTok','620,4K','41 vídeos'],[Facebook,'Facebook','210,3K','28 posts · 14 vídeos'],[Clock3,'Spotify','86,2K','12 episódios']];
+const TOP = [['A trajetória do Preto na medicina','Sala de Prescrição','Instagram','324,1K','8,4%'],['O maior desafio da carreira','Fronteiras da Saúde','YouTube','280,5K','6,1%'],['Construindo caminhos','No Front','TikTok','190,3K','7,8%'],['Opinião Simers','Opinião Simers','Instagram','142,6K','5,4%'],['Dica rápida: prevenção','Corações e Mentes','TikTok','118,4K','9,1%']];
 
 export default function CorpAnalytics() {
   const a = MOCK_CORP_ANALYTICS;
-  const chartData = a.serie_visualizacoes.map((v, i) => ({ x: i, v }));
-
-  const stats = [
-    { label: 'Visualizações', value: a.visualizacoes, delta: '+18.7%' },
-    { label: 'Watch Time', value: a.watch_time, delta: '+22.4%' },
-    { label: 'Inscritos', value: a.inscritos, delta: '+15.2%' },
-    { label: 'Comentários', value: a.comentarios.toLocaleString('pt-BR'), delta: '+12.1%' },
-  ];
-
-  return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Analytics & Relatórios</p>
-
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-lg border border-slate-800 bg-slate-950/40 px-2.5 py-2">
-            <p className="text-[9px] uppercase text-slate-500">{s.label}</p>
-            <p className="text-sm font-bold text-slate-100">{s.value}</p>
-            <p className="flex items-center gap-0.5 text-[9px] font-medium text-emerald-400">
-              <TrendingUp size={9} /> {s.delta}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="h-16 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
-            <Line type="monotone" dataKey="v" stroke="#38bdf8" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="mt-2 flex-1 overflow-y-auto">
-        <p className="mb-1.5 text-[9px] font-semibold uppercase text-slate-500">Top Programas</p>
-        <div className="space-y-1.5">
-          {a.top_programas.map((p) => (
-            <div key={p.name} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 truncate text-[10px] text-slate-400">{p.name}</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                <div className="h-full rounded-full bg-sky-500" style={{ width: `${p.value}%` }} />
-              </div>
-              <span className="w-8 shrink-0 text-right text-[10px] font-mono text-slate-500">{p.value}K</span>
-            </div>
-          ))}
-        </div>
-      </div>
+  const [tab,setTab] = useState('Visão geral');
+  const chartData = a.serie_visualizacoes.map((value,index)=>({name:['20/08','27/08','03/09','10/09','18/09'][Math.floor(index*5/a.serie_visualizacoes.length)]||'',total:value,organico:Math.round(value*.68),pago:Math.round(value*.31)}));
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden border border-slate-800 bg-slate-950/35">
+    <header className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-3 py-2"><div className="mr-auto"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-sky-400">Inteligência de audiência</p><h2 className="text-base font-semibold text-slate-100">Analytics</h2></div>{['Últimos 30 dias','Programa: Todos','Canal: Todos','Campanha: Todas'].map((item)=><button key={item} className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-[9px] text-slate-400">{item} ▾</button>)}</header>
+    <nav className="flex gap-1 overflow-x-auto border-b border-slate-800 p-2">{TABS.map((item)=><button key={item} onClick={()=>setTab(item)} className={`shrink-0 rounded px-2.5 py-1.5 text-[9px] font-semibold ${tab===item?'bg-sky-500 text-slate-950':'border border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{item}</button>)}</nav>
+    <div className="flex-1 space-y-2 overflow-y-auto p-2">
+      <section className="grid gap-2 xl:grid-cols-[1.7fr_1fr]"><div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-4">{KPIS.map(([label,value,delta,Icon])=><article key={label} className="border border-slate-800 bg-slate-950/55 p-2"><div className="flex items-start justify-between"><div><p className="text-[8px] uppercase text-slate-500">{label}</p><p className="text-base font-semibold text-slate-100">{value}</p></div><Icon size={16} className="text-sky-400"/></div><p className="mt-1 text-[8px] font-semibold text-emerald-400">↑ {delta}</p></article>)}</div><article className="border border-slate-800 bg-slate-950/55 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Evolução de visualizações</p><div className="flex gap-2 text-[8px]"><span className="text-sky-300">● Total</span><span className="text-emerald-300">● Orgânico</span><span className="text-violet-300">● Pago</span></div></div><div className="mt-2 h-44"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData}><CartesianGrid stroke="#1e293b" vertical={false}/><XAxis dataKey="name" tick={{fontSize:8,fill:'#64748b'}}/><YAxis tick={{fontSize:8,fill:'#64748b'}}/><Tooltip contentStyle={{background:'#020617',border:'1px solid #334155',fontSize:10}}/><Line dataKey="total" stroke="#38bdf8" dot={false} strokeWidth={2}/><Line dataKey="organico" stroke="#34d399" dot={false}/><Line dataKey="pago" stroke="#a78bfa" dot={false}/></LineChart></ResponsiveContainer></div></article></section>
+      <section className="grid gap-1.5 md:grid-cols-3 xl:grid-cols-5">{CHANNELS.map(([Icon,name,value,detail])=><article key={name} className="border border-slate-800 bg-slate-950/55 p-2"><div className="flex items-center gap-2"><Icon size={16} className="text-sky-400"/><p className="text-[10px] font-semibold text-slate-200">{name}</p></div><p className="mt-2 text-base font-bold text-slate-100">{value}</p><p className="text-[8px] text-emerald-400">↑ 14,2%</p><p className="mt-1 text-[8px] text-slate-500">{detail}</p></article>)}</section>
+      <section className="grid gap-2 xl:grid-cols-[1.25fr_.55fr_.55fr]"><article className="border border-slate-800 bg-slate-950/55"><div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><p className="text-[10px] font-bold text-slate-300">Top conteúdos por visualizações</p><button className="text-[8px] text-sky-300">Ver todos</button></div><table className="w-full text-left text-[8px]"><thead className="text-slate-600"><tr><th className="px-3 py-1.5">#</th><th>Conteúdo</th><th>Programa</th><th>Canal</th><th>Visualizações</th><th>Engajamento</th></tr></thead><tbody className="divide-y divide-slate-800">{TOP.map((row,index)=><tr key={row[0]}><td className="px-3 py-2 text-slate-500">{index+1}</td>{row.map((cell,i)=><td key={`${cell}-${i}`} className={i===0?'font-semibold text-slate-200':'text-slate-400'}>{cell}</td>)}</tr>)}</tbody></table></article><Donut title="Origem do tráfego" gradient="conic-gradient(#22c55e 0 61%,#38bdf8 61% 85%,#a78bfa 85% 94%,#f59e0b 94%)" center="1,28M" lines={['Orgânico 61,3%','Impulsionado 23,7%','Perfil/Direto 8,2%','Outros 6,8%']}/><Donut title="Dispositivos" gradient="conic-gradient(#38bdf8 0 78%,#a78bfa 78% 92%,#fb7185 92% 98%,#64748b 98%)" center="100%" lines={['Celular 78,4%','Computador 14,2%','Tablet 5,6%','TV 1,8%']}/></section>
+      <section className="grid gap-2 xl:grid-cols-[1fr_.72fr]"><article className="border border-slate-800 bg-slate-950/55 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Campanhas em destaque</p><button className="text-[8px] text-sky-300">Ver todas</button></div><div className="mt-2 grid gap-2 sm:grid-cols-3">{[['Setembro Amarelo','482,1K','6,8%'],['Saúde em Foco','320,4K','5,2%'],['Novos Médicos','210,2K','4,9%']].map(([name,views,rate])=><div key={name} className="border border-slate-800 p-2"><p className="text-[9px] font-semibold text-slate-200">{name}</p><p className="mt-1 text-[8px] text-slate-500">{views} visualizações · {rate}</p></div>)}</div></article><article className="border border-slate-800 bg-slate-950/55 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Crescimento de audiência</p><span className="text-sm font-bold text-emerald-400">+12,4%</span></div><div className="mt-2 flex h-10 items-end gap-1">{[2,4,3,7,5,9,8,12,10,14,12,16,15,20,18,24].map((h,i)=><span key={i} className="flex-1 bg-violet-500/70" style={{height:`${h+10}px`}}/>)}</div><div className="mt-2 border-t border-slate-800 pt-2"><p className="flex items-center gap-1 text-[9px] font-semibold text-violet-300"><Sparkles size={11}/> Sugestões da IA</p><p className="mt-1 text-[8px] text-slate-500">Reels de até 45s têm 32% mais retenção. Melhor horário: 18h–21h.</p></div></article></section>
+      <footer className="flex flex-wrap items-center gap-4 border border-slate-800 bg-slate-950/55 px-3 py-2 text-[8px] text-slate-500"><span className="font-semibold text-slate-300">Resumo financeiro · mídia paga</span>{[['Investimento','R$ 18.420'],['Impressões','1.420.000'],['CPM','R$ 12,97'],['Cliques','31.420'],['CPC','R$ 0,58'],['Conversões','2.810'],['CPA','R$ 6,55']].map(([label,value])=><span key={label}><b className="text-slate-300">{value}</b><br/>{label}</span>)}<button className="ml-auto flex items-center gap-1 rounded border border-slate-700 px-3 py-1.5 text-slate-300"><Download size={10}/>Gerar relatório</button><button className="flex items-center gap-1 rounded bg-sky-500 px-3 py-1.5 font-bold text-slate-950"><Send size={10}/>Compartilhar dashboard</button></footer>
     </div>
-  );
+  </div>;
 }
+
+function Donut({title,gradient,center,lines}) { return <article className="border border-slate-800 bg-slate-950/55 p-3"><p className="text-[10px] font-bold text-slate-300">{title}</p><div className="mt-2 flex items-center gap-3"><div className="grid size-20 place-items-center rounded-full" style={{background:gradient}}><div className="grid size-12 place-items-center rounded-full bg-slate-950 text-[9px] font-bold text-slate-200">{center}</div></div><div className="space-y-1">{lines.map((line)=><p key={line} className="text-[8px] text-slate-500">● {line}</p>)}</div></div></article>; }
