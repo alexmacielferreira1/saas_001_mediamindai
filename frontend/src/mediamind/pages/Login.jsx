@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Sparkles, Archive, Search, Scissors, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ROLE_CATALOG } from '../lib/roleCatalog';
@@ -19,6 +20,7 @@ const ROLE_TILES = [
 
 export default function Login() {
   const { login, loginDemo } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const googleError = new URLSearchParams(window.location.search).get('google_error');
@@ -37,8 +39,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login(mail, pass);
-      // Hard redirect para o AuthProvider re-inicializar com o token.
-      window.location.href = '/corp?tab=producao';
+      // O AuthProvider já recebeu a sessão do login; evite recarregar a aplicação.
+      navigate('/corp?tab=producao', { replace: true });
     } catch (err) {
       setError(err.message || 'Credenciais inválidas. Verifique e-mail e senha.');
     } finally {
@@ -57,7 +59,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginDemo(tile.email);
-      window.location.href = '/corp?tab=producao';
+      navigate('/corp?tab=producao', { replace: true });
     } catch (err) {
       setError(err.message || 'Não foi possível acessar a conta demo.');
     } finally {
@@ -116,7 +118,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
             <a
-              href="/api/v1/auth/google/start"
+              href={`${import.meta.env.VITE_API_URL || ''}/api/v1/auth/google/start`}
               className="flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-white py-2.5 font-semibold text-slate-900 transition hover:bg-slate-100"
             >
               <span className="text-lg font-bold text-blue-600">G</span>
