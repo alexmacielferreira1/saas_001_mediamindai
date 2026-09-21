@@ -51,6 +51,7 @@ const SUBTABS = [
 export default function ProdutoraPage() {
   const [sub, setSub] = useState('overview');
   const [newDraftSignal, setNewDraftSignal] = useState(0);
+  const [mediaHandoff, setMediaHandoff] = useState(null);
   const [params, setParams] = useSearchParams();
   const tabs = filterActiveSubtabs('producer', SUBTABS);
   useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, []);
@@ -79,6 +80,11 @@ export default function ProdutoraPage() {
     return () => { alive = false; };
   }, []);
   const detailRef = useRef(null);
+
+  function navigateWithMedia(target, payload) {
+    if (payload) setMediaHandoff(payload);
+    setSub(target);
+  }
 
   function updateEvent(id, patch) {
     setEvents((es) => es.map((e) => (e.id === id ? { ...e, ...patch } : e)));
@@ -155,9 +161,9 @@ export default function ProdutoraPage() {
         {sub === 'gravacoes' && <div className="h-full"><GravacoesMateriais /></div>}
         {sub === 'em_edicao' && <div className="h-full overflow-y-auto"><EdicaoPage /></div>}
         {sub === 'em_aprovacao' && <div className="h-full overflow-y-auto"><AprovacoesPage /></div>}
-        {sub === 'finalizado' && <div className="h-full"><FinalizadoTimeline onNavigate={setSub} /></div>}
-        {sub === 'redes_sociais' && <div className="h-full"><ViralClips /></div>}
-        {sub === 'publicacoes' && <div className="h-full"><CorpPublications /></div>}
+        {sub === 'finalizado' && <div className="h-full"><FinalizadoTimeline onNavigate={navigateWithMedia} /></div>}
+        {sub === 'redes_sociais' && <div className="h-full"><ViralClips incomingMedia={mediaHandoff?.destination === 'redes_sociais' ? mediaHandoff : null} /></div>}
+        {sub === 'publicacoes' && <div className="h-full"><CorpPublications incomingMedia={mediaHandoff?.destination === 'publicacoes' ? mediaHandoff : null} /></div>}
         {sub === 'analytics' && <div className="h-full"><CorpAnalytics /></div>}
         {COMMON_IDS.includes(sub) && <CommonScreen active={sub} />}
       </div>

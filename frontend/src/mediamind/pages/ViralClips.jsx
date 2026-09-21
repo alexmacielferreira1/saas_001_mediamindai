@@ -29,7 +29,7 @@ const SECONDARY_FILTERS = [
   { key: 'sugestoes', label: 'Sugestões' },
 ];
 
-export default function ViralClips() {
+export default function ViralClips({ incomingMedia = null }) {
   const [tab, setTab] = useState('cortes');
   const [newClipSignal, setNewClipSignal] = useState(0);
   const [preselectedAsset, setPreselectedAsset] = useState('');
@@ -124,7 +124,7 @@ export default function ViralClips() {
       {/* Content */}
       <div className="min-h-0 flex-1">
         {tab === 'cortes' && (
-          <SocialCortesWorkspace onProsseguir={() => setTab('aprovar')} newClipSignal={newClipSignal} preselectedAssetId={preselectedAsset} />
+          <SocialCortesWorkspace onProsseguir={() => setTab('aprovar')} newClipSignal={newClipSignal} preselectedAssetId={preselectedAsset} incomingMedia={incomingMedia} />
         )}
         {tab === 'versoes' && <VersionsView />}
         {tab === 'preparar' && <PrepareView />}

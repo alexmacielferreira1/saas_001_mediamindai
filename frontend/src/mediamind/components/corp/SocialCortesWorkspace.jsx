@@ -5,6 +5,7 @@ import ClipWorkspace from './recortes/ClipWorkspace';
 import NewClipDialog from './recortes/NewClipDialog';
 import { MOCK_PUBLICATIONS, PUBLICATION_PLATFORM_LABELS } from '../../data';
 import { StatusBadge } from '../../ui';
+import { timecodeToMs } from '../../lib/mediaHandoff';
 
 const STAGE_BADGE = {
   selecao: 'bg-slate-500/15 text-slate-300',
@@ -19,7 +20,7 @@ const STAGE_BADGE = {
 // publicadas em redes sociais. Cada recorte vira uma versão candidata; o que
 // já existia de "Cortes e versões" na central social mora agora à direita,
 // conectado ao recorte em edição.
-export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0, preselectedAssetId = '' }) {
+export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0, preselectedAssetId = '', incomingMedia = null }) {
   const [clips, setClips] = useState(() => seedClips());
   const [selId, setSelId] = useState(clips[0]?.id);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
@@ -39,6 +40,23 @@ export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0,
     if (preselectedAssetId) setNewDialogOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedAssetId]);
+
+  useEffect(() => {
+    if (!incomingMedia) return;
+    const transferred = {
+      ...newClip({ titulo: incomingMedia.titulo }),
+      id: incomingMedia.id,
+      source_id: incomingMedia.sourceId,
+      in_label: incomingMedia.inPoint,
+      out_label: incomingMedia.outPoint,
+      in_ms: timecodeToMs(incomingMedia.inPoint),
+      out_ms: timecodeToMs(incomingMedia.outPoint),
+      programa: incomingMedia.programa,
+      episodio: incomingMedia.episodio,
+    };
+    setClips((current) => current.some((clip) => clip.id === transferred.id) ? current : [transferred, ...current]);
+    setSelId(transferred.id);
+  }, [incomingMedia]);
 
   function onCreated(recorte) {
     setClips((p) => [recorte, ...p]);

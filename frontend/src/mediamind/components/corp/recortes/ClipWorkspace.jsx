@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { STAGES, fmt } from './clipModel';
 import ClipPlayer from './ClipPlayer';
@@ -37,6 +37,8 @@ export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewC
   const [stage, setStage] = useState(clip.stage || 'selecao');
   const seekRef = useRef(null);
   const seekTo = (ms) => seekRef.current?.(ms);
+
+  useEffect(() => { setStage(clip.stage || 'selecao'); }, [clip.id, clip.stage]);
 
   function patch(p) { onChange(p); }
   function setStageBoth(s) { setStage(s); patch({ stage: s }); }
