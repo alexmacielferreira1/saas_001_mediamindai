@@ -5,6 +5,7 @@ import RoteiroScriptList from '../components/RoteiroScriptList';
 import RoteiroEditor from '../components/RoteiroEditor';
 import RoteiroMediaPanel from '../components/RoteiroMediaPanel';
 import RoteiroTimeline from '../components/RoteiroTimeline';
+import RoteiroMediaSelector from '../components/RoteiroMediaSelector';
 import { MOCK_SCRIPTS, MOCK_ASSETS, formatDuration, formatTime, parseTime } from '../data';
 
 // Mock items per script (matching the design reference)
@@ -38,10 +39,11 @@ function computeDurationSeconds(durStr) {
   return parseTime(durStr);
 }
 
-export default function Timeline() {
+export default function Timeline({ embedded = false }) {
   const [selectedId, setSelectedId] = useState(1);
   const [items, setItems] = useState(SCRIPT_ITEMS[1]);
   const [status, setStatus] = useState('reviewing');
+  const [mediaToSelect, setMediaToSelect] = useState(null);
 
   const script = MOCK_SCRIPTS.find((s) => s.id === selectedId);
 
@@ -73,8 +75,8 @@ export default function Timeline() {
       track,
       label: asset.title,
       icon: asset.icon,
-      in: '00:00:00',
-      out: dur.length === 5 ? '00:' + dur : dur,
+      in: asset.clipIn || '00:00:00',
+      out: asset.clipOut || (dur.length === 5 ? '00:' + dur : dur),
       duration: dur,
       assetId: asset.id,
     };
@@ -136,7 +138,7 @@ export default function Timeline() {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex h-[calc(100vh-8rem)] flex-col gap-3">
+      <div className={`flex flex-col gap-3 ${embedded ? 'h-full' : 'h-[calc(100vh-8rem)]'}`}>
         {/* Header */}
         <div>
           <h1 className="text-xl font-bold text-slate-50">Modo roteiro</h1>
@@ -175,7 +177,7 @@ export default function Timeline() {
 
               {/* Media panel */}
               <Panel order={3} defaultSize={22} minSize={14} className="rounded-xl">
-                <RoteiroMediaPanel onAddMedia={addMedia} />
+                <RoteiroMediaPanel onAddMedia={setMediaToSelect} />
               </Panel>
             </PanelGroup>
           </Panel>
@@ -185,6 +187,11 @@ export default function Timeline() {
             <RoteiroTimeline items={items} onRemove={removeItem} />
           </Panel>
         </PanelGroup>
+        <RoteiroMediaSelector
+          asset={mediaToSelect}
+          onCancel={() => setMediaToSelect(null)}
+          onConfirm={(asset) => { addMedia(asset); setMediaToSelect(null); }}
+        />
       </div>
     </DragDropContext>
   );
