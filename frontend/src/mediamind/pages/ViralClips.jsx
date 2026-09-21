@@ -80,61 +80,12 @@ export default function ViralClips({ incomingMedia = null }) {
       {/* Metrics */}
       <SocialMetrics />
 
-      {/* Primary tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-800">
-        {PRIMARY_TABS.map((t) => {
-          const Icon = t.icon;
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition ${
-                active
-                  ? 'border-sky-500 text-sky-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2 border-y border-slate-800 py-2 text-[10px] text-slate-400">
+        <Sparkles size={13} className="text-sky-400" /> Cortes, versões, preparo, aprovação, publicação, biblioteca, calendário e desempenho agora fazem parte do fluxo integrado de seis etapas.
       </div>
 
-      {/* Secondary filters */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {SECONDARY_FILTERS.map((f) => {
-          const active = tab === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setTab(f.key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                active
-                  ? 'bg-sky-500/15 text-sky-300'
-                  : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-300'
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Content */}
       <div className="min-h-0 flex-1">
-        {tab === 'cortes' && (
-          <SocialCortesWorkspace onProsseguir={() => setTab('aprovar')} newClipSignal={newClipSignal} preselectedAssetId={preselectedAsset} incomingMedia={incomingMedia} />
-        )}
-        {tab === 'versoes' && <VersionsView />}
-        {tab === 'preparar' && <PrepareView />}
-        {tab === 'aprovar' && <PublishView />}
-        {tab === 'publicar' && <PublishView />}
-        {tab === 'contas' && <AccountsView />}
-        {tab === 'biblioteca' && <LibraryView />}
-        {tab === 'calendario' && <CalendarView />}
-        {tab === 'desempenho' && <PerformanceView />}
-        {tab === 'sugestoes' && <SuggestionsView />}
+        <SocialCortesWorkspace onProsseguir={() => setTab('aprovar')} newClipSignal={newClipSignal} preselectedAssetId={preselectedAsset} incomingMedia={incomingMedia} />
       </div>
     </div>
   );

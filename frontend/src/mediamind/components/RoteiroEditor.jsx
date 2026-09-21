@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import {
-  GripVertical, Trash2, Play, FileText, ChevronDown, Save, Download,
+  GripVertical, Trash2, Play, Pause, FileText, ChevronDown, Save, Download,
   Send, Type, Plus,
 } from 'lucide-react';
 
@@ -24,6 +24,15 @@ export default function RoteiroEditor({
   onRemove, onUpdateItem, onReorder, onAddText, totalDuration,
 }) {
   const [showTextOnly, setShowTextOnly] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const previewItem = useMemo(() => items.find((item) => item.type === 'media'), [items]);
+
+  useEffect(() => {
+    if (!playing) return undefined;
+    const timer = setInterval(() => setPosition((current) => current >= 100 ? 0 : current + 1), 500);
+    return () => clearInterval(timer);
+  }, [playing]);
 
   const visibleItems = showTextOnly ? items.filter((i) => i.type === 'text') : items;
 
@@ -63,6 +72,14 @@ export default function RoteiroEditor({
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="grid gap-2 border-b border-slate-800 bg-slate-950/35 p-3 lg:grid-cols-[180px_1fr]">
+        <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded border border-slate-700 bg-[radial-gradient(circle_at_50%_35%,#315070,#0f172a_70%)]">
+          <button aria-label={playing?'Pausar preview':'Reproduzir preview'} onClick={()=>setPlaying((value)=>!value)} className="grid size-9 place-items-center rounded-full border border-white/35 bg-black/30 text-white">{playing?<Pause size={15}/>:<Play size={15}/>}</button>
+          <span className="absolute bottom-1 right-2 font-mono text-[8px] text-white">00:{String(Math.round(position*.81)).padStart(2,'0')} / 01:21</span>
+        </div>
+        <div className="flex min-w-0 flex-col justify-center"><div className="flex items-center justify-between gap-2"><div className="min-w-0"><p className="text-[9px] font-bold uppercase text-sky-400">Preview do roteiro</p><p className="truncate text-xs font-semibold text-slate-200">{previewItem?.label||'Selecione ou adicione uma mídia'}</p></div><span className="rounded bg-slate-800 px-2 py-1 text-[8px] text-slate-400">{items.filter((item)=>item.type==='media').length} mídias</span></div><input aria-label="Posição do preview" type="range" min="0" max="100" value={position} onChange={(event)=>setPosition(Number(event.target.value))} className="mt-3 w-full accent-sky-500"/><div className="mt-1 flex justify-between font-mono text-[8px] text-slate-600"><span>00:00:00</span><span>{totalDuration}</span></div></div>
       </div>
 
       {/* Blocks header */}

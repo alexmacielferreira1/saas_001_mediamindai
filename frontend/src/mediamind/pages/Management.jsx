@@ -15,6 +15,11 @@ import { listMemberships } from '../../api/permissions';
 import { useProducaoProjetos } from '../lib/producaoStore';
 import { CARGO_BY_ID } from '../lib/roleCatalog';
 import { buildSectorRows, buildTeamRows } from '../lib/managementReportsViewModel';
+import {
+  DEMO_MANAGEMENT_OVERVIEW,
+  DEMO_MEMBERSHIPS,
+  withDemoFallback,
+} from '../lib/managementDemoData';
 
 const MGMT_TABS = [
   { key: 'dashboards', label: 'Visão Geral', icon: BarChart3 },
@@ -53,17 +58,14 @@ export default function Management() {
 export function DashboardsTab() {
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
-  const [error, setError] = useState(false);
 
   useEffect(() => {
     let active = true;
-    getManagementOverview()
+    withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)
       .then((data) => { if (active) setOverview(data); })
-      .catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, []);
 
-  if (error) return <EmptyState icon={AlertCircle} title="Não foi possível carregar a visão gerencial" description="Tente novamente em alguns instantes." />;
   if (!overview) return <Loading label="Carregando visão gerencial..." />;
 
   const summary = overview.publications;
@@ -156,13 +158,14 @@ export function ReportsTab() {
   const [subTab, setSubTab] = useState('equipe');
   const [overview, setOverview] = useState(null);
   const [memberships, setMemberships] = useState([]);
-  const [error, setError] = useState(false);
   const projects = useProducaoProjetos();
   useEffect(() => {
     let active = true;
-    Promise.all([getManagementOverview(), listMemberships()])
+    Promise.all([
+      withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
+      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
+    ])
       .then(([data, users]) => { if (active) { setOverview(data); setMemberships(users); } })
-      .catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, []);
   const subTabs = [
@@ -176,8 +179,7 @@ export function ReportsTab() {
 
   return (
     <div className="space-y-4">
-      {error && <EmptyState icon={AlertCircle} title="Não foi possível carregar os relatórios" />}
-      {!error && !overview && <Loading label="Carregando relatórios..." />}
+      {!overview && <Loading label="Carregando relatórios..." />}
 
       {/* Sub-tabs */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">

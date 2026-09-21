@@ -12,6 +12,13 @@ import { getManagementOverview } from '../../api/management';
 import { buildAcervoSystemSummary } from '../lib/acervoSystemViewModel';
 import { listMemberships, updateMembershipScreens } from '../../api/permissions';
 import { CARGO_BY_ID } from '../lib/roleCatalog';
+import {
+  DEMO_ASSETS,
+  DEMO_AUDIT_LOGS,
+  DEMO_MANAGEMENT_OVERVIEW,
+  DEMO_MEMBERSHIPS,
+  withDemoFallback,
+} from '../lib/managementDemoData';
 
 const ACERVO_TABS = [
   { key: 'acervo', label: 'Arquivos', icon: Archive },
@@ -28,18 +35,16 @@ export default function Acervo() {
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabParam || 'acervo');
   const [data, setData] = useState(null);
-  const [error, setError] = useState(false);
 
   useEffect(() => {
     let active = true;
     Promise.all([
-      getManagementOverview(),
-      base44.entities.Asset.list('-created_date', 500),
-      base44.entities.LogAuditoria.list('-created_date', 100),
-      listMemberships().catch(() => []),
+      withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
+      withDemoFallback(() => base44.entities.Asset.list('-created_date', 500), DEMO_ASSETS),
+      withDemoFallback(() => base44.entities.LogAuditoria.list('-created_date', 100), DEMO_AUDIT_LOGS),
+      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
     ])
       .then(([overview, assets, logs, memberships]) => { if (active) setData({ overview, assets, logs, memberships }); })
-      .catch(() => { if (active) setError(true); });
     return () => { active = false; };
   }, []);
 
@@ -57,8 +62,7 @@ export default function Acervo() {
 
       <Tabs tabs={ACERVO_TABS} active={activeTab} onChange={handleTabChange} />
 
-      {error && <EmptyState icon={AlertTriangle} title="Não foi possível carregar o acervo" description="Verifique o serviço local e tente novamente." />}
-      {!error && !data && <Loading label="Carregando acervo..." />}
+      {!data && <Loading label="Carregando acervo..." />}
       {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
       {data && activeTab === 'admin' && <AdminTab logs={data.logs} memberships={data.memberships} />}
       {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} />}
@@ -342,7 +346,7 @@ function MonitoringTab({ overview }) {
 
   async function refreshSystem() {
     setRefreshing(true);
-    try { setLiveOverview(await getManagementOverview()); } finally { setRefreshing(false); }
+    try { setLiveOverview(await withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)); } finally { setRefreshing(false); }
   }
   return (
     <div className="space-y-4">

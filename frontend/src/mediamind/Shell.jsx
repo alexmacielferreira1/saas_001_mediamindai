@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Briefcase, Bell, Settings,
   LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
-  Home, Layers, Film, Calendar, Send, ShieldCheck, BarChart3,
+  Home, Layers, Film, Calendar, Send, ShieldCheck, BarChart3, LayoutDashboard, FileText, Clapperboard, Scissors, CheckCircle2, Flag, Share2,
 } from 'lucide-react';
 import { useAuth } from './auth';
 import { useEmpresa } from './lib/empresaContext';
@@ -21,13 +21,27 @@ const NAV_GROUPS = [
     ],
   },
   {
-    group: 'Módulos',
+    group: 'Produção',
     items: [
-      { to: '/search', label: 'Busca', icon: Search },
-      { to: '/ingest', label: 'Ingest', icon: Layers },
-      { to: '/workspace', label: 'Workspace', icon: Film },
-      { to: '/timeline', label: 'Timeline', icon: Calendar },
-      { to: '/social', label: 'Clipes', icon: Send },
+      { to: '/corp?tab=producao&sub=overview', label: 'Visão geral', icon: LayoutDashboard, sub: 'overview' },
+      { to: '/corp?tab=producao&sub=pesquisa', label: 'Pesquisa', icon: Search, sub: 'pesquisa' },
+      { to: '/corp?tab=producao&sub=ingest', label: 'Ingest', icon: Layers, sub: 'ingest' },
+      { to: '/corp?tab=producao&sub=workspace', label: 'Workspace', icon: Film, sub: 'workspace' },
+      { to: '/corp?tab=producao&sub=roteiro', label: 'Modo roteiro', icon: FileText, sub: 'roteiro' },
+      { to: '/corp?tab=producao&sub=rascunhos', label: 'Rascunhos', icon: FileText, sub: 'rascunhos' },
+      { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
+      { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
+      { to: '/corp?tab=producao&sub=em_edicao', label: 'Em edição', icon: Scissors, sub: 'em_edicao' },
+      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em aprovação', icon: CheckCircle2, sub: 'em_aprovacao' },
+      { to: '/corp?tab=producao&sub=finalizado', label: 'Finalizado', icon: Flag, sub: 'finalizado' },
+      { to: '/corp?tab=producao&sub=redes_sociais', label: 'Redes sociais', icon: Share2, sub: 'redes_sociais' },
+      { to: '/corp?tab=producao&sub=publicacoes', label: 'Publicações', icon: Send, sub: 'publicacoes' },
+      { to: '/corp?tab=producao&sub=analytics', label: 'Analytics', icon: BarChart3, sub: 'analytics' },
+    ],
+  },
+  {
+    group: 'Administração',
+    items: [
       { to: '/acervo', label: 'Acervo', icon: ShieldCheck },
       { to: '/management', label: 'Gestão', icon: BarChart3 },
     ],
@@ -140,13 +154,19 @@ export default function Shell({ children }) {
                       key={it.to}
                       to={it.to}
                       end={it.end}
-                      className={({ isActive }) =>
-                        `flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                          isActive
+                      className={({ isActive }) => {
+                        const query = new URLSearchParams(location.search);
+                        const active = it.sub
+                          ? location.pathname === '/corp' && query.get('sub') === it.sub
+                          : it.to === '/corp'
+                            ? isActive && !query.get('sub')
+                            : isActive;
+                        return `flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition ${
+                          active
                             ? 'bg-sky-500 font-bold text-slate-950'
                             : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
-                        }`
-                      }
+                        }`;
+                      }}
                     >
                       <Icon size={17} className="shrink-0" />
                       {it.label}

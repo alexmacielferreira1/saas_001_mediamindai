@@ -13,11 +13,12 @@ export function fmt(ms) {
 }
 
 export const STAGES = [
-  { id: 'selecao', name: 'Seleção', desc: 'Defina o trecho (IN/OUT) do corte geral que a IA vai processar.' },
-  { id: 'ia', name: 'Análise IA', desc: 'Processe o trecho e escolha os trechos mais viralizáveis por nota.' },
-  { id: 'legendas', name: 'Legendas', desc: 'Gere, edite e corte as legendas (cortando o áudio ou não).' },
-  { id: 'cg', name: 'CGs', desc: 'Edite lower-thirds e grafismos. Salve pra editar externamente.' },
-  { id: 'reimport', name: 'Reimportar', desc: 'Volte com o vídeo editado externamente e continue a esteira.' },
+  { id: 'selecao', name: 'Edição do corte', desc: 'Defina IN/OUT, enquadramento e o corte-base.' },
+  { id: 'ia', name: 'Análise IA e legendas', desc: 'Escolha momentos, ajuste legendas e gere versões.' },
+  { id: 'legendas', name: 'Edição externa', desc: 'Exporte, finalize e reimporte a versão editada.' },
+  { id: 'cg', name: 'Aprovação', desc: 'Confira conteúdo, canais, metadados e solicite ajustes.' },
+  { id: 'reimport', name: 'Publicação', desc: 'Prepare conteúdo editorial, destinos e agendamento.' },
+  { id: 'formatos', name: 'Redes e formatos', desc: 'Escolha os canais, enquadramentos e configurações editoriais de cada destino.' },
 ];
 export const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.id, s.name]));
 
@@ -45,6 +46,7 @@ export function seedClips() {
   return (MOCK_CORP_RECORTES || []).slice(0, 3).map((r, i) => ({
     ...newClip({ titulo: r.titulo }),
     id: `clip-${i + 1}`,
+    source_asset_id: String(i + 1),
     stage: i === 0 ? 'legendas' : 'selecao',
     in_ms: 5000,
     out_ms: 120000,

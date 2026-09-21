@@ -14,8 +14,8 @@ const clip = (id,stage) => ({ id, stage, in_ms:0, out_ms:1000, viral:[], cgs:[] 
 describe('ClipWorkspace selection',()=>{
   it('resets the visible workflow stage when another clip is selected',()=>{
     const { rerender } = render(<ClipWorkspace clip={clip('old','legendas')} onChange={vi.fn()}/>);
-    expect(screen.getByRole('button',{name:/Legendas/})).toHaveClass('bg-sky-500');
+    expect(screen.getByRole('button',{name:/Edição externa/})).toHaveClass('bg-sky-500');
     rerender(<ClipWorkspace clip={clip('new','selecao')} onChange={vi.fn()}/>);
-    expect(screen.getByRole('button',{name:/Seleção/})).toHaveClass('bg-sky-500');
+    expect(screen.getByRole('button',{name:/Edição do corte/})).toHaveClass('bg-sky-500');
   });
 });

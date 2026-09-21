@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Lock, Crown } from 'lucide-react';
 import CorpRoleSelector from '../components/corp/CorpRoleSelector';
 import { useAuth } from '../auth';
 import { filterTabsForUser, defaultTabForUser } from '../lib/permissions';
@@ -47,18 +47,20 @@ const TABS = CORP_TABS;
 
 export default function Corp() {
   const { user } = useAuth();
-  const allowedTabs = filterTabsForUser(TABS, user);
-  const firstAllowed = defaultTabForUser(TABS, user);
+  const allowedTabs = useMemo(() => {
+    const roleTabs = filterTabsForUser(TABS, user);
+    const superTab = { id: 'superadmin', name: 'Superadmin — todos os perfis', Icon: Crown };
+    return user?.role === 'superadmin' ? [superTab, ...roleTabs] : roleTabs;
+  }, [user]);
+  const firstAllowed = user?.role === 'superadmin' ? 'superadmin' : defaultTabForUser(TABS, user);
   const [activeTab, setActiveTab] = useState(firstAllowed || 'producao');
   const [searchParams] = useSearchParams();
 
   // Deep-link vindo do Assistente IA: /corp?tab=<id>. Aplica no mount.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
+    const tab = searchParams.get('tab');
     if (tab && allowedTabs.some((t) => t.id === tab)) setActiveTab(tab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, allowedTabs]);
 
   // Gatilho do botão "Novo": /corp?novo=producao ativa a aba de produção.
   // Não limpa o param aqui — a ProdutoraPage lê, cria o rascunho e limpa.
@@ -76,6 +78,7 @@ export default function Corp() {
   }, [firstAllowed, allowedTabs, activeTab]);
 
   function renderTab() {
+    if (activeTab === 'superadmin') return <ProdutoraPage />;
     if (activeTab === 'editor_video') return <EditorVideoPage />;
     if (activeTab === 'videomaker') return <VideomakerPage />;
     if (activeTab === 'producao') return <ProdutoraPage />;

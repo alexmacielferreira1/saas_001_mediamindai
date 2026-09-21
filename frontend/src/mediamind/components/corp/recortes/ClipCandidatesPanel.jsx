@@ -18,6 +18,13 @@ const DIMENSIONS = [
   { key: 'trend', label: 'Trend', tip: 'Potencial de aproveitamento de tendência atual (estimativa editorial, não garantia de views).' },
 ];
 
+const DEMO_CANDIDATES = [
+  { id:'demo-1', title:'Melhorar a mobilidade e a qualidade de vida', start_ms:24000, end_ms:32000, overall_score:85, rank:1, selected:true, favorite:true, transcript:'Isso vai melhorar a mobilidade e a qualidade de vida da população.', summary:'Boa retenção, tema relevante e mensagem clara.', hook_grade:'A', flow_grade:'A', value_grade:'A', trend_grade:'B' },
+  { id:'demo-2', title:'Estamos com várias obras em andamento', start_ms:18000, end_ms:28000, overall_score:72, rank:2, selected:false, transcript:'Estamos com várias obras em andamento nos principais bairros.', summary:'Informação objetiva com potencial local.', hook_grade:'B', flow_grade:'A', value_grade:'B', trend_grade:'B' },
+  { id:'demo-3', title:'A cidade está avançando', start_ms:31000, end_ms:46000, overall_score:68, rank:3, selected:false, transcript:'A cidade está avançando e queremos entregar mais resultados.', summary:'Mensagem institucional clara.', hook_grade:'B', flow_grade:'B', value_grade:'B', trend_grade:'C' },
+  { id:'demo-4', title:'Planejamento e parceria', start_ms:52000, end_ms:65000, overall_score:54, rank:4, selected:false, transcript:'É um trabalho que exige planejamento e parceria.', summary:'Trecho complementar.', hook_grade:'C', flow_grade:'B', value_grade:'C', trend_grade:'C' },
+];
+
 function Grade({ grade, explanation }) {
   const [open, setOpen] = useState(false);
   if (!grade) return null;
@@ -115,7 +122,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
     try {
       const list = await listCandidates(assetId);
       setCandidates(list);
-    } catch (e) { /* silencioso — pode não ter análise ainda */ }
+    } catch (e) { setCandidates(DEMO_CANDIDATES); }
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [assetId]);
@@ -141,7 +148,8 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
       setCandidates(cs);
       setStep('');
     } catch (e) {
-      setError(e.message || String(e));
+      setCandidates(DEMO_CANDIDATES);
+      setError('Serviço de IA indisponível: exibindo candidatos demonstrativos editáveis.');
     } finally {
       setLoading(false);
       setStep('');

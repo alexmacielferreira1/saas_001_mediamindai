@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand, CheckCircle2, Database, CalendarDays, MapPin, Clock3 } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand, CheckCircle2, Database, CalendarDays, MapPin, Clock3, FolderOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { base44 } from '@/api/base44Client';
@@ -63,13 +63,22 @@ export default function GravacoesMateriais() {
     try {
       const novos = [];
       for (const file of files) {
-        const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+        let fileUrl = '';
+        try {
+          const uploaded = await base44.integrations.Core.UploadPublicFile({ file });
+          fileUrl = uploaded?.file_url || '';
+        } catch {
+          // No modo local a mídia continua disponível nesta sessão mesmo sem o serviço de upload.
+          fileUrl = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
+        }
         novos.push({
           id: `m${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           nome: file.name,
+          caminhoRelativo: file.webkitRelativePath || file.name,
+          pastaOrigem: file.webkitRelativePath?.split('/')[0] || '',
           tamanho: formatBytes(file.size),
           recebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          url: file_url,
+          url: fileUrl,
         });
       }
       const jaTem = (rec.materiais || []).length > 0;
@@ -190,10 +199,17 @@ export default function GravacoesMateriais() {
             <Upload size={22} className={uploading ? 'animate-pulse' : ''} />
             <span className="text-xs font-semibold">{uploading ? 'Enviando arquivos…' : 'Arraste os arquivos gravados aqui'}</span>
             <span className="text-[10px] text-slate-500">ou</span>
-            <label className="cursor-pointer rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800">
-              Ingest de arquivos
-              <input type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-            </label>
+            <div className="flex flex-wrap justify-center gap-2">
+              <label className="cursor-pointer rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800">
+                <span className="flex items-center gap-1.5"><Upload size={12} /> Ingest de arquivos</span>
+                <input type="file" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+              </label>
+              <label className="cursor-pointer rounded-md border border-sky-700/70 bg-sky-950/40 px-3 py-1.5 text-[11px] font-semibold text-sky-200 hover:bg-sky-900/50">
+                <span className="flex items-center gap-1.5"><FolderOpen size={12} /> Selecionar pasta da gravação</span>
+                <input type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+              </label>
+            </div>
+            <span className="max-w-xl text-[9px] leading-4 text-slate-600">Ao apontar uma pasta, todos os arquivos e subpastas são preparados para o ingest, mantendo a organização original.</span>
           </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Novo Ingest será criado automaticamente</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Ao enviar as mídias, o sistema valida os arquivos, calcula checksum, gera proxy, processa com IA e vincula tudo ao projeto.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação dos arquivos','Cálculo de checksum','Geração de proxy','Processamento com IA','Vínculo automático ao projeto'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
 
           <div>
@@ -207,7 +223,7 @@ export default function GravacoesMateriais() {
                     <FileVideo size={14} className="shrink-0 text-violet-300" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-slate-200">{m.nome}</p>
-                      <p className="text-[10px] text-slate-500">{m.tamanho} · recebido {m.recebido}</p>
+                      <p className="truncate text-[10px] text-slate-500">{m.caminhoRelativo || m.nome} · {m.tamanho} · recebido {m.recebido}</p>
                     </div>
                     <button onClick={() => setPreview(m)} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-sky-300" title="Ver material">
                       <Eye size={13} />

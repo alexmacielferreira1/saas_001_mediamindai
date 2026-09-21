@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
 import {
@@ -26,7 +26,6 @@ import CorpAnalytics from '../CorpAnalytics';
 import { ProjetosAtribuidosPanel, AgendaUnificadaPanel } from '../OverviewPanels';
 import PanelSplit from '../../ui/PanelSplit';
 import RelatoriosEquipePanel from '../RelatoriosEquipePanel';
-import { SubTabsBar } from '../../shared';
 import { COMMON_SUBTABS, CommonScreen, COMMON_IDS } from './CommonScreens';
 import RoleInicio from '../RoleInicio';
 
@@ -53,8 +52,12 @@ export default function ProdutoraPage() {
   const [newDraftSignal, setNewDraftSignal] = useState(0);
   const [mediaHandoff, setMediaHandoff] = useState(null);
   const [params, setParams] = useSearchParams();
-  const tabs = filterActiveSubtabs('producer', SUBTABS);
-  useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, []);
+  const tabs = useMemo(() => filterActiveSubtabs('producer', SUBTABS), []);
+  useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, [sub, tabs]);
+  useEffect(() => {
+    const requested = params.get('sub');
+    if (requested && tabs.some((tab) => tab.id === requested)) setSub(requested);
+  }, [params, tabs]);
 
   // Gatilho do botão "Novo": /corp?novo=producao → cai na aba Rascunhos e
   // sinaliza a RascunhosPage pra criar um novo rascunho (reusa o addDraft).
@@ -102,10 +105,8 @@ export default function ProdutoraPage() {
   }, [selectedEventId]);
 
   return (
-    <div className="space-y-4">
-      <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
-
-      <div className="h-[calc(100vh-16rem)]">
+    <div>
+      <div className="h-[calc(100vh-11rem)]">
         {sub === 'overview' && <RoleInicio roleId="producer" onNavigate={setSub} />}
         {false && (
           <div className="flex h-full flex-col gap-3">

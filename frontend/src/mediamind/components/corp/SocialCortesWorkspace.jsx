@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Layers, Film, Send, Sparkles } from 'lucide-react';
+import { Film, Sparkles } from 'lucide-react';
 import { newClip, seedClips, STAGE_LABEL } from './recortes/clipModel';
 import ClipWorkspace from './recortes/ClipWorkspace';
 import NewClipDialog from './recortes/NewClipDialog';
-import { MOCK_PUBLICATIONS, PUBLICATION_PLATFORM_LABELS } from '../../data';
-import { StatusBadge } from '../../ui';
 import { timecodeToMs } from '../../lib/mediaHandoff';
 
 const STAGE_BADGE = {
@@ -13,6 +11,7 @@ const STAGE_BADGE = {
   legendas: 'bg-sky-500/15 text-sky-300',
   cg: 'bg-amber-500/15 text-amber-300',
   reimport: 'bg-emerald-500/15 text-emerald-300',
+  formatos: 'bg-cyan-500/15 text-cyan-300',
 };
 
 // Blend perfeito: o workspace de cortes no estilo Opus Clip (recortes + player
@@ -63,24 +62,6 @@ export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0,
     setSelId(recorte.id);
   }
 
-  // Versões: as já publicadas em redes sociais + as geradas a partir dos recortes.
-  const versoes = [
-    ...clips.filter((c) => c.pronto || c.salvo).map((c, i) => ({
-      id: `clip-${c.id}`,
-      titulo: c.titulo,
-      plataforma: 'Rascunho',
-      status: c.pronto ? 'ready' : 'draft',
-      origem: 'Recorte',
-    })),
-    ...MOCK_PUBLICATIONS.slice(0, 4).map((p) => ({
-      id: `pub-${p.id}`,
-      titulo: p.title,
-      plataforma: PUBLICATION_PLATFORM_LABELS[p.platform],
-      status: p.status,
-      origem: 'Social',
-    })),
-  ];
-
   return (
     <div className="grid h-full gap-3 lg:grid-cols-6">
       {/* Lista de recortes (Opus Clip) */}
@@ -105,7 +86,7 @@ export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0,
       </div>
 
       {/* Workspace Opus Clip (player IN/OUT, IA, legendas, CG, reimport) */}
-      <div className="lg:col-span-3">
+      <div className="min-h-0 lg:col-span-5">
         {sel ? (
           <ClipWorkspace clip={sel} onChange={patchClip} onProsseguir={onProsseguir} onOpenNewClip={() => setNewDialogOpen(true)} />
         ) : (
@@ -113,34 +94,6 @@ export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0,
             <div className="text-center"><Film size={22} className="mx-auto mb-2 text-slate-600" />Crie um recorte pra começar o corte no estilo Opus Clip.</div>
           </div>
         )}
-      </div>
-
-      {/* Versões — blend com a central social */}
-      <div className="flex flex-col gap-3 lg:col-span-2">
-        <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-3">
-          <div className="flex items-center gap-2">
-            <Layers size={14} className="text-sky-400" />
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-300">Versões</p>
-          </div>
-          <button onClick={onProsseguir} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-slate-800">
-            <Send size={10} /> Publicar
-          </button>
-        </div>
-        <div className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/40 p-2.5">
-          {versoes.map((v) => (
-            <div key={v.id} className="flex items-center gap-2.5 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5">
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[9px] font-bold uppercase ${v.origem === 'Recorte' ? 'bg-violet-500/15 text-violet-300' : 'bg-sky-500/15 text-sky-300'}`}>
-                {v.origem === 'Recorte' ? <Film size={13} /> : <Layers size={13} />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-slate-200">{v.titulo}</p>
-                <p className="text-[10px] text-slate-500">{v.plataforma} · {v.origem}</p>
-              </div>
-              <StatusBadge status={v.status} />
-            </div>
-          ))}
-          {versoes.length === 0 && <p className="py-8 text-center text-[11px] text-slate-500">Nenhuma versão ainda.</p>}
-        </div>
       </div>
 
       <NewClipDialog

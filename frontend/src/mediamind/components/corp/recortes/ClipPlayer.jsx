@@ -52,8 +52,9 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
 
   return (
     <div className="flex h-full flex-col">
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-black">
-        <video ref={vref} src={source_url} className="h-auto max-h-[42vh] w-full" controls={false} playsInline preload="metadata" />
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-black">
+        {source_url ? <video ref={vref} src={source_url} className="h-full w-full object-contain" controls={false} playsInline preload="metadata" /> : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_55%_35%,#315475,#15283d_38%,#07111f_75%)]"><div className="text-center"><div className="mx-auto mb-3 grid size-24 place-items-center rounded-full border border-sky-400/30 bg-slate-950/40 text-5xl">🎙️</div><p className="text-sm font-bold text-slate-100">Prefeito fala sobre obras</p><p className="text-[10px] text-slate-400">Jornal da Cidade · prévia do corte</p></div></div>}
+        <div className="absolute bottom-5 left-[8%] right-[18%] border-l-4 border-sky-400 bg-white/95 px-3 py-2 text-left shadow-xl"><p className="text-[10px] font-black uppercase text-blue-900">Prefeito fala sobre obras</p><p className="text-[8px] font-semibold text-slate-700">Novas intervenções devem melhorar a mobilidade na região</p></div>
       </div>
 
       <div className="mt-3">
