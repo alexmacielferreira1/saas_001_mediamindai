@@ -1,202 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
-import {
-  Search, Play, Music, Image, FileText, Filter, X, Clock,
-  Scissors, Film, Clapperboard, Download,
-} from 'lucide-react';
-import { Panel, Badge, StatusBadge, SearchInput, Button, InfoRow, EmptyState } from '../ui';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Search, Filter, Play, FileText, Film, Scissors, Clapperboard, Download, FolderOpen, MoreHorizontal, X, Maximize2, MonitorPlay } from 'lucide-react';
 import { formatDuration, formatSize } from '../data';
 import { useMamData } from '../lib/mamData';
-import SearchTranscriptResults from '../components/SearchTranscriptResults';
 
-const ASSET_TYPE_ICONS = { video: Play, audio: Music, image: Image, document: FileText };
-const CONTENT_TYPES = ['Entrevista', 'Imagem de apoio', 'Drone', 'Documento'];
+const STATUS = { reviewed:'Revisado', indexed:'Indexado', processing:'Processando', ready:'Pronto', pending:'Pendente' };
+const FILTERS = [['all','Todos'],['video','Vídeos'],['audio','Áudios'],['document','Documentos'],['image','Imagens']];
+const META_TABS = ['Metadados','Transcrição','Capítulos','Miniaturas'];
+const inputClass = 'rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-[9px] text-slate-300 outline-none focus:border-sky-500';
 
 export default function SearchPage() {
-  const [searchParams] = useSearchParams();
+  const [params] = useSearchParams();
   const { assets, loading } = useMamData();
-  const [query, setQuery] = useState(searchParams.get('q') || '');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [inPoint, setInPoint] = useState('');
-  const [outPoint, setOutPoint] = useState('');
+  const [query,setQuery] = useState(params.get('q')||'');
+  const [type,setType] = useState('all');
+  const [selectedId,setSelectedId] = useState(null);
+  const [metaTab,setMetaTab] = useState('Metadados');
+  const [inPoint,setInPoint] = useState('00:01:14');
+  const [outPoint,setOutPoint] = useState('00:01:42');
+  const filtered = useMemo(()=>assets.filter((asset)=>{
+    if(type!=='all'&&asset.asset_type!==type) return false;
+    const hay=`${asset.title} ${asset.filename} ${asset.subjects} ${asset.people} ${asset.description}`.toLowerCase();
+    return !query||hay.includes(query.toLowerCase());
+  }),[assets,query,type]);
+  const selected = assets.find((asset)=>String(asset.id)===String(selectedId)) || filtered[0] || null;
+  useEffect(()=>{if(!selectedId&&assets[0]) setSelectedId(assets[0].id);},[assets,selectedId]);
+  if(loading) return <div className="grid h-full place-items-center text-sm text-slate-500">Carregando pesquisa…</div>;
 
-  useEffect(() => {
-    setQuery(searchParams.get('q') || '');
-  }, [searchParams]);
+  return <div className="flex h-full min-h-0 flex-col overflow-hidden border border-slate-800 bg-slate-950/30">
+    <header className="border-b border-slate-800 px-3 py-2"><div className="flex items-end justify-between"><div><h1 className="text-base font-semibold text-slate-100">Pesquisa</h1><p className="text-[10px] text-slate-500">Busque no acervo por transcrições, metadados e conteúdo</p></div><button className="flex items-center gap-1 rounded border border-slate-700 px-2 py-1.5 text-[9px] text-slate-300"><Filter size={11}/>Filtros avançados</button></div><div className="mt-2 flex gap-2"><div className="relative flex-1"><Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"/><input aria-label="Pesquisar no acervo" value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="mobilidade urbana" className="w-full rounded border border-slate-700 bg-slate-950 py-2 pl-9 pr-8 text-xs text-slate-200 outline-none focus:border-sky-500"/>{query&&<button onClick={()=>setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600"><X size={12}/></button>}</div><button className="flex items-center gap-1 rounded bg-sky-500 px-4 text-[10px] font-bold text-slate-950"><Search size={12}/>Buscar</button></div><div className="mt-2 flex flex-wrap items-center gap-1">{FILTERS.map(([id,label])=><button key={id} onClick={()=>setType(id)} className={`rounded px-2 py-1 text-[9px] ${type===id?'bg-sky-500 text-slate-950':'border border-slate-800 text-slate-500'}`}>{label} ({id==='all'?assets.length:assets.filter((a)=>a.asset_type===id).length})</button>)}{['Período','Programa','Pessoa','Categoria','Formato','Status'].map((label)=><button key={label} className="ml-1 rounded border border-slate-800 px-2 py-1 text-[9px] text-slate-500">{label} ▾</button>)}<button onClick={()=>{setQuery('');setType('all');}} className="ml-auto text-[9px] text-slate-500">Limpar filtros</button></div></header>
 
-  useEffect(() => {
-    setInPoint('');
-    setOutPoint('');
-  }, [selected?.id]);
+    <div className="grid min-h-0 flex-1 lg:grid-cols-[350px_minmax(0,1fr)]">
+      <aside className="min-h-0 border-r border-slate-800"><div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><span className="text-[10px] text-slate-400">{filtered.length} resultado(s)</span><button className="text-[9px] text-slate-500">Mais relevantes ▾</button></div><div className="h-full space-y-1 overflow-y-auto p-2 pb-12">{filtered.map((asset)=><button key={asset.id} onClick={()=>setSelectedId(asset.id)} className={`flex w-full gap-2 border p-2 text-left ${selected?.id===asset.id?'border-sky-500 bg-sky-950/30':'border-slate-800 bg-slate-950/40 hover:bg-slate-900'}`}><div className="relative flex h-14 w-24 shrink-0 items-center justify-center bg-[linear-gradient(135deg,#1e3a5f,#0f172a)] text-xl">{asset.icon||'🎬'}<span className="absolute bottom-1 right-1 bg-black/75 px-1 font-mono text-[8px] text-white">{formatDuration(asset.duration)}</span></div><div className="min-w-0 flex-1"><div className="flex items-start gap-1"><p className="line-clamp-1 flex-1 text-[10px] font-semibold text-slate-200">{asset.title}</p><span className="rounded bg-emerald-500/15 px-1 py-0.5 text-[7px] text-emerald-300">{STATUS[asset.status]||asset.status}</span></div><p className="truncate text-[8px] text-slate-600">{asset.filename}</p><div className="mt-1 flex flex-wrap gap-1">{String(asset.subjects||'conteúdo mídia').split(',').slice(0,3).map((tag)=><span key={tag} className="rounded bg-slate-800 px-1 py-0.5 text-[7px] text-slate-400">{tag.trim()}</span>)}</div></div></button>)}{filtered.length===0&&<p className="py-16 text-center text-xs text-slate-500">Nenhum resultado para esta busca.</p>}</div></aside>
 
-  const filtered = assets.filter((a) => {
-    if (typeFilter !== 'all' && a.asset_type !== typeFilter) return false;
-    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-    if (query) {
-      const hay = `${a.title} ${a.filename} ${a.subjects} ${a.people} ${a.description}`.toLowerCase();
-      if (!hay.includes(query.toLowerCase())) return false;
-    }
-    return true;
-  });
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="w-8 h-8 border-4 border-slate-700 border-t-sky-400 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 pb-8">
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-50">Pesquisa</h1>
-        <p className="text-sm text-slate-400">Busca no acervo por transcrições, metadados e conteúdo</p>
-      </div>
-
-      <div className="flex gap-3">
-        <SearchInput placeholder="Pesquisar mídias, transcrições, palavras-chave..." value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1" />
-        <Button variant="secondary" icon={<Filter size={16} />} onClick={() => setShowFilters(!showFilters)}>
-          Filtros
-        </Button>
-      </div>
-
-      {showFilters && (
-        <Panel title="Filtros">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-slate-400">Tipo</span>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500">
-                <option value="all">Todos</option>
-                <option value="video">Vídeo</option>
-                <option value="audio">Áudio</option>
-                <option value="image">Imagem</option>
-                <option value="document">Documento</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-slate-400">Status</span>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500">
-                <option value="all">Todos</option>
-                <option value="reviewed">Revisado</option>
-                <option value="indexed">Indexado</option>
-                <option value="processing">Processando</option>
-                <option value="pending">Pendente</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-slate-400">Data inicial</span>
-              <input type="date" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500" />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-slate-400">Data final</span>
-              <input type="date" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500" />
-            </label>
-          </div>
-        </Panel>
-      )}
-
-      <div className="flex items-center justify-between text-sm text-slate-400">
-        <span>{filtered.length} resultado(s)</span>
-        {(typeFilter !== 'all' || statusFilter !== 'all') && (
-          <button onClick={() => { setTypeFilter('all'); setStatusFilter('all'); }} className="flex items-center gap-1 text-sky-400 hover:text-sky-300">
-            <X size={14} /> Limpar filtros
-          </button>
-        )}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-        {/* Resultados */}
-        <div className="flex flex-col gap-2">
-          {filtered.length === 0 ? (
-            <Panel>
-              <EmptyState icon={Search} title="Nenhum resultado" description="Tente outros termos de busca ou ajuste os filtros." />
-            </Panel>
-          ) : (
-            filtered.map((a) => {
-              const Icon = ASSET_TYPE_ICONS[a.asset_type] || FileText;
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => setSelected(a)}
-                  className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition hover:border-sky-700 ${selected?.id === a.id ? 'border-sky-600 bg-sky-950/20' : 'border-slate-800 bg-slate-900/40'}`}
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xl">{a.icon}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-medium text-slate-200">{a.title}</p>
-                      <StatusBadge status={a.status} />
-                    </div>
-                    <p className="truncate text-xs text-slate-500">{a.filename}</p>
-                    {a.subjects && <p className="mt-1 truncate text-xs text-slate-400">{a.subjects}</p>}
-                    <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                      <span><Icon size={11} className="mr-1 inline" />{a.asset_type}</span>
-                      <span><Clock size={11} className="mr-1 inline" />{formatDuration(a.duration)}</span>
-                      <span>{formatSize(a.file_size)}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* Detalhe */}
-        {selected ? (
-          <Panel title="Detalhes do arquivo">
-            {selected.file_url && selected.asset_type === 'video' ? (
-              <video controls src={selected.file_url} className="mb-3 aspect-video w-full rounded-xl bg-black object-contain" />
-            ) : selected.file_url && selected.asset_type === 'audio' ? (
-              <audio controls src={selected.file_url} className="mb-3 w-full" />
-            ) : selected.file_url && selected.asset_type === 'image' ? (
-              <img src={selected.file_url} alt={selected.title} className="mb-3 h-40 w-full rounded-xl object-contain" />
-            ) : (
-              <div className="mb-3 flex h-32 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-5xl">{selected.icon || '📄'}</div>
-            )}
-            <div className="flex flex-col gap-1">
-              <InfoRow label="Título" value={selected.title} />
-              <InfoRow label="Arquivo" value={selected.filename} />
-              <InfoRow label="Tipo" value={selected.asset_type} />
-              <InfoRow label="Status" value={selected.status} />
-              <InfoRow label="Categoria" value={selected.category || '—'} />
-              <InfoRow label="Local" value={selected.location || '—'} />
-              <InfoRow label="Duração" value={formatDuration(selected.duration)} />
-              <InfoRow label="Tamanho" value={formatSize(selected.file_size)} />
-              <InfoRow label="Pessoas" value={selected.people || '—'} />
-              <InfoRow label="Assuntos" value={selected.subjects || '—'} />
-              <InfoRow label="Data" value={selected.reference_date || '—'} />
-            </div>
-            {selected.description && (
-              <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <p className="mb-1 text-xs font-semibold text-slate-400">Descrição</p>
-                <p className="text-xs text-slate-400">{selected.description}</p>
-              </div>
-            )}
-            {(selected.asset_type === 'video' || selected.asset_type === 'audio') && (
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                <label className="text-[10px] uppercase text-slate-500">IN (segundos)<input type="number" min="0" value={inPoint} onChange={(e) => setInPoint(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" /></label>
-                <label className="text-[10px] uppercase text-slate-500">OUT (segundos)<input type="number" min="0" value={outPoint} onChange={(e) => setOutPoint(e.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200" /></label>
-              </div>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link to={`/workspace?assetId=${selected.id}&title=${encodeURIComponent(selected.title)}`}><Button size="sm">Abrir no workspace</Button></Link>
-              <Link to={`/timeline?assetId=${selected.id}&in=${inPoint}&out=${outPoint}`}><Button variant="secondary" size="sm" icon={<Film size={13} />}>Timeline</Button></Link>
-              <Link to={`/social?assetId=${selected.id}&in=${inPoint}&out=${outPoint}`}><Button variant="secondary" size="sm" icon={<Scissors size={13} />}>Gerar corte</Button></Link>
-              <Link to={`/corp?tab=producao&assetId=${selected.id}`}><Button variant="secondary" size="sm" icon={<Clapperboard size={13} />}>Usar na produção</Button></Link>
-              {selected.file_url && <a href={selected.file_url} download={selected.filename}><Button variant="secondary" size="sm" icon={<Download size={13} />}>Download</Button></a>}
-            </div>
-          </Panel>
-        ) : (
-          <Panel>
-            <EmptyState icon={FileText} title="Selecione um arquivo" description="Clique em um resultado para ver os detalhes." />
-          </Panel>
-        )}
-      </div>
-
-      <SearchTranscriptResults query={query} />
+      {selected?<main className="min-h-0 overflow-y-auto p-3"><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><h2 className="text-sm font-semibold text-slate-100">{selected.title}</h2><span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[8px] text-emerald-300">{STATUS[selected.status]||selected.status}</span></div><p className="text-[9px] text-slate-500">{selected.filename} · {selected.reference_date} · {formatDuration(selected.duration)} · {formatSize(selected.file_size)}</p></div><button className="flex items-center gap-1 rounded border border-sky-700 px-2 py-1 text-[9px] text-sky-300">Editar informações</button></div>
+        <div className="mt-3 grid gap-3 xl:grid-cols-[1.2fr_.8fr]"><section><div className="relative flex aspect-video items-center justify-center border border-slate-800 bg-[radial-gradient(circle_at_55%_40%,#315070,#111827_68%)]"><button className="grid size-12 place-items-center rounded-full border border-white/30 bg-black/30 text-white"><Play size={20}/></button><div className="absolute right-2 top-2 flex gap-1"><button className="rounded bg-black/60 p-1 text-white"><MonitorPlay size={12}/></button><button className="rounded bg-black/60 p-1 text-white"><Maximize2 size={12}/></button></div><div className="absolute inset-x-3 bottom-3 h-1 bg-slate-700"><div className="h-full w-[42%] bg-sky-500"/></div></div><div className="mt-2"><div className="flex h-14 items-end gap-0.5 overflow-hidden border border-slate-800 bg-slate-950 p-1">{Array.from({length:18},(_,i)=><span key={i} className="h-full min-w-8 flex-1 border border-slate-700 bg-gradient-to-b from-slate-700 to-slate-900"/> )}</div><div className="relative mt-1 h-5 border-t border-slate-700"><span className="absolute left-[18%] top-0 h-5 w-px bg-emerald-400"/><span className="absolute left-[42%] top-0 h-5 w-px bg-rose-400"/></div><div className="grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2"><span className="text-[8px] text-slate-500">IN</span><input value={inPoint} onChange={(e)=>setInPoint(e.target.value)} className={inputClass}/><span className="text-[8px] text-slate-500">OUT</span><input value={outPoint} onChange={(e)=>setOutPoint(e.target.value)} className={inputClass}/><span className="text-[9px] text-slate-400">Duração 00:00:28</span></div></div></section>
+          <section className="border border-slate-800 bg-slate-950/45"><nav className="flex border-b border-slate-800">{META_TABS.map((item)=><button key={item} onClick={()=>setMetaTab(item)} className={`px-3 py-2 text-[9px] ${metaTab===item?'border-b-2 border-sky-500 text-sky-300':'text-slate-500'}`}>{item}</button>)}</nav>{metaTab==='Metadados'?<div className="grid grid-cols-[90px_1fr] gap-x-3 gap-y-2 p-3 text-[9px]">{[['Título',selected.title],['Descrição',selected.description],['Programa',selected.program_name||'Jornal da Cidade'],['Categoria',selected.category],['Data',selected.reference_date],['Duração',formatDuration(selected.duration)],['Formato',selected.asset_type],['Localização',selected.location],['Pessoas',selected.people||'—'],['Direitos','Uso interno'],['Status',STATUS[selected.status]||selected.status]].map(([label,value])=><React.Fragment key={label}><span className="text-slate-600">{label}</span><span className="text-slate-300">{value||'—'}</span></React.Fragment>)}<span className="text-slate-600">Tags</span><div className="flex flex-wrap gap-1">{String(selected.subjects||'mídia').split(',').map((tag)=><span key={tag} className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">{tag.trim()}</span>)}</div></div>:<div className="space-y-2 p-3 text-[9px] text-slate-400">{metaTab==='Transcrição'?['00:01:14 A região central recebeu novas obras e melhorias.','00:01:25 O projeto amplia a mobilidade e o acesso.','00:01:38 A entrega está prevista para o próximo semestre.'].map((line)=><p key={line}>{line}</p>):<p>Conteúdo de {metaTab.toLowerCase()} disponível para esta mídia.</p>}</div>}</section></div>
+        <section className="mt-3"><p className="mb-2 text-[9px] font-bold uppercase text-slate-500">Ações com esta mídia</p><div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-7"><Action to={`/corp?tab=producao&assetId=${selected.id}`} Icon={FileText} label="Adicionar ao roteiro"/><Action to={`/timeline?assetId=${selected.id}&in=${inPoint}&out=${outPoint}`} Icon={Film} label="Adicionar à timeline"/><Action to={`/social?asset=${selected.id}&in=${inPoint}&out=${outPoint}`} Icon={Scissors} label="Gerar corte"/><Action to={`/workspace?assetId=${selected.id}`} Icon={FolderOpen} label="Abrir no Workspace"/><Action to={`/corp?tab=producao&assetId=${selected.id}`} Icon={Clapperboard} label="Usar na produção"/><Action Icon={Download} label="Download"/><Action Icon={MoreHorizontal} label="Mais ações"/></div></section>
+      </main>:<div className="grid place-items-center text-slate-500"><div className="text-center"><Search className="mx-auto mb-2"/>Selecione uma mídia</div></div>}
     </div>
-  );
+  </div>;
 }
+
+function Action({to,Icon,label}) { const content=<span className="flex min-h-14 items-center justify-center gap-1 border border-slate-800 bg-slate-950/55 px-2 text-center text-[9px] font-semibold text-slate-300 hover:border-sky-700"><Icon size={13}/>{label}</span>; return to?<Link to={to}>{content}</Link>:<button>{content}</button>; }

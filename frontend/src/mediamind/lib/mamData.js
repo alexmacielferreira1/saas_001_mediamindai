@@ -15,12 +15,12 @@ import {
 // Workspace, Management...) que ainda não foram migradas.
 // ============================================================================
 
-async function loadOrSeed(entityName, mockRows) {
+export async function loadOrSeed(entityName, mockRows) {
   try {
     const list = await base44.entities[entityName].list('-created_date', 200);
     if (list && list.length) return list;
   } catch {
-    return [];
+    return mockRows;
   }
   const seed = mockRows.map(({ id, ...rest }) => rest);
   if (!seed.length) return [];
@@ -28,7 +28,7 @@ async function loadOrSeed(entityName, mockRows) {
     const created = await base44.entities[entityName].bulkCreate(seed);
     return created || [];
   } catch {
-    return [];
+    return mockRows;
   }
 }
 
