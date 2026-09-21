@@ -2,9 +2,10 @@ import re
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import uuid4
-from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 
 from app.api.v1 import router as api_v1_router
@@ -25,7 +26,21 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     settings = get_settings()
     logger = configure_logging()
-    app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
+
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.version,
+        lifespan=lifespan,
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.frontend_url],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(api_v1_router)
 
     @app.middleware("http")
