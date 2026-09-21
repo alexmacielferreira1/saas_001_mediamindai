@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2 } from 'lucide-react';
+import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, moverEtapa, transicionar } from '../../../lib/producaoStore';
 import { baixarXmlPremiere } from '../../../lib/premiereXml';
 import { useAuth } from '../../../auth';
 import { StageDragArea, DraggableStageCard } from '../StageDragList';
+import { EDITING_LANES, laneForEditingStatus, moveEditingLane } from '../../../lib/edicaoWorkflow';
 
 const EDICAO_STATUS = [
   { value: 'rascunho_corte', label: 'Rascunho de corte' },
@@ -60,16 +61,34 @@ export default function EdicaoPage({ disableBack = false }) {
     toast({ title: 'Revisão do produtor solicitada', description: 'O projeto foi pra Em aprovação (revisão intermediária).' });
   }
 
+  function moveToLane(projectId, targetLane) {
+    const project = emEdicao.find((item) => String(item.id) === String(projectId));
+    if (!project) return;
+    const nextStatus = moveEditingLane(project.edicao_status, targetLane);
+    if (!nextStatus) {
+      toast({ title: 'Movimento fora da ordem', description: 'Mova a entrega apenas para a etapa anterior ou seguinte.' });
+      return;
+    }
+    updateProjeto(project.id, { edicao_status: nextStatus });
+    setQueueFilter(targetLane);
+    setSelId(project.id);
+  }
+
+  function changeEditingStatus(status) {
+    if (!sel) return;
+    const targetLane = laneForEditingStatus(status);
+    if (targetLane === laneForEditingStatus(sel.edicao_status)) field('edicao_status', status);
+    else moveToLane(sel.id, targetLane);
+  }
+
   const materiais = sel?.materiais || [];
   const comPrazo = emEdicao.filter((p) => p.edicao_prazo).length;
   const emRevisao = emEdicao.filter((p) => p.edicao_status === 'revisao_interna').length;
   const prontas = emEdicao.filter((p) => p.edicao_status === 'pronto_para_aprovacao').length;
-  const queueCounts = {
-    para_editar: emEdicao.filter((p) => !p.edicao_status || p.edicao_status === 'rascunho_corte').length,
-    em_edicao: emEdicao.filter((p) => p.edicao_status !== 'pronto_para_aprovacao').length,
-    aguardando: prontas,
-  };
-  const filteredQueue = emEdicao.filter((p) => queueFilter === 'aguardando' ? p.edicao_status === 'pronto_para_aprovacao' : queueFilter === 'para_editar' ? (!p.edicao_status || p.edicao_status === 'rascunho_corte') : p.edicao_status !== 'pronto_para_aprovacao');
+  const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => laneForEditingStatus(p.edicao_status) === lane).length]));
+  const filteredQueue = emEdicao.filter((p) => laneForEditingStatus(p.edicao_status) === queueFilter);
+  const selectedLane = sel ? laneForEditingStatus(sel.edicao_status) : null;
+  const selectedLaneIndex = selectedLane ? EDITING_LANES.indexOf(selectedLane) : -1;
   const mediaGroups = [
     { label: 'Vídeos', Icon: Video, count: Math.max(8, materiais.filter((m) => /video|mp4|mov/i.test(`${m.tipo || ''}${m.nome || ''}`)).length), files: materiais.filter((m) => /mp4|mov/i.test(m.nome || '')).map((m) => m.nome).slice(0, 3), fallback: ['CAM_A_001.mp4', 'CAM_B_001.mp4', 'CAM_C_001.mp4'] },
     { label: 'Áudio', Icon: AudioLines, count: 4, files: [], fallback: ['AUDIO_MASTER.wav', 'LAPELA_001.wav', 'AMBIENTE.wav'] },
@@ -120,7 +139,7 @@ export default function EdicaoPage({ disableBack = false }) {
             ['para_editar', 'Para editar', queueCounts.para_editar],
             ['em_edicao', 'Em edição', queueCounts.em_edicao],
             ['aguardando', 'Aguardando aprovação', queueCounts.aguardando],
-          ].map(([id, label, count]) => <button key={id} onClick={() => setQueueFilter(id)} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
+          ].map(([id, label, count]) => <button key={id} onClick={() => setQueueFilter(id)} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();moveToLane(e.dataTransfer.getData('text/plain'),id);}} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
         </div>
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
@@ -265,7 +284,7 @@ export default function EdicaoPage({ disableBack = false }) {
                 </label>
                 <label className="block">
                   <span className="mb-0.5 block text-[9px] uppercase text-slate-500">Status da edição</span>
-                  <select value={sel.edicao_status || 'rascunho_corte'} onChange={(e) => field('edicao_status', e.target.value)} className={inputCls()}>
+                  <select value={sel.edicao_status || 'rascunho_corte'} onChange={(e) => changeEditingStatus(e.target.value)} className={inputCls()}>
                     {EDICAO_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </label>
@@ -334,9 +353,11 @@ export default function EdicaoPage({ disableBack = false }) {
               <button onClick={pedirRevisaoProdutor} className="flex items-center gap-1.5 rounded-md border border-amber-700/50 px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-950/40">
                 <MessageSquare size={12} /> Pedir revisão do produtor
               </button>
-              <button onClick={() => setEtapa(sel.id, 'em_aprovacao')} className="ml-auto flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400">
-                <Send size={12} /> Enviar pra aprovação
-              </button>
+              <div className="ml-auto flex flex-wrap gap-2">
+                {selectedLaneIndex > 0 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex-1])} className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-300 hover:bg-slate-800"><ChevronLeft size={12}/> Etapa anterior</button>}
+                {selectedLaneIndex < EDITING_LANES.length-1 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex+1])} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Próxima etapa <ChevronRight size={12}/></button>}
+                {selectedLane === 'aguardando' && <button onClick={() => setEtapa(sel.id, 'em_aprovacao')} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Send size={12} /> Enviar pra aprovação</button>}
+              </div>
             </div>
           </>
         ) : (
