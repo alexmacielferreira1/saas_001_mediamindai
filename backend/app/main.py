@@ -2,7 +2,7 @@ import re
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import uuid4
-
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
