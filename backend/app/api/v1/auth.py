@@ -47,13 +47,19 @@ def session_payload(session: Session, auth_session) -> SessionResponse:
     )
 
 
+def session_cookie_samesite(settings) -> str:
+    # Production frontend/backend use different origins. Cross-origin fetches need
+    # SameSite=None + Secure so the browser sends the session cookie.
+    return "none" if settings.session_cookie_secure else "lax"
+
+
 def set_session_cookie(response: Response, token: str, settings) -> None:
     response.set_cookie(
         COOKIE_NAME,
         token,
         httponly=True,
         secure=settings.session_cookie_secure,
-        samesite="lax",
+        samesite=session_cookie_samesite(settings),
         max_age=settings.session_hours * 3600,
         path="/",
     )
@@ -152,5 +158,11 @@ def logout(
         auth_session = get_auth_session(session, hash_session_token(token))
         if auth_session is not None and auth_session.revoked_at is None:
             revoke_auth_session(session, auth_session, datetime.now(UTC))
-    response.delete_cookie(COOKIE_NAME, path="/", samesite="lax")
+    settings = get_settings()
+    response.delete_cookie(
+        COOKIE_NAME,
+        path="/",
+        secure=settings.session_cookie_secure,
+        samesite=session_cookie_samesite(settings),
+    )
     response.status_code = 204
