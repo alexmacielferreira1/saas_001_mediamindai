@@ -1,6 +1,6 @@
 # MediaMind AI
 
-Bootstrap local em andamento. Backend FastAPI e PostgreSQL independentes; frontend Base44 preservado. **M0 ainda não aprovado:** ver `docs/PROJECT_STATUS.md`, `docs/FRONTEND_BASELINE.md` e `docs/TESTING_STRATEGY.md`.
+Bootstrap local em andamento. Backend FastAPI e PostgreSQL independentes; frontend Base44 preservado a partir da tag `base44-export`, com sete correções tipadas auditadas no estado atual. **M0 ainda não aprovado:** ver `docs/PROJECT_STATUS.md`, `docs/FRONTEND_BASELINE.md`, `docs/FRONTEND_VALIDATION_MATRIX.md` e `docs/TESTING_STRATEGY.md`.
 
 ## Uso no Windows
 
@@ -14,7 +14,7 @@ Abra PowerShell na pasta deste produto. Python 3.12, Node 24 e Docker Desktop em
 .\scripts\stop.ps1
 ```
 
-`check` pode retornar erro: ele registra todos os gates, incluindo falhas herdadas do frontend. Não ignorar esse resultado para avançar a M1.
+`check` registra todos os gates sem ocultar falhas. Os gates estáticos do frontend passam no estado atual, mas a validação funcional continua bloqueada pela configuração Base44 ausente. Não ignorar esse resultado para avançar a M1.
 
 ## Endereços desta máquina
 
@@ -25,7 +25,7 @@ Abra PowerShell na pasta deste produto. Python 3.12, Node 24 e Docker Desktop em
 
 Configurações ficam no .env local, ignorado pelo Git.
 
-`/health` verifica se a API está viva; `/ready` testa o banco de verdade; `/version` identifica produto e versão. As telas ainda não consomem este backend. A abertura do login não comprova autenticação real nem funções migradas.
+`/health` verifica se a API está viva; `/ready` testa o banco de verdade; `/version` identifica produto e versão. As telas ainda não consomem este backend. A abertura do login ou a navegação no modo demo não comprovam autenticação, persistência nem funções migradas. A matriz de validação separa os fluxos demonstráveis dos que exigem a Base44 real.
 
 ## Comandos disponíveis
 
