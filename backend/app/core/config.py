@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
     app_name: str = PRODUCT
-    environment: Literal["local", "test"] = "local"
+    environment: Literal["local", "test", "staging", "production"] = "local"
     database_url: SecretStr = SecretStr(
         f"postgresql+psycopg://{PRODUCT}:local_dev_only@127.0.0.1:{DEFAULT_DB_PORT}/{PRODUCT}"
     )
@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
+
+    @model_validator(mode="after")
+    def validate_production_auth(self) -> "Settings":
+        if self.environment != "production":
+            return self
+        if not self.session_cookie_secure:
+            raise ValueError("SESSION_COOKIE_SECURE deve ser true em production")
+        if not self.frontend_url.startswith("https://"):
+            raise ValueError("FRONTEND_URL deve usar HTTPS em production")
+        if (
+            self.google_client_id or self.google_client_secret
+        ) and not self.google_redirect_uri.startswith("https://"):
+            raise ValueError("GOOGLE_REDIRECT_URI deve usar HTTPS em production")
+        return self
 
     @property
     def version(self) -> str:
