@@ -43,7 +43,7 @@ Estados de uma publicação por canal pertencem a `Publicações`: `queued`, `sc
 
 A composição segue a referência aprovada:
 
-**Referência visual oficial:** `C:\Users\Alex\Downloads\download.png`  
+**Referência visual oficial:** `C:\Users\Alex\Downloads\download.png`
 **SHA-256:** `87813C5FA51FF371766BB9BBE201605305905C970B01B16B304FA3104076CEC9`
 
 O desenho deve preservar a densidade operacional da imagem: navegação global no topo, fila compacta à esquerda e detalhe completo à direita, sem transformar o conteúdo em cartões grandes e esparsos. Em desktop, a fila ocupa aproximadamente 40% da largura útil e o detalhe 60%; em viewport estreito, a seleção e o detalhe passam para uma sequência navegável sem ocultar ações.
