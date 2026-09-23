@@ -1,8 +1,9 @@
 import React from 'react';
-import { Search, Upload, LayoutDashboard, FileText } from 'lucide-react';
+import { Search, Upload, LayoutDashboard, FileText, PanelsTopLeft } from 'lucide-react';
 import SearchPage from '../../../pages/Search';
 import Ingest from '../../../pages/Ingest';
 import Workspace from '../../../pages/Workspace';
+import Workspace2 from '../../../pages/Workspace2';
 import Timeline from '../../../pages/Timeline';
 
 // As 4 telas comuns que toda função recebe — Pesquisa, Ingest, Workspace e
@@ -11,6 +12,7 @@ export const COMMON_SUBTABS = [
   { id: 'pesquisa', name: 'Pesquisa', Icon: Search },
   { id: 'ingest', name: 'Ingest', Icon: Upload },
   { id: 'workspace', name: 'Workspace', Icon: LayoutDashboard },
+  { id: 'workspace2', name: 'Workspace 2', Icon: PanelsTopLeft },
   { id: 'roteiro', name: 'Modo Roteiro', Icon: FileText },
 ];
 
@@ -20,6 +22,7 @@ export function CommonScreen({ active }) {
   if (active === 'pesquisa') return <div className="h-full overflow-y-auto"><SearchPage /></div>;
   if (active === 'ingest') return <div className="h-full overflow-y-auto"><Ingest /></div>;
   if (active === 'workspace') return <div className="h-full overflow-y-auto"><Workspace /></div>;
+  if (active === 'workspace2') return <div className="h-full overflow-y-auto"><Workspace2 /></div>;
   if (active === 'roteiro') return <div className="h-full overflow-hidden"><Timeline embedded /></div>;
   return null;
 }
