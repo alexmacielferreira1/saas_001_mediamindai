@@ -8,7 +8,7 @@
 
 Criar uma área de Administração completa sem descartar a tela atual de acessos. A área deve permitir administrar usuários individuais, perfis, funções, permissões, equipes, módulos, formulários, integrações, segurança e configurações. Dentro dela, uma bancada de dados em massa permitirá abrir Excel/CSV, inspecionar e corrigir a tabela, mapear colunas, simular mudanças e somente então importar.
 
-O primeiro corte funcional contempla quatro domínios: usuários, mídias, arquivos e configurações. A mesma bancada será usada para exportação, respeitando tenant, permissões, filtros e auditoria.
+O primeiro corte funcional contempla quatro domínios: usuários, mídias, arquivos e configurações. A segunda leva usa o mesmo motor para pessoas, programas, produções e metadados. A mesma bancada será usada para exportação, respeitando tenant, permissões, filtros e auditoria.
 
 ## 2. Restrições e decisões
 
@@ -147,6 +147,10 @@ O motor recebe um `ImportSchema` versionado. Cada schema declara campos, aliases
 - **Mídias:** identificador, título, programa, categoria, data, duração, localização, direitos, tags e metadados; não presume upload do master.
 - **Arquivos:** referência de storage, nome, MIME, tamanho, checksum, vínculo e classificação. A planilha não concede acesso arbitrário a caminhos locais.
 - **Configurações:** chave permitida, escopo, tipo e valor validado. Somente chaves explicitamente importáveis entram no schema.
+- **Pessoas:** identidade profissional, contatos autorizados, vínculo e status, sem criar login implicitamente.
+- **Programas:** identificação, título, categoria, responsáveis e parâmetros editoriais permitidos.
+- **Produções:** programa, episódio, título, estado inicial permitido, responsáveis e datas; não pode saltar etapas protegidas.
+- **Metadados:** chave tipada e allowlist por entidade; não altera campos de segurança, auditoria ou sistema.
 
 ### 5.6 Validação e simulação
 
@@ -304,7 +308,7 @@ Endpoints administrativos de usuários, perfis, equipes e permissões usarão os
 
 - isolamento por tenant em todas as consultas;
 - CSV/XLSX válidos e malformados;
-- schemas dos quatro domínios;
+- schemas dos oito domínios;
 - transformações determinísticas;
 - validação, dry run e diferenças;
 - idempotência, retry, cancelamento e expiração;
@@ -318,7 +322,7 @@ Endpoints administrativos de usuários, perfis, equipes e permissões usarão os
 1. Um administrador abre XLSX/CSV e vê a tabela antes de qualquer escrita.
 2. Pode corrigir células e criar etapas reutilizáveis sem alterar o arquivo original.
 3. Vê todos os erros e o efeito criar/atualizar antes de confirmar.
-4. Importa usuários, mídias, arquivos ou configurações pelo mesmo fluxo.
+4. Importa usuários, mídias, arquivos, configurações, pessoas, programas, produções ou metadados pelo mesmo fluxo.
 5. Recebe resultado por linha e consegue reprocessar rejeitados.
 6. Exporta somente dados autorizados, com filtros e histórico.
 7. A tela atual de acessos continua funcional dentro da nova Administração.
@@ -334,7 +338,8 @@ Endpoints administrativos de usuários, perfis, equipes e permissões usarão os
 6. Adaptador de Usuários e execução auditada.
 7. Histórico, rejeitados e exportação de Usuários.
 8. Adaptadores de Mídias, Arquivos e Configurações.
-9. Perfis, permissões, equipes, módulos e segurança.
-10. Formulários, integrações e configurações restantes.
+9. Adaptadores de Pessoas, Programas, Produções e Metadados.
+10. Perfis, permissões, equipes, módulos e segurança.
+11. Formulários, integrações e configurações restantes.
 
 Cada item será implementado com teste primeiro, verificação completa e commit isolado. Descobertas fora do aceite entram no backlog em vez de ampliar silenciosamente a etapa.
