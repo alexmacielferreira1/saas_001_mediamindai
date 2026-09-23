@@ -299,7 +299,7 @@ Expected: FAIL because components are missing.
 
 - [ ] **Step 3: Implement the reference layout**
 
-Build the left queue and right detail, four detail tabs, checklist progress, targets, editorial content, operational data and sticky footer. Use buttons for rows, visible focus, `aria-live` for start progress and responsive single-column fallback.
+Build the left queue and right detail from `C:\Users\Alex\Downloads\download.png` (SHA-256 `87813C5FA51FF371766BB9BBE201605305905C970B01B16B304FA3104076CEC9`): compact desktop split near 40/60, queue header with `Novo agendamento`, search, four filters and status counters; detail header with thumbnail/player and metadata; four tabs; checklist and channels side by side; compact editorial/operational blocks; and sticky footer with warning plus `Iniciar publicação`, `Editar agendamento`, `Abrir mídia`, `Ver produção`, `Duplicar` and contextual menu. Use buttons for rows, visible focus, `aria-live` for start progress and responsive single-column fallback.
 
 ```jsx
 <StartPublicationButton
@@ -403,7 +403,7 @@ Expected: all pass; no new warning or failure is omitted.
 
 - [ ] **Step 5: Manual QA before any deploy**
 
-Verify with superadmin and restricted user: list/filter/detail, checklist, blockers, complete review, double-click start, cross-tenant denial, handoff to Publicações, responsive layout and comparison with the approved reference image.
+Verify with superadmin and restricted user: list/filter/detail, checklist, blockers, complete review, double-click start, cross-tenant denial, handoff to Publicações and responsive layout. At the desktop reference viewport, compare hierarchy, density, 40/60 split, selected row, metadata header, side-by-side checklist/channels and sticky action bar against `C:\Users\Alex\Downloads\download.png`; record deviations before approval.
 
 - [ ] **Step 6: Commit**
 
@@ -411,4 +411,3 @@ Verify with superadmin and restricted user: list/filter/detail, checklist, block
 git add backend/app/services/demo_seed.py backend/tests/test_demo_seed.py docs/CODEX_BACKLOG.md docs/CODEX_HANDOFF.md docs/PROJECT_STATUS.md
 git commit -m "test(publication): complete ready-to-publish gate"
 ```
-

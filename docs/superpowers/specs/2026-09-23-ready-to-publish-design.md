@@ -43,8 +43,14 @@ Estados de uma publicação por canal pertencem a `Publicações`: `queued`, `sc
 
 A composição segue a referência aprovada:
 
+**Referência visual oficial:** `C:\Users\Alex\Downloads\download.png`  
+**SHA-256:** `87813C5FA51FF371766BB9BBE201605305905C970B01B16B304FA3104076CEC9`
+
+O desenho deve preservar a densidade operacional da imagem: navegação global no topo, fila compacta à esquerda e detalhe completo à direita, sem transformar o conteúdo em cartões grandes e esparsos. Em desktop, a fila ocupa aproximadamente 40% da largura útil e o detalhe 60%; em viewport estreito, a seleção e o detalhe passam para uma sequência navegável sem ocultar ações.
+
 ### Coluna de lista
 
+- título `Para publicar`, descrição curta e botão `Novo agendamento` no mesmo cabeçalho;
 - busca por título, programa ou episódio;
 - filtros por programa, status, canal e data;
 - indicadores para todas, aguardando conferência, conferidas e prontas para iniciar;
@@ -61,11 +67,14 @@ A composição segue a referência aprovada:
 - dados operacionais, última revisão, tentativas e responsável;
 - ações contextuais: editar agendamento, abrir mídia, ver produção e duplicar.
 
+Na guia Conferência, checklist e canais ficam lado a lado. Conteúdo editorial e informações operacionais permanecem em blocos compactos abaixo dos canais, conforme a referência, sem exigir navegação para validar o estado básico.
+
 ### Rodapé operacional
 
 - mostra os bloqueios antes da tentativa;
 - permite concluir conferência somente com itens obrigatórios atendidos;
 - habilita `Iniciar publicação` somente no estado `ready` e com permissão;
+- mantém `Editar agendamento`, `Abrir mídia`, `Ver produção`, `Duplicar` e menu contextual visíveis no mesmo rodapé;
 - durante o início, exibe validação, verificação das contas e criação dos trabalhos;
 - após sucesso, informa o estado de cada destino e oferece `Abrir em Publicações`.
 
