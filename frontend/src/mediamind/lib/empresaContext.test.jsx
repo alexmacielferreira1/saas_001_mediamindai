@@ -161,4 +161,43 @@ describe('local tenant context', () => {
     expect(result.current.current).toBe('all');
     expect(result.current.isGlobal).toBe(true);
   });
+
+  it('uses the local demo tenant without calling protected tenant endpoints', async () => {
+    const demoWrapper = ({ children }) => (
+      <EmpresaProvider user={{
+        id: 'demo-editor',
+        role: 'editor',
+        selected_tenant_id: 'mediamind-demo',
+      }}>
+        {children}
+      </EmpresaProvider>
+    );
+    const { result } = renderHook(() => useEmpresa(), { wrapper: demoWrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(result.current.currentEmpresa).toEqual(expect.objectContaining({
+      id: 'mediamind-demo',
+      nome: 'MediaMind Demo',
+    }));
+
+    await act(() => result.current.setCurrent('all'));
+    expect(result.current.isGlobal).toBe(true);
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the standard demo tenant when an old local session has no tenant id', async () => {
+    const legacyDemoWrapper = ({ children }) => (
+      <EmpresaProvider user={{ id: 'demo-editor', role: 'editor' }}>
+        {children}
+      </EmpresaProvider>
+    );
+    const { result } = renderHook(() => useEmpresa(), { wrapper: legacyDemoWrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.accessible[0].id).toBe('mediamind-demo');
+    expect(requestMock).not.toHaveBeenCalled();
+  });
 });

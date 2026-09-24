@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Sparkles, Archive, Search, Scissors, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth';
+import { isLocalDemoAvailable } from '../lib/demoAccess';
 import { ROLE_CATALOG } from '../lib/roleCatalog';
 
 // Quadrinhos de acesso rápido por papel. Cada um preenche o e-mail do papel;
@@ -17,6 +18,11 @@ const ROLE_TILES = [
     .filter((c) => c.id !== 'admin')
     .map((c) => ({ label: c.name, email: `${c.id}@mediamind.ai`, accent: false })),
 ];
+const GOOGLE_ERROR_MESSAGES = {
+  account_not_allowed: 'Conta Google não autorizada neste MediaMind.',
+  access_denied: 'Você cancelou a entrada com Google.',
+  not_configured: 'Login Google indisponível neste ambiente.',
+};
 
 export default function Login() {
   const { login, loginDemo } = useAuth();
@@ -25,14 +31,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const googleError = new URLSearchParams(window.location.search).get('google_error');
   const [error, setError] = useState(
-    googleError === 'account_not_allowed'
-      ? 'Conta Google não autorizada neste MediaMind.'
-      : googleError
-        ? 'Não foi possível concluir o login com Google.'
-        : '',
+    googleError ? GOOGLE_ERROR_MESSAGES[googleError] || 'Não foi possível concluir o login com Google.' : '',
   );
   const [loading, setLoading] = useState(false);
   const passwordRef = useRef(null);
+  const showDemoAccess = isLocalDemoAvailable({
+    dev: import.meta.env.DEV,
+    hostname: window.location.hostname,
+  });
 
   async function doLogin(mail, pass) {
     setError('');
@@ -166,44 +172,48 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Acesso rápido por papel */}
-          <div className="mt-8">
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <ShieldCheck size={13} className="text-sky-400" />
-              Acesso rápido por papel
-            </div>
-            <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-              Clique num papel para entrar diretamente na conta demo correspondente.
-            </p>
-            <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
-              {ROLE_TILES.map((t) => (
-                <button
-                  key={t.email}
-                  type="button"
-                  onClick={() => quickLogin(t)}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
-                    t.accent
-                      ? 'border-sky-600/50 bg-sky-500/10 hover:bg-sky-500/20'
-                      : 'border-slate-800 bg-slate-950/40 hover:border-slate-600 hover:bg-slate-800/60'
-                  }`}
-                >
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
-                    t.accent ? 'bg-sky-500/20 text-sky-300' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {t.accent ? <ShieldCheck size={14} /> : t.label.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className={`truncate text-xs font-semibold ${t.accent ? 'text-slate-100' : 'text-slate-300'}`}>{t.label}</p>
-                    <p className="truncate text-[10px] text-slate-500">{t.email}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+          {showDemoAccess && (
+            <>
+              {/* Acesso rápido por papel permanece disponível somente no ambiente local. */}
+              <div className="mt-8">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <ShieldCheck size={13} className="text-sky-400" />
+                  Acesso rápido por papel
+                </div>
+                <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                  Clique num papel para entrar diretamente na conta demo correspondente.
+                </p>
+                <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1">
+                  {ROLE_TILES.map((t) => (
+                    <button
+                      key={t.email}
+                      type="button"
+                      onClick={() => quickLogin(t)}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
+                        t.accent
+                          ? 'border-sky-600/50 bg-sky-500/10 hover:bg-sky-500/20'
+                          : 'border-slate-800 bg-slate-950/40 hover:border-slate-600 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                        t.accent ? 'bg-sky-500/20 text-sky-300' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {t.accent ? <ShieldCheck size={14} /> : t.label.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`truncate text-xs font-semibold ${t.accent ? 'text-slate-100' : 'text-slate-300'}`}>{t.label}</p>
+                        <p className="truncate text-[10px] text-slate-500">{t.email}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          <p className="mt-6 text-xs text-slate-500">
-            Modo demonstração local — as contas serão removidas somente na produção.
-          </p>
+              <p className="mt-6 text-xs text-slate-500">
+                Modo demonstração local — as contas não são exibidas em produção.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -83,6 +83,27 @@ def test_login_sets_opaque_http_only_cookie_and_returns_safe_profile(auth_client
     assert "password_hash" not in response.text
 
 
+def test_login_cookie_is_secure_for_cross_origin_https(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr(
+        "app.api.v1.auth.get_settings",
+        lambda: SimpleNamespace(
+            session_cookie_secure=True,
+            session_hours=8,
+            login_max_attempts=5,
+            login_lockout_minutes=15,
+        ),
+    )
+
+    response = login(client)
+
+    assert response.status_code == 200
+    cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=none" in cookie
+
+
 @pytest.mark.parametrize(
     ("email", "password"),
     [
@@ -270,7 +291,64 @@ def test_google_callback_rejects_invalid_state(auth_client, monkeypatch):
     assert response.headers["location"].endswith("/login?google_error=invalid_state")
 
 
-@pytest.mark.parametrize("provider_error", [KeyError("access_token"), __import__("httpx").ConnectError("offline")])
+def test_google_callback_handles_denied_consent_without_validation_error(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr("app.api.v1.auth.get_settings", google_settings)
+    client.cookies.set("mediamind_google_state", "expected", path="/api/v1/auth/google")
+
+    response = client.get(
+        "/api/v1/auth/google/callback?error=access_denied&state=expected",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith("/login?google_error=access_denied")
+    assert "mediamind_google_state=" in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_google_callback_handles_missing_configuration_without_server_error(
+    auth_client, monkeypatch
+):
+    client, _ = auth_client
+    settings = google_settings()
+    settings.google_client_secret = None
+    monkeypatch.setattr("app.api.v1.auth.get_settings", lambda: settings)
+    client.cookies.set("mediamind_google_state", "expected", path="/api/v1/auth/google")
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=abc&state=expected",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith("/login?google_error=not_configured")
+    assert "mediamind_google_state=" in response.headers["set-cookie"]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+def test_google_callback_rejects_missing_authorization_code(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr("app.api.v1.auth.get_settings", google_settings)
+    monkeypatch.setattr(
+        "app.api.v1.auth.exchange_google_code",
+        AsyncMock(return_value={"email": "alexmacielferreira@gmail.com", "email_verified": True}),
+    )
+    client.cookies.set("mediamind_google_state", "expected", path="/api/v1/auth/google")
+
+    response = client.get(
+        "/api/v1/auth/google/callback?state=expected",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith("/login?google_error=provider_failed")
+    assert "mediamind_session=" not in response.headers.get("set-cookie", "")
+
+
+@pytest.mark.parametrize(
+    "provider_error", [KeyError("access_token"), __import__("httpx").ConnectError("offline")]
+)
 def test_google_callback_handles_provider_failure(auth_client, monkeypatch, provider_error):
     client, _ = auth_client
     monkeypatch.setattr("app.api.v1.auth.get_settings", google_settings)
@@ -291,7 +369,9 @@ def test_google_callback_handles_provider_failure(auth_client, monkeypatch, prov
 def test_google_callback_rejects_unverified_or_inactive_account(auth_client, monkeypatch):
     client, testing_session = auth_client
     monkeypatch.setattr("app.api.v1.auth.get_settings", google_settings)
-    exchange = AsyncMock(return_value={"email": "alexmacielferreira@gmail.com", "email_verified": False})
+    exchange = AsyncMock(
+        return_value={"email": "alexmacielferreira@gmail.com", "email_verified": False}
+    )
     monkeypatch.setattr("app.api.v1.auth.exchange_google_code", exchange)
     client.cookies.set("mediamind_google_state", "expected", path="/api/v1/auth/google")
     unverified = client.get(
@@ -311,23 +391,53 @@ def test_google_callback_rejects_unverified_or_inactive_account(auth_client, mon
     assert inactive.headers["location"].endswith("/login?google_error=account_not_allowed")
 
 
+def test_google_callback_rejects_account_without_active_membership(auth_client, monkeypatch):
+    client, testing_session = auth_client
+    monkeypatch.setattr("app.api.v1.auth.get_settings", google_settings)
+    monkeypatch.setattr(
+        "app.api.v1.auth.exchange_google_code",
+        AsyncMock(return_value={"email": "alexmacielferreira@gmail.com", "email_verified": True}),
+    )
+    with testing_session() as session:
+        membership = session.query(Membership).one()
+        membership.is_active = False
+        session.commit()
+    client.cookies.set("mediamind_google_state", "expected", path="/api/v1/auth/google")
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=abc&state=expected",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith("/login?google_error=account_not_allowed")
+    assert "mediamind_session=" not in response.headers.get("set-cookie", "")
+
+
 def test_google_exchange_posts_code_and_loads_verified_profile(monkeypatch):
     from app.services.google_oauth import exchange_google_code
 
     token_response = MagicMock()
     token_response.json.return_value = {"access_token": "access-token"}
     user_response = MagicMock()
-    user_response.json.return_value = {"email": "alexmacielferreira@gmail.com", "email_verified": True}
+    user_response.json.return_value = {
+        "email": "alexmacielferreira@gmail.com",
+        "email_verified": True,
+    }
     client = AsyncMock()
     client.post.return_value = token_response
     client.get.return_value = user_response
     context = AsyncMock()
     context.__aenter__.return_value = client
-    monkeypatch.setattr("app.services.google_oauth.httpx.AsyncClient", MagicMock(return_value=context))
+    monkeypatch.setattr(
+        "app.services.google_oauth.httpx.AsyncClient", MagicMock(return_value=context)
+    )
 
-    profile = asyncio.run(exchange_google_code(
-        code="code", client_id="client", client_secret="secret", redirect_uri="callback"
-    ))
+    profile = asyncio.run(
+        exchange_google_code(
+            code="code", client_id="client", client_secret="secret", redirect_uri="callback"
+        )
+    )
 
     assert profile["email_verified"] is True
     token_response.raise_for_status.assert_called_once()

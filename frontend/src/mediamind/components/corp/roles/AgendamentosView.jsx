@@ -4,6 +4,7 @@ import PanelSplit from '../../ui/PanelSplit';
 import CorpAgenda from '../CorpAgenda';
 import AgendamentoDetail from './AgendamentoDetail';
 import { useProducaoProjetos, addProjeto } from '../../../lib/producaoStore';
+import { isProjectInProductionStage } from '../../../lib/productionWorkflow';
 import { MOCK_CORP_PRODUCTIONS } from '../../../data';
 
 const PROGRAMAS = Array.from(new Set(MOCK_CORP_PRODUCTIONS.map((p) => p.programa)));
@@ -15,7 +16,7 @@ const PROGRAMAS = Array.from(new Set(MOCK_CORP_PRODUCTIONS.map((p) => p.programa
 // Painéis redimensionáveis e com toggle pra ligar/desligar (lembrado entre sessões).
 export default function AgendamentosView() {
   const projetos = useProducaoProjetos();
-  const gravacoes = projetos.filter((p) => p.etapa === 'gravacao');
+  const gravacoes = projetos.filter((p) => isProjectInProductionStage(p, 'agendamentos'));
 
   const [selectedId, setSelectedId] = useState(() => {
     const incomplete = gravacoes.find((p) => !p.gravacao?.data);
@@ -45,7 +46,7 @@ export default function AgendamentosView() {
 
   function nova() {
     const id = addProjeto({
-      etapa: 'gravacao',
+      etapa: 'agendamentos',
       programa: PROGRAMAS[0] || '',
       titulo: 'Nova gravação',
       gravacao: { data: '', horario: '', estudio: 'Estúdio 1' },

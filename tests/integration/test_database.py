@@ -2,6 +2,8 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from app.db.session import engine
 from app.models.identity import AuthSession, Membership, Tenant, User
 from app.security.sessions import hash_session_token, new_session_token
@@ -18,12 +20,10 @@ pytestmark = [
 
 
 def test_database_and_migration_revision():
+    expected_head = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
     with engine.connect() as connection:
         assert connection.scalar(text("select 1")) == 1
-        assert (
-            connection.scalar(text("select version_num from alembic_version"))
-            == "0002_identity_tenancy"
-        )
+        assert connection.scalar(text("select version_num from alembic_version")) == expected_head
 
 
 def test_identity_records_round_trip_in_postgresql():

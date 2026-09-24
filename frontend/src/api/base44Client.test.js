@@ -1,28 +1,60 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./httpClient', () => ({ request: vi.fn() }));
-import { request } from './httpClient';
-import { base44 } from './base44Client';
+const requestMock = vi.fn();
+const readDemoMock = vi.fn();
 
-describe('local entity compatibility client', () => {
-  beforeEach(() => request.mockReset());
+vi.mock('./httpClient', () => ({ request: (...args) => requestMock(...args) }));
+vi.mock('../mediamind/lib/demoAccess', () => ({
+  readLocalDemoSession: (...args) => readDemoMock(...args),
+}));
 
-  it('maps list and filter to tenant record endpoints', async () => {
-    request.mockResolvedValueOnce({ records: [{ id: '1' }] }).mockResolvedValueOnce({ records: [{ id: '2' }] });
-    await expect(base44.entities.AgendaEvento.list('ordem', 20)).resolves.toEqual([{ id: '1' }]);
-    await expect(base44.entities.AgendaEvento.filter({ status: 'open' }, '-ordem', 10)).resolves.toEqual([{ id: '2' }]);
-    expect(request).toHaveBeenNthCalledWith(1, '/records/AgendaEvento?sort=ordem&limit=20');
-    expect(request).toHaveBeenNthCalledWith(2, '/records/AgendaEvento/query', {
-      method: 'POST', body: { filters: { status: 'open' }, sort: '-ordem', limit: 10 },
+describe('compatibility entity client', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    requestMock.mockReset();
+    readDemoMock.mockReset();
+  });
+
+  it('keeps local demo entity operations in memory without protected HTTP calls', async () => {
+    readDemoMock.mockReturnValue({ id: 'demo-editor' });
+    const { base44 } = await import('./base44Client');
+
+    await expect(base44.entities.AgendaEvento.list('ordem', 20)).resolves.toEqual([]);
+    const created = await base44.entities.AgendaEvento.create({ titulo: 'Pauta demo' });
+    await expect(base44.entities.AgendaEvento.list('ordem', 20)).resolves.toEqual([created]);
+    await expect(base44.entities.AgendaEvento.update(created.id, { titulo: 'Pauta revisada' }))
+      .resolves.toEqual(expect.objectContaining({ titulo: 'Pauta revisada' }));
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the backend when there is no local demo session', async () => {
+    readDemoMock.mockReturnValue(null);
+    requestMock.mockResolvedValue({ records: [{ id: 'record-1' }] });
+    const { base44 } = await import('./base44Client');
+
+    await expect(base44.entities.Asset.list('ordem', 20)).resolves.toEqual([{ id: 'record-1' }]);
+    expect(requestMock).toHaveBeenCalledWith('/records/Asset?sort=ordem&limit=20');
+  });
+
+  it('routes legacy AI functions through the local backend adapter', async () => {
+    readDemoMock.mockReturnValue(null);
+    requestMock.mockResolvedValue({ data: { reply: 'ok' } });
+    const { base44 } = await import('./base44Client');
+
+    await expect(base44.functions.invoke('assistente_ia', { message: 'Olá' }))
+      .resolves.toEqual({ data: { reply: 'ok' } });
+    expect(requestMock).toHaveBeenCalledWith('/ai/functions/assistente_ia', {
+      method: 'POST',
+      body: { message: 'Olá' },
     });
   });
 
-  it('notifies subscribers after a local mutation', async () => {
-    const listener = vi.fn();
-    const unsubscribe = base44.entities.AgendaEvento.subscribe(listener);
-    request.mockResolvedValue({ id: '1', titulo: 'Pauta' });
-    await base44.entities.AgendaEvento.create({ titulo: 'Pauta' });
-    expect(listener).toHaveBeenCalledWith({ type: 'create', data: { id: '1', titulo: 'Pauta' } });
-    unsubscribe();
+  it('reports AI as unavailable in local demo mode without calling the backend', async () => {
+    readDemoMock.mockReturnValue({ id: 'demo-editor' });
+    const { base44 } = await import('./base44Client');
+
+    await expect(base44.functions.invoke('assistente_ia', { message: 'Olá' }))
+      .rejects.toThrow('IA ainda não configurada no modo demo.');
+    expect(requestMock).not.toHaveBeenCalled();
   });
 });

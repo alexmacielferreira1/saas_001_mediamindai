@@ -31,6 +31,7 @@ describe('MediaMind local authentication', () => {
   beforeEach(() => {
     requestMock.mockReset();
     localStorage.clear();
+    vi.unstubAllEnvs();
   });
 
   it('maps the server session without storing a token in browser storage', () => {
@@ -134,7 +135,17 @@ describe('MediaMind local authentication', () => {
     expect(localStorage.getItem('mm_demo_session_v1')).toContain('alexmacielferreira@gmail.com');
   });
 
-  it('restores a local demo session after a page reload while the API is offline', async () => {
+  it.each([undefined, '   '])('rejects a demo login without an e-mail: %s', async (email) => {
+    requestMock.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await expect(result.current.loginDemo(email)).rejects.toThrow('Informe um e-mail para o acesso demo.');
+    expect(result.current.user).toBeNull();
+    expect(localStorage.getItem('mm_demo_session_v1')).toBeNull();
+  });
+
+  it('restores a local demo session after a page reload without calling the protected API', async () => {
     localStorage.setItem('mm_demo_session_v1', JSON.stringify({
       id: 'demo-editor',
       email: 'editor@mediamind.ai',
@@ -150,6 +161,46 @@ describe('MediaMind local authentication', () => {
 
     expect(result.current.user).toEqual(expect.objectContaining({ role: 'editor' }));
     expect(result.current.error).toBe('');
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('discards a corrupted local demo session and reports the unavailable backend', async () => {
+    localStorage.setItem('mm_demo_session_v1', '{invalid-json');
+    requestMock.mockRejectedValueOnce(new Error('offline'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(localStorage.getItem('mm_demo_session_v1')).toBeNull();
+    expect(result.current.user).toBeNull();
+    expect(result.current.error).toBe('Não foi possível verificar sua sessão. Tente novamente.');
+  });
+
+  it('builds readable names for the other local demo profiles', async () => {
+    requestMock.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(() => result.current.loginDemo('editor_video@mediamind.ai'));
+
+    expect(result.current.user).toEqual(expect.objectContaining({
+      name: 'Editor Video',
+      role: 'editor_video',
+    }));
+  });
+
+  it('blocks demo login when the frontend is not running in local development', async () => {
+    vi.stubEnv('DEV', false);
+    requestMock.mockRejectedValueOnce(
+      new ApiError({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }),
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await expect(result.current.loginDemo('editor@mediamind.ai')).rejects.toThrow(
+      'O acesso rápido está disponível somente no ambiente local.',
+    );
+    expect(result.current.user).toBeNull();
   });
 
   it('clears local identity even when logout cannot reach the backend', async () => {
@@ -178,6 +229,17 @@ describe('MediaMind local authentication', () => {
     unmount();
 
     await act(async () => resolveSession(session));
+
+    expect(requestMock).toHaveBeenCalledWith('/auth/session');
+  });
+
+  it('ignores a late session failure after the provider is unmounted', async () => {
+    let rejectSession;
+    requestMock.mockReturnValueOnce(new Promise((_, reject) => { rejectSession = reject; }));
+    const { unmount } = renderHook(() => useAuth(), { wrapper });
+    unmount();
+
+    await act(async () => rejectSession(new Error('offline')));
 
     expect(requestMock).toHaveBeenCalledWith('/auth/session');
   });

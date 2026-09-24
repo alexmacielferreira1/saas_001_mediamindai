@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, moverEtapa, transicionar } from '../../../lib/producaoStore';
+import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, transicionar } from '../../../lib/producaoStore';
 import { baixarXmlPremiere } from '../../../lib/premiereXml';
 import { useAuth } from '../../../auth';
 import { StageDragArea, DraggableStageCard } from '../StageDragList';
-import { EDITING_LANES, laneForEditingStatus, moveEditingLane } from '../../../lib/edicaoWorkflow';
+import { EDITING_LANES, editingTransition, laneForEditingProject, laneForEditingStatus } from '../../../lib/edicaoWorkflow';
 
 const EDICAO_STATUS = [
   { value: 'rascunho_corte', label: 'Rascunho de corte' },
@@ -27,7 +27,7 @@ export default function EdicaoPage({ disableBack = false }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const editorName = user?.name || 'Editor';
-  const emEdicao = projetos.filter((p) => p.etapa === 'em_edicao');
+  const emEdicao = projetos.filter((p) => ['para_editar', 'em_edicao', 'aguardando_aprovacao', 'aguardando'].includes(p.etapa));
   const [selId, setSelId] = useState(emEdicao[0]?.id ?? null);
   const sel = emEdicao.find((p) => p.id === selId) || emEdicao[0] || null;
   const [ajusteOpen, setAjusteOpen] = useState(false);
@@ -35,7 +35,7 @@ export default function EdicaoPage({ disableBack = false }) {
   const [queueFilter, setQueueFilter] = useState('em_edicao');
 
   function nova() {
-    const id = addProjeto({ etapa: 'em_edicao', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
+    const id = addProjeto({ etapa: 'para_editar', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
     setSelId(id);
   }
   function field(name, value) { if (sel) updateProjeto(sel.id, { [name]: value }); }
@@ -49,7 +49,7 @@ export default function EdicaoPage({ disableBack = false }) {
   function enviarAjuste() {
     if (!ajusteObs.trim()) return;
     updateProjeto(sel.id, { grav_status: 'problema' });
-    transicionar(sel.id, 'gravacao', { quem: editorName, obs: `Ajuste solicitado pela edição: ${ajusteObs.trim()}` });
+    transicionar(sel.id, 'gravacoes', { quem: editorName, obs: `Ajuste solicitado pela edição: ${ajusteObs.trim()}` });
     setAjusteOpen(false);
     setAjusteObs('');
     toast({ title: 'Ajuste solicitado ao videomaker', description: 'O projeto voltou pra Gravação com a observação.' });
@@ -57,19 +57,19 @@ export default function EdicaoPage({ disableBack = false }) {
 
   function pedirRevisaoProdutor() {
     updateProjeto(sel.id, { revisao_intermediaria: true });
-    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Revisão intermediária do produtor solicitada' });
-    toast({ title: 'Revisão do produtor solicitada', description: 'O projeto foi pra Em aprovação (revisão intermediária).' });
+    transicionar(sel.id, 'aguardando_aprovacao', { quem: editorName, obs: 'Revisão intermediária do produtor solicitada' });
+    toast({ title: 'Revisão do produtor solicitada', description: 'O projeto foi para Aguardando aprovação.' });
   }
 
   function moveToLane(projectId, targetLane) {
     const project = emEdicao.find((item) => String(item.id) === String(projectId));
     if (!project) return;
-    const nextStatus = moveEditingLane(project.edicao_status, targetLane);
-    if (!nextStatus) {
+    const transition = editingTransition(project, targetLane);
+    if (!transition) {
       toast({ title: 'Movimento fora da ordem', description: 'Mova a entrega apenas para a etapa anterior ou seguinte.' });
       return;
     }
-    updateProjeto(project.id, { edicao_status: nextStatus });
+    updateProjeto(project.id, transition);
     setQueueFilter(targetLane);
     setSelId(project.id);
   }
@@ -85,9 +85,9 @@ export default function EdicaoPage({ disableBack = false }) {
   const comPrazo = emEdicao.filter((p) => p.edicao_prazo).length;
   const emRevisao = emEdicao.filter((p) => p.edicao_status === 'revisao_interna').length;
   const prontas = emEdicao.filter((p) => p.edicao_status === 'pronto_para_aprovacao').length;
-  const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => laneForEditingStatus(p.edicao_status) === lane).length]));
-  const filteredQueue = emEdicao.filter((p) => laneForEditingStatus(p.edicao_status) === queueFilter);
-  const selectedLane = sel ? laneForEditingStatus(sel.edicao_status) : null;
+  const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => laneForEditingProject(p) === lane).length]));
+  const filteredQueue = emEdicao.filter((p) => laneForEditingProject(p) === queueFilter);
+  const selectedLane = sel ? laneForEditingProject(sel) : null;
   const selectedLaneIndex = selectedLane ? EDITING_LANES.indexOf(selectedLane) : -1;
   const mediaGroups = [
     { label: 'Vídeos', Icon: Video, count: Math.max(8, materiais.filter((m) => /video|mp4|mov/i.test(`${m.tipo || ''}${m.nome || ''}`)).length), files: materiais.filter((m) => /mp4|mov/i.test(m.nome || '')).map((m) => m.nome).slice(0, 3), fallback: ['CAM_A_001.mp4', 'CAM_B_001.mp4', 'CAM_C_001.mp4'] },
@@ -144,7 +144,12 @@ export default function EdicaoPage({ disableBack = false }) {
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
         </div>
-        <StageDragArea onMove={moverEtapa} disableBack={disableBack} className="flex-1 min-h-0">
+        <StageDragArea onMove={(id, dir) => {
+          const project = emEdicao.find((item) => String(item.id) === String(id));
+          const laneIndex = project ? EDITING_LANES.indexOf(laneForEditingProject(project)) : -1;
+          const target = EDITING_LANES[laneIndex + dir];
+          if (target) moveToLane(id, target);
+        }} disableBack={disableBack} className="flex-1 min-h-0">
           <div className="h-full overflow-y-auto">
             {filteredQueue.length === 0 ? (
               <p className="px-3 py-10 text-center text-[11px] text-slate-500">{disableBack ? 'Nada em edição. Crie uma nova edição pra começar.' : 'Nada em edição. Arraste um projeto da Gravação pra cá, ou crie uma nova edição.'}</p>

@@ -25,6 +25,8 @@ export default defineConfig({
         'src/api/permissions.js',
         'src/mediamind/auth.jsx',
         'src/mediamind/lib/empresaContext.jsx',
+        'src/mediamind/lib/gravacoesUpload.js',
+        'src/mediamind/lib/productionWorkflow.js',
       ],
       thresholds: {
         branches: 100,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Briefcase, Bell, Settings,
+  Search, Bell, Settings,
   LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Home, Layers, Film, Calendar, Send, ShieldCheck, BarChart3, LayoutDashboard, FileText, Clapperboard, Scissors, CheckCircle2, Flag, Share2, PanelsTopLeft,
 } from 'lucide-react';
@@ -12,31 +12,30 @@ import CommandPalette from './components/CommandPalette';
 import QuickActionsButton from './components/QuickActionsButton';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 
-const NAV_GROUPS = [
+export const NAV_GROUPS = [
   {
     group: 'Principal',
     items: [
       { to: '/', label: 'Início', icon: Home, end: true },
-      { to: '/corp', label: 'IAcervo Corp', icon: Briefcase },
     ],
   },
   {
     group: 'Produção',
     items: [
       { to: '/corp?tab=producao&sub=overview', label: 'Visão geral', icon: LayoutDashboard, sub: 'overview' },
-      { to: '/corp?tab=producao&sub=pesquisa', label: 'Pesquisa', icon: Search, sub: 'pesquisa' },
       { to: '/corp?tab=producao&sub=ingest', label: 'Ingest', icon: Layers, sub: 'ingest' },
-      { to: '/corp?tab=producao&sub=workspace', label: 'Workspace', icon: Film, sub: 'workspace' },
       { to: '/corp?tab=producao&sub=workspace2', label: 'Workspace 2', icon: PanelsTopLeft, sub: 'workspace2' },
-      { to: '/corp?tab=producao&sub=roteiro', label: 'Modo roteiro', icon: FileText, sub: 'roteiro' },
       { to: '/corp?tab=producao&sub=rascunhos', label: 'Rascunhos', icon: FileText, sub: 'rascunhos' },
       { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
       { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
+      { to: '/corp?tab=producao&sub=para_editar', label: 'Material para editar', icon: Film, sub: 'para_editar' },
       { to: '/corp?tab=producao&sub=em_edicao', label: 'Em edição', icon: Scissors, sub: 'em_edicao' },
+      { to: '/corp?tab=producao&sub=aguardando_aprovacao', label: 'Aguardando aprovação', icon: Calendar, sub: 'aguardando_aprovacao' },
       { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em aprovação', icon: CheckCircle2, sub: 'em_aprovacao' },
       { to: '/corp?tab=producao&sub=finalizado', label: 'Finalizado', icon: Flag, sub: 'finalizado' },
       { to: '/corp?tab=producao&sub=redes_sociais', label: 'Redes sociais', icon: Share2, sub: 'redes_sociais' },
-      { to: '/corp?tab=producao&sub=publicacoes', label: 'Publicações', icon: Send, sub: 'publicacoes' },
+      { to: '/corp?tab=producao&sub=para_publicar', label: 'Para publicação', icon: Send, sub: 'para_publicar' },
+      { to: '/corp?tab=producao&sub=publicado', label: 'Publicado', icon: Send, sub: 'publicado' },
       { to: '/corp?tab=producao&sub=analytics', label: 'Analytics', icon: BarChart3, sub: 'analytics' },
     ],
   },

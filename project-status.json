@@ -4,86 +4,81 @@
   "milestones": {
     "M0": {
       "name": "bootstrap",
-      "status": "blocked",
+      "status": "failed",
       "checks": {
         "backend_lint": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:15.388696+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/backend_lint.log"
+          "status": "failed",
+          "updated_at": "2026-09-24T00:20:15.271056+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/backend_lint.log"
         },
         "backend_format": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:15.634376+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/backend_format.log"
+          "status": "failed",
+          "updated_at": "2026-09-24T00:20:15.841010+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/backend_format.log"
         },
         "unit_tests": {
           "status": "passed",
-          "updated_at": "2026-09-19T19:54:15.891872+00:00",
+          "updated_at": "2026-09-24T00:20:17.365015+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/unit_tests.log"
         },
         "migration": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:18.865469+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/migration.log"
+          "status": "failed",
+          "updated_at": "2026-09-24T00:21:16.095512+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/migration.log"
         },
         "database_integration": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:20.638211+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/database_integration.log"
+          "status": "failed",
+          "updated_at": "2026-09-24T00:21:22.491083+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/database_integration.log"
         },
         "dependency_consistency": {
           "status": "passed",
-          "updated_at": "2026-09-19T19:54:22.707949+00:00",
+          "updated_at": "2026-09-24T00:21:33.099425+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/dependency_consistency.log"
         },
         "frontend_build": {
           "status": "passed",
-          "updated_at": "2026-09-19T19:54:23.830914+00:00",
+          "updated_at": "2026-09-24T00:21:37.155978+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_build.log"
         },
         "frontend_lint": {
           "status": "passed",
-          "updated_at": "2026-09-19T19:54:29.751896+00:00",
+          "updated_at": "2026-09-24T00:21:43.184726+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_lint.log"
         },
         "frontend_typecheck": {
           "status": "passed",
-          "updated_at": "2026-09-19T19:54:37.203748+00:00",
+          "updated_at": "2026-09-24T00:21:50.741832+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_typecheck.log"
         },
+        "frontend_unit_tests": {
+          "status": "failed",
+          "updated_at": "2026-09-24T00:21:54.326370+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/frontend_unit_tests.log"
+        },
         "http_smoke": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:40.497285+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/http_smoke.log"
+          "status": "failed",
+          "updated_at": "2026-09-24T00:22:11.088318+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/http_smoke.log"
         },
         "original_frontend_integrity": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:41.393901+00:00",
-          "notes": "288 original files; 7 approved typed corrections; 0 unapproved changes or missing. "
+          "status": "failed",
+          "updated_at": "2026-09-24T00:22:14.471020+00:00",
+          "notes": "288 original files; 7 approved typed corrections; 62 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js"
         },
         "frontend_functional_validation": {
           "status": "blocked",
-          "updated_at": "2026-09-20T11:05:00+00:00",
-          "notes": "Identity/tenancy journey no longer uses Base44, but browser validation after migration is pending because Docker/PostgreSQL was unavailable. See docs/FRONTEND_VALIDATION_MATRIX.md."
-        },
-        "local_identity_unit_coverage": {
-          "status": "passed",
-          "updated_at": "2026-09-20T11:05:00+00:00",
-          "notes": "Backend 114 passed at 100% line/branch coverage; frontend 46 passed at 100% configured migrated-code coverage. Includes tenant-scoped permissions, restricted Google OAuth, real Management aggregates and Acervo without simulated monitoring values."
-        },
-        "local_identity_postgres_browser": {
-          "status": "blocked",
-          "updated_at": "2026-09-20T11:05:00+00:00",
-          "notes": "WSL responded, but com.docker.service remained stopped and could not be started by this session; migration/seed/browser proof must be rerun when Docker is operational."
+          "updated_at": "2026-09-24T00:22:14.471020+00:00",
+          "notes": "Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient."
         },
         "git_clean_at_check": {
-          "status": "passed",
-          "updated_at": "2026-09-19T19:54:41.393901+00:00",
+          "status": "pending",
+          "updated_at": "2026-09-24T00:22:14.471020+00:00",
           "notes": "Snapshot before writing this report. Verify and commit reviewed work separately."
         }
       },
-      "updated_at": "2026-09-20T11:05:00+00:00",
-      "notes": "Partial M0; identity/tenancy slice implemented outside Base44, but PostgreSQL/browser evidence and remaining migration gates are unresolved. Do not declare M1 complete."
+      "updated_at": "2026-09-24T00:22:14.471020+00:00",
+      "notes": "Partial M0; unresolved gates. Do not advance to M1."
     },
     "M1": {
       "name": "foundation",

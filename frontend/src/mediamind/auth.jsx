@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { ApiError, request } from '../api/httpClient';
 import { USER_ROLE_LABELS } from './data';
+import { isLocalDemoAvailable } from './lib/demoAccess';
 import { hasCorpAccess } from './lib/permissions';
 
 const AuthContext = createContext(null);
@@ -9,7 +10,7 @@ const DEMO_SESSION_KEY = 'mm_demo_session_v1';
 const DEMO_TENANT_ID = 'mediamind-demo';
 
 function localDemoAvailable() {
-  return import.meta.env.DEV && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  return isLocalDemoAvailable({ dev: import.meta.env.DEV, hostname: window.location.hostname });
 }
 
 function readDemoUser() {
@@ -23,7 +24,7 @@ function readDemoUser() {
 }
 
 function createDemoUser(email) {
-  const normalized = String(email || '').trim().toLowerCase();
+  const normalized = email.trim().toLowerCase();
   const account = normalized.split('@')[0];
   const role = normalized === 'alexmacielferreira@gmail.com' ? 'superadmin' : account;
   return {
@@ -60,6 +61,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
+    const restoredDemoUser = readDemoUser();
+    if (restoredDemoUser) {
+      setUser(restoredDemoUser);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     request('/auth/session')
       .then((session) => {
         if (active) {
@@ -69,11 +78,6 @@ export function AuthProvider({ children }) {
       })
       .catch((reason) => {
         if (!active) return;
-        const demoUser = readDemoUser();
-        if (demoUser) {
-          setUser(demoUser);
-          return;
-        }
         if (!(reason instanceof ApiError && reason.status === 401)) {
           setError('Não foi possível verificar sua sessão. Tente novamente.');
         }
@@ -99,6 +103,9 @@ export function AuthProvider({ children }) {
   const loginDemo = useCallback(async (email) => {
     if (!localDemoAvailable()) {
       throw new Error('O acesso rápido está disponível somente no ambiente local.');
+    }
+    if (typeof email !== 'string' || !email.trim()) {
+      throw new Error('Informe um e-mail para o acesso demo.');
     }
     const demoUser = createDemoUser(email);
     localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(demoUser));

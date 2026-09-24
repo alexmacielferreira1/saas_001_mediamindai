@@ -4,10 +4,14 @@ import { MOCK_CORP_PRESENTERS, MOCK_CORP_PRODUCTIONS } from '../../data';
 import { useProducaoProjetos, updateProjeto, addProjeto, setEtapa, moverEtapa } from '../../lib/producaoStore';
 import { StageDragArea, DraggableStageCard } from './StageDragList';
 import BriefingChecklistPanel from './BriefingChecklistPanel';
+import { isProjectInProductionStage } from '../../lib/productionWorkflow';
 
 const STATUS = {
   rascunho: { label: 'Rascunho', tone: 'bg-slate-500/15 text-slate-300' },
   gravacao: { label: 'Gravação agendada', tone: 'bg-sky-500/15 text-sky-300' },
+  agendamentos: { label: 'Agendamento', tone: 'bg-sky-500/15 text-sky-300' },
+  gravacoes: { label: 'Gravação', tone: 'bg-amber-500/15 text-amber-300' },
+  para_editar: { label: 'Para editar', tone: 'bg-violet-500/15 text-violet-300' },
   em_edicao: { label: 'Em edição', tone: 'bg-violet-500/15 text-violet-300' },
 };
 
@@ -96,7 +100,7 @@ function RascunhoActions({ proj, onMarcar, onRegistrar }) {
       </button>
     );
   }
-  if (proj.etapa === 'gravacao') {
+  if (isProjectInProductionStage(proj, 'agendamentos')) {
     if (proj.grav_status === 'gravada') {
       return (
         <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -119,7 +123,7 @@ function RascunhoActions({ proj, onMarcar, onRegistrar }) {
 
 export default function RascunhosPage({ newDraftSignal = 0 }) {
   const projetos = useProducaoProjetos();
-  const meus = projetos.filter((p) => ['rascunho', 'gravacao', 'em_edicao'].includes(p.etapa));
+  const meus = projetos.filter((p) => ['rascunho', 'agendamentos', 'gravacoes', 'para_editar', 'em_edicao'].includes(isProjectInProductionStage(p, 'agendamentos') ? 'agendamentos' : p.etapa));
   const [selectedId, setSelectedId] = useState(meus[0]?.id);
   const selected = meus.find((p) => p.id === selectedId) || meus[0];
 
@@ -149,7 +153,7 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
   function removePresenter(i) { updateProjeto(selected.id, { apresentadores: selected.apresentadores.filter((_, idx) => idx !== i) }); }
   function loadDefaults() { updateProjeto(selected.id, { apresentadores: MOCK_CORP_PRESENTERS.map((p) => ({ nome: p.nome, cg: p.cg })) }); }
 
-  const editable = selected.etapa === 'rascunho' || selected.etapa === 'gravacao';
+  const editable = selected.etapa === 'rascunho' || isProjectInProductionStage(selected, 'agendamentos');
   const st = STATUS[selected.etapa];
 
   return (
@@ -212,8 +216,8 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
           <RascunhoActions
             key={selected.id}
             proj={selected}
-            onMarcar={(g) => updateProjeto(selected.id, { etapa: 'gravacao', gravacao: { data: g.data, horario: g.horario, estudio: g.estudio }, pauta: g.pauta, equipe: g.equipe })}
-            onRegistrar={() => updateProjeto(selected.id, { gravada: true, grav_status: 'gravada' })}
+            onMarcar={(g) => updateProjeto(selected.id, { etapa: 'agendamentos', grav_status: 'agendada', gravacao: { data: g.data, horario: g.horario, estudio: g.estudio }, pauta: g.pauta, equipe: g.equipe })}
+            onRegistrar={() => updateProjeto(selected.id, { etapa: 'gravacoes', gravada: true, grav_status: 'gravada' })}
           />
         </div>
       </div>

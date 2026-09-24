@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from secrets import token_urlsafe
+from secrets import compare_digest, token_urlsafe
 from typing import Annotated
 
 import httpx
@@ -111,15 +111,28 @@ def google_start(request: Request):
 
 @router.get("/google/callback")
 async def google_callback(
-    code: str,
-    state: str,
     session: DbSession,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
     oauth_state: Annotated[str | None, Cookie(alias=GOOGLE_STATE_COOKIE)] = None,
 ):
     settings = get_settings()
     error_base = f"{settings.frontend_url}/login?google_error="
-    if not oauth_state or state != oauth_state:
-        return RedirectResponse(error_base + "invalid_state")
+
+    def failed(reason: str) -> RedirectResponse:
+        response = RedirectResponse(error_base + reason)
+        response.delete_cookie(GOOGLE_STATE_COOKIE, path="/api/v1/auth/google")
+        return response
+
+    if not oauth_state or not state or not compare_digest(state, oauth_state):
+        return failed("invalid_state")
+    if error:
+        return failed("access_denied" if error == "access_denied" else "provider_failed")
+    if not settings.google_client_id or not settings.google_client_secret:
+        return failed("not_configured")
+    if not code:
+        return failed("provider_failed")
     try:
         profile = await exchange_google_code(
             code=code,
@@ -128,11 +141,16 @@ async def google_callback(
             redirect_uri=settings.google_redirect_uri,
         )
     except (httpx.HTTPError, KeyError):
-        return RedirectResponse(error_base + "provider_failed")
+        return failed("provider_failed")
     email = normalize_email(profile.get("email", ""))
     user = get_user_by_email(session, email)
-    if not profile.get("email_verified") or user is None or not user.is_active:
-        return RedirectResponse(error_base + "account_not_allowed")
+    if (
+        not profile.get("email_verified")
+        or user is None
+        or not user.is_active
+        or not list_active_memberships(session, user.id)
+    ):
+        return failed("account_not_allowed")
     result = create_session_for_user(session, user, session_hours=settings.session_hours)
     response = RedirectResponse(f"{settings.frontend_url}/corp?tab=producao")
     set_session_cookie(response, result.token, settings)

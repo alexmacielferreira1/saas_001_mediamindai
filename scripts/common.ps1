@@ -10,14 +10,31 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$Exe failed (exit $LASTEXITCODE)." }
 }
 
+function Invoke-AppPython {
+    param([string[]]$Arguments)
+    $previousPythonPath = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = Join-Path $ProjectRoot 'backend'
+        Invoke-Native $PythonExe $Arguments
+    } finally {
+        $env:PYTHONPATH = $previousPythonPath
+    }
+}
+
 function Assert-Python {
     if (-not (Test-Path -LiteralPath $PythonExe)) { throw 'Run scripts/setup.ps1 first.' }
 }
 
 function Get-LocalConfig {
     Assert-Python
-    $result = & $PythonExe -c 'import json; from app.core.config import get_settings; s=get_settings(); print(json.dumps(dict(service=s.app_name,api_port=s.api_port,frontend_port=s.frontend_port)))'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not read local settings.' }
+    $previousPythonPath = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = Join-Path $ProjectRoot 'backend'
+        $result = & $PythonExe -c 'import json; from app.core.config import get_settings; s=get_settings(); print(json.dumps(dict(service=s.app_name,api_port=s.api_port,frontend_port=s.frontend_port)))'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not read local settings.' }
+    } finally {
+        $env:PYTHONPATH = $previousPythonPath
+    }
     return $result | ConvertFrom-Json
 }
 

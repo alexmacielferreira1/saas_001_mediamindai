@@ -1,37 +1,73 @@
 import { request } from './httpClient';
+import { readLocalDemoSession } from '../mediamind/lib/demoAccess';
 
 const listeners = new Map();
+const demoEntities = new Map();
 function emit(entity, event) {
   for (const listener of listeners.get(entity) || []) listener(event);
 }
 
 function entityClient(entity) {
   const path = `/records/${encodeURIComponent(entity)}`;
+  const demoList = () => demoEntities.get(entity) || [];
+  const saveDemoList = (records) => demoEntities.set(entity, records);
   return {
     async list(sort = '-created_date', limit = 100) {
+      if (readLocalDemoSession()) return demoList().slice(0, limit);
       return (await request(`${path}?sort=${encodeURIComponent(sort)}&limit=${limit}`)).records;
     },
     async filter(filters = {}, sort = '-created_date', limit = 100) {
+      if (readLocalDemoSession()) return demoList().slice(0, limit);
       return (await request(`${path}/query`, { method: 'POST', body: { filters, sort, limit } })).records;
     },
-    get: (id) => request(`${path}/${encodeURIComponent(id)}`),
+    get: (id) => readLocalDemoSession()
+      ? Promise.resolve(demoList().find((record) => String(record.id) === String(id)) || null)
+      : request(`${path}/${encodeURIComponent(id)}`),
     async create(data) {
+      if (readLocalDemoSession()) {
+        const record = { ...data, id: `demo-${entity}-${crypto.randomUUID()}` };
+        saveDemoList([...demoList(), record]);
+        emit(entity, { type: 'create', data: record });
+        return record;
+      }
       const record = await request(path, { method: 'POST', body: { data } });
       emit(entity, { type: 'create', data: record });
       return record;
     },
     async bulkCreate(items) {
+      if (readLocalDemoSession()) {
+        const records = items.map((data) => ({ ...data, id: `demo-${entity}-${crypto.randomUUID()}` }));
+        saveDemoList([...demoList(), ...records]);
+        for (const record of records) emit(entity, { type: 'create', data: record });
+        return records;
+      }
       const records = (await request(`${path}/bulk`, { method: 'POST', body: { items } })).records;
       for (const record of records) emit(entity, { type: 'create', data: record });
       return records;
     },
     async update(id, data) {
+      if (readLocalDemoSession()) {
+        const current = demoList().find((record) => String(record.id) === String(id)) || { id };
+        const record = { ...current, ...data, id: current.id };
+        saveDemoList(demoList().some((item) => String(item.id) === String(id))
+          ? demoList().map((item) => (String(item.id) === String(id) ? record : item))
+          : [...demoList(), record]);
+        emit(entity, { type: 'update', data: record });
+        return record;
+      }
       const record = await request(`${path}/${encodeURIComponent(id)}`, { method: 'PATCH', body: { data } });
       emit(entity, { type: 'update', data: record });
       return record;
     },
-    updateMany: (filters, data) => request(`${path}/bulk`, { method: 'PATCH', body: { filters, data } }),
+    updateMany: (filters, data) => readLocalDemoSession()
+      ? Promise.resolve([])
+      : request(`${path}/bulk`, { method: 'PATCH', body: { filters, data } }),
     async delete(id) {
+      if (readLocalDemoSession()) {
+        saveDemoList(demoList().filter((record) => String(record.id) !== String(id)));
+        emit(entity, { type: 'delete', id });
+        return;
+      }
       await request(`${path}/${encodeURIComponent(id)}`, { method: 'DELETE' });
       emit(entity, { type: 'delete', id });
     },
@@ -51,6 +87,14 @@ function unavailable(message) {
 
 export const base44 = {
   entities: new Proxy({}, { get: (_target, entity) => entityClient(String(entity)) }),
+  functions: {
+    invoke: (functionName, body = {}) => readLocalDemoSession()
+      ? unavailable('IA ainda não configurada no modo demo.')
+      : request(
+        `/ai/functions/${encodeURIComponent(functionName)}`,
+        { method: 'POST', body },
+      ),
+  },
   integrations: { Core: { UploadPublicFile({ file }) {
     const body = new FormData();
     body.append('file', file);

@@ -54,33 +54,53 @@ def test_seed_creates_idempotent_permission_bootstrap_for_administrators(db_sess
     memberships = db_session.scalars(select(Membership)).all()
 
     assert sorted(item.code for item in permissions) == [
+        "assets.write",
+        "clips.write",
         "permissions.manage",
+        "production.write",
+        "publishing.write",
+        "review.write",
         "users.manage",
         "users.manage_admin",
     ]
     assert [item.name for item in groups] == [
         "Administradores de permissões",
         "Gestores CEDOC",
+        "Operadores de conteúdo",
     ]
-    admin_group, cedoc_group = groups
+    admin_group, cedoc_group, operator_group = groups
     assert sorted(item.code for item in admin_group.permissions) == [
+        "assets.write",
+        "clips.write",
         "permissions.manage",
+        "production.write",
+        "publishing.write",
+        "review.write",
         "users.manage",
         "users.manage_admin",
     ]
     assert sorted(item.code for item in cedoc_group.permissions) == [
+        "assets.write",
         "permissions.manage",
         "users.manage",
+    ]
+    assert sorted(item.code for item in operator_group.permissions) == [
+        "assets.write",
+        "clips.write",
+        "production.write",
+        "publishing.write",
+        "review.write",
     ]
     admin_roles = {item.role for item in memberships if item.permission_group_id == admin_group.id}
     cedoc_roles = {item.role for item in memberships if item.permission_group_id == cedoc_group.id}
     assert admin_roles == {"admin", "superadmin"}
     assert cedoc_roles == {"cedoc"}
-    assert all(
-        item.permission_group_id is None
-        for item in memberships
-        if item.role not in {"admin", "cedoc", "superadmin"}
-    )
+    operator_roles = {
+        item.role for item in memberships if item.permission_group_id == operator_group.id
+    }
+    assert operator_roles == {
+        role for _, _, role in DEMO_ACCOUNTS if role not in {"admin", "cedoc", "superadmin"}
+    }
 
 
 @pytest.mark.parametrize("environment", ["production", "staging", ""])

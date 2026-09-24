@@ -5,25 +5,51 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
 from app.core.config import ROOT
 from app.core.errors import PublicError
+from app.db.session import get_session
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
+from app.tenancy.permissions import require_permission
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
+DbSession = Annotated[Session, Depends(get_session)]
 UPLOAD_ROOT = ROOT / ".runtime" / "uploads"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 ALLOWED_SUFFIXES = {
-    ".aac", ".avi", ".csv", ".doc", ".docx", ".jpeg", ".jpg", ".m4a",
-    ".mov", ".mp3", ".mp4", ".ogg", ".pdf", ".png", ".ppt", ".pptx",
-    ".txt", ".wav", ".webm", ".webp", ".xls", ".xlsx",
+    ".aac",
+    ".avi",
+    ".csv",
+    ".doc",
+    ".docx",
+    ".jpeg",
+    ".jpg",
+    ".m4a",
+    ".mov",
+    ".mp3",
+    ".mp4",
+    ".ogg",
+    ".pdf",
+    ".png",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".wav",
+    ".webm",
+    ".webp",
+    ".xls",
+    ".xlsx",
 }
 
 
 @router.post("", status_code=201)
-async def upload_file(current: Authenticated, file: Annotated[UploadFile, File()]):
+async def upload_file(
+    current: Authenticated, session: DbSession, file: Annotated[UploadFile, File()]
+):
     membership = require_membership(current)
+    require_permission(session, current, "assets.write")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
         raise PublicError(422, "INVALID_FILE_TYPE", "Tipo de arquivo não permitido.")

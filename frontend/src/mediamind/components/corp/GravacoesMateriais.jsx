@@ -6,19 +6,13 @@ import { base44 } from '@/api/base44Client';
 import { useProducaoProjetos, updateProjeto, transicionar } from '../../lib/producaoStore';
 import { useModoTransicao, setModoTransicao, TRANSITION_MODES } from '../../lib/producaoConfig';
 import { useAuth } from '../../auth';
+import { uploadRecordingFiles } from '../../lib/gravacoesUpload';
+import { isProjectInProductionStage } from '../../lib/productionWorkflow';
 
 // Gravações (Produção): o videomaker vê a gravação atribuída, marca o status
 // (agendada → gravando → gravada), sobe os arquivos gravados (drag-and-drop/ingest)
 // e sinaliza problema/regravação. A transição pra Em edição segue o modo da empresa:
 // editor puxa (padrão), auto-avança ao subir material, ou produtor designa editor.
-function formatBytes(b) {
-  if (!b) return '—';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0; let n = b;
-  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  return `${n.toFixed(1)} ${u[i]}`;
-}
-
 const GRAV_STATUS = {
   agendada: { label: 'Agendada', tone: 'bg-sky-500/15 text-sky-300' },
   gravando: { label: 'Gravando', tone: 'bg-amber-500/15 text-amber-300' },
@@ -33,7 +27,7 @@ export default function GravacoesMateriais() {
   const { toast } = useToast();
   const editorName = user?.name || 'Editor';
 
-  const lista = projetos.filter((p) => p.etapa === 'gravacao');
+  const lista = projetos.filter((p) => isProjectInProductionStage(p, 'gravacoes'));
   const [selectedId, setSelectedId] = useState(lista[0]?.id ?? null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -61,32 +55,23 @@ export default function GravacoesMateriais() {
     if (!files.length || !rec) return;
     setUploading(true);
     try {
-      const novos = [];
-      for (const file of files) {
-        let fileUrl = '';
-        try {
-          const uploaded = await base44.integrations.Core.UploadPublicFile({ file });
-          fileUrl = uploaded?.file_url || '';
-        } catch {
-          // No modo local a mídia continua disponível nesta sessão mesmo sem o serviço de upload.
-          fileUrl = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(file) : '';
-        }
-        novos.push({
-          id: `m${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          nome: file.name,
-          caminhoRelativo: file.webkitRelativePath || file.name,
-          pastaOrigem: file.webkitRelativePath?.split('/')[0] || '',
-          tamanho: formatBytes(file.size),
-          recebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          url: fileUrl,
+      const { uploaded: novos, failed } = await uploadRecordingFiles(
+        files,
+        (file) => base44.integrations.Core.UploadPublicFile({ file }),
+      );
+      const jaTem = (rec.materiais || []).length > 0;
+      if (novos.length) updateProjeto(rec.id, { materiais: [...(rec.materiais || []), ...novos] });
+      if (failed.length) {
+        toast({
+          title: `${failed.length} arquivo(s) não enviado(s)`,
+          description: `Os arquivos confirmados foram preservados. Revise: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}`,
+          variant: 'destructive',
         });
       }
-      const jaTem = (rec.materiais || []).length > 0;
-      updateProjeto(rec.id, { materiais: [...(rec.materiais || []), ...novos] });
-      // Auto-avanço: ao subir o primeiro material, o projeto cai em Em edição sozinho.
-      if (modo === 'auto_avanca' && !jaTem && rec.etapa === 'gravacao') {
-        transicionar(rec.id, 'em_edicao', { quem: editorName, obs: 'Auto-avanço ao subir material' });
-        toast({ title: 'Material recebido — projeto em edição', description: `${rec.titulo} avançou automaticamente.` });
+      // Auto-avanço: ao subir o primeiro material, o projeto entra na fila Para editar.
+      if (modo === 'auto_avanca' && !jaTem && novos.length && !failed.length && isProjectInProductionStage(rec, 'gravacoes')) {
+        transicionar(rec.id, 'para_editar', { quem: editorName, obs: 'Auto-avanço ao subir material' });
+        toast({ title: 'Material recebido — projeto para editar', description: `${rec.titulo} avançou automaticamente.` });
       }
     } finally {
       setUploading(false);
@@ -99,11 +84,11 @@ export default function GravacoesMateriais() {
 
   function enviarEdicao() {
     if (modo === 'editor_puxa') {
-      transicionar(rec.id, 'em_edicao', { quem: editorName, obs: 'Editor puxou pra editar' });
+      transicionar(rec.id, 'para_editar', { quem: editorName, obs: 'Editor puxou pra fila de edição' });
       updateProjeto(rec.id, { editor: editorName });
     } else if (modo === 'produtor_designa') {
       if (!editorDesignado) return;
-      transicionar(rec.id, 'em_edicao', { quem: editorDesignado, obs: 'Produtor designou editor' });
+      transicionar(rec.id, 'para_editar', { quem: editorDesignado, obs: 'Produtor designou editor' });
       updateProjeto(rec.id, { editor: editorDesignado });
     }
     const next = lista.find((p) => p.id !== rec.id);
@@ -113,7 +98,7 @@ export default function GravacoesMateriais() {
   function registrarProblema() {
     if (!problemaObs.trim()) return;
     updateProjeto(rec.id, { grav_status: 'problema' });
-    transicionar(rec.id, 'gravacao', { quem: editorName, obs: `Problema/regravação: ${problemaObs.trim()}` });
+    transicionar(rec.id, 'gravacoes', { quem: editorName, obs: `Problema/regravação: ${problemaObs.trim()}` });
     setProblemaOpen(false);
     setProblemaObs('');
     toast({ title: 'Problema sinalizado', description: 'O produtor/videomaker foi avisado da regravação.' });
@@ -210,7 +195,7 @@ export default function GravacoesMateriais() {
               </label>
             </div>
             <span className="max-w-xl text-[9px] leading-4 text-slate-600">Ao apontar uma pasta, todos os arquivos e subpastas são preparados para o ingest, mantendo a organização original.</span>
-          </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Novo Ingest será criado automaticamente</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Ao enviar as mídias, o sistema valida os arquivos, calcula checksum, gera proxy, processa com IA e vincula tudo ao projeto.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação dos arquivos','Cálculo de checksum','Geração de proxy','Processamento com IA','Vínculo automático ao projeto'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
+          </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Envio privado ao servidor</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Somente arquivos confirmados pela API aparecem como recebidos. O limite atual é 100 MB por arquivo. Pacote Ingest, proxy, IA e arquivos maiores ainda dependem de implementação.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação do tipo','Limite por arquivo','Checksum no servidor','Aviso de falhas sem falso sucesso'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
 
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Materiais recebidos ({materiais.length})</p>

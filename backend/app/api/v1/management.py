@@ -21,12 +21,26 @@ def _status(data: dict[str, Any]) -> str:
 @router.get("/overview")
 def management_overview(current: Authenticated, session: DbSession):
     membership = require_membership(current)
-    if membership.role not in {"admin", "superadmin", "cedoc", "editor", "producer", "reporter", "journalist"}:
-        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil não acessa os indicadores do acervo.")
+    if membership.role not in {
+        "admin",
+        "superadmin",
+        "cedoc",
+        "editor",
+        "producer",
+        "reporter",
+        "journalist",
+    }:
+        raise PublicError(
+            403, "PERMISSION_DENIED", "Seu perfil não acessa os indicadores do acervo."
+        )
 
-    rows = list(session.scalars(select(TenantRecord).where(
-        TenantRecord.tenant_id == membership.tenant_id,
-    )))
+    rows = list(
+        session.scalars(
+            select(TenantRecord).where(
+                TenantRecord.tenant_id == membership.tenant_id,
+            )
+        )
+    )
     publications = [row for row in rows if row.entity_type == "Publicacao"]
     assets = [row for row in rows if row.entity_type == "Asset"]
     jobs = [row for row in rows if row.entity_type == "ProcessamentoJob"]
@@ -49,9 +63,13 @@ def management_overview(current: Authenticated, session: DbSession):
         ),
         key=lambda item: item["date"],
     )[:8]
-    indexed = sum(_status(row.data) in {"indexado", "indexed", "concluido", "completed"} for row in assets)
+    indexed = sum(
+        _status(row.data) in {"indexado", "indexed", "concluido", "completed"} for row in assets
+    )
     failures = sum(_status(row.data) in {"falha", "failed", "erro", "error"} for row in assets)
-    storage_bytes = sum(int(row.data.get("file_size") or row.data.get("size") or 0) for row in assets)
+    storage_bytes = sum(
+        int(row.data.get("file_size") or row.data.get("size") or 0) for row in assets
+    )
 
     return {
         "publications": {
@@ -70,9 +88,14 @@ def management_overview(current: Authenticated, session: DbSession):
         },
         "processing": {
             "total": len(jobs),
-            "active": sum(_status(row.data) in {"processando", "processing", "queued", "na_fila"} for row in jobs),
+            "active": sum(
+                _status(row.data) in {"processando", "processing", "queued", "na_fila"}
+                for row in jobs
+            ),
             "completed": sum(_status(row.data) in {"concluido", "completed"} for row in jobs),
-            "failed": sum(_status(row.data) in {"falha", "failed", "erro", "error"} for row in jobs),
+            "failed": sum(
+                _status(row.data) in {"falha", "failed", "erro", "error"} for row in jobs
+            ),
         },
         "audit_events": sum(row.entity_type == "LogAuditoria" for row in rows),
         "services": [

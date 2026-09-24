@@ -16,6 +16,7 @@ function toEmpresa(tenant) {
 }
 
 export function EmpresaProvider({ user, children }) {
+  const isDemo = user?.id?.startsWith('demo-') || false;
   const initialCurrent = user?.selected_tenant_id ?? (user?.role === 'admin' || user?.role === 'superadmin' ? 'all' : null);
   const [empresas, setEmpresas] = useState([]);
   const [current, setCurrentState] = useState(initialCurrent);
@@ -24,6 +25,15 @@ export function EmpresaProvider({ user, children }) {
 
   useEffect(() => {
     let active = true;
+    if (isDemo) {
+      setEmpresas([toEmpresa({
+        id: user.selected_tenant_id || 'mediamind-demo',
+        name: 'MediaMind Demo',
+        role: user.role,
+      })]);
+      setLoading(false);
+      return () => { active = false; };
+    }
     request('/tenants')
       .then((payload) => {
         if (active) setEmpresas(payload.tenants.map(toEmpresa));
@@ -37,20 +47,24 @@ export function EmpresaProvider({ user, children }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isDemo, user?.role, user?.selected_tenant_id]);
 
   const isAdmin = empresas.some((empresa) => ['admin', 'superadmin'].includes(empresa.role));
   const accessible = empresas;
 
   const setCurrent = useCallback(async (id) => {
     setError('');
+    if (isDemo) {
+      setCurrentState(id);
+      return;
+    }
     const tenantId = id === 'all' ? null : id;
     await request('/auth/session/tenant', {
       method: 'PUT',
       body: { tenant_id: tenantId },
     });
     setCurrentState(id);
-  }, []);
+  }, [isDemo]);
 
   const clear = useCallback(() => setCurrentState(null), []);
   const currentEmpresa = current === 'all' ? null : empresas.find((item) => item.id === current) || null;

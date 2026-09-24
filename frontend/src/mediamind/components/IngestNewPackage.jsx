@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { uploadFile } from '../../api/uploads';
 import { base44 } from '../../api/base44Client';
+import { pendingUploadEntries } from '../lib/ingestUploadPlan';
 
 const PROGRAMS = ['Jornal do Meio Dia', 'Jornal da Noite', 'Especial Enchentes RS', 'Documentário Turismo', 'Campanha Institucional'];
 const STEPS = ['Criar pacote', 'Adicionar arquivos', 'Revisar e iniciar'];
@@ -45,8 +46,9 @@ export default function IngestNewPackage() {
     if (!name || files.length === 0 || uploading) return;
     setUploading(true);
     setUploadError('');
-    try {
-      for (const entry of files) {
+    const queue = pendingUploadEntries(files);
+    for (const entry of queue) {
+      try {
         setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploading' } : item));
         const uploaded = await uploadFile(entry.file);
         await base44.entities.Asset.create({
@@ -56,13 +58,15 @@ export default function IngestNewPackage() {
           package_name: name, folder, program_name: program, ai_status: aiEnabled ? 'pending' : 'disabled',
         });
         setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploaded' } : item));
+      } catch {
+        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'failed' } : item));
+        setUploadError('O envio foi interrompido. Os arquivos concluídos foram preservados; tente novamente para continuar dos restantes.');
+        setUploading(false);
+        return;
       }
-      navigate('/ingest');
-    } catch {
-      setUploadError('Não foi possível enviar todos os arquivos. Os concluídos foram preservados; tente novamente.');
-    } finally {
-      setUploading(false);
     }
+    setUploading(false);
+    navigate('/ingest');
   }
 
   return (
@@ -201,7 +205,7 @@ export default function IngestNewPackage() {
                       <Icon size={15} className="text-slate-400" />
                       <span className="flex-1 text-sm text-slate-200">{f.name}</span>
                       <span className="text-xs text-slate-500">{f.size}</span>
-                      <span className="text-[10px] uppercase text-sky-400">{f.status === 'uploaded' ? 'Enviado' : f.status === 'uploading' ? 'Enviando' : 'Pendente'}</span>
+                      <span className={`text-[10px] uppercase ${f.status === 'failed' ? 'text-rose-400' : 'text-sky-400'}`}>{f.status === 'uploaded' ? 'Enviado' : f.status === 'uploading' ? 'Enviando' : f.status === 'failed' ? 'Falhou · tentar novamente' : 'Pendente'}</span>
                       <button onClick={() => removeFile(f.id)} className="text-slate-600 hover:text-rose-400">✕</button>
                     </div>
                   );
@@ -296,7 +300,7 @@ export default function IngestNewPackage() {
           disabled={uploading || (step === 3 && (!name || files.length === 0))}
           className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-sky-400"
         >
-          {uploading ? 'Enviando…' : step === 3 ? 'Iniciar envio' : 'Criar pacote e continuar →'}
+          {uploading ? 'Enviando…' : step === 3 ? uploadError ? 'Continuar envio' : 'Iniciar envio' : 'Criar pacote e continuar →'}
         </button>
       </div>
     </div>

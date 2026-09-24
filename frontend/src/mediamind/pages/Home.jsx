@@ -5,11 +5,17 @@ import {
   Search, Sparkles, Activity, Archive, Clock, ArrowRight,
   CalendarClock, AlertTriangle, Send, Film,
   CalendarDays,
+  Users,
 } from 'lucide-react';
 import { getMyDashboard } from '../../api/dashboard';
 import { Panel, Stat, Badge, StatusBadge, Button } from '../ui';
 import { formatDuration } from '../data';
 import { useMamData } from '../lib/mamData';
+import { useAuth } from '../auth';
+
+export function canViewProfiles(user) {
+  return user?.role === 'superadmin';
+}
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -19,6 +25,7 @@ function getGreeting() {
 }
 
 export default function Home() {
+  const { user } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const { projects, assets, tasks, scripts, savedSearches, recentActivity, loading } = useMamData();
   const today = new Intl.DateTimeFormat('pt-BR', {
@@ -69,9 +76,16 @@ export default function Home() {
             <Clock size={14} /> {today}
           </p>
         </div>
-        <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-          Dados de demonstração
-        </span>
+        <div className="flex items-center gap-2">
+          {canViewProfiles(user) && (
+            <Link to="/corp" className="inline-flex items-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-300 hover:bg-sky-500/20">
+              <Users size={16} /> Perfis
+            </Link>
+          )}
+          <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+            Dados de demonstração
+          </span>
+        </div>
       </header>
 
       {/* Top stats */}

@@ -33,19 +33,28 @@ import RoleInicio from '../RoleInicio';
 // Cada guia mostra os projetos do seu contexto — rascunho → gravação → edição →
 // aprovação → finalizado → cortes → publicações → analytics. O fluxo que antes
 // era espalhado pelo menu do Corp (Gravação, Edição, Aprovações) mora aqui agora.
-const SUBTABS = [
+export const PRODUCTION_SUBTABS = [
   { id: 'overview', name: 'Visão geral', Icon: LayoutDashboard },
   ...COMMON_SUBTABS,
   { id: 'rascunhos', name: 'Rascunhos', Icon: FileText },
   { id: 'agendamentos', name: 'Agendamentos', Icon: Calendar },
   { id: 'gravacoes', name: 'Gravações', Icon: Clapperboard },
+  { id: 'para_editar', name: 'Material para editar', Icon: Scissors },
   { id: 'em_edicao', name: 'Em edição', Icon: Scissors },
+  { id: 'aguardando_aprovacao', name: 'Aguardando aprovação', Icon: CalendarClock },
   { id: 'em_aprovacao', name: 'Em aprovação', Icon: CheckCircle2 },
   { id: 'finalizado', name: 'Finalizado', Icon: Flag },
   { id: 'redes_sociais', name: 'Redes sociais', Icon: Share2 },
-  { id: 'publicacoes', name: 'Publicações', Icon: Send },
+  { id: 'para_publicar', name: 'Para publicação', Icon: Send },
+  { id: 'publicado', name: 'Publicado', Icon: Send },
   { id: 'analytics', name: 'Analytics', Icon: BarChart3 },
 ];
+
+const SUBTABS = PRODUCTION_SUBTABS;
+
+export function normalizeProductionSubtab(subtab) {
+  return subtab === 'publicacoes' ? 'para_publicar' : subtab;
+}
 
 export default function ProdutoraPage() {
   const [sub, setSub] = useState('overview');
@@ -55,7 +64,7 @@ export default function ProdutoraPage() {
   const tabs = useMemo(() => filterActiveSubtabs('producer', SUBTABS), []);
   useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, [sub, tabs]);
   useEffect(() => {
-    const requested = params.get('sub');
+    const requested = normalizeProductionSubtab(params.get('sub'));
     if (requested && tabs.some((tab) => tab.id === requested)) setSub(requested);
   }, [params, tabs]);
 
@@ -86,7 +95,7 @@ export default function ProdutoraPage() {
 
   function navigateWithMedia(target, payload) {
     if (payload) setMediaHandoff(payload);
-    setSub(target);
+    setSub(normalizeProductionSubtab(target));
   }
 
   function updateEvent(id, patch) {
@@ -160,11 +169,14 @@ export default function ProdutoraPage() {
         {sub === 'rascunhos' && <div className="h-full"><RascunhosPage newDraftSignal={newDraftSignal} /></div>}
         {sub === 'agendamentos' && <div className="h-full"><AgendamentosView /></div>}
         {sub === 'gravacoes' && <div className="h-full"><GravacoesMateriais /></div>}
+        {sub === 'para_editar' && <div className="h-full overflow-y-auto"><EdicaoPage initialLane="para_editar" /></div>}
         {sub === 'em_edicao' && <div className="h-full overflow-y-auto"><EdicaoPage /></div>}
+        {sub === 'aguardando_aprovacao' && <div className="h-full overflow-y-auto"><EdicaoPage initialLane="aguardando" /></div>}
         {sub === 'em_aprovacao' && <div className="h-full overflow-y-auto"><AprovacoesPage /></div>}
         {sub === 'finalizado' && <div className="h-full"><FinalizadoTimeline onNavigate={navigateWithMedia} /></div>}
         {sub === 'redes_sociais' && <div className="h-full"><ViralClips incomingMedia={mediaHandoff?.destination === 'redes_sociais' ? mediaHandoff : null} /></div>}
-        {sub === 'publicacoes' && <div className="h-full"><CorpPublications incomingMedia={mediaHandoff?.destination === 'publicacoes' ? mediaHandoff : null} /></div>}
+        {sub === 'para_publicar' && <div className="h-full"><CorpPublications mode="queue" incomingMedia={mediaHandoff?.destination === 'publicacoes' ? mediaHandoff : null} /></div>}
+        {sub === 'publicado' && <div className="h-full"><CorpPublications mode="published" incomingMedia={mediaHandoff?.destination === 'publicacoes' ? mediaHandoff : null} /></div>}
         {sub === 'analytics' && <div className="h-full"><CorpAnalytics /></div>}
         {COMMON_IDS.includes(sub) && <CommonScreen active={sub} />}
       </div>

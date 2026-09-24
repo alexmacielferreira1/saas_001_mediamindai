@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.demo_accounts import DEMO_ACCOUNTS
 from app.models.identity import Membership, Permission, PermissionGroup, Tenant, User
 from app.security.passwords import hash_password
+from app.tenancy.record_policies import CONTENT_WRITE_PERMISSIONS, PERMISSION_CATALOG
 
 
 def seed_demo_accounts(session: Session, password: str, environment: str) -> dict[str, int | str]:
@@ -22,11 +23,7 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
         tenant.is_active = True
 
     permissions = {}
-    for code, description in (
-        ("permissions.manage", "Gerenciar grupos e atribuições de permissões"),
-        ("users.manage", "Gerenciar vínculos e cargos de usuários"),
-        ("users.manage_admin", "Conceder cargos administrativos"),
-    ):
+    for code, description in PERMISSION_CATALOG.items():
         permission = session.scalar(select(Permission).where(Permission.code == code))
         if permission is None:
             permission = Permission(code=code, description=description)
@@ -39,12 +36,22 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
         (
             "Administradores de permissões",
             "Bootstrap local para administradores demo",
-            ("permissions.manage", "users.manage", "users.manage_admin"),
+            (
+                *CONTENT_WRITE_PERMISSIONS,
+                "permissions.manage",
+                "users.manage",
+                "users.manage_admin",
+            ),
         ),
         (
             "Gestores CEDOC",
             "Bootstrap local para gestão de usuários sem promoção administrativa",
-            ("permissions.manage", "users.manage"),
+            ("assets.write", "permissions.manage", "users.manage"),
+        ),
+        (
+            "Operadores de conteúdo",
+            "Bootstrap local com ações de conteúdo para os perfis demo",
+            CONTENT_WRITE_PERMISSIONS,
         ),
     ):
         group = session.scalar(
@@ -100,7 +107,7 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
                         if role in {"admin", "superadmin"}
                         else groups["Gestores CEDOC"].id
                         if role == "cedoc"
-                        else None
+                        else groups["Operadores de conteúdo"].id
                     ),
                 )
             )
@@ -112,7 +119,7 @@ def seed_demo_accounts(session: Session, password: str, environment: str) -> dic
                 if role in {"admin", "superadmin"}
                 else groups["Gestores CEDOC"].id
                 if role == "cedoc"
-                else None
+                else groups["Operadores de conteúdo"].id
             )
 
     session.commit()

@@ -31,7 +31,7 @@ try {
             $config = Get-LocalConfig
             Invoke-Native docker @('compose','up','-d','--wait','--wait-timeout','60','postgres')
             Invoke-Native $PythonExe @('-m','alembic','upgrade','head')
-            Start-OwnedService -Name backend -Exe $PythonExe -Arguments @('-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$($config.api_port)",'--no-access-log') -Directory $ProjectRoot -Port $config.api_port
+            Start-OwnedService -Name backend -Exe $PythonExe -Arguments @('-m','uvicorn','app.main:app','--app-dir','backend','--host','127.0.0.1','--port',"$($config.api_port)",'--no-access-log') -Directory $ProjectRoot -Port $config.api_port
             $node = (Get-Command node -ErrorAction Stop).Source
             Start-OwnedService -Name frontend -Exe $node -Arguments @('node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',"$($config.frontend_port)",'--strictPort') -Directory (Join-Path $ProjectRoot 'frontend') -Port $config.frontend_port
             Write-Host 'Frontend server responds; Base44 login/data are not yet migrated.'
@@ -54,9 +54,9 @@ try {
             Invoke-Native $PythonExe @('-m','ruff','format','--check','backend','tests','alembic','scripts')
             Invoke-Native npm.cmd @('--prefix','frontend','run','lint')
         }
-        'check' { Assert-Python; Invoke-Native $PythonExe @('scripts/readiness.py') }
-        'readiness' { Assert-Python; Invoke-Native $PythonExe @('scripts/readiness.py') }
-        'smoke' { Assert-Python; Invoke-Native $PythonExe @('scripts/smoke.py') }
+        'check' { Assert-Python; Invoke-AppPython @('scripts/readiness.py') }
+        'readiness' { Assert-Python; Invoke-AppPython @('scripts/readiness.py') }
+        'smoke' { Assert-Python; Invoke-AppPython @('scripts/smoke.py') }
         'migrate' { Assert-Python; Invoke-Native $PythonExe @('-m','alembic','upgrade','head') }
         'build' { Invoke-Native npm.cmd @('--prefix','frontend','run','build') }
         'reset-db' {

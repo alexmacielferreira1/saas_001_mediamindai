@@ -1,42 +1,25 @@
 # Estado do projeto
 
-Marco atual: **M0 — blocked**.
+Marco atual: **M0 — failed**.
 
-Atualizado em 20/09/2026 após identidade local, Google restrito e migração de Gestão/Acervo.
-
-Autenticação, sessão, contas demo protegidas, isolamento básico por membership e seleção de empresa
-foram reconstruídos fora do Base44. O login Google agora existe, mas somente aceita conta já
-cadastrada e ativa; as contas demo locais continuam disponíveis. Gestão e Acervo usam agregados
-tenant-scoped e não exibem métricas inventadas. O layout foi preservado. O gate continua **blocked** porque a
-execução PostgreSQL e a navegação ponta a ponta ainda não foram refeitas após essa migração.
-
-Última evidência automatizada: backend **114 passed, 2 skipped**, 100% linhas/branches; frontend
-**46 passed**, 100% statements/branches/functions/lines na fatia configurada; lint, format,
-typecheck e build aprovados.
-Os dois skips exigem PostgreSQL. Em 20/09 o WSL iniciou, porém `com.docker.service` permaneceu
-parado e a sessão não tinha permissão para iniciá-lo.
-
-RBAC em andamento: catálogo e grupos por tenant, autorização deny-by-default, CRUD, vínculo com
-membership, seed administrativo e listagem local na tela de acessos foram implementados. Overrides
-individuais, catálogo funcional completo e prova PostgreSQL da migration `0004_permission_groups`
-permanecem pendentes. Alterações de cargo já persistem por membership; CEDOC não pode conceder
-`admin/superadmin` sem a permissão separada `users.manage_admin`.
+Verificado em 2026-09-24T00:22:14.471020+00:00.
 
 | Verificação | Estado | Evidência |
 |---|---|---|
-| backend_lint | passed | Exit 0; evidence: .runtime/checks/backend_lint.log |
-| backend_format | passed | Exit 0; evidence: .runtime/checks/backend_format.log |
+| backend_lint | failed | Exit 1; evidence: .runtime/checks/backend_lint.log |
+| backend_format | failed | Exit 1; evidence: .runtime/checks/backend_format.log |
 | unit_tests | passed | Exit 0; evidence: .runtime/checks/unit_tests.log |
-| migration | passed | Exit 0; evidence: .runtime/checks/migration.log |
-| database_integration | passed | Exit 0; evidence: .runtime/checks/database_integration.log |
+| migration | failed | Exit 1; evidence: .runtime/checks/migration.log |
+| database_integration | failed | Exit 1; evidence: .runtime/checks/database_integration.log |
 | dependency_consistency | passed | Exit 0; evidence: .runtime/checks/dependency_consistency.log |
 | frontend_build | passed | Exit 0; evidence: .runtime/checks/frontend_build.log |
 | frontend_lint | passed | Exit 0; evidence: .runtime/checks/frontend_lint.log |
 | frontend_typecheck | passed | Exit 0; evidence: .runtime/checks/frontend_typecheck.log |
-| http_smoke | passed | Exit 0; evidence: .runtime/checks/http_smoke.log |
-| original_frontend_integrity | passed | 288 original files; 7 approved typed corrections; 0 unapproved changes or missing.  |
+| frontend_unit_tests | failed | Exit 1; evidence: .runtime/checks/frontend_unit_tests.log |
+| http_smoke | failed | Exit 1; evidence: .runtime/checks/http_smoke.log |
+| original_frontend_integrity | failed | 288 original files; 7 approved typed corrections; 62 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js |
 | frontend_functional_validation | blocked | Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient. |
-| git_clean_at_check | passed | Snapshot before writing this report. Verify and commit reviewed work separately. |
+| git_clean_at_check | pending | Snapshot before writing this report. Verify and commit reviewed work separately. |
 
 M1–M7 continuam pendentes. Os relatórios não comprovam paridade nem uso em produção.
 Não ignorar testes nem desligar verificações. Resolver a causa e executar novamente.

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Save } from 'lucide-react';
 import { MOCK_CORP_PRECHECKLIST } from '../../../data';
-import { updateProjeto } from '../../../lib/producaoStore';
+import { transicionar, updateProjeto } from '../../../lib/producaoStore';
+import { isScheduleReady } from '../../../lib/productionWorkflow';
 
 const VIDEOMAKERS = ['Bianca', 'Rafael', 'Ana', 'Carlos Lima', 'Marina Alves'];
 const GRAV_STATUS = {
@@ -27,6 +28,11 @@ export default function AgendamentoDetail({ rec }) {
 
   function salvar() {
     setSaved(true);
+  }
+
+  function confirmar() {
+    if (!isScheduleReady(rec)) return;
+    transicionar(rec.id, 'gravacoes', { obs: 'Agendamento confirmado' });
   }
 
   function field(name, value) { updateProjeto(rec.id, { [name]: value }); }
@@ -143,6 +149,13 @@ export default function AgendamentoDetail({ rec }) {
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 px-4 py-3">
         <button onClick={salvar} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-4 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">
           <Save size={12} /> {saved ? 'Agendamento salvo ✓' : 'Salvar agendamento'}
+        </button>
+        <button
+          onClick={confirmar}
+          disabled={!isScheduleReady(rec)}
+          className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-4 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Check size={12} /> Confirmar e enviar para Gravações
         </button>
         <p className="text-[10px] text-slate-500">A gravação acontece na aba <span className="font-semibold text-slate-300">Gravações</span>.</p>
       </div>

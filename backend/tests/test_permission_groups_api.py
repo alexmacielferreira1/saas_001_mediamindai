@@ -43,6 +43,15 @@ def permission_client():
         manage = Permission(code="permissions.manage", description="Gerenciar permissões")
         manage_users = Permission(code="users.manage", description="Gerenciar usuários")
         manage_admins = Permission(code="users.manage_admin", description="Gerenciar admins")
+        write_assets = Permission(code="assets.write", description="Criar e alterar ativos")
+        write_production = Permission(
+            code="production.write", description="Criar e alterar produções"
+        )
+        write_review = Permission(code="review.write", description="Revisar e aprovar")
+        write_clips = Permission(code="clips.write", description="Criar e alterar cortes")
+        write_publishing = Permission(
+            code="publishing.write", description="Programar e publicar conteúdo"
+        )
         publish = Permission(code="assets.publish", description="Publicar ativos")
         session.add_all(
             [
@@ -54,6 +63,11 @@ def permission_client():
                 manage,
                 manage_users,
                 manage_admins,
+                write_assets,
+                write_production,
+                write_review,
+                write_clips,
+                write_publishing,
                 publish,
             ]
         )
@@ -61,7 +75,18 @@ def permission_client():
         admin_group = PermissionGroup(tenant_id=tenant.id, name="Administradores")
         session.add(admin_group)
         session.flush()
-        admin_group.permissions.extend([manage, manage_users, manage_admins])
+        admin_group.permissions.extend(
+            [
+                manage,
+                manage_users,
+                manage_admins,
+                write_assets,
+                write_production,
+                write_review,
+                write_clips,
+                write_publishing,
+            ]
+        )
         cedoc_group = PermissionGroup(tenant_id=tenant.id, name="Gestores CEDOC")
         session.add(cedoc_group)
         session.flush()

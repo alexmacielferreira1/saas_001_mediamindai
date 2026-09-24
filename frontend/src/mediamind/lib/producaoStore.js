@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { base44 } from '@/api/base44Client';
 import { MOCK_CORP_PRODUCAO_PROJETOS } from '../data';
+import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './productionWorkflow';
 
 // Memória compartilhada dos projetos de Produção — o coração do pipeline
 // (Rascunhos, Gravações, Kanban e Em edição leem e escrevem aqui).
@@ -20,6 +21,7 @@ function currentEmpresaId() {
 
 let projetos = seedMock();
 let loaded = false;
+let loadingPromise = null;
 const listeners = new Set();
 
 function seedMock() {
@@ -43,6 +45,7 @@ function emit() {
 }
 function subscribe(listener) {
   listeners.add(listener);
+  ensureLoaded();
   return () => listeners.delete(listener);
 }
 
@@ -157,7 +160,13 @@ async function loadOrSeed() {
     emit();
   }
 }
-loadOrSeed();
+
+function ensureLoaded() {
+  if (!loaded && !loadingPromise) {
+    loadingPromise = loadOrSeed();
+  }
+  return loadingPromise;
+}
 
 export function updateProjeto(id, patch) {
   projetos = projetos.map((p) => (p.id === id ? { ...p, ...patch } : p));
@@ -165,7 +174,7 @@ export function updateProjeto(id, patch) {
   persist(id);
 }
 
-export const STAGE_ORDER = ['rascunho', 'gravacao', 'em_edicao', 'em_aprovacao', 'finalizado'];
+export const STAGE_ORDER = PRODUCTION_STAGE_ORDER;
 
 export function setEtapa(id, etapa) {
   updateProjeto(id, { etapa });
@@ -175,8 +184,7 @@ export function setEtapa(id, etapa) {
 export function moverEtapa(id, dir) {
   const p = projetos.find((x) => x.id === id);
   if (!p) return;
-  const idx = STAGE_ORDER.indexOf(p.etapa);
-  const next = STAGE_ORDER[idx + dir];
+  const next = getAdjacentProductionStage(p.etapa, dir);
   if (next) updateProjeto(id, { etapa: next });
 }
 

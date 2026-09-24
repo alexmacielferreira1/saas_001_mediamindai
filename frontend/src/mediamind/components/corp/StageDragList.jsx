@@ -1,16 +1,17 @@
 import React, { createContext, useContext, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { STAGE_ORDER } from '../../lib/producaoStore';
+import { getAdjacentProductionStage, productionStageLabel } from '../../lib/productionWorkflow';
 
-const STAGE_LABELS = { rascunho: 'Rascunho', gravacao: 'Gravação', em_edicao: 'Em edição', em_aprovacao: 'Em aprovação', finalizado: 'Finalizado' };
 
-const DragCtx = createContext({ dragId: null, dragEtapa: null, setDrag: () => {} });
+const DragCtx = createContext({ dragId: null, dragEtapa: null, setDrag: () => {}, move: () => {} });
 export function useStageDrag() { return useContext(DragCtx); }
 
 // Card arrastável do pipeline. Ao arrastar, as zonas de soltar nos cantos acendem
 // com o nome do quadro anterior/próximo conforme a etapa do card.
 export function DraggableStageCard({ id, etapa, children, className, onClick }) {
-  const { setDrag } = useStageDrag();
+  const { setDrag, move } = useStageDrag();
+  const previousStage = getAdjacentProductionStage(etapa, -1);
+  const nextStage = getAdjacentProductionStage(etapa, 1);
   return (
     <div
       draggable
@@ -24,6 +25,10 @@ export function DraggableStageCard({ id, etapa, children, className, onClick }) 
       className={`cursor-grab active:cursor-grabbing ${className || ''}`}
     >
       {children}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {previousStage && <button type="button" aria-label={`Voltar para ${productionStageLabel(previousStage)}`} onClick={(e) => { e.stopPropagation(); move(id, -1); }} className="rounded-lg border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:border-sky-500">← {productionStageLabel(previousStage)}</button>}
+        {nextStage && <button type="button" aria-label={`Enviar para ${productionStageLabel(nextStage)}`} onClick={(e) => { e.stopPropagation(); move(id, 1); }} className="ml-auto rounded-lg border border-sky-700 px-2 py-1 text-[10px] text-sky-300 hover:bg-sky-500/10">{productionStageLabel(nextStage)} →</button>}
+      </div>
     </div>
   );
 }
@@ -40,13 +45,15 @@ export function StageDragArea({ onMove, className = '', children, disableBack = 
     if (dragId != null) onMove?.(dragId, dir);
     setDragId(null); setDragEtapa(null); setOver(null);
   }
+  function move(id, dir) { return onMove?.(id, dir); }
 
-  const idx = dragEtapa ? STAGE_ORDER.indexOf(dragEtapa) : -1;
-  const prevLabel = disableBack ? null : (idx > 0 ? STAGE_LABELS[STAGE_ORDER[idx - 1]] : null);
-  const nextLabel = idx >= 0 && idx < STAGE_ORDER.length - 1 ? STAGE_LABELS[STAGE_ORDER[idx + 1]] : null;
+  const previousStage = dragEtapa ? getAdjacentProductionStage(dragEtapa, -1) : null;
+  const nextStage = dragEtapa ? getAdjacentProductionStage(dragEtapa, 1) : null;
+  const prevLabel = disableBack || !previousStage ? null : productionStageLabel(previousStage);
+  const nextLabel = nextStage ? productionStageLabel(nextStage) : null;
 
   return (
-    <DragCtx.Provider value={{ dragId, dragEtapa, setDrag }}>
+    <DragCtx.Provider value={{ dragId, dragEtapa, setDrag, move }}>
       <div
         className={`relative ${className}`}
         onDragOver={(e) => { if (dragId != null) e.preventDefault(); }}

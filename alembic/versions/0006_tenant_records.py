@@ -4,8 +4,9 @@ Revision ID: 0006_tenant_records
 Revises: 0005_membership_screen_overrides
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0006_tenant_records"
 down_revision = "0005_membership_screen_overrides"
