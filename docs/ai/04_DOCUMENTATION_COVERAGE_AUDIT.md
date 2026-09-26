@@ -4,6 +4,8 @@
 
 As fontes anexadas foram comparadas com a documentação ativa do MediaMind e do HUB. A base existente cobria arquitetura de vídeo, exportação, Edge/CEDOC, RAG, MCP e fine-tuning, mas não havia uma visão única das capacidades do produto. Essa lacuna foi fechada em `03_PRODUCT_CAPABILITY_CATALOG.md`.
 
+Em 25/09/2026, a cobertura foi ampliada para os PDFs integrais `AJUSTAR SAAS 16092026.pdf` (754 páginas) e `Saas atualização 14092026.pdf` (837 páginas). O mapa completo, com classificação e destino, está em `../../../_documentacao/SOURCE_INTAKE_2026-09-25_TWO_MASTER_PDFS.md`. Para o MediaMind, as faixas principais são 114–652 e 681–753 do primeiro PDF e 586–620/688–807 do segundo.
+
 ## Cobertura por tema
 
 | Tema das fontes | Documento ativo | Situação |
