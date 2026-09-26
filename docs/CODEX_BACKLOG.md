@@ -29,7 +29,13 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 - **MM-MCP-ACTIONS-001 — P3, blocked_by MM-MCP-READ-001:** ações idempotentes e escopadas; aprovação, exportação e agendamento exigem confirmação humana.
 - **MM-AI-FEEDBACK-001 — P2, pending:** eventos append-only de sugestões, decisões e correções, com consentimento, retenção e avaliação offline.
 - **MM-FINETUNE-001 — P4, discovery only:** decidir por tarefa especializada somente após dataset real, baseline e ganho mensurável; não usar para memorizar o acervo.
+- **MM-CLIP-MVP-001 — P1, blocked_by MM-AI-VIDEO-001:** entregar o primeiro corte vertical real com transcrição, candidatos, score explicável, ajuste IN/OUT, legenda e render, preservando o editor atual.
+- **MM-SPEAKER-001 — P2, pending:** diarização, nomes revisáveis e vínculo entre speaker, transcript, busca, legenda e reenquadramento.
+- **MM-REFRAME-001 — P2, blocked_by MM-CLIP-MVP-001:** tracking, keyframes, layouts e Auto Director com revisão manual e fallback.
+- **MM-TEXT-EDIT-001 — P2, pending:** edição não destrutiva por texto, limpeza de fala revisável, undo e histórico.
+- **MM-BROLL-001 — P3, blocked_by MM-KNOWLEDGE-001:** busca e sugestão de B-roll no acervo autorizado antes de fontes externas ou geração.
+- **MM-AI-COST-001 — P1, pending:** orçamento, estimativa, quotas, cache, reutilização de análise e bloqueio de cobrança duplicada por tenant/job.
 
-Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md` e `ai/01_IMPLEMENTATION_PLAN.md`. Especificações: `ai/00_RAG_MCP_FINETUNING_MASTER.md`, `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
+Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md` e `ai/01_IMPLEMENTATION_PLAN.md`. Catálogo funcional: `ai/03_PRODUCT_CAPABILITY_CATALOG.md`. Especificações: `ai/00_RAG_MCP_FINETUNING_MASTER.md`, `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
 
 Pronto exige teste automatizado, evidência local/publicada quando aplicável e documentação atualizada.

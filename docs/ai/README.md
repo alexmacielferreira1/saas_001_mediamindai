@@ -7,6 +7,8 @@ Esta área concentra a arquitetura e o plano de implementação das capacidades 
 - [Plano mestre de RAG, Knowledge, MCP e aprendizado](00_RAG_MCP_FINETUNING_MASTER.md)
 - [Plano incremental de implementação](01_IMPLEMENTATION_PLAN.md)
 - [Registro das fontes e decisões](02_SOURCE_ASSESSMENT.md)
+- [Catálogo completo de capacidades do produto](03_PRODUCT_CAPABILITY_CATALOG.md)
+- [Auditoria de cobertura documental](04_DOCUMENTATION_COVERAGE_AUDIT.md)
 - [Estratégia de provedores de vídeo e IA](../VIDEO_AI_PROVIDER_STRATEGY.md)
 - [Roadmap dos módulos de vídeo, exportação e CEDOC](../PDF6_IMPLEMENTATION_ROADMAP.md)
 
