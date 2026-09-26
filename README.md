@@ -47,6 +47,6 @@ Não executar reset-db por rotina. O banco persiste no volume do Docker. Logs/PI
 
 ## Retomada e origem
 
-Ler `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_WORKFLOW.md` e `docs/PROJECT_STATUS.md`. No workspace completo, o acompanhamento geral está em `../_documentacao/RETOMADA.md`.
+Ler `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_WORKFLOW.md` e `docs/PROJECT_STATUS.md`. Para a evolução de IA, começar em `docs/ai/README.md` e seguir o plano incremental. No workspace completo, o acompanhamento geral está em `../_documentacao/RETOMADA.md`.
 
 Git local: branch `bootstrap/m0`, snapshot original `base44-export`; nenhum remoto configurado. O README dentro de frontend/ pertence ao export e descreve publicação Base44 histórica; não é instrução de publicação deste bootstrap.

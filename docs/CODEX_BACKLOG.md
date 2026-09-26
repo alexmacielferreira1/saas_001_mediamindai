@@ -23,7 +23,13 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 - **MM-EXPORT-001 — P1, pending:** MediaMind Export Package com Premiere/DaVinci primeiro, legenda editável, frame rate racional, relink, checksums, validação e diferentes modos de mídia.
 - **MM-CLIP-ENGINE-001 — P1, pending:** motor próprio de cortes sobre `MM-AI-VIDEO-001`, com candidatos estruturados, score explicável, IN/OUT, revisão humana, legendas, reframe, render, versões, exportação e publicação; OpusClip é somente referência funcional.
 - **MM-EDGE-001 — P2, pending:** Edge Agent/CEDOC para manter masters locais e publicar catálogo/derivados autorizados; depende de storage, jobs, segurança e observabilidade estabilizados.
+- **MM-RAG-001 — P1, pending:** busca híbrida multitenant sobre transcrições e chunks com timecode, proveniência, direitos, avaliação e reindexação idempotente.
+- **MM-KNOWLEDGE-001 — P2, pending:** ampliar a recuperação para OCR, metadados, pessoas, roteiros, projetos, regras editoriais e documentos autorizados, com retenção por origem.
+- **MM-MCP-READ-001 — P2, blocked_by MM-RAG-001 e APIs estáveis:** servidor MCP do MediaMind somente leitura, autenticado, autorizado e auditado.
+- **MM-MCP-ACTIONS-001 — P3, blocked_by MM-MCP-READ-001:** ações idempotentes e escopadas; aprovação, exportação e agendamento exigem confirmação humana.
+- **MM-AI-FEEDBACK-001 — P2, pending:** eventos append-only de sugestões, decisões e correções, com consentimento, retenção e avaliação offline.
+- **MM-FINETUNE-001 — P4, discovery only:** decidir por tarefa especializada somente após dataset real, baseline e ganho mensurável; não usar para memorizar o acervo.
 
-Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md`. Especificações: `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
+Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md` e `ai/01_IMPLEMENTATION_PLAN.md`. Especificações: `ai/00_RAG_MCP_FINETUNING_MASTER.md`, `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
 
 Pronto exige teste automatizado, evidência local/publicada quando aplicável e documentação atualizada.

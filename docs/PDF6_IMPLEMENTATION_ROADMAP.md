@@ -54,6 +54,25 @@ Entrega: `MM-CLIP-ENGINE-001`, dependente de `MM-AI-VIDEO-001`.
 
 Entrega: `MM-EDGE-001`.
 
+### Fase F — RAG audiovisual e Knowledge
+
+- indexar primeiro transcrições e metadados com chunks ligados a timecodes;
+- combinar full-text, vetor, metadados, direitos e filtros multitenant;
+- integrar resultados à Pesquisa e ao Workspace 2 existentes;
+- expandir depois para OCR, pessoas, roteiros, projetos e regras editoriais;
+- avaliar recuperação, proveniência, remoção e reindexação antes de abrir uso por agentes.
+
+Entregas: `MM-RAG-001` e `MM-KNOWLEDGE-001`.
+
+### Fase G — MCP e aprendizado
+
+- expor primeiro resources e tools somente leitura sobre serviços internos;
+- adicionar ações idempotentes apenas após autorização e auditoria comprovadas;
+- registrar sugestões e correções humanas como eventos separados de telemetria;
+- avaliar fine-tuning somente com dataset consentido, baseline e ganho mensurável.
+
+Entregas: `MM-MCP-READ-001`, `MM-MCP-ACTIONS-001`, `MM-AI-FEEDBACK-001` e, futuramente, `MM-FINETUNE-001`.
+
 ## Relações com as telas existentes
 
 - **Pesquisa/Workspace 2:** usam metadados e análises normalizadas.
