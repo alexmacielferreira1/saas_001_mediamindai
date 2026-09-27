@@ -93,3 +93,30 @@ def test_media_upload_rejects_invalid_suffix_mime_and_missing_permission(
     assert denied.json()["error_code"] == "PERMISSION_DENIED"
     assert list(tmp_path.rglob("*")) == []
     get_settings.cache_clear()
+
+
+def test_media_stream_supports_full_and_byte_range(permission_client, monkeypatch, tmp_path):
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    uploaded = client.post(
+        "/api/v1/media/assets",
+        files={"file": ("seek.mp4", b"0123456789", "video/mp4")},
+    ).json()
+
+    complete = client.get(uploaded["stream_url"])
+    partial = client.get(uploaded["stream_url"], headers={"Range": "bytes=2-5"})
+    invalid = client.get(uploaded["stream_url"], headers={"Range": "bytes=20-30"})
+
+    assert complete.status_code == 200
+    assert complete.content == b"0123456789"
+    assert complete.headers["accept-ranges"] == "bytes"
+    assert complete.headers["content-type"].startswith("video/mp4")
+    assert partial.status_code == 206
+    assert partial.content == b"2345"
+    assert partial.headers["content-range"] == "bytes 2-5/10"
+    assert partial.headers["content-length"] == "4"
+    assert invalid.status_code == 416
+    assert invalid.headers["content-range"] == "bytes */10"
+    get_settings.cache_clear()

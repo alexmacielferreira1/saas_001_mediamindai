@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Annotated
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -100,3 +101,82 @@ def list_assets(current: Authenticated, session: DbSession):
         )
     )
     return {"assets": [serialize_asset(record) for record in records]}
+
+
+def find_asset(session: Session, tenant_id: UUID, asset_id: UUID) -> TenantRecord:
+    record = session.scalar(
+        select(TenantRecord).where(
+            TenantRecord.id == asset_id,
+            TenantRecord.tenant_id == tenant_id,
+            TenantRecord.entity_type == "Asset",
+        )
+    )
+    if record is None:
+        raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+    return record
+
+
+def parse_byte_range(value: str, size: int) -> tuple[int, int]:
+    if not value.startswith("bytes=") or "," in value:
+        raise ValueError
+    start_text, separator, end_text = value.removeprefix("bytes=").partition("-")
+    if not separator:
+        raise ValueError
+    if start_text:
+        start = int(start_text)
+        end = min(int(end_text), size - 1) if end_text else size - 1
+    else:
+        length = int(end_text)
+        if length <= 0:
+            raise ValueError
+        start = max(0, size - length)
+        end = size - 1
+    if start < 0 or start >= size or end < start:
+        raise ValueError
+    return start, end
+
+
+def iter_file_range(path: Path, start: int, end: int, chunk_size: int = 1024 * 1024):
+    with path.open("rb") as source:
+        source.seek(start)
+        remaining = end - start + 1
+        while remaining:
+            chunk = source.read(min(chunk_size, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+@router.get("/assets/{asset_id}/stream")
+def stream_asset(asset_id: UUID, request: Request, current: Authenticated, session: DbSession):
+    membership = require_membership(current)
+    record = find_asset(session, membership.tenant_id, asset_id)
+    storage = LocalMediaStorage(get_settings().media_root)
+    source = storage.resolve(record.data["storage_key"])
+    if not source.is_file():
+        raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+    size = source.stat().st_size
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=0"}
+    range_value = request.headers.get("range")
+    if not range_value:
+        return FileResponse(
+            source,
+            media_type=record.data.get("mime_type") or "application/octet-stream",
+            headers=headers,
+        )
+    try:
+        start, end = parse_byte_range(range_value, size)
+    except (TypeError, ValueError):
+        return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+    length = end - start + 1
+    return StreamingResponse(
+        iter_file_range(source, start, end),
+        status_code=206,
+        media_type=record.data.get("mime_type") or "application/octet-stream",
+        headers={
+            **headers,
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(length),
+        },
+    )
