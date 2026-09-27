@@ -39,4 +39,19 @@ describe('useTimeline2Project', () => {
     expect(result.current.canUndo).toBe(false);
     expect(JSON.parse(localStorage.getItem('timeline2-playback')).playhead).toBe(8);
   });
+
+  it('records a pointer gesture as one undoable edit', () => {
+    const initial = { ...createTimeline2Document(), duration: 20 };
+    const { result } = renderHook(() => useTimeline2Project(initial, 'timeline2-gesture'));
+
+    act(() => result.current.beginGesture());
+    act(() => result.current.updateTransient((document) => setZoom(document, 2)));
+    act(() => result.current.updateTransient((document) => setZoom(document, 3)));
+    act(() => result.current.finishGesture());
+
+    expect(result.current.document.zoom).toBe(3);
+    expect(result.current.canUndo).toBe(true);
+    act(() => result.current.undo());
+    expect(result.current.document.zoom).toBe(1);
+  });
 });

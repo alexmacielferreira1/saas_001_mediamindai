@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportMediaClip, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
+import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
 
 describe('media API', () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -44,5 +44,18 @@ describe('media API', () => {
     expect(result.blob.type).toBe('video/mp4');
     expect(result.filename).toBe('edited.mp4');
     expect(fetch).toHaveBeenCalledWith('/api/v1/media/exports/clip', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+  });
+
+  it('requests a rendered complete timeline', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('timeline-video', {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4', 'Content-Disposition': 'attachment; filename="timeline.mp4"' },
+    })));
+    const project = { name: 'News', tracks: [] };
+
+    const result = await exportTimeline(project);
+
+    expect(result.filename).toBe('timeline.mp4');
+    expect(fetch).toHaveBeenCalledWith('/api/v1/media/exports/timeline', expect.objectContaining({ body: JSON.stringify(project) }));
   });
 });

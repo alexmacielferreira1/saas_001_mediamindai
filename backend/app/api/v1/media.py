@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -46,6 +47,11 @@ class ClipExportRequest(BaseModel):
     source_in: float = Field(default=0, ge=0)
     duration: float = Field(gt=0, le=24 * 60 * 60)
     properties: dict = Field(default_factory=dict)
+
+
+class TimelineExportRequest(BaseModel):
+    name: str = Field(default="MediaMind", max_length=180)
+    tracks: list[dict] = Field(default_factory=list)
 
 
 def find_ffmpeg() -> Path:
@@ -127,6 +133,8 @@ def render_media_clip(
             "0:v:0",
             "-map",
             "0:a?",
+            "-vf",
+            "scale=1280:720",
             "-c:v",
             "libx264",
             "-preset",
@@ -148,6 +156,49 @@ def render_media_clip(
     except subprocess.CalledProcessError as error:
         destination.unlink(missing_ok=True)
         raise PublicError(422, "EXPORT_FAILED", "Não foi possível exportar este clipe.") from error
+
+
+def render_timeline(segments: list[dict], destination: Path) -> None:
+    if not segments:
+        raise PublicError(
+            422, "EMPTY_TIMELINE", "A trilha principal não possui clipes exportáveis."
+        )
+    segment_root = destination.parent / "segments"
+    rendered = []
+    for index, segment in enumerate(segments):
+        output = segment_root / f"{index:04d}.mp4"
+        render_media_clip(
+            segment["source"],
+            output,
+            source_in=segment["source_in"],
+            duration=segment["duration"],
+            properties=segment["properties"],
+        )
+        rendered.append(output.resolve())
+    concat_file = destination.parent / "concat.txt"
+    concat_file.write_text(
+        "".join(f"file '{path.as_posix()}'\n" for path in rendered), encoding="utf-8"
+    )
+    command = [
+        str(find_ffmpeg()),
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_file),
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        str(destination),
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, timeout=30 * 60)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        destination.unlink(missing_ok=True)
+        raise PublicError(422, "EXPORT_FAILED", "Não foi possível exportar a sequência.") from error
 
 
 def classify_upload(file: UploadFile) -> tuple[str, str]:
@@ -327,4 +378,48 @@ def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbS
         destination,
         media_type="video/mp4",
         filename=f"{Path(record.data['filename']).stem}-editado.mp4",
+    )
+
+
+@router.post("/exports/timeline")
+def export_timeline(payload: TimelineExportRequest, current: Authenticated, session: DbSession):
+    membership = require_membership(current)
+    require_permission(session, current, "assets.write")
+    main_track = next(
+        (track for track in payload.tracks if track.get("id") == "v1"),
+        next((track for track in payload.tracks if track.get("kind") == "video"), None),
+    )
+    clips = sorted(
+        (main_track or {}).get("clips", []), key=lambda clip: float(clip.get("start", 0))
+    )
+    storage = LocalMediaStorage(get_settings().media_root)
+    segments = []
+    for clip in clips:
+        try:
+            asset_id = UUID(str(clip.get("assetId")))
+        except (TypeError, ValueError):
+            continue
+        record = find_asset(session, membership.tenant_id, asset_id)
+        segments.append(
+            {
+                "source": storage.resolve(record.data["storage_key"]),
+                "source_in": max(0, float(clip.get("sourceIn", 0))),
+                "duration": max(1 / 30, float(clip.get("duration", 0))),
+                "properties": clip.get("properties") or {},
+            }
+        )
+    export_id = uuid4()
+    destination = (
+        get_settings().media_root
+        / str(membership.tenant_id)
+        / "exports"
+        / str(export_id)
+        / "timeline.mp4"
+    )
+    render_timeline(segments, destination)
+    safe_name = re.sub(r"[^\w.-]+", "-", payload.name, flags=re.UNICODE).strip("-.")
+    return FileResponse(
+        destination,
+        media_type="video/mp4",
+        filename=f"{safe_name or 'MediaMind'}-editado.mp4",
     )

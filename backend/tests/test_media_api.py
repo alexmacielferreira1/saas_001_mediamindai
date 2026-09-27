@@ -113,6 +113,51 @@ def test_export_selected_clip_returns_a_real_download(permission_client, monkeyp
     login(client)
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
     get_settings.cache_clear()
+
+
+def test_export_timeline_renders_the_main_storyline(permission_client, monkeypatch, tmp_path):
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    uploaded = client.post(
+        "/api/v1/media/assets",
+        files={"file": ("story.mp4", b"story-video", "video/mp4")},
+    ).json()
+
+    def fake_render(segments, destination):
+        assert segments[0]["source"].read_bytes() == b"story-video"
+        assert segments[0]["source_in"] == 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"complete-storyline")
+
+    monkeypatch.setattr("app.api.v1.media.render_timeline", fake_render)
+    response = client.post(
+        "/api/v1/media/exports/timeline",
+        json={
+            "name": "Jornal",
+            "tracks": [
+                {
+                    "id": "v1",
+                    "kind": "video",
+                    "clips": [
+                        {
+                            "assetId": uploaded["id"],
+                            "start": 0,
+                            "sourceIn": 1,
+                            "duration": 2,
+                            "properties": {"speed": 1},
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"complete-storyline"
+    assert "Jornal-editado.mp4" in response.headers["content-disposition"]
+    get_settings.cache_clear()
     uploaded = client.post(
         "/api/v1/media/assets",
         files={"file": ("source.mp4", b"source-video", "video/mp4")},

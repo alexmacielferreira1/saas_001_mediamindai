@@ -14,9 +14,9 @@ export function mediaStreamUrl(asset) {
   return asset?.stream_url || '';
 }
 
-export async function exportMediaClip(payload) {
+async function requestMediaExport(path, payload) {
   const origin = import.meta.env.VITE_API_URL || '';
-  const response = await fetch(`${origin}/api/v1/media/exports/clip`, {
+  const response = await fetch(`${origin}/api/v1/media/exports/${path}`, {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'video/mp4', 'Content-Type': 'application/json' },
@@ -29,4 +29,12 @@ export async function exportMediaClip(payload) {
   const disposition = response.headers.get('Content-Disposition') || '';
   const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'mediamind-editado.mp4';
   return { blob: await response.blob(), filename };
+}
+
+export function exportMediaClip(payload) {
+  return requestMediaExport('clip', payload);
+}
+
+export function exportTimeline(payload) {
+  return requestMediaExport('timeline', payload);
 }

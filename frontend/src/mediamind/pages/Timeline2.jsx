@@ -5,7 +5,7 @@ import {
   Scissors, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, Unlock, Upload, Volume2,
   VolumeX, Wand2, ZoomIn,
 } from 'lucide-react';
-import { exportMediaClip, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
+import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
   addMarker, addMediaClip, addTextClip, createTimeline2Document, deleteClips, duplicateClip, moveClip, rippleDelete,
@@ -45,7 +45,7 @@ export default function Timeline2() {
       return workspaceDraft?.tracks ? workspaceDraft : INITIAL_DOCUMENT;
     } catch { return INITIAL_DOCUMENT; }
   }, []);
-  const { document, commit, updateTransient, undo, redo, canUndo, canRedo } = useTimeline2Project(initial);
+  const { document, commit, updateTransient, beginGesture, finishGesture, undo, redo, canUndo, canRedo } = useTimeline2Project(initial, `mm_timeline2_project:${initial.id}`);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [libraryTab, setLibraryTab] = useState('project');
@@ -58,6 +58,7 @@ export default function Timeline2() {
   const [notice, setNotice] = useState('Importe um arquivo ou adicione uma mídia do acervo.');
   const fileInputRef = useRef(null);
   const mediaRefs = useRef(new Map());
+  const pointerGestureRef = useRef(null);
   const selected = document.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedClipId);
   const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected?.properties || {}) };
   const activeClips = useMemo(() => getActiveClips(document, document.playhead), [document]);
@@ -132,17 +133,25 @@ export default function Timeline2() {
     else setNotice('O navegador não conseguiu reproduzir esta mídia. Gere ou selecione um proxy compatível.');
   };
   const setProperty = (field, value) => selected && commit((current) => updateClipProperties(current, selected.id, { [field]: Number(value) }));
+  const downloadExport = ({ blob, filename }) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement('a');
+    anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+    setNotice(`Exportação concluída: ${filename}`);
+  };
   const exportSelected = async () => {
     if (!selected?.assetId || selected.kind !== 'video') return;
     setExporting(true);
     setNotice('Renderizando o clipe selecionado…');
     try {
-      const { blob, filename } = await exportMediaClip({ asset_id: selected.assetId, source_in: selected.sourceIn, duration: selected.duration, properties: selectedProperties });
-      const url = URL.createObjectURL(blob);
-      const anchor = window.document.createElement('a');
-      anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
-      setNotice(`Exportação concluída: ${filename}`);
+      downloadExport(await exportMediaClip({ asset_id: selected.assetId, source_in: selected.sourceIn, duration: selected.duration, properties: selectedProperties }));
     } catch (error) { setNotice(error?.message || 'Não foi possível exportar o clipe.'); }
+    finally { setExporting(false); }
+  };
+  const exportSequence = async () => {
+    setExporting(true); setNotice('Renderizando a sequência da trilha principal…');
+    try { downloadExport(await exportTimeline({ name: document.name, tracks: document.tracks })); }
+    catch (error) { setNotice(error?.message || 'Não foi possível exportar a sequência.'); }
     finally { setExporting(false); }
   };
   const addText = (caption = false) => {
@@ -194,11 +203,31 @@ export default function Timeline2() {
     return pointerToTimelineTime(event.clientX, bounds, scaleDuration);
   };
   const movePlayheadFromPointer = (event) => updateTransient((current) => setPlayhead(current, positionFromPointer(event)));
-  const trimFromHandle = (event, clip, edge) => {
-    event.stopPropagation();
+  const startClipGesture = (event, clip, mode = 'move') => {
+    if (activeTool !== 'select') return;
     const canvas = event.currentTarget.closest('[data-track-canvas]');
     if (!canvas) return;
-    commit((current) => trimClip(current, clip.id, { edge, time: positionFromPointer(event, canvas) }));
+    event.preventDefault(); event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const pointerTime = positionFromPointer(event, canvas);
+    pointerGestureRef.current = { clipId: clip.id, canvas, mode, offset: pointerTime - clip.start };
+    setSelectedClipId(clip.id);
+    beginGesture();
+  };
+  const updateClipGesture = (event) => {
+    const gesture = pointerGestureRef.current;
+    if (!gesture) return;
+    const pointerTime = positionFromPointer(event, gesture.canvas);
+    if (gesture.mode === 'move') {
+      const hoveredTrack = globalThis.document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.('[data-track-id]');
+      updateTransient((current) => moveClip(current, gesture.clipId, { start: pointerTime - gesture.offset, trackId: hoveredTrack?.dataset.trackId }));
+    } else updateTransient((current) => trimClip(current, gesture.clipId, { edge: gesture.mode, time: pointerTime }));
+  };
+  const endClipGesture = () => {
+    if (!pointerGestureRef.current) return;
+    pointerGestureRef.current = null;
+    finishGesture();
+    setNotice('Edição aplicada. Desfazer restaura o gesto inteiro.');
   };
   const moduleItems = [
     ['media', FolderOpen, 'Arquivos'], ['audio', Music, 'Áudio'], ['text', Type, 'Texto'],
@@ -219,6 +248,7 @@ export default function Timeline2() {
           <button type="button" onClick={redo} disabled={!canRedo} aria-label="Refazer" className="w2-button disabled:opacity-40"><Redo2 size={14} /> Refazer</button>
           <button type="button" onClick={() => localStorage.setItem('mm_timeline2_project', JSON.stringify(document))} className="w2-button"><Save size={14} /> Salvar projeto</button>
           <button type="button" onClick={exportSelected} disabled={exporting || selected?.kind !== 'video' || !selected?.assetId} title="Renderiza os cortes do clipe selecionado em MP4" className="w2-button border-emerald-600 text-emerald-300 disabled:opacity-40"><Download size={14} /> {exporting ? 'Renderizando…' : 'Exportar clipe'}</button>
+          <button type="button" onClick={exportSequence} disabled={exporting || !document.tracks.find((track) => track.id === 'v1')?.clips.some((clip) => clip.assetId)} title="Renderiza todos os cortes da trilha principal em um MP4" className="w2-button border-violet-600 text-violet-300 disabled:opacity-40"><Download size={14} /> Exportar sequência</button>
         </div>
       </header>
 
@@ -303,10 +333,10 @@ export default function Timeline2() {
             <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { event.currentTarget.setPointerCapture?.(event.pointerId); movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
             <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }} />
             {document.tracks.map((track) => (
-              <div key={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
+              <div key={track.id} data-track-id={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
                 <div className="flex w-32 shrink-0 items-center gap-1 border-r border-slate-700 px-2"><span className="min-w-0 flex-1"><strong className="block text-xs uppercase">{track.id}</strong><small className="block truncate text-[9px] text-slate-500">{track.name}</small></span><button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'locked'))} aria-label={`${track.locked ? 'Destravar' : 'Travar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.locked ? <Lock size={11} /> : <Unlock size={11} />}</button>{track.kind === 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'muted'))} aria-label={`${track.muted ? 'Ativar' : 'Silenciar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>}{track.kind !== 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'hidden'))} aria-label={`${track.hidden ? 'Mostrar' : 'Ocultar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.hidden ? <EyeOff size={11} /> : <Eye size={11} />}</button>}</div>
                 <div data-track-canvas className={`relative shrink-0 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${timelineGeometry.width}px` }}>
-                  {track.clips.map((clip) => <button key={clip.id} type="button" draggable={activeTool === 'select'} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-timeline2-clip', clip.id); }} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover; use as alças para aparar" className={`group absolute top-1 h-10 cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'start')} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'end')} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /></button>)}
+                  {track.clips.map((clip) => <button key={clip.id} type="button" onPointerDown={(event) => startClipGesture(event, clip)} onPointerMove={updateClipGesture} onPointerUp={endClipGesture} onPointerCancel={endClipGesture} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover entre trilhas; use as alças para aparar" className={`group absolute top-1 h-10 touch-none cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span onPointerDown={(event) => startClipGesture(event, clip, 'start')} className="absolute inset-y-0 left-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => startClipGesture(event, clip, 'end')} className="absolute inset-y-0 right-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /></button>)}
                 </div>
               </div>
             ))}

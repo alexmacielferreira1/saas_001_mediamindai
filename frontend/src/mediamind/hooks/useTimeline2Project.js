@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const HISTORY_LIMIT = 100;
 
@@ -13,6 +13,7 @@ function readSaved(storageKey, fallback) {
 
 export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_project') {
   const [state, setState] = useState(() => ({ past: [], present: readSaved(storageKey, initialDocument), future: [] }));
+  const gestureStartRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(state.present));
@@ -34,6 +35,22 @@ export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_
     });
   }, []);
 
+  const beginGesture = useCallback(() => {
+    setState((current) => {
+      gestureStartRef.current = current.present;
+      return current;
+    });
+  }, []);
+
+  const finishGesture = useCallback(() => {
+    setState((current) => {
+      const start = gestureStartRef.current;
+      gestureStartRef.current = null;
+      if (!start || JSON.stringify(start) === JSON.stringify(current.present)) return current;
+      return { past: [...current.past, start].slice(-HISTORY_LIMIT), present: current.present, future: [] };
+    });
+  }, []);
+
   const undo = useCallback(() => setState((current) => {
     if (!current.past.length) return current;
     return { past: current.past.slice(0, -1), present: current.past.at(-1), future: [current.present, ...current.future] };
@@ -46,5 +63,5 @@ export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_
 
   const reset = useCallback(() => setState({ past: [], present: initialDocument, future: [] }), [initialDocument]);
 
-  return { document: state.present, commit, updateTransient, undo, redo, reset, canUndo: state.past.length > 0, canRedo: state.future.length > 0 };
+  return { document: state.present, commit, updateTransient, beginGesture, finishGesture, undo, redo, reset, canUndo: state.past.length > 0, canRedo: state.future.length > 0 };
 }
