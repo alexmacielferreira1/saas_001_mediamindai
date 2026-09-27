@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
+import { exportMediaClip, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
 
 describe('media API', () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -31,5 +31,18 @@ describe('media API', () => {
   it('keeps same-origin stream paths usable by authenticated players', () => {
     expect(mediaStreamUrl({ stream_url: '/api/v1/media/assets/asset-1/stream' }))
       .toBe('/api/v1/media/assets/asset-1/stream');
+  });
+
+  it('downloads an actually rendered selected clip', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('rendered-video', {
+      status: 200,
+      headers: { 'Content-Type': 'video/mp4', 'Content-Disposition': 'attachment; filename="edited.mp4"' },
+    })));
+
+    const result = await exportMediaClip({ asset_id: 'asset-1', source_in: 2, duration: 4, properties: {} });
+
+    expect(result.blob.type).toBe('video/mp4');
+    expect(result.filename).toBe('edited.mp4');
+    expect(fetch).toHaveBeenCalledWith('/api/v1/media/exports/clip', expect.objectContaining({ method: 'POST', credentials: 'include' }));
   });
 });

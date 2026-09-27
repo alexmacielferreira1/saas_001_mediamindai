@@ -14,6 +14,9 @@ const visualClasses = [
 ];
 
 function MediaVisual({ asset, large = false }) {
+  if (asset?.stream_url && large && asset.asset_type === 'video') return <video src={asset.stream_url} controls preload="metadata" className="h-48 w-full rounded-lg bg-black object-contain" />;
+  if (asset?.stream_url && large && asset.asset_type === 'audio') return <div className="grid h-48 place-items-center rounded-lg bg-slate-950"><audio src={asset.stream_url} controls preload="metadata" className="w-4/5" /></div>;
+  if (asset?.stream_url && asset.asset_type === 'image') return <img src={asset.stream_url} alt={asset.title} className={`${large ? 'h-48 rounded-lg' : 'h-24 rounded-t-lg'} w-full object-cover`} />;
   return (
     <div className={`relative grid place-items-center overflow-hidden bg-gradient-to-br ${visualClasses[Number(asset.id) % visualClasses.length]} ${large ? 'h-48 rounded-lg' : 'h-24 rounded-t-lg'}`}>
       <span className={large ? 'text-6xl' : 'text-4xl'}>{asset.icon || '🎬'}</span>
@@ -64,7 +67,7 @@ export default function Workspace2Search({
       <aside className="w2-panel overflow-hidden">
         <div className="grid grid-cols-2 border-b border-slate-800 p-2 text-xs font-semibold">
           <button type="button" className="flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2"><Search size={14} /> Pesquisa</button>
-          <button type="button" className="flex items-center justify-center gap-2 text-slate-400"><Sparkles size={14} /> Prompt IA</button>
+          <button type="button" disabled title="Disponível quando o serviço de IA estiver configurado" className="flex items-center justify-center gap-2 text-slate-600"><Sparkles size={14} /> Prompt IA</button>
         </div>
         <div className="space-y-4 p-3">
           <Field label="Nome do arquivo" value={filters.filename} onChange={update('filename')} placeholder="Digite o nome do arquivo..." />
@@ -129,10 +132,10 @@ export default function Workspace2Search({
       <footer className={`${showPreview ? 'col-span-3' : 'col-span-2'} grid grid-cols-6 gap-2`}>
         <button type="button" onClick={() => onStepChange('script')} className="w2-button justify-center"><Film size={14} /> Adicionar ao roteiro</button>
         <button type="button" onClick={() => onStepChange('timeline')} className="w2-button justify-center"><ChevronRight size={14} /> Adicionar à timeline</button>
-        <button type="button" className="w2-button justify-center"><Film size={14} /> Gerar corte</button>
-        <button type="button" className="w2-button justify-center"><FolderOpen size={14} /> Abrir no Workspace</button>
-        <button type="button" className="w2-button justify-center"><Send size={14} /> Usar na produção</button>
-        <button type="button" className="w2-button justify-center"><Download size={14} /> Download</button>
+        <button type="button" onClick={() => onStepChange('timeline')} disabled={!selectedAssets.length} className="w2-button justify-center disabled:opacity-40"><Film size={14} /> Gerar corte</button>
+        <button type="button" onClick={() => onStepChange('script')} className="w2-button justify-center"><FolderOpen size={14} /> Abrir no Workspace</button>
+        <button type="button" onClick={() => onStepChange('script')} disabled={!selectedAssets.length} className="w2-button justify-center disabled:opacity-40"><Send size={14} /> Usar na produção</button>
+        <a href={previewAsset?.stream_url || undefined} download={previewAsset?.filename || previewAsset?.title} aria-disabled={!previewAsset?.stream_url} className={`w2-button justify-center ${previewAsset?.stream_url ? '' : 'pointer-events-none opacity-40'}`}><Download size={14} /> Download</a>
       </footer>
     </section>
   );

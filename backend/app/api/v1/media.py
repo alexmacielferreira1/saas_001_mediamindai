@@ -1,9 +1,13 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,6 +41,115 @@ ALLOWED_MEDIA = {
 }
 
 
+class ClipExportRequest(BaseModel):
+    asset_id: UUID
+    source_in: float = Field(default=0, ge=0)
+    duration: float = Field(gt=0, le=24 * 60 * 60)
+    properties: dict = Field(default_factory=dict)
+
+
+def find_ffmpeg() -> Path:
+    configured = get_settings().ffmpeg_path
+    candidates = [
+        configured,
+        Path(shutil.which("ffmpeg") or "") if shutil.which("ffmpeg") else None,
+        get_settings().media_root.parents[1]
+        / "work"
+        / "ai-edita-analysis"
+        / "ai-edita-studio-windows-x64"
+        / "app"
+        / "node_modules"
+        / "@remotion"
+        / "compositor-win32-x64-msvc"
+        / "ffmpeg.exe",
+    ]
+    for candidate in candidates:
+        if candidate and candidate.is_file():
+            return candidate
+    raise PublicError(503, "FFMPEG_UNAVAILABLE", "O motor local de exportação não está disponível.")
+
+
+def probe_media(source: Path) -> dict:
+    try:
+        ffmpeg = find_ffmpeg()
+        ffprobe = ffmpeg.with_name("ffprobe.exe" if ffmpeg.suffix else "ffprobe")
+    except PublicError:
+        return {}
+    if not ffprobe.is_file():
+        return {}
+    result = subprocess.run(
+        [
+            str(ffprobe),
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration:stream=codec_type,width,height,r_frame_rate",
+            "-of",
+            "json",
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode:
+        return {}
+    try:
+        payload = json.loads(result.stdout)
+        video = next(
+            (item for item in payload.get("streams", []) if item.get("codec_type") == "video"), {}
+        )
+        numerator, _, denominator = str(video.get("r_frame_rate") or "0/1").partition("/")
+        fps = float(numerator) / max(1, float(denominator or 1))
+        return {
+            "duration": round(float(payload.get("format", {}).get("duration") or 0), 3),
+            **({"width": int(video["width"])} if video.get("width") else {}),
+            **({"height": int(video["height"])} if video.get("height") else {}),
+            **({"fps": round(fps, 3)} if fps else {}),
+        }
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def render_media_clip(
+    source: Path, destination: Path, *, source_in: float, duration: float, properties: dict
+) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    speed = max(0.25, min(4.0, float(properties.get("speed", 1) or 1)))
+    command = [str(find_ffmpeg()), "-y", "-ss", str(source_in), "-t", str(duration)]
+    if speed != 1:
+        command.extend(["-itsscale", str(1 / speed)])
+    command.extend(
+        [
+            "-i",
+            str(source),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            str(destination),
+        ]
+    )
+    try:
+        subprocess.run(command, check=True, capture_output=True, timeout=30 * 60)
+    except subprocess.TimeoutExpired as error:
+        destination.unlink(missing_ok=True)
+        raise PublicError(
+            504, "EXPORT_TIMEOUT", "A exportação excedeu o tempo permitido."
+        ) from error
+    except subprocess.CalledProcessError as error:
+        destination.unlink(missing_ok=True)
+        raise PublicError(422, "EXPORT_FAILED", "Não foi possível exportar este clipe.") from error
+
+
 def classify_upload(file: UploadFile) -> tuple[str, str]:
     suffix = Path(file.filename or "").suffix.lower()
     config = ALLOWED_MEDIA.get(suffix)
@@ -62,6 +175,7 @@ async def upload_asset(
         file,
         get_settings().media_max_upload_bytes,
     )
+    media_metadata = probe_media(storage.resolve(stored.relative_key))
     record = TenantRecord(
         id=asset_id,
         tenant_id=membership.tenant_id,
@@ -75,6 +189,7 @@ async def upload_asset(
             "sha256": stored.sha256,
             "storage_key": stored.relative_key,
             "media_status": "uploaded",
+            **media_metadata,
         },
     )
     session.add(record)
@@ -179,4 +294,37 @@ def stream_asset(asset_id: UUID, request: Request, current: Authenticated, sessi
             "Content-Range": f"bytes {start}-{end}/{size}",
             "Content-Length": str(length),
         },
+    )
+
+
+@router.post("/exports/clip")
+def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbSession):
+    membership = require_membership(current)
+    require_permission(session, current, "assets.write")
+    record = find_asset(session, membership.tenant_id, payload.asset_id)
+    if record.data.get("asset_type") != "video":
+        raise PublicError(422, "VIDEO_REQUIRED", "Selecione um clipe de vídeo para exportar.")
+    storage = LocalMediaStorage(get_settings().media_root)
+    source = storage.resolve(record.data["storage_key"])
+    if not source.is_file():
+        raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+    export_id = uuid4()
+    destination = (
+        get_settings().media_root
+        / str(membership.tenant_id)
+        / "exports"
+        / str(export_id)
+        / "clip.mp4"
+    )
+    render_media_clip(
+        source,
+        destination,
+        source_in=payload.source_in,
+        duration=payload.duration,
+        properties=payload.properties,
+    )
+    return FileResponse(
+        destination,
+        media_type="video/mp4",
+        filename=f"{Path(record.data['filename']).stem}-editado.mp4",
     )

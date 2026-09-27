@@ -12,7 +12,9 @@ export function appendScriptBlock(blocks, asset) {
       assetId: asset.id,
       title: asset.title,
       duration: asset.duration || 0,
-      type: 'media',
+      type: asset.asset_type === 'audio' ? 'audio' : 'media',
+      src: asset.stream_url || asset.src || null,
+      mimeType: asset.mime_type || null,
     },
   ];
 }

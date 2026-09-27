@@ -20,6 +20,7 @@ import Ingest from './mediamind/pages/Ingest';
 import Workspace from './mediamind/pages/Workspace';
 import Workspace2 from './mediamind/pages/Workspace2';
 import Timeline from './mediamind/pages/Timeline';
+import Timeline2 from './mediamind/pages/Timeline2';
 import SearchPage from './mediamind/pages/Search';
 import AssistenteIA from './mediamind/pages/AssistenteIA';
 import { canAccessModule } from './mediamind/lib/moduleAccess';
@@ -48,6 +49,7 @@ const AuthenticatedApp = () => {
         <Route path="/workspace2" element={<ModuleRoute moduleId="workspace"><Shell><Workspace2 /></Shell></ModuleRoute>} />
         <Route path="/workspace/timeline" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
         <Route path="/timeline" element={<ModuleRoute moduleId="timeline"><Shell><Timeline /></Shell></ModuleRoute>} />
+        <Route path="/timeline2" element={<ModuleRoute moduleId="timeline"><Shell><Timeline2 /></Shell></ModuleRoute>} />
         <Route path="/social" element={<ModuleRoute moduleId="social"><Shell><ViralClips /></Shell></ModuleRoute>} />
         <Route path="/clips" element={<Navigate to="/social" replace />} />
         <Route path="/publish" element={<Navigate to="/social" replace />} />

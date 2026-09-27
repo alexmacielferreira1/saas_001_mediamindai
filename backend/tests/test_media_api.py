@@ -16,6 +16,10 @@ def test_media_upload_creates_tenant_asset_and_atomic_original(
     login(client)
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
     get_settings.cache_clear()
+    monkeypatch.setattr(
+        "app.api.v1.media.probe_media",
+        lambda _path: {"duration": 12.5, "width": 1920, "height": 1080, "fps": 30.0},
+    )
 
     response = client.post(
         "/api/v1/media/assets",
@@ -30,6 +34,8 @@ def test_media_upload_creates_tenant_asset_and_atomic_original(
     assert asset["file_size"] == 16
     assert asset["sha256"] == "c986372cb64bb5d854d6d97a58e6a893564850db144f18b23daea00fcb72d5a5"
     assert asset["media_status"] == "uploaded"
+    assert asset["duration"] == 12.5
+    assert asset["width"] == 1920
     assert asset["stream_url"] == f"/api/v1/media/assets/{asset['id']}/stream"
     assert "physical_path" not in asset
     original = tmp_path / asset["tenant_id"] / asset["id"] / "original" / "source.mp4"
@@ -99,6 +105,38 @@ def test_media_stream_supports_full_and_byte_range(permission_client, monkeypatc
     client, _ = permission_client
     login(client)
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+
+
+def test_export_selected_clip_returns_a_real_download(permission_client, monkeypatch, tmp_path):
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    uploaded = client.post(
+        "/api/v1/media/assets",
+        files={"file": ("source.mp4", b"source-video", "video/mp4")},
+    ).json()
+
+    def fake_render(source, destination, **_options):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source.read_bytes() + b"-rendered")
+
+    monkeypatch.setattr("app.api.v1.media.render_media_clip", fake_render)
+    response = client.post(
+        "/api/v1/media/exports/clip",
+        json={
+            "asset_id": uploaded["id"],
+            "source_in": 1,
+            "duration": 2.5,
+            "properties": {"speed": 1},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"source-video-rendered"
+    assert response.headers["content-type"].startswith("video/mp4")
+    assert "attachment" in response.headers["content-disposition"]
     get_settings.cache_clear()
     uploaded = client.post(
         "/api/v1/media/assets",

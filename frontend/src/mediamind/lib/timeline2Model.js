@@ -1,0 +1,284 @@
+const DEFAULT_TRACKS = [
+  { id: 'v1', kind: 'video', name: 'Vídeo principal' },
+  { id: 'v2', kind: 'video', name: 'B-roll e apoio' },
+  { id: 't1', kind: 'text', name: 'Textos e legendas' },
+  { id: 'a1', kind: 'audio', name: 'Áudio principal' },
+  { id: 'a2', kind: 'audio', name: 'Trilha e efeitos' },
+];
+
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 8;
+
+export function getTimelineGeometry(duration, zoom = 1) {
+  const pixelsPerSecond = 40 * Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(zoom) || 1));
+  return { pixelsPerSecond, width: Math.max(900, Math.max(0, Number(duration) || 0) * pixelsPerSecond) };
+}
+
+export function pointerToTimelineTime(clientX, bounds, duration) {
+  const ratio = (Number(clientX) - Number(bounds?.left || 0)) / Math.max(1, Number(bounds?.width) || 1);
+  return Math.max(0, Math.min(Math.max(0, Number(duration) || 0), ratio * Math.max(0, Number(duration) || 0)));
+}
+
+const cloneTrack = (track) => ({ ...track, clips: track.clips.map((clip) => ({ ...clip })) });
+
+const computeDuration = (tracks) => tracks.reduce(
+  (maximum, track) => track.clips.reduce((trackMaximum, clip) => Math.max(trackMaximum, clip.start + clip.duration), maximum),
+  0,
+);
+
+const locateClip = (document, clipId) => {
+  for (let trackIndex = 0; trackIndex < document.tracks.length; trackIndex += 1) {
+    const clipIndex = document.tracks[trackIndex].clips.findIndex((clip) => clip.id === clipId);
+    if (clipIndex >= 0) return { trackIndex, clipIndex, track: document.tracks[trackIndex], clip: document.tracks[trackIndex].clips[clipIndex] };
+  }
+  return null;
+};
+
+const replaceTracks = (document, tracks) => ({
+  ...document,
+  tracks,
+  duration: computeDuration(tracks),
+  updatedAt: new Date().toISOString(),
+});
+
+export function createTimeline2Document({ id = 'timeline2-draft', name = 'Projeto sem título', fps = 30 } = {}) {
+  return {
+    id,
+    name,
+    fps,
+    duration: 0,
+    playhead: 0,
+    zoom: 1,
+    snapEnabled: true,
+    tracks: DEFAULT_TRACKS.map((track) => ({ ...track, locked: false, muted: false, hidden: false, clips: [] })),
+    markers: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function workspace2ToTimeline2({ project = {}, blocks = [], selectedAssets = [] } = {}) {
+  const document = createTimeline2Document({ id: project.id || 'workspace2-draft', name: project.title || 'Workspace 2' });
+  let cursor = 0;
+  const tracks = document.tracks.map(cloneTrack);
+  const sourceItems = blocks.length ? blocks : selectedAssets.map((asset) => ({
+    id: `asset-block-${asset.id}`,
+    assetId: asset.id,
+    title: asset.title || asset.filename,
+    duration: asset.duration,
+    type: asset.asset_type,
+    src: asset.stream_url,
+    mimeType: asset.mime_type,
+  }));
+  sourceItems.forEach((block, index) => {
+    const kind = block.type === 'text' ? 'text' : block.type === 'audio' ? 'audio' : 'video';
+    const trackId = kind === 'text' ? 't1' : kind === 'audio' ? 'a1' : 'v1';
+    const track = tracks.find((candidate) => candidate.id === trackId);
+    const duration = Math.max(1 / document.fps, Number(block.duration) || 5);
+    track.clips.push({
+      id: String(block.id || `clip-${index + 1}`),
+      assetId: block.assetId ?? null,
+      name: block.title || block.text || `Clipe ${index + 1}`,
+      kind,
+      trackId,
+      start: cursor,
+      duration,
+      sourceIn: 0,
+      sourceOut: duration,
+      src: block.src || block.stream_url || null,
+      mimeType: block.mimeType || block.mime_type || null,
+      origin: block.origin || (block.assetId ? 'acervo' : 'workspace'),
+      properties: { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(block.properties || {}) },
+      selected: false,
+    });
+    cursor += duration;
+  });
+  return { ...document, tracks, duration: cursor };
+}
+
+export function addMediaClip(document, media, { trackId, start = document.playhead } = {}) {
+  const kind = media.kind === 'audio' ? 'audio' : media.kind === 'text' ? 'text' : 'video';
+  const preferredTrack = trackId || (kind === 'audio' ? 'a1' : kind === 'text' ? 't1' : 'v1');
+  const trackIndex = document.tracks.findIndex((track) => track.id === preferredTrack && track.kind === kind);
+  if (trackIndex < 0 || document.tracks[trackIndex].locked) return document;
+  const duration = Math.max(1 / document.fps, Number(media.duration) || 5);
+  const clipStart = Math.max(0, snapTime(document, Number(start) || 0));
+  const tracks = document.tracks.map(cloneTrack);
+  const baseId = String(media.id || `media-${Date.now()}`);
+  tracks[trackIndex].clips.push({
+    id: media.clipId || `${baseId}-${Date.now()}-${tracks[trackIndex].clips.length}`,
+    assetId: media.id ?? null,
+    name: media.name || 'Mídia sem título',
+    kind,
+    trackId: preferredTrack,
+    start: clipStart,
+    duration,
+    sourceIn: 0,
+    sourceOut: duration,
+    src: media.src || null,
+    mimeType: media.mimeType || null,
+    origin: media.origin || 'project',
+    properties: { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(media.properties || {}) },
+    selected: false,
+  });
+  tracks[trackIndex].clips.sort((a, b) => a.start - b.start);
+  return replaceTracks(document, tracks);
+}
+
+function snapTime(document, requested, ignoredClipId) {
+  if (!document.snapEnabled) return requested;
+  const tolerance = 0.12 / document.zoom;
+  const targets = [0, document.playhead];
+  document.tracks.forEach((track) => track.clips.forEach((clip) => {
+    if (clip.id !== ignoredClipId) targets.push(clip.start, clip.start + clip.duration);
+  }));
+  const closest = targets.reduce((best, target) => best == null || Math.abs(target - requested) < Math.abs(best - requested) ? target : best, null);
+  return Math.abs(closest - requested) <= tolerance ? closest : requested;
+}
+
+export function moveClip(document, clipId, { start, trackId } = {}) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked) return document;
+  const destinationIndex = trackId ? document.tracks.findIndex((track) => track.id === trackId) : located.trackIndex;
+  if (destinationIndex < 0 || document.tracks[destinationIndex].locked) return document;
+  const destination = document.tracks[destinationIndex];
+  if (destination.kind !== located.clip.kind && !(destination.kind === 'video' && located.clip.kind === 'text')) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  const [clip] = tracks[located.trackIndex].clips.splice(located.clipIndex, 1);
+  const nextStart = Math.max(0, snapTime(document, Number(start) || 0, clipId));
+  tracks[destinationIndex].clips.push({ ...clip, trackId: destination.id, start: nextStart });
+  tracks[destinationIndex].clips.sort((a, b) => a.start - b.start);
+  return replaceTracks(document, tracks);
+}
+
+export function trimClip(document, clipId, { edge, time } = {}) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked) return document;
+  const frame = 1 / document.fps;
+  const clipEnd = located.clip.start + located.clip.duration;
+  const requested = snapTime(document, Number(time), clipId);
+  if (edge === 'start' && requested >= located.clip.start && requested <= clipEnd - frame) {
+    const delta = requested - located.clip.start;
+    const tracks = document.tracks.map(cloneTrack);
+    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, start: requested, duration: located.clip.duration - delta, sourceIn: located.clip.sourceIn + delta };
+    return replaceTracks(document, tracks);
+  }
+  if (edge === 'end' && requested >= located.clip.start + frame && requested <= clipEnd) {
+    const tracks = document.tracks.map(cloneTrack);
+    const duration = requested - located.clip.start;
+    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, duration, sourceOut: located.clip.sourceIn + duration };
+    return replaceTracks(document, tracks);
+  }
+  return document;
+}
+
+export function splitClip(document, clipId, time) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked) return document;
+  const frame = 1 / document.fps;
+  const splitAt = Number(time);
+  const end = located.clip.start + located.clip.duration;
+  if (splitAt < located.clip.start + frame || splitAt > end - frame) return document;
+  const leftDuration = splitAt - located.clip.start;
+  const rightDuration = end - splitAt;
+  const sourceSplit = located.clip.sourceIn + leftDuration;
+  const left = { ...located.clip, duration: leftDuration, sourceOut: sourceSplit };
+  const right = { ...located.clip, id: `${located.clip.id}-split-${Math.round(splitAt * document.fps)}`, start: splitAt, duration: rightDuration, sourceIn: sourceSplit };
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[located.trackIndex].clips.splice(located.clipIndex, 1, left, right);
+  return replaceTracks(document, tracks);
+}
+
+export function deleteClips(document, clipIds) {
+  const wanted = new Set(clipIds);
+  if (!document.tracks.some((track) => !track.locked && track.clips.some((clip) => wanted.has(clip.id)))) return document;
+  const tracks = document.tracks.map((track) => track.locked ? cloneTrack(track) : { ...track, clips: track.clips.filter((clip) => !wanted.has(clip.id)).map((clip) => ({ ...clip })) });
+  return replaceTracks(document, tracks);
+}
+
+export function duplicateClip(document, clipId) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  const frame = 1 / document.fps;
+  const copy = { ...located.clip, id: `${located.clip.id}-copy-${Date.now()}`, name: `${located.clip.name} (cópia)`, start: located.clip.start + located.clip.duration + frame };
+  tracks[located.trackIndex].clips.push(copy);
+  tracks[located.trackIndex].clips.sort((a, b) => a.start - b.start);
+  return replaceTracks(document, tracks);
+}
+
+export function rippleDelete(document, clipIds) {
+  const wanted = new Set(clipIds);
+  let changed = false;
+  const tracks = document.tracks.map((track) => {
+    if (track.locked) return cloneTrack(track);
+    const removed = track.clips.filter((clip) => wanted.has(clip.id));
+    if (!removed.length) return cloneTrack(track);
+    changed = true;
+    return {
+      ...track,
+      clips: track.clips.filter((clip) => !wanted.has(clip.id)).map((clip) => {
+        const shift = removed.filter((item) => item.start < clip.start).reduce((total, item) => total + item.duration, 0);
+        return { ...clip, start: Math.max(0, clip.start - shift) };
+      }),
+    };
+  });
+  return changed ? replaceTracks(document, tracks) : document;
+}
+
+export function updateClipProperties(document, clipId, properties) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, properties: { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(located.clip.properties || {}), ...properties } };
+  return replaceTracks(document, tracks);
+}
+
+export function addTextClip(document, text, options = {}) {
+  const value = String(text || '').trim();
+  if (!value) return document;
+  return addMediaClip(document, { id: `text-${Date.now()}`, name: value, kind: 'text', duration: options.duration || 5, origin: 'editor', properties: options.properties }, { trackId: 't1', start: options.start ?? document.playhead });
+}
+
+export function addMarker(document, { time = document.playhead, label = 'Marcador', color = '#f59e0b' } = {}) {
+  const markerTime = Math.max(0, Math.min(document.duration, Number(time) || 0));
+  return { ...document, markers: [...document.markers, { id: `marker-${Date.now()}-${document.markers.length}`, time: markerTime, label, color }], updatedAt: new Date().toISOString() };
+}
+
+export function toggleTrackState(document, trackId, field) {
+  if (!['locked', 'muted', 'hidden'].includes(field)) return document;
+  const index = document.tracks.findIndex((track) => track.id === trackId);
+  if (index < 0) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[index] = { ...tracks[index], [field]: !tracks[index][field] };
+  return { ...document, tracks, updatedAt: new Date().toISOString() };
+}
+
+export function setPlayhead(document, time) {
+  return { ...document, playhead: Math.max(0, Math.min(document.duration, Number(time) || 0)) };
+}
+
+export function setZoom(document, zoom) {
+  return { ...document, zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(zoom) || 1)) };
+}
+
+export function toggleSnapping(document) {
+  return { ...document, snapEnabled: !document.snapEnabled };
+}
+
+export function getActiveClips(document, time = document.playhead) {
+  const programTime = Math.max(0, Number(time) || 0);
+  return document.tracks.flatMap((track, layerIndex) => {
+    if (track.hidden || (track.kind === 'audio' && track.muted)) return [];
+    return track.clips
+      .filter((clip) => programTime >= clip.start && programTime < clip.start + clip.duration)
+      .map((clip) => {
+        const speed = Math.max(0.25, Math.min(4, Number(clip.properties?.speed) || 1));
+        return {
+          ...clip,
+          layerIndex,
+          muted: Boolean(track.muted),
+          sourceTime: clip.sourceIn + ((programTime - clip.start) * speed),
+        };
+      });
+  });
+}

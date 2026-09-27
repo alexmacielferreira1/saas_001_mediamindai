@@ -1,5 +1,13 @@
 # Handoff do MediaMind AI
 
+## Atualização 26/09/2026 — Timeline 2 / AI Edita
+
+- Fontes do AI Edita inventariadas sem executar binários; hashes e matriz estão em `AI_EDITA_INVENTARIO_E_MATRIZ.md`.
+- Timeline 2 local criada como rota/menu independentes, preservando Timeline e Workspace originais.
+- Workspace 2 reorganizado em quatro passos: Pesquisa, Roteiro, Prévia e Timeline; o passo 4 abre o editor dedicado.
+- Fundação funcional: documento não destrutivo, handoff, trilhas, seleção simples, mover, trim, split, excluir, playhead, zoom, snapping, undo/redo e persistência local.
+- Não publicado e não implantado. Próximo bloco deve priorizar reprodução real, drag-and-drop, seleção múltipla/ripple e áudio, mantendo testes e documentação sincronizados.
+
 - Commit publicado: `b75d96a` (`main`) — Workspace 2.
 - Render: bundle conferido com Workspace 2, metadados e drag-and-drop.
 - Frontend: 124 testes, lint, typecheck e build aprovados; cobertura configurada em 100% no recorte atual.

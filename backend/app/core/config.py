@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     hub_product_id: str = "mediamind-ai"
     media_root: Path = ROOT / ".runtime" / "media"
     media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
+    ffmpeg_path: Path | None = None
 
     @model_validator(mode="after")
     def validate_production_auth(self) -> "Settings":

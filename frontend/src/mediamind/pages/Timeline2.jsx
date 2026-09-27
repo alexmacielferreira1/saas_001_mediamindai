@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, BookmarkPlus, Captions, ChevronLeft, ChevronRight, Copy, Crop, Eye, EyeOff,
+  Archive, BookmarkPlus, Captions, ChevronLeft, ChevronRight, Copy, Crop, Download, Eye, EyeOff,
   FolderOpen, Lock, Magnet, MousePointer2, Music, Pause, Play, Plus, Redo2, Save,
   Scissors, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, Unlock, Upload, Volume2,
   VolumeX, Wand2, ZoomIn,
 } from 'lucide-react';
-import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
+import { exportMediaClip, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
   addMarker, addMediaClip, addTextClip, createTimeline2Document, deleteClips, duplicateClip, moveClip, rippleDelete,
   setPlayhead, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
-  updateClipProperties, workspace2ToTimeline2,
+  getActiveClips, getTimelineGeometry, pointerToTimelineTime, updateClipProperties,
 } from '../lib/timeline2Model';
 
 const INITIAL_DOCUMENT = createTimeline2Document({ id: 'timeline2-local', name: 'Novo projeto MediaMind' });
@@ -45,7 +45,7 @@ export default function Timeline2() {
       return workspaceDraft?.tracks ? workspaceDraft : INITIAL_DOCUMENT;
     } catch { return INITIAL_DOCUMENT; }
   }, []);
-  const { document, commit, undo, redo, canUndo, canRedo } = useTimeline2Project(initial);
+  const { document, commit, updateTransient, undo, redo, canUndo, canRedo } = useTimeline2Project(initial);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [libraryTab, setLibraryTab] = useState('project');
@@ -54,12 +54,18 @@ export default function Timeline2() {
   const [textValue, setTextValue] = useState('');
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('Importe um arquivo ou adicione uma mídia do acervo.');
   const fileInputRef = useRef(null);
-  const mediaRef = useRef(null);
+  const mediaRefs = useRef(new Map());
   const selected = document.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedClipId);
   const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected?.properties || {}) };
+  const activeClips = useMemo(() => getActiveClips(document, document.playhead), [document]);
+  const activeVisuals = activeClips.filter((clip) => clip.kind === 'video' || clip.kind === 'text');
+  const activeAudio = activeClips.filter((clip) => clip.kind === 'audio');
+  const primaryClock = activeClips.find((clip) => ['video', 'audio'].includes(clip.kind) && clip.src);
   const scaleDuration = Math.max(document.duration, 30);
+  const timelineGeometry = useMemo(() => getTimelineGeometry(scaleDuration, document.zoom), [scaleDuration, document.zoom]);
   const projectMedia = useMemo(() => {
     const clips = document.tracks.flatMap((track) => track.clips).filter((clip) => clip.kind !== 'text');
     return clips.map((clip) => ({ id: clip.assetId || clip.id, name: clip.name, kind: clip.kind, duration: clip.sourceOut || clip.duration, src: clip.src, origin: clip.origin }))
@@ -104,14 +110,41 @@ export default function Timeline2() {
     event.target.value = '';
   };
   const togglePlayback = async () => {
-    const player = mediaRef.current;
-    if (!player) return;
-    if (player.paused) {
-      player.currentTime = Math.max(0, selected?.sourceIn || 0);
-      await player.play(); setPlaying(true);
-    } else { player.pause(); setPlaying(false); }
+    const players = activeClips
+      .map((clip) => ({ clip, player: mediaRefs.current.get(clip.id) }))
+      .filter((item) => item.player);
+    if (!players.length) {
+      setNotice('Posicione a agulha sobre um clipe reproduzível.');
+      return;
+    }
+    if (playing) {
+      players.forEach(({ player }) => player.pause());
+      setPlaying(false);
+      return;
+    }
+    const attempts = await Promise.allSettled(players.map(async ({ clip, player }) => {
+      player.currentTime = Math.max(0, clip.sourceTime);
+      player.playbackRate = Math.max(0.25, Math.min(4, Number(clip.properties?.speed) || 1));
+      player.volume = Math.max(0, Math.min(1, 10 ** ((Number(clip.properties?.volume) || 0) / 20)));
+      await player.play();
+    }));
+    if (attempts.some((result) => result.status === 'fulfilled')) setPlaying(true);
+    else setNotice('O navegador não conseguiu reproduzir esta mídia. Gere ou selecione um proxy compatível.');
   };
   const setProperty = (field, value) => selected && commit((current) => updateClipProperties(current, selected.id, { [field]: Number(value) }));
+  const exportSelected = async () => {
+    if (!selected?.assetId || selected.kind !== 'video') return;
+    setExporting(true);
+    setNotice('Renderizando o clipe selecionado…');
+    try {
+      const { blob, filename } = await exportMediaClip({ asset_id: selected.assetId, source_in: selected.sourceIn, duration: selected.duration, properties: selectedProperties });
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+      setNotice(`Exportação concluída: ${filename}`);
+    } catch (error) { setNotice(error?.message || 'Não foi possível exportar o clipe.'); }
+    finally { setExporting(false); }
+  };
   const addText = (caption = false) => {
     if (!textValue.trim()) return;
     const clipId = `text-${Date.now()}`;
@@ -126,12 +159,12 @@ export default function Timeline2() {
     return () => { active = false; };
   }, []);
   useEffect(() => {
-    const player = mediaRef.current;
-    if (!player || !selected) return;
-    const properties = selected.properties || {};
-    player.playbackRate = Math.max(0.25, Math.min(4, Number(properties.speed) || 1));
-    if ('volume' in player) player.volume = Math.max(0, Math.min(1, 10 ** ((Number(properties.volume) || 0) / 20)));
-  }, [selected]);
+    if (playing) return;
+    activeClips.forEach((clip) => {
+      const player = mediaRefs.current.get(clip.id);
+      if (player && Number.isFinite(clip.sourceTime) && Math.abs(player.currentTime - clip.sourceTime) > 0.08) player.currentTime = clip.sourceTime;
+    });
+  }, [activeClips, playing]);
   useEffect(() => {
     const onKeyDown = (event) => {
       const editingField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName);
@@ -150,7 +183,7 @@ export default function Timeline2() {
     const clipId = event.dataTransfer.getData('application/x-timeline2-clip');
     if (clipId) {
       const bounds = event.currentTarget.getBoundingClientRect();
-      const time = Math.max(0, Math.min(scaleDuration, ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * scaleDuration));
+      const time = pointerToTimelineTime(event.clientX, bounds, scaleDuration);
       commit((current) => moveClip(current, clipId, { start: time, trackId: track.id }));
       setSelectedClipId(clipId); setNotice(`Clipe movido para ${track.name} em ${formatTime(time)}.`); return;
     }
@@ -158,9 +191,9 @@ export default function Timeline2() {
   };
   const positionFromPointer = (event, element = event.currentTarget) => {
     const bounds = element.getBoundingClientRect();
-    return Math.max(0, Math.min(scaleDuration, ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * scaleDuration));
+    return pointerToTimelineTime(event.clientX, bounds, scaleDuration);
   };
-  const movePlayheadFromPointer = (event) => commit((current) => setPlayhead(current, positionFromPointer(event)));
+  const movePlayheadFromPointer = (event) => updateTransient((current) => setPlayhead(current, positionFromPointer(event)));
   const trimFromHandle = (event, clip, edge) => {
     event.stopPropagation();
     const canvas = event.currentTarget.closest('[data-track-canvas]');
@@ -185,6 +218,7 @@ export default function Timeline2() {
           <button type="button" onClick={undo} disabled={!canUndo} aria-label="Desfazer" className="w2-button disabled:opacity-40"><Undo2 size={14} /> Desfazer</button>
           <button type="button" onClick={redo} disabled={!canRedo} aria-label="Refazer" className="w2-button disabled:opacity-40"><Redo2 size={14} /> Refazer</button>
           <button type="button" onClick={() => localStorage.setItem('mm_timeline2_project', JSON.stringify(document))} className="w2-button"><Save size={14} /> Salvar projeto</button>
+          <button type="button" onClick={exportSelected} disabled={exporting || selected?.kind !== 'video' || !selected?.assetId} title="Renderiza os cortes do clipe selecionado em MP4" className="w2-button border-emerald-600 text-emerald-300 disabled:opacity-40"><Download size={14} /> {exporting ? 'Renderizando…' : 'Exportar clipe'}</button>
         </div>
       </header>
 
@@ -219,12 +253,18 @@ export default function Timeline2() {
 
         <main className="w2-panel flex flex-col p-3">
           <div className="mb-2 flex items-center justify-between"><h2 className="font-bold">Preview do programa</h2><span className="text-xs text-sky-300">{formatTime(document.playhead)}</span></div>
-          <div className="grid flex-1 place-items-center overflow-hidden rounded-xl bg-black">
-            {selected?.src && selected.kind === 'video' ? <video ref={mediaRef} key={selected.src} src={selected.src} className="max-h-full max-w-full transition-transform" style={{ opacity: selectedProperties.opacity / 100, transform: `translate(${selectedProperties.x}px, ${selectedProperties.y}px) scale(${selectedProperties.scale / 100}) rotate(${selectedProperties.rotation}deg)` }} onEnded={() => setPlaying(false)} /> : selected?.src && selected.kind === 'audio' ? <div className="w-full px-8 text-center"><div className="mb-5 text-6xl">🎵</div><audio ref={mediaRef} key={selected.src} src={selected.src} className="w-full" controls onEnded={() => setPlaying(false)} /></div> : selected?.kind === 'text' ? <div className="max-w-[90%] text-center font-bold text-white drop-shadow-lg" style={{ opacity: selectedProperties.opacity / 100, fontSize: `${selectedProperties.fontSize || 54}px`, transform: `translate(${selectedProperties.x}px, ${selectedProperties.y}px) scale(${selectedProperties.scale / 100}) rotate(${selectedProperties.rotation}deg)` }}>{selectedProperties.text || selected.name}</div> : <div className="text-center"><div className="text-6xl">🎬</div><p className="mt-3 text-sm font-semibold">{selected?.name || 'Selecione um clipe na timeline'}</p><p className="mt-1 text-xs text-slate-500">{selected ? 'Referência do acervo sem proxy de reprodução local' : 'Importe um arquivo ou escolha no acervo'}</p></div>}
+          <div className="relative grid flex-1 place-items-center overflow-hidden rounded-xl bg-black">
+            {activeVisuals.map((clip) => {
+              const properties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(clip.properties || {}) };
+              if (clip.kind === 'text') return <div key={clip.id} data-testid={`preview-layer-${clip.id}`} onClick={() => setSelectedClipId(clip.id)} className="absolute max-w-[90%] cursor-pointer text-center font-bold text-white drop-shadow-lg" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, fontSize: `${properties.fontSize || 54}px`, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }}>{properties.text || clip.name}</div>;
+              return <video key={clip.id} data-testid={`preview-layer-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} preload="metadata" onClick={() => setSelectedClipId(clip.id)} className="absolute max-h-full max-w-full cursor-pointer transition-transform" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }} onTimeUpdate={(event) => { if (clip.id === primaryClock?.id && playing) { const programTime = clip.start + ((event.currentTarget.currentTime - clip.sourceIn) / Math.max(0.25, Number(properties.speed) || 1)); updateTransient((current) => setPlayhead(current, programTime)); } }} onEnded={() => setPlaying(false)} />;
+            })}
+            {activeAudio.map((clip) => <audio key={clip.id} data-testid={`preview-audio-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} preload="metadata" onTimeUpdate={(event) => { if (clip.id === primaryClock?.id && playing) { const speed = Math.max(0.25, Number(clip.properties?.speed) || 1); updateTransient((current) => setPlayhead(current, clip.start + ((event.currentTarget.currentTime - clip.sourceIn) / speed))); } }} onEnded={() => setPlaying(false)} />)}
+            {!activeVisuals.length && <div className="text-center"><div className="text-6xl">{activeAudio.length ? '🎵' : '🎬'}</div><p className="mt-3 text-sm font-semibold">{activeAudio[0]?.name || selected?.name || 'Posicione a agulha sobre um clipe'}</p><p className="mt-1 text-xs text-slate-500">{selected ? 'O preview segue a agulha e as camadas ativas.' : 'Importe um arquivo ou escolha no Acervo'}</p></div>}
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button type="button" onClick={togglePlayback} disabled={!selected?.src} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
-            <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => commit((current) => setPlayhead(current, event.target.value))} className="flex-1" />
+            <button type="button" onClick={togglePlayback} disabled={!activeClips.some((clip) => clip.src)} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
+            <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => updateTransient((current) => setPlayhead(current, event.target.value))} className="flex-1" />
           </div>
         </main>
 
@@ -260,13 +300,13 @@ export default function Timeline2() {
           </div>
           <div className="border-b border-slate-800 px-3 py-1 text-[10px] text-sky-300" role="status">{notice}</div>
           <div className="relative flex-1 overflow-auto bg-[#031022] p-3">
-            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 min-w-[900px] cursor-ew-resize border-b border-slate-700" style={{ width: `${document.zoom * 100}%` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${(marker.time / scaleDuration) * 100}%` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${(document.playhead / scaleDuration) * 100}%` }} /></div>
-            <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `calc(8rem + ${(document.playhead / scaleDuration) * document.zoom * 100}%)` }} />
+            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { event.currentTarget.setPointerCapture?.(event.pointerId); movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
+            <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }} />
             {document.tracks.map((track) => (
-              <div key={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 min-w-[1030px] border-b border-slate-800">
+              <div key={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
                 <div className="flex w-32 shrink-0 items-center gap-1 border-r border-slate-700 px-2"><span className="min-w-0 flex-1"><strong className="block text-xs uppercase">{track.id}</strong><small className="block truncate text-[9px] text-slate-500">{track.name}</small></span><button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'locked'))} aria-label={`${track.locked ? 'Destravar' : 'Travar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.locked ? <Lock size={11} /> : <Unlock size={11} />}</button>{track.kind === 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'muted'))} aria-label={`${track.muted ? 'Ativar' : 'Silenciar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>}{track.kind !== 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'hidden'))} aria-label={`${track.hidden ? 'Mostrar' : 'Ocultar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.hidden ? <EyeOff size={11} /> : <Eye size={11} />}</button>}</div>
-                <div data-track-canvas className={`relative flex-1 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${document.zoom * 100}%` }}>
-                  {track.clips.map((clip) => <button key={clip.id} type="button" draggable={activeTool === 'select'} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-timeline2-clip', clip.id); }} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover; use as alças para aparar" className={`group absolute top-1 h-10 cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${(clip.start / scaleDuration) * 100}%`, width: `${Math.max(4, (clip.duration / scaleDuration) * 100)}%` }}><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'start')} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'end')} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /></button>)}
+                <div data-track-canvas className={`relative shrink-0 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${timelineGeometry.width}px` }}>
+                  {track.clips.map((clip) => <button key={clip.id} type="button" draggable={activeTool === 'select'} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-timeline2-clip', clip.id); }} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover; use as alças para aparar" className={`group absolute top-1 h-10 cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'start')} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId); }} onPointerUp={(event) => trimFromHandle(event, clip, 'end')} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-white/20 opacity-0 group-hover:opacity-100" /></button>)}
                 </div>
               </div>
             ))}
