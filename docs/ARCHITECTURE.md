@@ -17,3 +17,9 @@ Export React/Vite intacto com SDK Base44. Não foi criada interface substituta. 
 ## Independência e evolução
 
 A futura Central se comunica com SaaS por API. Nada em M0 depende dela estar online. Pastas reservadas não representam módulos implementados. Ainda não extrair shared packages: validar primeiro nos dois produtos.
+
+## Contrato administrativo com o HUB
+
+O primeiro adaptador administrativo nativo expõe `/.well-known/hub/manifest` sem credenciais e protege `/api/hub/v1/health`, `/api/hub/v1/readiness` e `/api/hub/v1/version` com identidade de serviço. A autenticação exige token de ambiente, audiência e escopo `hub:observe`; o token nunca aparece nas respostas ou no frontend. Cada resposta observável identifica produto, ambiente e horário da medição.
+
+Este contrato não compartilha banco e não torna o MediaMind dependente da Central. Em produção, `HUB_ADMIN_TOKEN` é obrigatório; `HUB_ADMIN_AUDIENCE` e `HUB_PRODUCT_ID` identificam o contrato. Nesta primeira fatia não há comandos nem mutações remotas, e o marco permanece M0 enquanto os gates preexistentes não forem resolvidos.

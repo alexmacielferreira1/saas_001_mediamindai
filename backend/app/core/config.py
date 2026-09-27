@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
+    hub_admin_token: SecretStr | None = None
+    hub_admin_audience: str = "central"
+    hub_product_id: str = "mediamind-ai"
     media_root: Path = ROOT / ".runtime" / "media"
     media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
 
@@ -44,6 +47,8 @@ class Settings(BaseSettings):
             self.google_client_id or self.google_client_secret
         ) and not self.google_redirect_uri.startswith("https://"):
             raise ValueError("GOOGLE_REDIRECT_URI deve usar HTTPS em production")
+        if self.hub_admin_token is None or not self.hub_admin_token.get_secret_value().strip():
+            raise ValueError("HUB_ADMIN_TOKEN deve ser configurado em production")
         return self
 
     @property

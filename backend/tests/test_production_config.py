@@ -10,6 +10,7 @@ def production_settings(**overrides):
         "frontend_url": "https://mediamind.example.com",
         "google_redirect_uri": "https://api.example.com/api/v1/auth/google/callback",
         "session_cookie_secure": True,
+        "hub_admin_token": "production-token-from-secret-manager",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

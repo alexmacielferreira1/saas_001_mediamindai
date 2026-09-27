@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException
 
 from app.api.v1 import router as api_v1_router
+from app.api.v1.hub_admin import router as hub_admin_router
 from app.core.config import get_settings
 from app.core.errors import PublicError, error_response
 from app.db.session import database_available, engine
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_v1_router)
+    app.include_router(hub_admin_router)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
