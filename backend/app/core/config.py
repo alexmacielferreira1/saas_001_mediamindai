@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
+    media_root: Path = ROOT / ".runtime" / "media"
+    media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
 
     @model_validator(mode="after")
     def validate_production_auth(self) -> "Settings":
