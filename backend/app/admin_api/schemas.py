@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
+from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HubServiceIdentity(BaseModel):
@@ -41,3 +43,20 @@ class HubVersion(BaseModel):
     admin_api_version: str
     environment: str
     observed_at: datetime
+
+
+class HubCommandCreate(BaseModel):
+    action: str
+    dry_run: bool = True
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
+class HubCommandResponse(BaseModel):
+    id: UUID
+    action: str
+    dry_run: bool
+    status: str
+    result: dict[str, Any]
+    correlation_id: str
+    created_at: datetime
+    completed_at: datetime | None

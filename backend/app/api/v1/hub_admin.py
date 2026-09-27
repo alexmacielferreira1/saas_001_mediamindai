@@ -1,10 +1,16 @@
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request, Response
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.admin_api.auth import require_hub_service
+from app.admin_api.auth import require_hub_command_service, require_hub_service
+from app.admin_api.commands import complete_now, execute_dry_run
 from app.admin_api.schemas import (
+    HubCommandCreate,
+    HubCommandResponse,
     HubManifest,
     HubManifestEndpoints,
     HubObservation,
@@ -14,10 +20,13 @@ from app.admin_api.schemas import (
 )
 from app.core.config import get_settings
 from app.core.errors import PublicError
-from app.db.session import database_available
+from app.db.session import database_available, get_session
+from app.models.hub_command import HubCommand
 
 router = APIRouter(tags=["hub-admin"])
 AuthenticatedHubService = Annotated[HubServiceIdentity, Depends(require_hub_service)]
+CommandHubService = Annotated[HubServiceIdentity, Depends(require_hub_command_service)]
+DbSession = Annotated[Session, Depends(get_session)]
 
 
 def observed_now() -> datetime:
@@ -81,3 +90,94 @@ def hub_version(_: AuthenticatedHubService) -> HubVersion:
         environment=settings.environment,
         observed_at=observed_now(),
     )
+
+
+def serialize_command(command: HubCommand) -> HubCommandResponse:
+    created_at = command.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    completed_at = command.completed_at
+    if completed_at is not None and completed_at.tzinfo is None:
+        completed_at = completed_at.replace(tzinfo=UTC)
+    return HubCommandResponse(
+        id=command.id,
+        action=command.action,
+        dry_run=command.dry_run,
+        status=command.status,
+        result=command.result,
+        correlation_id=command.correlation_id,
+        created_at=created_at,
+        completed_at=completed_at,
+    )
+
+
+@router.post("/api/hub/v1/commands", response_model=HubCommandResponse)
+def create_command(
+    body: HubCommandCreate,
+    request: Request,
+    response: Response,
+    identity: CommandHubService,
+    session: DbSession,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
+) -> HubCommandResponse:
+    existing = session.scalar(
+        select(HubCommand).where(
+            HubCommand.source_service == identity.service,
+            HubCommand.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        if (
+            existing.action != body.action
+            or existing.dry_run != body.dry_run
+            or existing.parameters != body.parameters
+        ):
+            raise PublicError(
+                409,
+                "HUB_IDEMPOTENCY_CONFLICT",
+                "A chave de repetição já foi usada por outro comando.",
+            )
+        response.status_code = 200
+        return serialize_command(existing)
+
+    if not body.dry_run:
+        raise PublicError(
+            409,
+            "HUB_DRY_RUN_REQUIRED",
+            "Somente simulações de leitura estão liberadas nesta versão.",
+        )
+    result = execute_dry_run(session, body.action)
+    completed_at = complete_now()
+    command = HubCommand(
+        source_service=identity.service,
+        idempotency_key=idempotency_key,
+        action=body.action,
+        dry_run=True,
+        parameters=body.parameters,
+        status="succeeded",
+        result=result,
+        correlation_id=request.state.correlation_id,
+        completed_at=completed_at,
+        updated_at=completed_at,
+    )
+    session.add(command)
+    session.commit()
+    response.status_code = 202
+    return serialize_command(command)
+
+
+@router.get("/api/hub/v1/commands/{command_id}", response_model=HubCommandResponse)
+def get_command(
+    command_id: UUID,
+    identity: CommandHubService,
+    session: DbSession,
+) -> HubCommandResponse:
+    command = session.scalar(
+        select(HubCommand).where(
+            HubCommand.id == command_id,
+            HubCommand.source_service == identity.service,
+        )
+    )
+    if command is None:
+        raise PublicError(404, "HUB_COMMAND_NOT_FOUND", "Comando não encontrado.")
+    return serialize_command(command)
