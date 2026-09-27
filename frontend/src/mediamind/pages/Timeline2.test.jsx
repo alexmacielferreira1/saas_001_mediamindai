@@ -5,6 +5,8 @@ import Timeline2 from './Timeline2';
 const mediaApi = vi.hoisted(() => ({
   listMediaAssets: vi.fn(),
   uploadMediaAsset: vi.fn(),
+  exportMediaClip: vi.fn(),
+  exportTimeline: vi.fn(),
 }));
 
 vi.mock('../../api/media', () => ({
