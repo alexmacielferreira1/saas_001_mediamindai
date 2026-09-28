@@ -39,8 +39,7 @@ export const PRODUCTION_SUBTABS = [
   { id: 'rascunhos', name: 'Rascunhos', Icon: FileText },
   { id: 'agendamentos', name: 'Agendamentos', Icon: Calendar },
   { id: 'gravacoes', name: 'Gravações', Icon: Clapperboard },
-  { id: 'para_editar', name: 'Material para editar', Icon: Scissors },
-  { id: 'em_edicao', name: 'Em edição', Icon: Scissors },
+  { id: 'em_edicao', name: 'Edição', Icon: Scissors },
   { id: 'aguardando_aprovacao', name: 'Aguardando aprovação', Icon: CalendarClock },
   { id: 'em_aprovacao', name: 'Em aprovação', Icon: CheckCircle2 },
   { id: 'finalizado', name: 'Finalizado', Icon: Flag },
@@ -53,7 +52,9 @@ export const PRODUCTION_SUBTABS = [
 const SUBTABS = PRODUCTION_SUBTABS;
 
 export function normalizeProductionSubtab(subtab) {
-  return subtab === 'publicacoes' ? 'para_publicar' : subtab;
+  if (subtab === 'publicacoes') return 'para_publicar';
+  if (subtab === 'para_editar') return 'em_edicao';
+  return subtab;
 }
 
 export default function ProdutoraPage() {
@@ -169,7 +170,6 @@ export default function ProdutoraPage() {
         {sub === 'rascunhos' && <div className="h-full"><RascunhosPage newDraftSignal={newDraftSignal} /></div>}
         {sub === 'agendamentos' && <div className="h-full"><AgendamentosView /></div>}
         {sub === 'gravacoes' && <div className="h-full"><GravacoesMateriais /></div>}
-        {sub === 'para_editar' && <div className="h-full overflow-y-auto"><EdicaoPage initialLane="para_editar" /></div>}
         {sub === 'em_edicao' && <div className="h-full overflow-y-auto"><EdicaoPage /></div>}
         {sub === 'aguardando_aprovacao' && <div className="h-full overflow-y-auto"><EdicaoPage initialLane="aguardando" /></div>}
         {sub === 'em_aprovacao' && <div className="h-full overflow-y-auto"><AprovacoesPage /></div>}

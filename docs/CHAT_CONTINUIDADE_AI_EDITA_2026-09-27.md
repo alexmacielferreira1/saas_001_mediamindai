@@ -190,3 +190,12 @@ Antes de marcar qualquer linha como concluída:
 - Build frontend repetido e aprovado; permanecem avisos conhecidos de Browserslist, import dinâmico ineficaz e chunk grande.
 - Atualização de 28/09/2026: agulha real, transição para Em aprovação e lacunas foram corrigidas e validadas localmente. As lacunas continuam em preto/silêncio nos players e agora também são materializadas no MP4 renderizado pelo backend, usando a posição temporal dos clipes.
 - Nenhuma alteração deste bloco foi publicada em produção.
+
+### Consolidação da página Edição — 28/09/2026
+
+- o menu duplicado `Material para editar` foi removido;
+- a página remanescente passou a se chamar `Edição`;
+- os estados operacionais não foram apagados: `Para editar`, `Em edição` e `Aguardando aprovação` permanecem como filas internas da Central de edição;
+- links, permissões salvas e atalhos antigos com `para_editar` são convertidos para `em_edicao`, evitando quebrar favoritos e configurações existentes;
+- a compatibilidade foi validada no navegador local: a URL legada abriu diretamente a Central de edição unificada;
+- suíte completa após a alteração: 54 arquivos/187 testes frontend aprovados, lint e build aprovados; avisos conhecidos de tamanho de chunk, Browserslist e importação dinâmica permanecem não bloqueantes.

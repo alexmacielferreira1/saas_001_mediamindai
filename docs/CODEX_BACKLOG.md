@@ -51,7 +51,7 @@ O texto de revisão do usuário foi incorporado como requisito, mas itens só mu
 | MM-UX-PR-001 | pending | Sugestões de convidados sem nome/cargo predefinidos | sugestões selecionáveis e editáveis, persistidas no programa/agendamento |
 | MM-FLOW-GR-001 | pending | Gravações vazia após confirmar agendamento | confirmar gravação cria/atualiza registro visível e auditável |
 | MM-INGEST-002 | in_progress | Arquivo ingerido não aparece; ações “puxar para editar”, atribuir e concluir não alteram fluxo | upload local real aparece no Acervo/Gravações e cada ação persiste/transiciona |
-| MM-FLOW-ED-002 | in_progress | Duplicidade “Material para editar”/“Em edição” e destinos incorretos | menu único `Edição`, estados internos claros e transições canônicas testadas |
+| MM-FLOW-ED-002 | **done_local 2026-09-28** | Duplicidade “Material para editar”/“Em edição” e destinos incorretos | menu único `Edição`; filas internas `Para editar`, `Em edição` e `Aguardando aprovação` preservadas; permissões e links antigos `para_editar` migram para `em_edicao`; regressão automatizada e navegador local validados |
 | MM-FLOW-AP-002 | in_progress | Aguardando aprovação não chega à revisão; solicitar alteração não volta à Edição | transições reais, item sai da origem e aparece no destino após reload |
 | MM-APPROVAL-002 | done_local | Aprovar versão com alterações abertas não pede confirmação | confirmação obrigatória antes de aprovar com pendências |
 | MM-PLAYER-001 | in_progress | Players, IN/OUT e marcações inconsistentes entre telas | componente funcional compartilhado em revisão, finalizado, publicação e exportação |

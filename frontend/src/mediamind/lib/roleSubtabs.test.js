@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { ROLE_SUBTABS } from './roleSubtabs';
+import { ALL_SUBTABS, ROLE_SUBTABS, getActiveSubtabs } from './roleSubtabs';
 
 describe('producer role workflow access', () => {
-  it('includes every new canonical queue', () => {
+  it('exposes editing as one screen while keeping the approval queues', () => {
     expect(ROLE_SUBTABS.producer).toEqual(expect.arrayContaining([
-      'para_editar', 'aguardando_aprovacao', 'para_publicar', 'publicado',
+      'em_edicao', 'aguardando_aprovacao', 'para_publicar', 'publicado',
     ]));
+    expect(ROLE_SUBTABS.producer).not.toContain('para_editar');
+    expect(ALL_SUBTABS.find((tab) => tab.id === 'em_edicao')?.name).toBe('Edição');
+    expect(ALL_SUBTABS.some((tab) => tab.id === 'para_editar')).toBe(false);
+  });
+
+  it('migrates a saved Material para editar permission to Edição', () => {
+    localStorage.setItem('mm_role_subtabs_v1', JSON.stringify({
+      producer: ['overview', 'para_editar', 'aguardando_aprovacao'],
+    }));
+
+    expect(getActiveSubtabs('producer')).toEqual([
+      'overview', 'em_edicao', 'aguardando_aprovacao',
+    ]);
   });
 });

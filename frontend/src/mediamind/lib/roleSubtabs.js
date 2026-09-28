@@ -23,8 +23,7 @@ export const ALL_SUBTABS = [
   { id: 'rascunhos', name: 'Rascunhos' },
   { id: 'agendamentos', name: 'Agendamentos' },
   { id: 'gravacoes', name: 'Gravações' },
-  { id: 'para_editar', name: 'Material para editar' },
-  { id: 'em_edicao', name: 'Em edição' },
+  { id: 'em_edicao', name: 'Edição' },
   { id: 'aguardando_aprovacao', name: 'Aguardando aprovação' },
   { id: 'em_aprovacao', name: 'Em aprovação' },
   { id: 'finalizado', name: 'Finalizado' },
@@ -68,7 +67,7 @@ const VG = ['visao_geral'];
 
 export const ROLE_SUBTABS = {
   admin: null,
-  producer: [...OV, 'rascunhos', 'agendamentos', 'gravacoes', 'para_editar', 'em_edicao', 'aguardando_aprovacao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'para_publicar', 'publicado', 'analytics', ...COMMON_IDS],
+  producer: [...OV, 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'aguardando_aprovacao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'para_publicar', 'publicado', 'analytics', ...COMMON_IDS],
   editor: [...VG, 'agendamentos', 'gravacoes', 'em_edicao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'publicacoes', 'analytics', ...COMMON_IDS],
   videomaker: [...VG, 'agendamentos', 'gravacoes', ...COMMON_IDS],
   reporter: [...OV, ...COMMON_IDS],
@@ -117,12 +116,13 @@ export function getActiveSubtabs(cargoId) {
   if (isTotalAccess(cargoId)) return null;
   const stored = readJSON(KEY, {})[cargoId];
   if (stored) {
+    const migrated = [...new Set(stored.map((id) => (id === 'para_editar' ? 'em_edicao' : id)))];
     const hasOriginalWorkspace = stored.includes('workspace');
     const supportsWorkspace2 = (ROLE_SUBTABS[cargoId] || []).includes('workspace2');
-    if (hasOriginalWorkspace && supportsWorkspace2 && !stored.includes('workspace2')) {
-      return [...stored, 'workspace2'];
+    if (hasOriginalWorkspace && supportsWorkspace2 && !migrated.includes('workspace2')) {
+      return [...migrated, 'workspace2'];
     }
-    return stored;
+    return migrated;
   }
   return ROLE_SUBTABS[cargoId] || [];
 }

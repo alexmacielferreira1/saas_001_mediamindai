@@ -44,6 +44,8 @@ Verificação posterior: suíte completa com 158 testes backend aprovados e 2 te
 
 A ação real **Exportar sequência** também foi executada na Timeline 2 com o projeto local: o navegador exibiu `Exportação concluída: Jornal-12h---15-05-2026-editado.mp4` e a API registrou `POST /api/v1/media/local/exports/timeline` com status 200. O preview local ficou aberto nessa confirmação.
 
+A duplicidade de navegação `Material para editar`/`Em edição` foi eliminada sem remover estados do fluxo: a navegação agora expõe uma única página `Edição`, enquanto `Para editar`, `Em edição` e `Aguardando aprovação` continuam como filas internas. URLs e permissões antigas são migradas de forma compatível. A URL legada foi exercitada no navegador e abriu a Central de edição unificada. Verificação: 54 arquivos/187 testes frontend, lint e build aprovados. O marco M0 permanece `failed` e nenhuma publicação em produção foi realizada.
+
 ## Entrega isolada — contrato de observação do HUB
 
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.
