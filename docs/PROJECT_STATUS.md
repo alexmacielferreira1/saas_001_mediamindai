@@ -42,6 +42,8 @@ O render backend também passou a preservar a posição temporal dos clipes: lac
 
 Verificação posterior: suíte completa com 158 testes backend aprovados e 2 testes de integração ignorados pelo ambiente; Ruff e formatação dos arquivos alterados aprovados. O frontend permanece na evidência imediatamente anterior de 186 testes, lint e build aprovados.
 
+A ação real **Exportar sequência** também foi executada na Timeline 2 com o projeto local: o navegador exibiu `Exportação concluída: Jornal-12h---15-05-2026-editado.mp4` e a API registrou `POST /api/v1/media/local/exports/timeline` com status 200. O preview local ficou aberto nessa confirmação.
+
 ## Entrega isolada — contrato de observação do HUB
 
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.
