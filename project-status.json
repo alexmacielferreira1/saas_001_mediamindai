@@ -4,8 +4,8 @@
   "manual_checks": {
     "frontend_functional_validation": {
       "status": "partial",
-      "updated_at": "2026-09-28T19:55:00-03:00",
-      "notes": "Workspace 2 exercitado localmente até o Passo 5, incluindo Timeline e player final. 187 testes frontend em 54 arquivos, lint e build aprovados; 158 testes backend aprovados e 2 de integração ignorados pelo ambiente. Preview, player final e render MP4 preservam lacunas em preto/silêncio. A navegação de produção foi consolidada em uma única página Edição, preservando as filas internas e migrando links/permissões antigos. Restante da esteira, fila durável e persistência PostgreSQL ponta a ponta ainda pendentes."
+      "updated_at": "2026-09-28T20:25:00-03:00",
+      "notes": "Workspace 2 exercitado localmente até o Passo 5, incluindo Timeline e player final. 191 testes frontend em 55 arquivos, lint e build aprovados; 158 testes backend aprovados e 2 de integração ignorados pelo ambiente. Preview, player final e render MP4 preservam lacunas em preto/silêncio; a Timeline continua o relógio mesmo se a fonte do clipe estiver temporariamente indisponível. Keyframes distinguem visualmente estado vazio/ativo. Biblioteca local: 32 presets AI Edita Legendas Pro v2 + 4 MediaMind aplicáveis e visíveis no preview; sincronização palavra a palavra e render final permanecem pendentes. A navegação de produção foi consolidada em uma única página Edição e as superfícies solicitadas receberam o padrão arredondado. Restante da esteira, fila durável e persistência PostgreSQL ponta a ponta ainda pendentes."
     }
   },
   "milestones": {

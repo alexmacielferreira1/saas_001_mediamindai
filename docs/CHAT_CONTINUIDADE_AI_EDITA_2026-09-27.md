@@ -199,3 +199,15 @@ Antes de marcar qualquer linha como concluída:
 - links, permissões salvas e atalhos antigos com `para_editar` são convertidos para `em_edicao`, evitando quebrar favoritos e configurações existentes;
 - a compatibilidade foi validada no navegador local: a URL legada abriu diretamente a Central de edição unificada;
 - suíte completa após a alteração: 54 arquivos/187 testes frontend aprovados, lint e build aprovados; avisos conhecidos de tamanho de chunk, Browserslist e importação dinâmica permanecem não bloqueantes.
+
+### Timeline, keyframes, cantos e Legendas Pro — 28/09/2026
+
+- a reprodução deixou de depender de uma fonte carregável exatamente no ponto da agulha: sequências com duração continuam avançando em lacunas ou durante reconexão de mídia e exibem quadro preto;
+- o aviso `Posicione a agulha sobre um clipe reproduzível` foi removido do fluxo funcional;
+- o losango do keyframe fica vazado em cinza quando não há ponto no quadro atual e azul preenchido quando há;
+- o pacote anexado `AI-Edita-Legendas-Pro-v2.aiedita` foi validado como `ai-edita-style-pack` versão 1, com 32 templates; todos foram mapeados para propriedades editáveis da Timeline, agrupados por Palavra ativa, Uma palavra, Caixas, Neon & impacto e Editorial;
+- foram acrescentados quatro estilos autorais MediaMind: Notícia, Documental, Social e Acessível;
+- presets aplicam fonte, tamanho, peso, cor, contorno, sombra, fundo, raio e movimento ao clipe de texto; podem criar nova legenda no playhead ou ser aplicados à legenda selecionada;
+- ainda pendem sincronização automática por palavra, tradução/karaokê temporal e aplicação equivalente no render backend; por isso `MM-CAPTION-001` continua `in_progress`;
+- superfícies principais e cartões das telas entre Agendamentos e Finalizado, além de Para publicação, Publicado e Analytics, receberam `rounded-xl`/recorte de conteúdo sem alterar o fluxo estrutural;
+- validação: 55 arquivos/191 testes frontend aprovados, lint e build aprovados. O preview local foi aberto diretamente na biblioteca de legendas. Nenhum deploy em produção foi realizado.

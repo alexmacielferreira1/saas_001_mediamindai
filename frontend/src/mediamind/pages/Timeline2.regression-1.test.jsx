@@ -62,8 +62,13 @@ describe('Timeline 2 pointer regressions', () => {
     const canvas = screen.getByTestId('timeline2-track-v1').querySelector('[data-track-canvas]');
     fireEvent.click(within(canvas).getByRole('button'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar keyframe Escala' }));
-    expect(screen.getByRole('button', { name: 'Remover keyframe Escala' })).toBeInTheDocument();
+    const emptyDiamond = screen.getByRole('button', { name: 'Adicionar keyframe Escala' });
+    expect(emptyDiamond).toHaveClass('text-slate-600');
+    expect(emptyDiamond.querySelector('svg')).toHaveAttribute('fill', 'none');
+    fireEvent.click(emptyDiamond);
+    const activeDiamond = screen.getByRole('button', { name: 'Remover keyframe Escala' });
+    expect(activeDiamond).toHaveClass('text-sky-400');
+    expect(activeDiamond.querySelector('svg')).toHaveAttribute('fill', 'currentColor');
 
     fireEvent.change(screen.getByLabelText('Curva do keyframe Escala'), { target: { value: 'bezier' } });
     const saved = JSON.parse(localStorage.getItem('mm_timeline2_project:timeline2-local'));
@@ -151,5 +156,41 @@ describe('Timeline 2 pointer regressions', () => {
     act(() => vi.advanceTimersByTime(1500));
     expect(Number(screen.getByLabelText('Playhead').value)).toBeGreaterThanOrEqual(1.4);
     vi.useRealTimers();
+  });
+
+  it('plays a timed sequence as black when its media source is temporarily unavailable', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    const draft = addMediaClip(createTimeline2Document({ id: 'offline-project' }), {
+      id: 'offline-asset', clipId: 'offline-clip', name: 'Mídia reconectando', kind: 'video', duration: 4,
+    }, { trackId: 'v1', start: 2 });
+    localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(draft));
+    render(<Timeline2 />);
+
+    expect(screen.getByText('Quadro preto · sequência em andamento')).toBeInTheDocument();
+    expect(screen.queryByText(/Posicione a agulha/)).not.toBeInTheDocument();
+    const play = screen.getByRole('button', { name: 'Reproduzir' });
+    expect(play).toBeEnabled();
+    fireEvent.click(play);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(Number(screen.getByLabelText('Playhead').value)).toBeGreaterThanOrEqual(0.9);
+    vi.useRealTimers();
+  });
+
+  it('creates an editable caption using an imported AI Edita style', () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: 'Legendas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Selecionar estilo Neon Ciano' }));
+    fireEvent.change(screen.getByLabelText('Texto da legenda'), { target: { value: 'ENERGIA DIGITAL' } });
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar no playhead/i }));
+
+    const preview = screen.getAllByText('ENERGIA DIGITAL').find((node) => node.dataset.testid?.startsWith('preview-layer-'));
+    expect(preview).toHaveStyle({ color: '#c9fbff', fontSize: '50px' });
+    expect(preview).toHaveClass('mm-caption-pulse');
+    const saved = JSON.parse(localStorage.getItem('mm_timeline2_project:timeline2-local'));
+    expect(saved.tracks.find((track) => track.id === 't1').clips[0].properties).toMatchObject({
+      captionPresetId: 'ai-edita-legendas-pro-v2-neon-ciano',
+      outlineColor: '#007985',
+    });
   });
 });

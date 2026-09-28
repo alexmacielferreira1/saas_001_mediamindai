@@ -18,7 +18,7 @@ export default function AprovacoesPage() {
   }
 
   return (
-    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(290px,30%)_1fr]">
+    <div className="grid h-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(290px,30%)_1fr]">
       <div className="flex h-full min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="border-b border-slate-800 p-3">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Review & Approval</p>

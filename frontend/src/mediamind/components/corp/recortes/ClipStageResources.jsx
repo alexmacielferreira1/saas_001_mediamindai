@@ -36,7 +36,7 @@ export default function ClipStageResources({ stage }) {
   return (
     <section className="grid gap-2 xl:grid-cols-3">
       {items.map(({ icon: Icon, title, lines }) => (
-        <article key={title} className="border border-slate-800 bg-slate-950/45 p-2.5">
+        <article key={title} className="rounded-xl border border-slate-800 bg-slate-950/45 p-2.5">
           <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wide text-sky-300"><Icon size={12} />{title}</p>
           <div className="mt-2 space-y-1">
             {lines.map((line, index) => <button type="button" key={`${line}-${index}`} className="flex w-full items-center gap-2 border-b border-slate-800/70 py-1 text-left text-[9px] text-slate-400 last:border-0 hover:text-slate-200"><span className="size-1 rounded-full bg-sky-400" />{line}</button>)}

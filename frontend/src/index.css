@@ -46,6 +46,24 @@
   }
 }
 
+@keyframes mm-caption-pulse { 0% { scale: .86; opacity: .25; } 55% { scale: 1.1; opacity: 1; } 100% { scale: 1; opacity: 1; } }
+@keyframes mm-caption-impact { 0% { scale: .55; opacity: 0; } 60% { scale: 1.16; opacity: 1; } 100% { scale: 1; } }
+@keyframes mm-caption-slide { 0% { translate: 0 28px; opacity: 0; } 100% { translate: 0 0; opacity: 1; } }
+@keyframes mm-caption-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mm-caption-shake { 0% { rotate: -5deg; scale: .75; } 45% { rotate: 4deg; scale: 1.1; } 100% { rotate: 0; scale: 1; } }
+@keyframes mm-caption-flash { 0%, 35% { opacity: .25; } 18%, 100% { opacity: 1; } }
+@keyframes mm-caption-tilt { 0% { rotate: -9deg; scale: .7; } 65% { rotate: 3deg; scale: 1.1; } 100% { rotate: 0; scale: 1; } }
+@keyframes mm-caption-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+.mm-caption-pulse { animation: mm-caption-pulse .4s ease-out both; }
+.mm-caption-impact { animation: mm-caption-impact .36s cubic-bezier(.2,.9,.2,1.2) both; }
+.mm-caption-slide { animation: mm-caption-slide .32s ease-out both; }
+.mm-caption-fade { animation: mm-caption-fade .36s ease-out both; }
+.mm-caption-shake { animation: mm-caption-shake .42s ease-out both; }
+.mm-caption-flash { animation: mm-caption-flash .3s ease-out both; }
+.mm-caption-tilt { animation: mm-caption-tilt .42s ease-out both; }
+.mm-caption-reveal { animation: mm-caption-reveal .45s ease-out both; }
+
 @layer base {
   * {
     @apply border-border;

@@ -104,7 +104,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col border border-slate-800 bg-slate-950/35">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Pós-produção</p>
@@ -208,7 +208,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <div className="grid gap-3 xl:grid-cols-[1.15fr_1.35fr_.8fr]">
-                <section className="overflow-hidden border border-slate-800 bg-slate-950/65">
+                <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/65">
                   <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
                     <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Play size={11} /> Preview</p>
                     <span className="font-mono text-[10px] tabular-nums text-sky-300">00:00:38:12</span>
@@ -221,7 +221,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                   </div>
                 </section>
 
-                <section className="border border-slate-800 bg-slate-950/45">
+                <section className="rounded-xl border border-slate-800 bg-slate-950/45">
                   <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
                     <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Layers3 size={11} /> Timeline da entrega</p>
                     <span className="text-[9px] text-slate-500">V1 · corte bruto</span>
@@ -244,7 +244,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                   </div>
                 </section>
 
-                <section className="border border-slate-800 bg-slate-950/45">
+                <section className="rounded-xl border border-slate-800 bg-slate-950/45">
                   <div className="border-b border-slate-800 px-3 py-2"><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><GitBranch size={11} /> Versões e revisão</p></div>
                   <div className="divide-y divide-slate-800">
                     <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-slate-200">V1 · Corte bruto</span><span className="text-[9px] text-emerald-300">Atual</span></div><p className="mt-0.5 text-[9px] text-slate-500">Salva agora · {sel.editor || 'Editor'}</p></div>
@@ -258,7 +258,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                 </section>
               </div>
 
-              <section className="border border-slate-800 bg-slate-950/45">
+              <section className="rounded-xl border border-slate-800 bg-slate-950/45">
                 <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
                   <div><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-300"><Layers3 size={12} className="text-sky-400" /> Mídias vinculadas à produção</p><p className="mt-0.5 text-[9px] text-slate-500">Arquivos da gravação e referências disponíveis para esta edição.</p></div>
                   <button className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Ver todas as mídias ({mediaGroups.reduce((sum, group) => sum + group.count, 0)})</button>
@@ -268,7 +268,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                 </div>
               </section>
 
-              <section className="grid gap-3 border border-slate-800 bg-slate-950/45 p-3 xl:grid-cols-[1.25fr_.75fr]">
+              <section className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/45 p-3 xl:grid-cols-[1.25fr_.75fr]">
                 <div><p className="text-[10px] font-bold uppercase text-slate-300">Material para edição</p><p className="mb-2 text-[9px] text-slate-500">Baixe os arquivos, gere o pacote do projeto ou continue no Workspace.</p><div className="flex flex-wrap gap-1.5"><button onClick={copiarNomes} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Download size={11} /> Baixar mídias</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FileCode2 size={11} /> Baixar XML</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Layers3 size={11} /> Pacote completo</button><button onClick={() => window.location.assign('/workspace')} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Abrir no Workspace</button></div></div>
                 <div><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-300"><MessageCircle size={11} className="text-sky-400" /> Observações de edição</p><textarea value={sel.edicao_obs || ''} onChange={(e) => field('edicao_obs', e.target.value)} rows={3} className={`${inputCls()} mt-1`} placeholder="Cortes, ajustes, GC, trilha e observações..." /></div>
               </section>
@@ -341,7 +341,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                 )}
               </div>
 
-              <section className="overflow-hidden border border-slate-800 bg-slate-950/45">
+              <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/45">
                 <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-slate-300">Versões editadas</p><p className="text-[9px] text-slate-500">Histórico de entregas; novas versões não sobrescrevem as anteriores.</p></div><button className="flex items-center gap-1 rounded bg-sky-500 px-2 py-1.5 text-[9px] font-bold text-slate-950 hover:bg-sky-400"><Upload size={11} /> Enviar nova versão</button></div>
                 <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-[9px]"><thead className="border-b border-slate-800 bg-slate-900/55 uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Versão</th><th>Tipo</th><th>Responsável</th><th>Data e hora</th><th>Observações</th><th>Status</th><th className="pr-3 text-right">Ações</th></tr></thead><tbody className="divide-y divide-slate-800 text-slate-400">{[
                   ['V3', 'Master', 'Ajustes de áudio e GC. Versão final.', 'Atual'],

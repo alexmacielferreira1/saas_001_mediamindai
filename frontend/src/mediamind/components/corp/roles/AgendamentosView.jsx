@@ -91,7 +91,7 @@ export default function AgendamentosView() {
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col border border-slate-800 bg-slate-950/35">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Agenda</p><h2 className="text-base font-semibold text-slate-100">Agenda de gravações</h2><p className="text-[11px] text-slate-500">Selecione um compromisso para editar os detalhes no painel ao lado.</p></div>
         <button onClick={nova} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">

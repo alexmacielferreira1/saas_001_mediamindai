@@ -12,6 +12,7 @@ import {
   clearTimelineRange, separateClipAudio, setPlayhead, setTimelineIn, setTimelineOut, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
   getActiveClips, getClipPropertiesAtTime, getTimelineGeometry, pointerToTimelineTime, updateClipProperties, updateKeyframeCurve,
 } from '../lib/timeline2Model';
+import { CAPTION_PRESETS, captionPresetToProperties, getCaptionPreset } from '../lib/captionPresets';
 
 const INITIAL_DOCUMENT = createTimeline2Document({ id: 'timeline2-local', name: 'Novo projeto MediaMind' });
 
@@ -52,6 +53,7 @@ export default function Timeline2({ embedded = false }) {
   const [activePanel, setActivePanel] = useState('media');
   const [activeTool, setActiveTool] = useState('select');
   const [textValue, setTextValue] = useState('');
+  const [captionPresetId, setCaptionPresetId] = useState(CAPTION_PRESETS[0].id);
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -66,8 +68,8 @@ export default function Timeline2({ embedded = false }) {
   const selected = document.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedClipId);
   const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected ? getClipPropertiesAtTime(selected, document.playhead) : {}) };
   const activeClips = useMemo(() => getActiveClips(document, document.playhead), [document]);
-  const activeVisuals = activeClips.filter((clip) => clip.kind === 'video' || clip.kind === 'text');
-  const activeAudio = activeClips.filter((clip) => clip.kind === 'audio');
+  const activeVisuals = activeClips.filter((clip) => clip.kind === 'text' || (clip.kind === 'video' && clip.src));
+  const activeAudio = activeClips.filter((clip) => clip.kind === 'audio' && clip.src);
   const scaleDuration = Math.max(document.duration, 30);
   const timelineGeometry = useMemo(() => getTimelineGeometry(scaleDuration, document.zoom), [scaleDuration, document.zoom]);
   const projectMedia = useMemo(() => {
@@ -79,8 +81,8 @@ export default function Timeline2({ embedded = false }) {
     () => assets.filter((asset) => ['video', 'audio'].includes(asset.asset_type)).map(assetToMedia),
     [assets],
   );
-  const hasPlayableMedia = useMemo(
-    () => document.tracks.some((track) => track.clips.some((clip) => ['video', 'audio'].includes(clip.kind) && clip.src)),
+  const hasTimedSequence = useMemo(
+    () => document.tracks.some((track) => track.clips.some((clip) => ['video', 'audio'].includes(clip.kind) && Number(clip.duration) > 0)),
     [document.tracks],
   );
 
@@ -121,8 +123,8 @@ export default function Timeline2({ embedded = false }) {
     const players = activeClips
       .map((clip) => ({ clip, player: mediaRefs.current.get(clip.id) }))
       .filter((item) => item.player);
-    if (!hasPlayableMedia) {
-      setNotice('Importe um vídeo ou áudio para reproduzir a sequência.');
+    if (!hasTimedSequence) {
+      setNotice('Importe um vídeo ou áudio para criar uma sequência com duração.');
       return;
     }
     if (playing) {
@@ -181,8 +183,17 @@ export default function Timeline2({ embedded = false }) {
   const addText = (caption = false) => {
     if (!textValue.trim()) return;
     const clipId = `text-${Date.now()}`;
-    commit((current) => addTextClip(current, textValue, { properties: { text: textValue, caption, fontSize: caption ? 34 : 54, y: caption ? 34 : 0 } }));
+    const properties = caption
+      ? captionPresetToProperties(getCaptionPreset(captionPresetId), textValue)
+      : { text: textValue, caption: false, fontSize: 54, y: 0 };
+    commit((current) => addTextClip(current, textValue, { properties }));
     setTextValue(''); setActivePanel(caption ? 'captions' : 'text'); setNotice(`${caption ? 'Legenda' : 'Texto'} adicionado no playhead.`);
+  };
+  const applyCaptionPresetToSelected = () => {
+    if (!selected || selected.kind !== 'text') return;
+    const properties = captionPresetToProperties(getCaptionPreset(captionPresetId), selected.properties?.text || selected.name);
+    commit((current) => updateClipProperties(current, selected.id, properties));
+    setNotice(`Estilo ${getCaptionPreset(captionPresetId).name} aplicado à legenda selecionada.`);
   };
   useEffect(() => {
     let active = true;
@@ -367,7 +378,26 @@ export default function Timeline2({ embedded = false }) {
                 {libraryTab === 'project' && !projectMedia.length && <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-xl border border-dashed border-slate-700 p-6 text-xs text-slate-400"><Upload className="mx-auto mb-2" />Arraste ou selecione vídeos e áudios</button>}
               </div>
             </>}
-            {(activePanel === 'text' || activePanel === 'captions') && <div><h2 className="text-xs font-bold uppercase text-slate-400">{activePanel === 'captions' ? 'Legendas' : 'Texto'}</h2><textarea value={textValue} onChange={(event) => setTextValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addText(activePanel === 'captions'); } }} aria-label={activePanel === 'captions' ? 'Texto da legenda' : 'Texto do elemento'} placeholder={activePanel === 'captions' ? 'Digite a legenda e pressione Enter...' : 'Digite o texto e pressione Enter...'} className="mt-3 h-28 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" /><button type="button" onClick={() => addText(activePanel === 'captions')} className="mt-3 w2-button w-full justify-center"><Plus size={14} /> Adicionar no playhead</button></div>}
+            {(activePanel === 'text' || activePanel === 'captions') && <div>
+              <h2 className="text-xs font-bold uppercase text-slate-400">{activePanel === 'captions' ? 'Legendas' : 'Texto'}</h2>
+              <textarea value={textValue} onChange={(event) => setTextValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addText(activePanel === 'captions'); } }} aria-label={activePanel === 'captions' ? 'Texto da legenda' : 'Texto do elemento'} placeholder={activePanel === 'captions' ? 'Digite a legenda e pressione Enter...' : 'Digite o texto e pressione Enter...'} className="mt-3 h-28 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" />
+              {activePanel === 'captions' && <div className="mt-3">
+                <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-bold uppercase text-slate-500">36 estilos editáveis</p><span className="text-[9px] text-sky-300">AI Edita + MediaMind</span></div>
+                <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+                  {[...new Set(CAPTION_PRESETS.map((preset) => preset.category))].map((category) => <section key={category}>
+                    <p className="mb-1 text-[9px] font-bold uppercase text-slate-600">{category}</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {CAPTION_PRESETS.filter((preset) => preset.category === category).map((preset) => <button key={preset.id} type="button" aria-label={`Selecionar estilo ${preset.name}`} aria-pressed={captionPresetId === preset.id} onClick={() => setCaptionPresetId(preset.id)} className={`min-h-14 rounded-lg border p-2 text-left transition ${captionPresetId === preset.id ? 'border-sky-400 bg-sky-500/10' : 'border-slate-800 bg-slate-950/50 hover:border-slate-600'}`}>
+                        <span className="block truncate text-[10px] font-bold" style={{ color: preset.color, fontFamily: preset.fontFamily, textShadow: `0 0 ${preset.shadowBlur}px ${preset.shadowColor}`, WebkitTextStroke: `${preset.outlineWidth}px ${preset.outlineColor}`, backgroundColor: preset.backgroundColor, borderRadius: `${preset.backgroundRadius}px`, padding: preset.backgroundColor === 'transparent' ? 0 : '2px 4px' }}>{preset.preview}</span>
+                        <span className="mt-1 block truncate text-[9px] text-slate-500">{preset.name}</span>
+                      </button>)}
+                    </div>
+                  </section>)}
+                </div>
+                <button type="button" onClick={applyCaptionPresetToSelected} disabled={selected?.kind !== 'text'} className="mt-2 w2-button w-full justify-center disabled:opacity-40"><Wand2 size={13} /> Aplicar à legenda selecionada</button>
+              </div>}
+              <button type="button" onClick={() => addText(activePanel === 'captions')} className="mt-3 w2-button w-full justify-center"><Plus size={14} /> Adicionar no playhead</button>
+            </div>}
             {activePanel === 'elements' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Elementos</h2><div className="mt-3 grid grid-cols-2 gap-2">{['◼ Forma', '● Círculo', '→ Seta', '★ Destaque'].map((item) => <button key={item} type="button" onClick={() => { setTextValue(item); commit((current) => addTextClip(current, item, { properties: { text: item, fontSize: 64 } })); setNotice(`${item} adicionado.`); }} className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs hover:border-sky-500">{item}</button>)}</div></div>}
             {activePanel === 'effects' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Efeitos rápidos</h2><div className="mt-3 space-y-2">{[['Fade 50%', { opacity: 50 }], ['Zoom 120%', { scale: 120 }], ['Girar 15°', { rotation: 15 }], ['Velocidade 2x', { speed: 2 }]].map(([label, values]) => <button key={label} type="button" disabled={!selected} onClick={() => commit((current) => updateClipProperties(current, selected.id, values))} className="w2-button w-full justify-center disabled:opacity-40">{label}</button>)}</div></div>}
             {activePanel === 'adjust' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Ajustes</h2><p className="mt-3 text-xs leading-5 text-slate-400">Use o Inspetor à direita para posição, trim, transformação, velocidade e áudio do clipe selecionado.</p><button type="button" onClick={() => commit(toggleSnapping)} className="mt-4 w2-button w-full justify-center"><Magnet size={14} /> Snapping {document.snapEnabled ? 'ligado' : 'desligado'}</button></div>}
@@ -379,14 +409,14 @@ export default function Timeline2({ embedded = false }) {
           <div className="relative grid flex-1 place-items-center overflow-hidden rounded-xl bg-black">
             {activeVisuals.map((clip) => {
               const properties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(clip.properties || {}) };
-              if (clip.kind === 'text') return <div key={clip.id} data-testid={`preview-layer-${clip.id}`} onClick={() => setSelectedClipId(clip.id)} className="absolute max-w-[90%] cursor-pointer text-center font-bold text-white drop-shadow-lg" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, fontSize: `${properties.fontSize || 54}px`, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }}>{properties.text || clip.name}</div>;
+              if (clip.kind === 'text') return <div key={clip.id} data-testid={`preview-layer-${clip.id}`} onClick={() => setSelectedClipId(clip.id)} className={`absolute max-w-[90%] cursor-pointer text-center mm-caption-${properties.animation || 'none'}`} style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, fontSize: `${properties.fontSize || 54}px`, fontFamily: properties.fontFamily, fontWeight: properties.fontWeight || 700, color: properties.color || '#ffffff', WebkitTextStroke: `${properties.outlineWidth || 0}px ${properties.outlineColor || 'transparent'}`, textShadow: `0 0 ${properties.shadowBlur || 0}px ${properties.shadowColor || 'transparent'}`, backgroundColor: properties.backgroundColor || 'transparent', borderRadius: `${properties.backgroundRadius || 0}px`, padding: properties.backgroundColor && properties.backgroundColor !== 'transparent' ? '0.12em 0.28em' : 0, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }}>{properties.text || clip.name}</div>;
               return <video key={clip.id} data-testid={`preview-layer-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} muted={Boolean(properties.audioDisabled)} preload="metadata" onClick={() => setSelectedClipId(clip.id)} className="absolute max-h-full max-w-full cursor-pointer transition-transform" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }} />;
             })}
             {activeAudio.map((clip) => <audio key={clip.id} data-testid={`preview-audio-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} preload="metadata" />)}
-            {!activeVisuals.length && <div className="text-center"><div className="text-6xl">{activeAudio.length ? '🎵' : '🎬'}</div><p className="mt-3 text-sm font-semibold">{activeAudio[0]?.name || (hasPlayableMedia ? 'Quadro preto · sequência em andamento' : selected?.name || 'Posicione a agulha sobre um clipe')}</p><p className="mt-1 text-xs text-slate-500">{hasPlayableMedia ? 'A reprodução continua até o próximo clipe sem interromper a sequência.' : selected ? 'O preview segue a agulha e as camadas ativas.' : 'Importe um arquivo ou escolha no Acervo'}</p></div>}
+            {!activeVisuals.length && <div className="text-center"><div className="text-6xl">{activeAudio.length ? '🎵' : '🎬'}</div><p className="mt-3 text-sm font-semibold">{activeAudio[0]?.name || (hasTimedSequence ? 'Quadro preto · sequência em andamento' : 'Timeline vazia')}</p><p className="mt-1 text-xs text-slate-500">{hasTimedSequence ? 'A reprodução continua pelo espaço vazio até a próxima camada, sem interromper a sequência.' : 'Importe um arquivo ou escolha no Acervo'}</p></div>}
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button type="button" onClick={togglePlayback} disabled={!hasPlayableMedia} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
+            <button type="button" onClick={togglePlayback} disabled={!hasTimedSequence} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
             <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => updateTransient((current) => setPlayhead(current, event.target.value))} className="flex-1" />
           </div>
         </main>
@@ -401,7 +431,7 @@ export default function Timeline2({ embedded = false }) {
             <dl className="grid grid-cols-2 gap-2 text-xs"><dt className="text-slate-500">Source IN</dt><dd>{formatTime(selected.sourceIn)}</dd><dt className="text-slate-500">Source OUT</dt><dd>{formatTime(selected.sourceOut)}</dd></dl>
             <div className="border-t border-slate-800 pt-3"><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-bold uppercase text-sky-300">Transformação</h3><label className="flex items-center gap-2 text-[10px] text-slate-400"><input type="checkbox" checked={autoKeyframe} onChange={(event) => setAutoKeyframe(event.target.checked)} /> Auto keyframe</label></div>{[
               ['Posição X', 'x', -500, 500, 1], ['Posição Y', 'y', -500, 500, 1], ['Escala', 'scale', 10, 300, 1], ['Rotação', 'rotation', -180, 180, 1], ['Opacidade', 'opacity', 0, 100, 1],
-            ].map(([label, field, min, max, step]) => { const currentKeyframe = keyframeAtPlayhead(field); return <div key={field} className="mb-3 rounded-lg border border-slate-800 bg-slate-950/40 p-2"><span className="mb-1 flex items-center justify-between text-xs text-slate-400"><span>{label}</span><span className="flex items-center gap-2"><strong className="text-slate-200">{Number(Number(selectedProperties[field]).toFixed(3))}{['scale', 'opacity'].includes(field) ? '%' : ''}</strong><button type="button" onClick={() => toggleKeyframe(field)} aria-label={`${currentKeyframe ? 'Remover' : 'Adicionar'} keyframe ${label}`} title="Ativar/desativar keyframe neste quadro" className={currentKeyframe ? 'text-amber-300' : 'text-slate-600 hover:text-slate-200'}><Diamond size={13} fill={currentKeyframe ? 'currentColor' : 'none'} /></button></span></span><input aria-label={label} type="range" min={min} max={max} step={step} value={selectedProperties[field]} onChange={(event) => setProperty(field, event.target.value)} className="w-full" />{currentKeyframe && <div className="mt-2 flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Curva<select aria-label={`Curva do keyframe ${label}`} value={currentKeyframe.easing || 'smooth'} onChange={(event) => setKeyframeCurve(field, event.target.value)} className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"><option value="hold">Degrau</option><option value="linear">Linear</option><option value="smooth">Suave</option><option value="bezier">Bézier</option></select></label><span className="h-7 w-16 rounded border border-slate-700 bg-slate-900 p-1"><svg viewBox="0 0 56 20" className="h-full w-full" aria-label={`Gráfico da curva ${label}`}><path d={currentKeyframe.easing === 'hold' ? 'M1 19 H54 V1' : currentKeyframe.easing === 'linear' ? 'M1 19 L55 1' : 'M1 19 C18 19 38 1 55 1'} fill="none" stroke="currentColor" strokeWidth="2" className="text-sky-400" /></svg></span></div>}</div>; })}</div>
+            ].map(([label, field, min, max, step]) => { const currentKeyframe = keyframeAtPlayhead(field); return <div key={field} className="mb-3 rounded-lg border border-slate-800 bg-slate-950/40 p-2"><span className="mb-1 flex items-center justify-between text-xs text-slate-400"><span>{label}</span><span className="flex items-center gap-2"><strong className="text-slate-200">{Number(Number(selectedProperties[field]).toFixed(3))}{['scale', 'opacity'].includes(field) ? '%' : ''}</strong><button type="button" onClick={() => toggleKeyframe(field)} aria-label={`${currentKeyframe ? 'Remover' : 'Adicionar'} keyframe ${label}`} title="Ativar/desativar keyframe neste quadro" className={currentKeyframe ? 'text-sky-400' : 'text-slate-600 hover:text-slate-200'}><Diamond size={13} fill={currentKeyframe ? 'currentColor' : 'none'} /></button></span></span><input aria-label={label} type="range" min={min} max={max} step={step} value={selectedProperties[field]} onChange={(event) => setProperty(field, event.target.value)} className="w-full" />{currentKeyframe && <div className="mt-2 flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Curva<select aria-label={`Curva do keyframe ${label}`} value={currentKeyframe.easing || 'smooth'} onChange={(event) => setKeyframeCurve(field, event.target.value)} className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"><option value="hold">Degrau</option><option value="linear">Linear</option><option value="smooth">Suave</option><option value="bezier">Bézier</option></select></label><span className="h-7 w-16 rounded border border-slate-700 bg-slate-900 p-1"><svg viewBox="0 0 56 20" className="h-full w-full" aria-label={`Gráfico da curva ${label}`}><path d={currentKeyframe.easing === 'hold' ? 'M1 19 H54 V1' : currentKeyframe.easing === 'linear' ? 'M1 19 L55 1' : 'M1 19 C18 19 38 1 55 1'} fill="none" stroke="currentColor" strokeWidth="2" className="text-sky-400" /></svg></span></div>}</div>; })}</div>
             {selected.kind !== 'text' && <div className="border-t border-slate-800 pt-3"><h3 className="mb-3 text-xs font-bold uppercase text-emerald-300">Tempo e áudio</h3><label className="mb-3 block text-xs text-slate-400"><span className="mb-1 flex justify-between"><span>Velocidade</span><strong>{selectedProperties.speed}x</strong></span><input aria-label="Velocidade" type="range" min="0.25" max="4" step="0.25" value={selectedProperties.speed} onChange={(event) => setProperty('speed', event.target.value)} className="w-full" /></label><label className="block text-xs text-slate-400"><span className="mb-1 flex justify-between"><span>Volume</span><strong>{selectedProperties.volume} dB</strong></span><input aria-label="Volume" type="range" min="-60" max="6" step="1" value={selectedProperties.volume} onChange={(event) => setProperty('volume', event.target.value)} className="w-full" /></label>{selected.kind === 'video' && <button type="button" disabled={Boolean(selected.properties?.audioDisabled) || !selected.src} onClick={() => commit((current) => separateClipAudio(current, selected.id))} className="mt-3 w2-button w-full justify-center disabled:opacity-40"><Music size={13} /> {selected.properties?.audioDisabled ? 'Áudio já separado' : 'Separar áudio original'}</button>}</div>}
           </div> : <div className="grid h-full min-h-64 place-items-center text-center"><div><SlidersHorizontal className="mx-auto text-slate-600" size={38} /><h3 className="mt-4 font-bold">Nenhum elemento selecionado</h3><p className="mt-2 text-xs text-slate-500">Clique em um clipe para editar suas propriedades.</p></div></div>}
         </aside>

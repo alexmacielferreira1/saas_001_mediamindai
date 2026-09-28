@@ -105,7 +105,7 @@ export default function GravacoesMateriais() {
   }
 
   return (
-    <div className="grid h-full overflow-hidden border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(320px,38%)_1fr]">
+    <div className="grid h-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(320px,38%)_1fr]">
       {/* Gravações em andamento */}
       <div className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
@@ -179,7 +179,7 @@ export default function GravacoesMateriais() {
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-            className={`flex w-full flex-col items-center justify-center gap-2 border border-dashed py-7 text-center transition-colors ${dragOver ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-700 bg-slate-950/40 text-slate-400 hover:border-sky-600 hover:text-sky-300'}`}
+            className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-7 text-center transition-colors ${dragOver ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-700 bg-slate-950/40 text-slate-400 hover:border-sky-600 hover:text-sky-300'}`}
           >
             <Upload size={22} className={uploading ? 'animate-pulse' : ''} />
             <span className="text-xs font-semibold">{uploading ? 'Enviando arquivos…' : 'Arraste os arquivos gravados aqui'}</span>
