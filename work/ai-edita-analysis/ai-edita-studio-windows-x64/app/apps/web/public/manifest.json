@@ -1,0 +1,17 @@
+{
+	"name": "AI Edita",
+	"short_name": "AI Edita",
+	"description": "Estúdio de edição de vídeos com IA e timeline editável.",
+	"display": "standalone",
+	"start_url": "/projects",
+	"background_color": "#070a09",
+	"theme_color": "#b9f443",
+	"icons": [
+		{
+			"src": "/ai-edita-app-icon.png",
+			"sizes": "1254x1254",
+			"type": "image/png",
+			"purpose": "any maskable"
+		}
+	]
+}

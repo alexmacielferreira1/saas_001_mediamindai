@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/element-library": {
+      "maxDuration": 300
+    },
+    "/api/health": {},
+    "/api/integrations": {
+      "maxDuration": 300
+    },
+    "/api/integrations/mcp": {},
+    "/api/integrations/transcribe": {
+      "maxDuration": 180
+    },
+    "/api/local-storage": {
+      "maxDuration": 300
+    },
+    "/api/remotion/jobs": {
+      "maxDuration": 300
+    },
+    "/api/remotion/jobs/[job_id]": {},
+    "/api/remotion/jobs/[job_id]/file": {},
+    "/api/workspace": {
+      "maxDuration": 300
+    },
+    "/api/workspace/assets": {
+      "maxDuration": 300
+    },
+    "/api/workspace/branding": {}
+  }
+}

@@ -1,0 +1,1749 @@
+{
+	"format": "ai-edita-sound-library",
+	"version": 1,
+	"license": "Efeitos originais do AI Edita, sintetizados para este aplicativo. Uso livre nos seus vídeos, inclusive comerciais. Não redistribua a biblioteca separada do aplicativo.",
+	"categories": [
+		{
+			"id": "transicao",
+			"name": "Transição",
+			"description": "Passagens entre cortes e cenas."
+		},
+		{
+			"id": "impacto",
+			"name": "Impacto",
+			"description": "Batidas para marcar viradas e destaques."
+		},
+		{
+			"id": "whoosh",
+			"name": "Whoosh",
+			"description": "Movimento de entrada e saída de elementos."
+		},
+		{
+			"id": "salto",
+			"name": "Salto",
+			"description": "Pops curtos para textos e adesivos."
+		},
+		{
+			"id": "glitch",
+			"name": "Glitch",
+			"description": "Falhas digitais e ruídos eletrônicos."
+		},
+		{
+			"id": "riser",
+			"name": "Riser",
+			"description": "Tensão que cresce antes de uma revelação."
+		},
+		{
+			"id": "interface",
+			"name": "Interface",
+			"description": "Cliques e avisos discretos."
+		},
+		{
+			"id": "destaque",
+			"name": "Destaque",
+			"description": "Reforço de palavras, selos e números."
+		},
+		{
+			"id": "ambiencia",
+			"name": "Ambiência",
+			"description": "Fundos e texturas longas."
+		}
+	],
+	"sounds": [
+		{
+			"id": "transicao-suave",
+			"name": "Transição suave",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-suave.wav",
+			"order": 0,
+			"duration": 0.549,
+			"peakDb": -1.0,
+			"rmsDb": -21.04
+		},
+		{
+			"id": "transicao-media",
+			"name": "Transição média",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-media.wav",
+			"order": 1,
+			"duration": 0.45,
+			"peakDb": -1.0,
+			"rmsDb": -20.65
+		},
+		{
+			"id": "transicao-forte",
+			"name": "Transição forte",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-forte.wav",
+			"order": 2,
+			"duration": 0.38,
+			"peakDb": -1.0,
+			"rmsDb": -20.21
+		},
+		{
+			"id": "transicao-longa",
+			"name": "Transição longa",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-longa.wav",
+			"order": 3,
+			"duration": 0.837,
+			"peakDb": -1.0,
+			"rmsDb": -20.73
+		},
+		{
+			"id": "transicao-fita",
+			"name": "Transição de fita",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-fita.wav",
+			"order": 4,
+			"duration": 0.5,
+			"peakDb": -1.0,
+			"rmsDb": -21.73
+		},
+		{
+			"id": "transicao-rapida",
+			"name": "Transição rápida",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-rapida.wav",
+			"order": 5,
+			"duration": 0.22,
+			"peakDb": -1.23,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-grave",
+			"name": "Transição grave",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-grave.wav",
+			"order": 6,
+			"duration": 0.586,
+			"peakDb": -1.0,
+			"rmsDb": -20.28
+		},
+		{
+			"id": "transicao-aguda",
+			"name": "Transição aguda",
+			"category": "transicao",
+			"tags": [
+				"transição",
+				"corte",
+				"passagem"
+			],
+			"file": "transicao/transicao-aguda.wav",
+			"order": 7,
+			"duration": 0.4,
+			"peakDb": -1.0,
+			"rmsDb": -20.47
+		},
+		{
+			"id": "transicao-reversa",
+			"name": "Transição reversa",
+			"category": "transicao",
+			"tags": [
+				"reverso",
+				"entrada",
+				"transição"
+			],
+			"file": "transicao/transicao-reversa.wav",
+			"order": 8,
+			"duration": 0.6,
+			"peakDb": -5.16,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-impacto",
+			"name": "Transição com impacto",
+			"category": "transicao",
+			"tags": [
+				"corte",
+				"impacto",
+				"virada"
+			],
+			"file": "transicao/transicao-impacto.wav",
+			"order": 9,
+			"duration": 0.833,
+			"peakDb": -4.2,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-eco",
+			"name": "Transição com eco",
+			"category": "transicao",
+			"tags": [
+				"eco",
+				"espaço",
+				"passagem"
+			],
+			"file": "transicao/transicao-eco.wav",
+			"order": 10,
+			"duration": 1.0,
+			"peakDb": -1.0,
+			"rmsDb": -24.57
+		},
+		{
+			"id": "transicao-cinema",
+			"name": "Transição cinematográfica",
+			"category": "transicao",
+			"tags": [
+				"cinema",
+				"amplo",
+				"elegante"
+			],
+			"file": "transicao/transicao-cinema.wav",
+			"order": 11,
+			"duration": 1.386,
+			"peakDb": -12.39,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-papel",
+			"name": "Transição de papel",
+			"category": "transicao",
+			"tags": [
+				"papel",
+				"leve",
+				"orgânico"
+			],
+			"file": "transicao/transicao-papel.wav",
+			"order": 12,
+			"duration": 0.294,
+			"peakDb": -5.27,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-sussurro",
+			"name": "Transição sussurrada",
+			"category": "transicao",
+			"tags": [
+				"suave",
+				"sutil",
+				"discreto"
+			],
+			"file": "transicao/transicao-sussurro.wav",
+			"order": 13,
+			"duration": 0.7,
+			"peakDb": -1.0,
+			"rmsDb": -21.45
+		},
+		{
+			"id": "transicao-sobe",
+			"name": "Transição subindo",
+			"category": "transicao",
+			"tags": [
+				"subida",
+				"entrada",
+				"movimento"
+			],
+			"file": "transicao/transicao-sobe.wav",
+			"order": 14,
+			"duration": 0.6,
+			"peakDb": -1.0,
+			"rmsDb": -20.25
+		},
+		{
+			"id": "transicao-desce",
+			"name": "Transição descendo",
+			"category": "transicao",
+			"tags": [
+				"descida",
+				"saída",
+				"movimento"
+			],
+			"file": "transicao/transicao-desce.wav",
+			"order": 15,
+			"duration": 0.6,
+			"peakDb": -1.52,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-dupla",
+			"name": "Transição dupla",
+			"category": "transicao",
+			"tags": [
+				"duplo",
+				"vai e volta",
+				"corte"
+			],
+			"file": "transicao/transicao-dupla.wav",
+			"order": 16,
+			"duration": 0.6,
+			"peakDb": -4.98,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "transicao-agua",
+			"name": "Transição líquida",
+			"category": "transicao",
+			"tags": [
+				"água",
+				"fluido",
+				"orgânico"
+			],
+			"file": "transicao/transicao-agua.wav",
+			"order": 17,
+			"duration": 0.468,
+			"peakDb": -9.89,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "impacto-leve",
+			"name": "Impacto leve",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-leve.wav",
+			"order": 18,
+			"duration": 0.427,
+			"peakDb": -1.71,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-medio",
+			"name": "Impacto médio",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-medio.wav",
+			"order": 19,
+			"duration": 0.536,
+			"peakDb": -3.3,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-grave",
+			"name": "Impacto grave",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-grave.wav",
+			"order": 20,
+			"duration": 0.766,
+			"peakDb": -2.13,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-seco",
+			"name": "Impacto seco",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-seco.wav",
+			"order": 21,
+			"duration": 0.326,
+			"peakDb": -1.0,
+			"rmsDb": -17.37
+		},
+		{
+			"id": "impacto-metal",
+			"name": "Impacto metálico",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-metal.wav",
+			"order": 22,
+			"duration": 0.621,
+			"peakDb": -2.52,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-madeira",
+			"name": "Impacto de madeira",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-madeira.wav",
+			"order": 23,
+			"duration": 0.397,
+			"peakDb": -1.44,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-cinema",
+			"name": "Impacto cinematográfico",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-cinema.wav",
+			"order": 24,
+			"duration": 1.176,
+			"peakDb": -1.84,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-abafado",
+			"name": "Impacto abafado",
+			"category": "impacto",
+			"tags": [
+				"impacto",
+				"batida",
+				"destaque"
+			],
+			"file": "impacto/impacto-abafado.wav",
+			"order": 25,
+			"duration": 0.47,
+			"peakDb": -3.59,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-sub",
+			"name": "Impacto grave profundo",
+			"category": "impacto",
+			"tags": [
+				"sub",
+				"grave",
+				"tensão"
+			],
+			"file": "impacto/impacto-sub.wav",
+			"order": 26,
+			"duration": 1.05,
+			"peakDb": -6.64,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-tambor",
+			"name": "Impacto de tambor",
+			"category": "impacto",
+			"tags": [
+				"tambor",
+				"batida",
+				"abertura"
+			],
+			"file": "impacto/impacto-tambor.wav",
+			"order": 27,
+			"duration": 0.704,
+			"peakDb": -3.39,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-duplo",
+			"name": "Impacto duplo",
+			"category": "impacto",
+			"tags": [
+				"duplo",
+				"ênfase",
+				"virada"
+			],
+			"file": "impacto/impacto-duplo.wav",
+			"order": 28,
+			"duration": 0.661,
+			"peakDb": -2.33,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-cauda",
+			"name": "Impacto com cauda",
+			"category": "impacto",
+			"tags": [
+				"reverb",
+				"espaço",
+				"revelação"
+			],
+			"file": "impacto/impacto-cauda.wav",
+			"order": 29,
+			"duration": 0.894,
+			"peakDb": -1.22,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-estalo",
+			"name": "Estalo",
+			"category": "impacto",
+			"tags": [
+				"estalo",
+				"curto",
+				"seco"
+			],
+			"file": "impacto/impacto-estalo.wav",
+			"order": 30,
+			"duration": 0.082,
+			"peakDb": -1.0,
+			"rmsDb": -19.08
+		},
+		{
+			"id": "impacto-boom",
+			"name": "Boom",
+			"category": "impacto",
+			"tags": [
+				"boom",
+				"grave",
+				"abertura"
+			],
+			"file": "impacto/impacto-boom.wav",
+			"order": 31,
+			"duration": 1.715,
+			"peakDb": -4.84,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "impacto-coracao",
+			"name": "Batida de coração",
+			"category": "impacto",
+			"tags": [
+				"tensão",
+				"suspense",
+				"pulso"
+			],
+			"file": "impacto/impacto-coracao.wav",
+			"order": 32,
+			"duration": 0.8,
+			"peakDb": -5.42,
+			"rmsDb": -17.0
+		},
+		{
+			"id": "whoosh-curto",
+			"name": "Whoosh curto",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-curto.wav",
+			"order": 33,
+			"duration": 0.3,
+			"peakDb": -1.0,
+			"rmsDb": -21.77
+		},
+		{
+			"id": "whoosh-aereo",
+			"name": "Whoosh aéreo",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-aereo.wav",
+			"order": 34,
+			"duration": 0.695,
+			"peakDb": -1.0,
+			"rmsDb": -22.03
+		},
+		{
+			"id": "whoosh-grave",
+			"name": "Whoosh grave",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-grave.wav",
+			"order": 35,
+			"duration": 0.6,
+			"peakDb": -1.29,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "whoosh-agudo",
+			"name": "Whoosh agudo",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-agudo.wav",
+			"order": 36,
+			"duration": 0.35,
+			"peakDb": -1.0,
+			"rmsDb": -22.14
+		},
+		{
+			"id": "whoosh-lento",
+			"name": "Whoosh lento",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-lento.wav",
+			"order": 37,
+			"duration": 1.08,
+			"peakDb": -1.0,
+			"rmsDb": -21.28
+		},
+		{
+			"id": "whoosh-pesado",
+			"name": "Whoosh pesado",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-pesado.wav",
+			"order": 38,
+			"duration": 0.792,
+			"peakDb": -1.0,
+			"rmsDb": -21.02
+		},
+		{
+			"id": "whoosh-fino",
+			"name": "Whoosh fino",
+			"category": "whoosh",
+			"tags": [
+				"movimento",
+				"passagem",
+				"texto"
+			],
+			"file": "whoosh/whoosh-fino.wav",
+			"order": 39,
+			"duration": 0.45,
+			"peakDb": -1.0,
+			"rmsDb": -21.4
+		},
+		{
+			"id": "whoosh-duplo",
+			"name": "Whoosh duplo",
+			"category": "whoosh",
+			"tags": [
+				"duplo",
+				"vai e volta",
+				"movimento"
+			],
+			"file": "whoosh/whoosh-duplo.wav",
+			"order": 40,
+			"duration": 0.7,
+			"peakDb": -1.0,
+			"rmsDb": -21.54
+		},
+		{
+			"id": "whoosh-invertido",
+			"name": "Whoosh invertido",
+			"category": "whoosh",
+			"tags": [
+				"reverso",
+				"entrada",
+				"movimento"
+			],
+			"file": "whoosh/whoosh-invertido.wav",
+			"order": 41,
+			"duration": 0.5,
+			"peakDb": -1.0,
+			"rmsDb": -21.28
+		},
+		{
+			"id": "whoosh-cauda",
+			"name": "Whoosh com cauda",
+			"category": "whoosh",
+			"tags": [
+				"reverb",
+				"amplo",
+				"saída"
+			],
+			"file": "whoosh/whoosh-cauda.wav",
+			"order": 42,
+			"duration": 0.788,
+			"peakDb": -4.17,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "whoosh-espiral",
+			"name": "Whoosh espiral",
+			"category": "whoosh",
+			"tags": [
+				"giro",
+				"rotação",
+				"movimento"
+			],
+			"file": "whoosh/whoosh-espiral.wav",
+			"order": 43,
+			"duration": 0.882,
+			"peakDb": -1.0,
+			"rmsDb": -23.32
+		},
+		{
+			"id": "whoosh-impacto",
+			"name": "Whoosh com impacto",
+			"category": "whoosh",
+			"tags": [
+				"chegada",
+				"destaque",
+				"movimento"
+			],
+			"file": "whoosh/whoosh-impacto.wav",
+			"order": 44,
+			"duration": 0.888,
+			"peakDb": -3.87,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "whoosh-vento",
+			"name": "Rajada de vento",
+			"category": "whoosh",
+			"tags": [
+				"vento",
+				"natureza",
+				"passagem"
+			],
+			"file": "whoosh/whoosh-vento.wav",
+			"order": 45,
+			"duration": 1.4,
+			"peakDb": -2.69,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "whoosh-sussurrado",
+			"name": "Whoosh sussurrado",
+			"category": "whoosh",
+			"tags": [
+				"sutil",
+				"leve",
+				"discreto"
+			],
+			"file": "whoosh/whoosh-sussurrado.wav",
+			"order": 46,
+			"duration": 0.5,
+			"peakDb": -1.0,
+			"rmsDb": -21.05
+		},
+		{
+			"id": "pop-suave",
+			"name": "Pop suave",
+			"category": "salto",
+			"tags": [
+				"pop",
+				"entrada",
+				"legenda"
+			],
+			"file": "salto/pop-suave.wav",
+			"order": 47,
+			"duration": 0.14,
+			"peakDb": -6.0,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "pop-medio",
+			"name": "Pop médio",
+			"category": "salto",
+			"tags": [
+				"pop",
+				"entrada",
+				"legenda"
+			],
+			"file": "salto/pop-medio.wav",
+			"order": 48,
+			"duration": 0.125,
+			"peakDb": -5.71,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "pop-agudo",
+			"name": "Pop agudo",
+			"category": "salto",
+			"tags": [
+				"pop",
+				"entrada",
+				"legenda"
+			],
+			"file": "salto/pop-agudo.wav",
+			"order": 49,
+			"duration": 0.11,
+			"peakDb": -6.05,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "pop-grave",
+			"name": "Pop grave",
+			"category": "salto",
+			"tags": [
+				"pop",
+				"entrada",
+				"legenda"
+			],
+			"file": "salto/pop-grave.wav",
+			"order": 50,
+			"duration": 0.17,
+			"peakDb": -5.92,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-bolha",
+			"name": "Salto bolha",
+			"category": "salto",
+			"tags": [
+				"pop",
+				"entrada",
+				"legenda"
+			],
+			"file": "salto/salto-bolha.wav",
+			"order": 51,
+			"duration": 0.185,
+			"peakDb": -6.64,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-mola",
+			"name": "Salto com mola",
+			"category": "salto",
+			"tags": [
+				"boing",
+				"divertido",
+				"sticker"
+			],
+			"file": "salto/salto-mola.wav",
+			"order": 52,
+			"duration": 0.438,
+			"peakDb": -9.4,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-triplo",
+			"name": "Salto triplo",
+			"category": "salto",
+			"tags": [
+				"sequência",
+				"lista",
+				"itens"
+			],
+			"file": "salto/salto-triplo.wav",
+			"order": 53,
+			"duration": 0.358,
+			"peakDb": -5.45,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-duplo",
+			"name": "Salto duplo",
+			"category": "salto",
+			"tags": [
+				"duplo",
+				"texto",
+				"entrada"
+			],
+			"file": "salto/salto-duplo.wav",
+			"order": 54,
+			"duration": 0.21,
+			"peakDb": -5.94,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-gota",
+			"name": "Gota",
+			"category": "salto",
+			"tags": [
+				"água",
+				"leve",
+				"detalhe"
+			],
+			"file": "salto/salto-gota.wav",
+			"order": 55,
+			"duration": 0.267,
+			"peakDb": -8.04,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-elastico",
+			"name": "Elástico",
+			"category": "salto",
+			"tags": [
+				"esticar",
+				"cartoon",
+				"divertido"
+			],
+			"file": "salto/salto-elastico.wav",
+			"order": 56,
+			"duration": 0.498,
+			"peakDb": -7.97,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-quica",
+			"name": "Quicando",
+			"category": "salto",
+			"tags": [
+				"bounce",
+				"repetição",
+				"cartoon"
+			],
+			"file": "salto/salto-quica.wav",
+			"order": 57,
+			"duration": 0.461,
+			"peakDb": -2.9,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-sobe",
+			"name": "Subindo",
+			"category": "salto",
+			"tags": [
+				"escala",
+				"crescente",
+				"lista"
+			],
+			"file": "salto/salto-sobe.wav",
+			"order": 58,
+			"duration": 0.335,
+			"peakDb": -6.14,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "salto-desce",
+			"name": "Descendo",
+			"category": "salto",
+			"tags": [
+				"escala",
+				"queda",
+				"saída"
+			],
+			"file": "salto/salto-desce.wav",
+			"order": 59,
+			"duration": 0.335,
+			"peakDb": -6.31,
+			"rmsDb": -20.0
+		},
+		{
+			"id": "glitch-curto",
+			"name": "Glitch curto",
+			"category": "glitch",
+			"tags": [
+				"digital",
+				"erro",
+				"corte"
+			],
+			"file": "glitch/glitch-curto.wav",
+			"order": 60,
+			"duration": 0.18,
+			"peakDb": -4.81,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-digital",
+			"name": "Glitch digital",
+			"category": "glitch",
+			"tags": [
+				"digital",
+				"erro",
+				"corte"
+			],
+			"file": "glitch/glitch-digital.wav",
+			"order": 61,
+			"duration": 0.35,
+			"peakDb": -6.52,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-fita",
+			"name": "Glitch de fita",
+			"category": "glitch",
+			"tags": [
+				"digital",
+				"erro",
+				"corte"
+			],
+			"file": "glitch/glitch-fita.wav",
+			"order": 62,
+			"duration": 0.5,
+			"peakDb": -3.81,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-grave",
+			"name": "Glitch grave",
+			"category": "glitch",
+			"tags": [
+				"digital",
+				"erro",
+				"corte"
+			],
+			"file": "glitch/glitch-grave.wav",
+			"order": 63,
+			"duration": 0.3,
+			"peakDb": -3.74,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-agudo",
+			"name": "Glitch agudo",
+			"category": "glitch",
+			"tags": [
+				"digital",
+				"erro",
+				"corte"
+			],
+			"file": "glitch/glitch-agudo.wav",
+			"order": 64,
+			"duration": 0.25,
+			"peakDb": -1.65,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-zap",
+			"name": "Zap elétrico",
+			"category": "glitch",
+			"tags": [
+				"elétrico",
+				"energia",
+				"destaque"
+			],
+			"file": "glitch/glitch-zap.wav",
+			"order": 65,
+			"duration": 0.222,
+			"peakDb": -6.84,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-estatica",
+			"name": "Estática curta",
+			"category": "glitch",
+			"tags": [
+				"ruído",
+				"tv",
+				"transição"
+			],
+			"file": "glitch/glitch-estatica.wav",
+			"order": 66,
+			"duration": 0.3,
+			"peakDb": -5.93,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-stutter",
+			"name": "Stutter",
+			"category": "glitch",
+			"tags": [
+				"repetição",
+				"corte",
+				"ritmo"
+			],
+			"file": "glitch/glitch-stutter.wav",
+			"order": 67,
+			"duration": 0.426,
+			"peakDb": -1.22,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-sinal",
+			"name": "Sinal perdido",
+			"category": "glitch",
+			"tags": [
+				"falha",
+				"interferência",
+				"tv"
+			],
+			"file": "glitch/glitch-sinal.wav",
+			"order": 68,
+			"duration": 0.7,
+			"peakDb": -6.22,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-robo",
+			"name": "Robô",
+			"category": "glitch",
+			"tags": [
+				"robótico",
+				"digital",
+				"voz"
+			],
+			"file": "glitch/glitch-robo.wav",
+			"order": 69,
+			"duration": 0.5,
+			"peakDb": -12.72,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "glitch-scanner",
+			"name": "Scanner",
+			"category": "glitch",
+			"tags": [
+				"tecnologia",
+				"varredura",
+				"digital"
+			],
+			"file": "glitch/glitch-scanner.wav",
+			"order": 70,
+			"duration": 0.8,
+			"peakDb": -1.0,
+			"rmsDb": -21.62
+		},
+		{
+			"id": "glitch-telefone",
+			"name": "Interferência",
+			"category": "glitch",
+			"tags": [
+				"telefone",
+				"rádio",
+				"ruído"
+			],
+			"file": "glitch/glitch-telefone.wav",
+			"order": 71,
+			"duration": 0.6,
+			"peakDb": -6.06,
+			"rmsDb": -21.0
+		},
+		{
+			"id": "riser-curto",
+			"name": "Riser curto",
+			"category": "riser",
+			"tags": [
+				"tensão",
+				"expectativa",
+				"build"
+			],
+			"file": "riser/riser-curto.wav",
+			"order": 72,
+			"duration": 1.5,
+			"peakDb": -5.86,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-medio",
+			"name": "Riser médio",
+			"category": "riser",
+			"tags": [
+				"tensão",
+				"expectativa",
+				"build"
+			],
+			"file": "riser/riser-medio.wav",
+			"order": 73,
+			"duration": 2.3,
+			"peakDb": -6.16,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-longo",
+			"name": "Riser longo",
+			"category": "riser",
+			"tags": [
+				"tensão",
+				"expectativa",
+				"build"
+			],
+			"file": "riser/riser-longo.wav",
+			"order": 74,
+			"duration": 3.5,
+			"peakDb": -6.58,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-ruido",
+			"name": "Riser de ruído",
+			"category": "riser",
+			"tags": [
+				"tensão",
+				"expectativa",
+				"build"
+			],
+			"file": "riser/riser-ruido.wav",
+			"order": 75,
+			"duration": 2.097,
+			"peakDb": -6.26,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-descida",
+			"name": "Descida",
+			"category": "riser",
+			"tags": [
+				"queda",
+				"encerramento",
+				"saída"
+			],
+			"file": "riser/riser-descida.wav",
+			"order": 76,
+			"duration": 1.778,
+			"peakDb": -6.7,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-pulsante",
+			"name": "Riser pulsante",
+			"category": "riser",
+			"tags": [
+				"pulso",
+				"ritmo",
+				"tensão"
+			],
+			"file": "riser/riser-pulsante.wav",
+			"order": 77,
+			"duration": 2.7,
+			"peakDb": -4.92,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-tonal",
+			"name": "Riser tonal",
+			"category": "riser",
+			"tags": [
+				"nota",
+				"melódico",
+				"build"
+			],
+			"file": "riser/riser-tonal.wav",
+			"order": 78,
+			"duration": 2.7,
+			"peakDb": -9.53,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-tensao",
+			"name": "Tensão crescente",
+			"category": "riser",
+			"tags": [
+				"suspense",
+				"grave",
+				"build"
+			],
+			"file": "riser/riser-tensao.wav",
+			"order": 79,
+			"duration": 3.0,
+			"peakDb": -10.41,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "riser-revelacao",
+			"name": "Riser com revelação",
+			"category": "riser",
+			"tags": [
+				"clímax",
+				"impacto",
+				"abertura"
+			],
+			"file": "riser/riser-revelacao.wav",
+			"order": 80,
+			"duration": 2.516,
+			"peakDb": -5.46,
+			"rmsDb": -24.0
+		},
+		{
+			"id": "ui-clique",
+			"name": "Clique",
+			"category": "interface",
+			"tags": [
+				"clique",
+				"botão",
+				"detalhe"
+			],
+			"file": "interface/ui-clique.wav",
+			"order": 81,
+			"duration": 0.058,
+			"peakDb": -7.28,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-toque",
+			"name": "Toque suave",
+			"category": "interface",
+			"tags": [
+				"clique",
+				"botão",
+				"detalhe"
+			],
+			"file": "interface/ui-toque.wav",
+			"order": 82,
+			"duration": 0.058,
+			"peakDb": -8.74,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-alerta",
+			"name": "Alerta curto",
+			"category": "interface",
+			"tags": [
+				"clique",
+				"botão",
+				"detalhe"
+			],
+			"file": "interface/ui-alerta.wav",
+			"order": 83,
+			"duration": 0.058,
+			"peakDb": -5.84,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-selecionar",
+			"name": "Selecionar",
+			"category": "interface",
+			"tags": [
+				"clique",
+				"botão",
+				"detalhe"
+			],
+			"file": "interface/ui-selecionar.wav",
+			"order": 84,
+			"duration": 0.058,
+			"peakDb": -6.58,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-confirma",
+			"name": "Confirmação",
+			"category": "interface",
+			"tags": [
+				"sucesso",
+				"check",
+				"positivo"
+			],
+			"file": "interface/ui-confirma.wav",
+			"order": 85,
+			"duration": 0.29,
+			"peakDb": -8.68,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-negativo",
+			"name": "Negativo",
+			"category": "interface",
+			"tags": [
+				"erro",
+				"não",
+				"aviso"
+			],
+			"file": "interface/ui-negativo.wav",
+			"order": 86,
+			"duration": 0.312,
+			"peakDb": -10.53,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-digitando",
+			"name": "Digitando",
+			"category": "interface",
+			"tags": [
+				"teclado",
+				"texto",
+				"detalhe"
+			],
+			"file": "interface/ui-digitando.wav",
+			"order": 87,
+			"duration": 0.478,
+			"peakDb": -6.0,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-notificacao",
+			"name": "Notificação",
+			"category": "interface",
+			"tags": [
+				"aviso",
+				"mensagem",
+				"alerta"
+			],
+			"file": "interface/ui-notificacao.wav",
+			"order": 88,
+			"duration": 0.476,
+			"peakDb": -9.02,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-swipe",
+			"name": "Swipe",
+			"category": "interface",
+			"tags": [
+				"deslizar",
+				"gesto",
+				"mobile"
+			],
+			"file": "interface/ui-swipe.wav",
+			"order": 89,
+			"duration": 0.25,
+			"peakDb": -3.31,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-enviar",
+			"name": "Enviar",
+			"category": "interface",
+			"tags": [
+				"mensagem",
+				"envio",
+				"mobile"
+			],
+			"file": "interface/ui-enviar.wav",
+			"order": 90,
+			"duration": 0.337,
+			"peakDb": -1.0,
+			"rmsDb": -24.48
+		},
+		{
+			"id": "ui-receber",
+			"name": "Receber",
+			"category": "interface",
+			"tags": [
+				"mensagem",
+				"chegada",
+				"mobile"
+			],
+			"file": "interface/ui-receber.wav",
+			"order": 91,
+			"duration": 0.4,
+			"peakDb": -4.46,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-bloqueio",
+			"name": "Bloqueio",
+			"category": "interface",
+			"tags": [
+				"travar",
+				"negado",
+				"curto"
+			],
+			"file": "interface/ui-bloqueio.wav",
+			"order": 92,
+			"duration": 0.116,
+			"peakDb": -6.62,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "ui-toggle",
+			"name": "Chave liga-desliga",
+			"category": "interface",
+			"tags": [
+				"botão",
+				"ajuste",
+				"detalhe"
+			],
+			"file": "interface/ui-toggle.wav",
+			"order": 93,
+			"duration": 0.102,
+			"peakDb": -8.41,
+			"rmsDb": -23.0
+		},
+		{
+			"id": "destaque-palavra",
+			"name": "Destaque de palavra",
+			"category": "destaque",
+			"tags": [
+				"legenda",
+				"palavra",
+				"ênfase"
+			],
+			"file": "destaque/destaque-palavra.wav",
+			"order": 94,
+			"duration": 0.27,
+			"peakDb": -4.7,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-selo",
+			"name": "Selo na tela",
+			"category": "destaque",
+			"tags": [
+				"carimbo",
+				"marca",
+				"ênfase"
+			],
+			"file": "destaque/destaque-selo.wav",
+			"order": 95,
+			"duration": 0.443,
+			"peakDb": -5.9,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-brilho",
+			"name": "Brilho",
+			"category": "destaque",
+			"tags": [
+				"sparkle",
+				"leve",
+				"elegante"
+			],
+			"file": "destaque/destaque-brilho.wav",
+			"order": 96,
+			"duration": 0.425,
+			"peakDb": -10.51,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-contagem",
+			"name": "Contagem",
+			"category": "destaque",
+			"tags": [
+				"número",
+				"estatística",
+				"dado"
+			],
+			"file": "destaque/destaque-contagem.wav",
+			"order": 97,
+			"duration": 0.538,
+			"peakDb": -3.74,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-seta",
+			"name": "Seta apontando",
+			"category": "destaque",
+			"tags": [
+				"seta",
+				"indicação",
+				"gráfico"
+			],
+			"file": "destaque/destaque-seta.wav",
+			"order": 98,
+			"duration": 0.224,
+			"peakDb": -1.0,
+			"rmsDb": -22.29
+		},
+		{
+			"id": "destaque-zoom",
+			"name": "Zoom",
+			"category": "destaque",
+			"tags": [
+				"aproximar",
+				"câmera",
+				"ênfase"
+			],
+			"file": "destaque/destaque-zoom.wav",
+			"order": 99,
+			"duration": 0.35,
+			"peakDb": -7.71,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-check",
+			"name": "Check",
+			"category": "destaque",
+			"tags": [
+				"confirmado",
+				"lista",
+				"positivo"
+			],
+			"file": "destaque/destaque-check.wav",
+			"order": 100,
+			"duration": 0.322,
+			"peakDb": -5.91,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-estrela",
+			"name": "Estrela",
+			"category": "destaque",
+			"tags": [
+				"premium",
+				"brilho",
+				"elegante"
+			],
+			"file": "destaque/destaque-estrela.wav",
+			"order": 101,
+			"duration": 0.512,
+			"peakDb": -8.53,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-sublinha",
+			"name": "Sublinhado",
+			"category": "destaque",
+			"tags": [
+				"marcador",
+				"texto",
+				"traço"
+			],
+			"file": "destaque/destaque-sublinha.wav",
+			"order": 102,
+			"duration": 0.299,
+			"peakDb": -1.0,
+			"rmsDb": -22.36
+		},
+		{
+			"id": "destaque-chamada",
+			"name": "Chamada de atenção",
+			"category": "destaque",
+			"tags": [
+				"aviso",
+				"importante",
+				"ênfase"
+			],
+			"file": "destaque/destaque-chamada.wav",
+			"order": 103,
+			"duration": 0.422,
+			"peakDb": -7.66,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "destaque-preco",
+			"name": "Preço",
+			"category": "destaque",
+			"tags": [
+				"oferta",
+				"número",
+				"venda"
+			],
+			"file": "destaque/destaque-preco.wav",
+			"order": 104,
+			"duration": 0.726,
+			"peakDb": -5.56,
+			"rmsDb": -22.0
+		},
+		{
+			"id": "ambiencia-sala",
+			"name": "Ambiência de sala",
+			"category": "ambiencia",
+			"tags": [
+				"fundo",
+				"sala",
+				"textura"
+			],
+			"file": "ambiencia/ambiencia-sala.wav",
+			"order": 105,
+			"duration": 4.0,
+			"peakDb": -27.33,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-vinil",
+			"name": "Chiado de vinil",
+			"category": "ambiencia",
+			"tags": [
+				"vintage",
+				"textura",
+				"fundo"
+			],
+			"file": "ambiencia/ambiencia-vinil.wav",
+			"order": 106,
+			"duration": 4.0,
+			"peakDb": -18.96,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-tensao",
+			"name": "Tensão contínua",
+			"category": "ambiencia",
+			"tags": [
+				"suspense",
+				"fundo",
+				"drone"
+			],
+			"file": "ambiencia/ambiencia-tensao.wav",
+			"order": 107,
+			"duration": 4.0,
+			"peakDb": -25.03,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-vento",
+			"name": "Vento",
+			"category": "ambiencia",
+			"tags": [
+				"natureza",
+				"externo",
+				"fundo"
+			],
+			"file": "ambiencia/ambiencia-vento.wav",
+			"order": 108,
+			"duration": 4.0,
+			"peakDb": -11.96,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-chuva",
+			"name": "Chuva leve",
+			"category": "ambiencia",
+			"tags": [
+				"natureza",
+				"calmo",
+				"fundo"
+			],
+			"file": "ambiencia/ambiencia-chuva.wav",
+			"order": 109,
+			"duration": 4.0,
+			"peakDb": -24.33,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-estudio",
+			"name": "Silêncio de estúdio",
+			"category": "ambiencia",
+			"tags": [
+				"neutro",
+				"fundo",
+				"gravação"
+			],
+			"file": "ambiencia/ambiencia-estudio.wav",
+			"order": 110,
+			"duration": 4.0,
+			"peakDb": -19.23,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-grave",
+			"name": "Drone grave",
+			"category": "ambiencia",
+			"tags": [
+				"cinema",
+				"profundo",
+				"fundo"
+			],
+			"file": "ambiencia/ambiencia-grave.wav",
+			"order": 111,
+			"duration": 4.0,
+			"peakDb": -26.58,
+			"rmsDb": -32.0
+		},
+		{
+			"id": "ambiencia-cidade",
+			"name": "Cidade distante",
+			"category": "ambiencia",
+			"tags": [
+				"urbano",
+				"externo",
+				"fundo"
+			],
+			"file": "ambiencia/ambiencia-cidade.wav",
+			"order": 112,
+			"duration": 4.0,
+			"peakDb": -26.65,
+			"rmsDb": -32.0
+		}
+	]
+}

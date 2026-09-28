@@ -1,0 +1,3 @@
+{
+  "/api/integrations/transcribe/route": "app/api/integrations/transcribe/route.js"
+}

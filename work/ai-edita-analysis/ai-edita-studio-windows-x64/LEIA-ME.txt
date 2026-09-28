@@ -1,0 +1,20 @@
+AI EDITA STUDIO - VERSAO PORTATIL
+==================================
+
+Clique duas vezes em "Iniciar AI Edita.cmd".
+
+Na primeira abertura, o atalho AI Edita Studio e criado automaticamente na area de trabalho.
+
+O aplicativo abre no navegador padrao, sem criar perfil ou ativar sincronizacao de conta.
+Nao e necessario instalar Node.js, SQLite, Docker ou Cloudflare Tunnel.
+Para publicar no Instagram, mantenha o computador ligado e conectado a internet.
+
+O banco SQLite, os projetos e as midias ficam em:
+%LOCALAPPDATA%\AI Edita Remotion\data
+Eles aparecem igualmente no Edge, Chrome ou Firefox desta maquina.
+Mantenha o terminal aberto enquanto usar o AI Edita.
+Para editar e exportar, use o Google Chrome atualizado.
+
+Nao apague essa pasta se quiser manter os projetos e as midias.
+Para fazer backup, feche o AI Edita e copie a pasta completa 'AI Edita Remotion'.
+Leia GUIA-CONEXAO-INSTAGRAM.md para configurar a conta e o token da Meta.
