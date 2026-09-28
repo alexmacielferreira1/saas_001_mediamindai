@@ -60,12 +60,14 @@ export default function Timeline2({ embedded = false }) {
   const fileInputRef = useRef(null);
   const mediaRefs = useRef(new Map());
   const pointerGestureRef = useRef(null);
+  const timelineRulerRef = useRef(null);
+  const playheadGestureRef = useRef(null);
+  const playbackClockRef = useRef(null);
   const selected = document.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedClipId);
   const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected ? getClipPropertiesAtTime(selected, document.playhead) : {}) };
   const activeClips = useMemo(() => getActiveClips(document, document.playhead), [document]);
   const activeVisuals = activeClips.filter((clip) => clip.kind === 'video' || clip.kind === 'text');
   const activeAudio = activeClips.filter((clip) => clip.kind === 'audio');
-  const primaryClock = activeClips.find((clip) => ['video', 'audio'].includes(clip.kind) && clip.src);
   const scaleDuration = Math.max(document.duration, 30);
   const timelineGeometry = useMemo(() => getTimelineGeometry(scaleDuration, document.zoom), [scaleDuration, document.zoom]);
   const projectMedia = useMemo(() => {
@@ -76,6 +78,10 @@ export default function Timeline2({ embedded = false }) {
   const acervoMedia = useMemo(
     () => assets.filter((asset) => ['video', 'audio'].includes(asset.asset_type)).map(assetToMedia),
     [assets],
+  );
+  const hasPlayableMedia = useMemo(
+    () => document.tracks.some((track) => track.clips.some((clip) => ['video', 'audio'].includes(clip.kind) && clip.src)),
+    [document.tracks],
   );
 
   const applySplit = () => selected && commit((current) => splitClip(current, selected.id, current.playhead));
@@ -115,23 +121,26 @@ export default function Timeline2({ embedded = false }) {
     const players = activeClips
       .map((clip) => ({ clip, player: mediaRefs.current.get(clip.id) }))
       .filter((item) => item.player);
-    if (!players.length) {
-      setNotice('Posicione a agulha sobre um clipe reproduzível.');
+    if (!hasPlayableMedia) {
+      setNotice('Importe um vídeo ou áudio para reproduzir a sequência.');
       return;
     }
     if (playing) {
-      players.forEach(({ player }) => player.pause());
+      mediaRefs.current.forEach((player) => player.pause());
+      playbackClockRef.current = null;
       setPlaying(false);
       return;
     }
-    const attempts = await Promise.allSettled(players.map(async ({ clip, player }) => {
+    const startTime = document.playhead >= document.duration ? 0 : document.playhead;
+    if (startTime !== document.playhead) updateTransient((current) => setPlayhead(current, startTime));
+    playbackClockRef.current = { timelineTime: startTime, wallTime: Date.now() };
+    setPlaying(true);
+    await Promise.allSettled(players.map(async ({ clip, player }) => {
       player.currentTime = Math.max(0, clip.sourceTime);
       player.playbackRate = Math.max(0.25, Math.min(4, Number(clip.properties?.speed) || 1));
       player.volume = Math.max(0, Math.min(1, 10 ** ((Number(clip.properties?.volume) || 0) / 20)));
       await player.play();
     }));
-    if (attempts.some((result) => result.status === 'fulfilled')) setPlaying(true);
-    else setNotice('O navegador não conseguiu reproduzir esta mídia. Gere ou selecione um proxy compatível.');
   };
   const setProperty = (field, value) => selected && commit((current) => (autoKeyframe
     ? addPropertyKeyframe(current, selected.id, field, { value: Number(value) })
@@ -190,6 +199,32 @@ export default function Timeline2({ embedded = false }) {
     });
   }, [activeClips, playing]);
   useEffect(() => {
+    if (!playing || !playbackClockRef.current) return undefined;
+    const timer = window.setInterval(() => {
+      const clock = playbackClockRef.current;
+      if (!clock) return;
+      const next = Math.min(document.duration, clock.timelineTime + ((Date.now() - clock.wallTime) / 1000));
+      updateTransient((current) => setPlayhead(current, next));
+      if (next >= document.duration) {
+        mediaRefs.current.forEach((player) => player.pause());
+        playbackClockRef.current = null;
+        setPlaying(false);
+      }
+    }, 33);
+    return () => window.clearInterval(timer);
+  }, [document.duration, playing, updateTransient]);
+  useEffect(() => {
+    if (!playing) return;
+    activeClips.forEach((clip) => {
+      const player = mediaRefs.current.get(clip.id);
+      if (!player || !clip.src) return;
+      if (Number.isFinite(clip.sourceTime) && Math.abs(player.currentTime - clip.sourceTime) > 0.12) player.currentTime = clip.sourceTime;
+      player.playbackRate = Math.max(0.25, Math.min(4, Number(clip.properties?.speed) || 1));
+      player.volume = Math.max(0, Math.min(1, 10 ** ((Number(clip.properties?.volume) || 0) / 20)));
+      player.play().catch(() => {});
+    });
+  }, [activeClips, playing]);
+  useEffect(() => {
     const onKeyDown = (event) => {
       const editingField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName);
       if (editingField) return;
@@ -199,9 +234,9 @@ export default function Timeline2({ embedded = false }) {
       else if (event.key.toLowerCase() === 'i') { event.preventDefault(); commit((current) => setTimelineIn(current)); }
       else if (event.key.toLowerCase() === 'o') { event.preventDefault(); commit((current) => setTimelineOut(current)); }
       else if (event.code === 'Space') { event.preventDefault(); togglePlayback(); }
-      else if (event.key.toLowerCase() === 'k') { event.preventDefault(); mediaRefs.current.forEach((player) => player.pause()); setPlaying(false); }
+      else if (event.key.toLowerCase() === 'k') { event.preventDefault(); mediaRefs.current.forEach((player) => player.pause()); playbackClockRef.current = null; setPlaying(false); }
       else if (event.key.toLowerCase() === 'l') { event.preventDefault(); if (!playing) togglePlayback(); }
-      else if (event.key.toLowerCase() === 'j') { event.preventDefault(); mediaRefs.current.forEach((player) => player.pause()); setPlaying(false); updateTransient((current) => setPlayhead(current, current.playhead - (1 / current.fps))); }
+      else if (event.key.toLowerCase() === 'j') { event.preventDefault(); mediaRefs.current.forEach((player) => player.pause()); playbackClockRef.current = null; setPlaying(false); updateTransient((current) => setPlayhead(current, current.playhead - (1 / current.fps))); }
       else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const direction = event.key === 'ArrowLeft' ? -1 : 1; updateTransient((current) => setPlayhead(current, current.playhead + (direction * (event.shiftKey ? 1 : 1 / current.fps)))); }
       else if (event.key === 'Home') { event.preventDefault(); updateTransient((current) => setPlayhead(current, 0)); }
       else if (event.key === 'End') { event.preventDefault(); updateTransient((current) => setPlayhead(current, current.duration)); }
@@ -232,6 +267,27 @@ export default function Timeline2({ embedded = false }) {
     const bounds = element.getBoundingClientRect();
     const pointerTime = pointerToTimelineTime(event.clientX, bounds, scaleDuration);
     updateTransient((current) => setPlayhead(current, pointerTime));
+  };
+  const updatePlayheadGesture = (event) => {
+    const gesture = playheadGestureRef.current;
+    if (!gesture) return;
+    event.preventDefault(); event.stopPropagation();
+    const pointerTime = pointerToTimelineTime(event.clientX, gesture.bounds, gesture.duration);
+    updateTransient((current) => setPlayhead(current, pointerTime));
+  };
+  const startPlayheadGesture = (event) => {
+    const ruler = timelineRulerRef.current;
+    if (!ruler?.getBoundingClientRect) return;
+    event.preventDefault(); event.stopPropagation();
+    const bounds = ruler.getBoundingClientRect();
+    playheadGestureRef.current = { bounds: { left: bounds.left, width: bounds.width }, duration: scaleDuration };
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* gesture remains usable without capture */ }
+    updatePlayheadGesture(event);
+  };
+  const endPlayheadGesture = (event) => {
+    if (!playheadGestureRef.current) return;
+    updatePlayheadGesture(event);
+    playheadGestureRef.current = null;
   };
   const startClipGesture = (event, clip, mode = 'move') => {
     if (activeTool !== 'select') return;
@@ -324,13 +380,13 @@ export default function Timeline2({ embedded = false }) {
             {activeVisuals.map((clip) => {
               const properties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(clip.properties || {}) };
               if (clip.kind === 'text') return <div key={clip.id} data-testid={`preview-layer-${clip.id}`} onClick={() => setSelectedClipId(clip.id)} className="absolute max-w-[90%] cursor-pointer text-center font-bold text-white drop-shadow-lg" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, fontSize: `${properties.fontSize || 54}px`, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }}>{properties.text || clip.name}</div>;
-              return <video key={clip.id} data-testid={`preview-layer-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} muted={Boolean(properties.audioDisabled)} preload="metadata" onClick={() => setSelectedClipId(clip.id)} className="absolute max-h-full max-w-full cursor-pointer transition-transform" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }} onTimeUpdate={(event) => { if (clip.id === primaryClock?.id && playing) { const programTime = clip.start + ((event.currentTarget.currentTime - clip.sourceIn) / Math.max(0.25, Number(properties.speed) || 1)); updateTransient((current) => setPlayhead(current, programTime)); } }} onEnded={() => setPlaying(false)} />;
+              return <video key={clip.id} data-testid={`preview-layer-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} muted={Boolean(properties.audioDisabled)} preload="metadata" onClick={() => setSelectedClipId(clip.id)} className="absolute max-h-full max-w-full cursor-pointer transition-transform" style={{ zIndex: clip.layerIndex, opacity: properties.opacity / 100, transform: `translate(${properties.x}px, ${properties.y}px) scale(${properties.scale / 100}) rotate(${properties.rotation}deg)` }} />;
             })}
-            {activeAudio.map((clip) => <audio key={clip.id} data-testid={`preview-audio-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} preload="metadata" onTimeUpdate={(event) => { if (clip.id === primaryClock?.id && playing) { const speed = Math.max(0.25, Number(clip.properties?.speed) || 1); updateTransient((current) => setPlayhead(current, clip.start + ((event.currentTarget.currentTime - clip.sourceIn) / speed))); } }} onEnded={() => setPlaying(false)} />)}
-            {!activeVisuals.length && <div className="text-center"><div className="text-6xl">{activeAudio.length ? '🎵' : '🎬'}</div><p className="mt-3 text-sm font-semibold">{activeAudio[0]?.name || selected?.name || 'Posicione a agulha sobre um clipe'}</p><p className="mt-1 text-xs text-slate-500">{selected ? 'O preview segue a agulha e as camadas ativas.' : 'Importe um arquivo ou escolha no Acervo'}</p></div>}
+            {activeAudio.map((clip) => <audio key={clip.id} data-testid={`preview-audio-${clip.id}`} ref={(node) => { if (node) mediaRefs.current.set(clip.id, node); else mediaRefs.current.delete(clip.id); }} src={clip.src} preload="metadata" />)}
+            {!activeVisuals.length && <div className="text-center"><div className="text-6xl">{activeAudio.length ? '🎵' : '🎬'}</div><p className="mt-3 text-sm font-semibold">{activeAudio[0]?.name || (hasPlayableMedia ? 'Quadro preto · sequência em andamento' : selected?.name || 'Posicione a agulha sobre um clipe')}</p><p className="mt-1 text-xs text-slate-500">{hasPlayableMedia ? 'A reprodução continua até o próximo clipe sem interromper a sequência.' : selected ? 'O preview segue a agulha e as camadas ativas.' : 'Importe um arquivo ou escolha no Acervo'}</p></div>}
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button type="button" onClick={togglePlayback} disabled={!activeClips.some((clip) => clip.src)} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
+            <button type="button" onClick={togglePlayback} disabled={!hasPlayableMedia} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
             <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => updateTransient((current) => setPlayhead(current, event.target.value))} className="flex-1" />
           </div>
         </main>
@@ -375,8 +431,8 @@ export default function Timeline2({ embedded = false }) {
           </div>
           <div className="border-b border-slate-800 px-3 py-1 text-[10px] text-sky-300" role="status">{notice}</div>
           <div className="relative flex-1 overflow-auto bg-[#031022] p-3">
-            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer may already be inactive */ } movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.inPoint != null && document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-x border-emerald-400/70 bg-emerald-400/10" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(1, (document.outPoint - document.inPoint) * timelineGeometry.pixelsPerSecond)}px` }} />}{document.inPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-emerald-400" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-amber-400" style={{ left: `${document.outPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
-            <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }} />
+            <div ref={timelineRulerRef} role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer may already be inactive */ } movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.inPoint != null && document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-x border-emerald-400/70 bg-emerald-400/10" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(1, (document.outPoint - document.inPoint) * timelineGeometry.pixelsPerSecond)}px` }} />}{document.inPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-emerald-400" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-amber-400" style={{ left: `${document.outPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
+            <div role="slider" aria-label="Arrastar agulha vertical" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={startPlayheadGesture} onPointerMove={updatePlayheadGesture} onPointerUp={endPlayheadGesture} onPointerCancel={endPlayheadGesture} className="absolute bottom-3 top-10 z-40 w-3 -translate-x-1/2 touch-none cursor-ew-resize" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }}><span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-rose-500" /></div>
             {document.tracks.map((track) => (
               <div key={track.id} data-track-id={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
                 <div className="flex w-32 shrink-0 items-center gap-1 border-r border-slate-700 px-2"><span className="min-w-0 flex-1"><strong className="block text-xs uppercase">{track.id}</strong><small className="block truncate text-[9px] text-slate-500">{track.name}</small></span><button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'locked'))} aria-label={`${track.locked ? 'Destravar' : 'Travar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.locked ? <Lock size={11} /> : <Unlock size={11} />}</button>{track.kind === 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'muted'))} aria-label={`${track.muted ? 'Ativar' : 'Silenciar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>}{track.kind !== 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'hidden'))} aria-label={`${track.hidden ? 'Mostrar' : 'Ocultar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.hidden ? <EyeOff size={11} /> : <Eye size={11} />}</button>}{track.userCreated && <button type="button" disabled={track.clips.length > 0} onClick={() => commit((current) => removeTrack(current, track.id))} aria-label={`Remover ${track.name}`} title={track.clips.length ? 'Remova os clipes antes de excluir a trilha' : 'Remover trilha'} className="text-slate-500 hover:text-rose-300 disabled:opacity-25"><Trash2 size={11} /></button>}</div>

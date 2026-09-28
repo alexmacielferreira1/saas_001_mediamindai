@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FinalTimelinePlayer from './FinalTimelinePlayer';
 
@@ -49,5 +49,29 @@ describe('final timeline player', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Voltar ao início do vídeo final' }));
     expect(screen.getByLabelText('Posição do vídeo final')).toHaveValue('2');
     pause.mockRestore();
+  });
+
+  it('keeps a black frame and advances the sequence clock through timeline gaps', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const timelineWithGap = {
+      duration: 8,
+      fps: 30,
+      tracks: [{ id: 'v1', kind: 'video', clips: [
+        { id: 'after-gap', kind: 'video', name: 'Depois da lacuna', src: '/after.mp4', start: 2, duration: 4, sourceIn: 0, properties: {} },
+      ] }],
+    };
+    render(<FinalTimelinePlayer timeline={timelineWithGap} />);
+
+    expect(screen.queryByTestId('final-timeline-video')).not.toBeInTheDocument();
+    expect(screen.getByText('Quadro preto · sequência em andamento')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reproduzir vídeo final' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduzir vídeo final' }));
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(Number(screen.getByLabelText('Posição do vídeo final').value)).toBeGreaterThanOrEqual(1.4);
+
+    play.mockRestore(); pause.mockRestore(); vi.useRealTimers();
   });
 });

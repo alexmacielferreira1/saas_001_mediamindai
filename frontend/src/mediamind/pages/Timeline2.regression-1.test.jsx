@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Timeline2 from './Timeline2';
+import { addMediaClip, createTimeline2Document } from '../lib/timeline2Model';
 
 const mediaApi = vi.hoisted(() => ({
   listMediaAssets: vi.fn(),
@@ -116,5 +117,39 @@ describe('Timeline 2 pointer regressions', () => {
     expect(screen.getByTestId('timeline-out-point')).toHaveTextContent('00:00:08:00');
     fireEvent.click(screen.getByRole('button', { name: 'Limpar IN e OUT' }));
     expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('—');
+  });
+
+  it('drags the vertical playhead handle without moving the clip underneath it', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+    const ruler = screen.getByRole('slider', { name: 'Régua e agulha da timeline' });
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 900 });
+    const needle = screen.getByRole('slider', { name: 'Arrastar agulha vertical' });
+    needle.setPointerCapture = () => { throw new DOMException('Pointer is no longer active', 'NotFoundError'); };
+
+    fireEvent.pointerDown(needle, { clientX: 100, pointerId: 9, buttons: 1 });
+    fireEvent.pointerMove(needle, { clientX: 400, pointerId: 9, buttons: 1 });
+    fireEvent.pointerUp(needle, { clientX: 400, pointerId: 9 });
+
+    expect(screen.getByLabelText('Playhead')).toHaveValue('10');
+    expect(screen.getByLabelText('Posição do clipe')).toHaveValue(0);
+  });
+
+  it('continues the Timeline preview clock through an empty black gap', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    const draft = addMediaClip(createTimeline2Document({ id: 'gap-project' }), {
+      id: 'gap-asset', clipId: 'gap-clip', name: 'Depois da lacuna', kind: 'video', duration: 4, src: '/after-gap.mp4',
+    }, { trackId: 'v1', start: 2 });
+    localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(draft));
+    render(<Timeline2 />);
+
+    expect(screen.getByText('Quadro preto · sequência em andamento')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reproduzir' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduzir' }));
+    act(() => vi.advanceTimersByTime(1500));
+    expect(Number(screen.getByLabelText('Playhead').value)).toBeGreaterThanOrEqual(1.4);
+    vi.useRealTimers();
   });
 });

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { useProducaoProjetos, addProjeto, updateProjeto, setEtapa, transicionar } from '../../../lib/producaoStore';
+import { useProducaoProjetos, addProjeto, updateProjeto, transicionar } from '../../../lib/producaoStore';
 import { baixarXmlPremiere } from '../../../lib/premiereXml';
 import { useAuth } from '../../../auth';
 import { StageDragArea, DraggableStageCard } from '../StageDragList';
@@ -22,7 +22,7 @@ function inputCls() {
 
 // Em edição: lista (arrastável) + detalhamento + acesso às mídias (download,
 // copiar nomes, baixar XML Premiere) + ajuste ao videomaker / revisão do produtor.
-export default function EdicaoPage({ disableBack = false }) {
+export default function EdicaoPage({ disableBack = false, initialLane = 'em_edicao' }) {
   const projetos = useProducaoProjetos();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -32,7 +32,7 @@ export default function EdicaoPage({ disableBack = false }) {
   const sel = emEdicao.find((p) => p.id === selId) || emEdicao[0] || null;
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteObs, setAjusteObs] = useState('');
-  const [queueFilter, setQueueFilter] = useState('em_edicao');
+  const [queueFilter, setQueueFilter] = useState(EDITING_LANES.includes(initialLane) ? initialLane : 'em_edicao');
 
   function nova() {
     const id = addProjeto({ etapa: 'para_editar', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
@@ -59,6 +59,12 @@ export default function EdicaoPage({ disableBack = false }) {
     updateProjeto(sel.id, { revisao_intermediaria: true });
     transicionar(sel.id, 'aguardando_aprovacao', { quem: editorName, obs: 'Revisão intermediária do produtor solicitada' });
     toast({ title: 'Revisão do produtor solicitada', description: 'O projeto foi para Aguardando aprovação.' });
+  }
+
+  function enviarParaAprovacao() {
+    if (!sel) return;
+    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação' });
+    toast({ title: 'Versão enviada para Em aprovação', description: 'A entrega saiu da fila de espera e já está disponível para revisão.' });
   }
 
   function moveToLane(projectId, targetLane) {
@@ -149,6 +155,10 @@ export default function EdicaoPage({ disableBack = false }) {
           const laneIndex = project ? EDITING_LANES.indexOf(laneForEditingProject(project)) : -1;
           const target = EDITING_LANES[laneIndex + dir];
           if (target) moveToLane(id, target);
+          else if (project && dir > 0 && laneIndex === EDITING_LANES.length - 1) {
+            transicionar(project.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação pela fila de edição' });
+            toast({ title: 'Versão enviada para Em aprovação', description: 'A entrega saiu de Aguardando aprovação e entrou na revisão.' });
+          }
         }} disableBack={disableBack} className="flex-1 min-h-0">
           <div className="h-full overflow-y-auto">
             {filteredQueue.length === 0 ? (
@@ -361,7 +371,7 @@ export default function EdicaoPage({ disableBack = false }) {
               <div className="ml-auto flex flex-wrap gap-2">
                 {selectedLaneIndex > 0 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex-1])} className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-300 hover:bg-slate-800"><ChevronLeft size={12}/> Etapa anterior</button>}
                 {selectedLaneIndex < EDITING_LANES.length-1 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex+1])} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Próxima etapa <ChevronRight size={12}/></button>}
-                {selectedLane === 'aguardando' && <button onClick={() => setEtapa(sel.id, 'em_aprovacao')} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Send size={12} /> Enviar pra aprovação</button>}
+                {selectedLane === 'aguardando' && <button onClick={enviarParaAprovacao} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Send size={12} /> Enviar pra aprovação</button>}
               </div>
             </div>
           </>

@@ -188,5 +188,5 @@ Antes de marcar qualquer linha como concluída:
 - Suíte frontend: 53 arquivos/181 testes aprovados; lint aprovado.
 - Testes direcionados de mídia backend: 8 aprovados.
 - Build frontend repetido e aprovado; permanecem avisos conhecidos de Browserslist, import dinâmico ineficaz e chunk grande.
-- Permanecem P0: agulha real, lacunas do player/render e transição para Em aprovação.
+- Atualização de 28/09/2026: agulha real e transição para Em aprovação foram corrigidas e validadas localmente; lacunas já continuam em preto/silêncio nos players da Timeline e da exportação. Permanece pendente somente a preservação física do intervalo preto/silencioso no arquivo renderizado pelo backend.
 - Nenhuma alteração deste bloco foi publicada em produção.

@@ -34,6 +34,10 @@ Uma segunda passagem dos PDFs e textos anexados acrescentou rastreabilidade para
 
 Após teste manual do usuário, três bloqueios funcionais permanecem abertos e anulam qualquer alegação de conclusão da jornada: erro da agulha em uso real; player interrompendo/interpretando incorretamente lacunas que deveriam reproduzir preto e silêncio; e falha da transição `aguardando_aprovacao → em_aprovacao`. Eles estão rastreados como `MM-TL-NEEDLE-003`, `MM-PLAYER-GAP-001` e `MM-FLOW-AP-003`. A suíte frontend terminou com 53 arquivos/181 testes aprovados, lint e build aprovados, mas esses testes não substituem a reprodução manual dos três defeitos. O build mantém avisos não bloqueantes já conhecidos.
 
+### Correção funcional local — 28/09/2026
+
+A agulha vertical passou a capturar seu próprio gesto sem movimentar o clipe abaixo; o relógio do preview e do player final continua durante lacunas, exibindo quadro preto até o próximo clipe; e a ação rápida de `Aguardando aprovação` agora executa a transição canônica para `Em aprovação`. Os três caminhos foram cobertos por 14 testes focados e validados no navegador local. `MM-PLAYER-GAP-001` continua parcialmente aberto apenas para fazer o render do backend materializar preto e silêncio no arquivo exportado.
+
 ## Entrega isolada — contrato de observação do HUB
 
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.
