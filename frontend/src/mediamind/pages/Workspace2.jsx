@@ -7,7 +7,7 @@ import Workspace2Script from '../components/workspace2/Workspace2Script';
 import Workspace2Timeline from '../components/workspace2/Workspace2Timeline';
 import Workspace2Export from '../components/workspace2/Workspace2Export';
 import Timeline2 from './Timeline2';
-import { appendScriptBlock, appendTextBlock, removeScriptBlock, toggleSelectedAsset } from '../lib/workspace2Model';
+import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 
 export default function Workspace2() {
@@ -19,6 +19,7 @@ export default function Workspace2() {
   const [activeStep, setActiveStep] = useState('search');
   const [assets, setAssets] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [mediaSearch, setMediaSearch] = useState(DEFAULT_WORKSPACE_MEDIA_SEARCH);
   const [previewAssetId, setPreviewAssetId] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [project, setProject] = useState(initialProject);
@@ -102,6 +103,8 @@ export default function Workspace2() {
     assets,
     selectedAssets,
     selectedIds,
+    mediaSearch,
+    onMediaSearchChange: setMediaSearch,
     previewAsset,
     blocks,
     onPreview: (asset) => setPreviewAssetId(asset.id),

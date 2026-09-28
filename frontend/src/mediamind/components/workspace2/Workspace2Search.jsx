@@ -4,6 +4,7 @@ import {
   Send, ShieldCheck, Sparkles, WandSparkles,
 } from 'lucide-react';
 import { formatDuration } from '../../data';
+import { DEFAULT_WORKSPACE_MEDIA_SEARCH, filterWorkspaceAssets } from '../../lib/workspace2Model';
 
 const visualClasses = [
   'from-sky-950 via-cyan-800 to-amber-300',
@@ -37,29 +38,23 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
 export default function Workspace2Search({
   assets = [], selectedAssets = [], selectedIds = [], previewAsset, onToggle = () => {},
   onPreview = () => {}, onStepChange = () => {}, onClearSelection = () => {},
-  showPreview = true,
+  showPreview = true, mediaSearch, onMediaSearchChange,
 }) {
-  const [filters, setFilters] = useState({ filename: '', transcription: '', person: '', gc: '', local: '', date: '' });
+  const [localMediaSearch, setLocalMediaSearch] = useState(DEFAULT_WORKSPACE_MEDIA_SEARCH);
   const [viewMode, setViewMode] = useState('grid');
   const [transcription, setTranscription] = useState('');
   const [rightsStatus, setRightsStatus] = useState('');
-  const [quickType, setQuickType] = useState('all');
   const [previewTab, setPreviewTab] = useState('metadata');
-  const update = (key) => (value) => setFilters((current) => ({ ...current, [key]: value }));
-  const filtered = useMemo(() => assets.filter((asset) => {
-    const haystack = `${asset.title || ''} ${asset.filename || ''}`.toLowerCase();
-    if (filters.filename && !haystack.includes(filters.filename.toLowerCase())) return false;
-    if (filters.transcription && !`${asset.description || ''} ${asset.subjects || ''}`.toLowerCase().includes(filters.transcription.toLowerCase())) return false;
-    if (filters.person && !`${asset.people || ''}`.toLowerCase().includes(filters.person.toLowerCase())) return false;
-    if (filters.gc && !`${asset.subjects || ''}`.toLowerCase().includes(filters.gc.toLowerCase())) return false;
-    if (filters.local && !`${asset.location || ''}`.toLowerCase().includes(filters.local.toLowerCase())) return false;
-    if (filters.date && asset.reference_date !== filters.date) return false;
-    if (quickType === 'video' && asset.asset_type !== 'video') return false;
-    if (quickType === 'audio' && asset.asset_type !== 'audio') return false;
-    if (quickType === 'document' && asset.asset_type !== 'document') return false;
-    if (quickType === 'image' && asset.asset_type !== 'image') return false;
-    return true;
-  }), [assets, filters, quickType]);
+  const effectiveSearch = mediaSearch || localMediaSearch;
+  const filters = effectiveSearch.filters;
+  const quickType = effectiveSearch.quickType;
+  const changeSearch = (updater) => {
+    const next = typeof updater === 'function' ? updater(effectiveSearch) : updater;
+    if (onMediaSearchChange) onMediaSearchChange(next);
+    else setLocalMediaSearch(next);
+  };
+  const update = (key) => (value) => changeSearch((current) => ({ ...current, filters: { ...current.filters, [key]: value } }));
+  const filtered = useMemo(() => filterWorkspaceAssets(assets, effectiveSearch), [assets, effectiveSearch]);
   const countType = (type) => type === 'all' ? assets.length : assets.filter((asset) => asset.asset_type === type).length;
 
   return (
@@ -76,7 +71,7 @@ export default function Workspace2Search({
           <Field label="GC / Texto na tela" value={filters.gc} onChange={update('gc')} placeholder="Texto exibido no vídeo..." />
           <Field label="Local" value={filters.local} onChange={update('local')} placeholder="Ex.: São Paulo, Centro..." />
           <Field label="Data" type="date" value={filters.date} onChange={update('date')} />
-          <button type="button" onClick={() => setFilters({ filename: '', transcription: '', person: '', gc: '', local: '', date: '' })} className="w-full rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950">Limpar</button>
+          <button type="button" onClick={() => changeSearch((current) => ({ ...current, filters: { ...DEFAULT_WORKSPACE_MEDIA_SEARCH.filters } }))} className="w-full rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950">Limpar</button>
           <div className="border-t border-slate-800 pt-4 text-xs text-slate-400">Filtros adicionais</div>
           {['Categoria', 'Formato', 'Status', 'Duração', 'Origem'].map((label) => <select aria-label={label} key={label} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300"><option>{label === 'Duração' ? 'Qualquer duração' : 'Todas'}</option></select>)}
         </div>
@@ -89,7 +84,7 @@ export default function Workspace2Search({
             <div className="flex items-center gap-1"><button type="button" aria-label="Visualização em grade" onClick={() => setViewMode('grid')} className={`w2-button ${viewMode === 'grid' ? 'border-sky-500 text-sky-300' : ''}`}><Grid2X2 size={14} /></button><button type="button" aria-label="Visualização em lista" onClick={() => setViewMode('list')} className={`w2-button ${viewMode === 'list' ? 'border-sky-500 text-sky-300' : ''}`}><List size={14} /></button><select aria-label="Ordenação" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"><option>Mais recentes</option></select></div>
           </header>
           <div className="flex flex-wrap gap-1 border-b border-slate-800 px-3 py-2">
-            {[['all', 'Todos'], ['video', 'Vídeos'], ['audio', 'Áudios'], ['document', 'Documentos'], ['image', 'Imagens']].map(([id, label]) => <button type="button" key={id} onClick={() => setQuickType(id)} className={`rounded border px-2.5 py-1 text-[10px] ${quickType === id ? 'border-sky-500 bg-sky-500 text-slate-950' : 'border-slate-700 text-slate-400'}`}>{label} ({countType(id)})</button>)}
+            {[['all', 'Todos'], ['video', 'Vídeos'], ['audio', 'Áudios'], ['document', 'Documentos'], ['image', 'Imagens']].map(([id, label]) => <button type="button" key={id} onClick={() => changeSearch((current) => ({ ...current, quickType: id }))} className={`rounded border px-2.5 py-1 text-[10px] ${quickType === id ? 'border-sky-500 bg-sky-500 text-slate-950' : 'border-slate-700 text-slate-400'}`}>{label} ({countType(id)})</button>)}
             {['Período', 'Programa', 'Pessoa', 'Categoria', 'Formato', 'Status'].map((label) => <select key={label} aria-label={`Filtro rápido ${label}`} className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-400"><option>{label}</option></select>)}
           </div>
           <div data-testid="workspace2-media-grid" className={`${viewMode === 'grid' ? 'grid grid-cols-3' : 'flex flex-col'} gap-2 p-3`}>
