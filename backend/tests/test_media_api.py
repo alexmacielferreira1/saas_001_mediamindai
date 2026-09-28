@@ -142,6 +142,42 @@ def test_export_timeline_renders_the_main_storyline(permission_client, monkeypat
     login(client)
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
     get_settings.cache_clear()
+
+
+def test_export_timeline_respects_sequence_in_and_out(permission_client, monkeypatch, tmp_path):
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    uploaded = client.post(
+        "/api/v1/media/assets",
+        files={"file": ("story.mp4", b"story-video", "video/mp4")},
+    ).json()
+
+    def fake_render(segments, destination):
+        assert len(segments) == 1
+        assert segments[0]["source_in"] == 4
+        assert segments[0]["duration"] == 5
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"selected-range")
+
+    monkeypatch.setattr("app.api.v1.media.render_timeline", fake_render)
+    response = client.post(
+        "/api/v1/media/exports/timeline",
+        json={
+            "name": "Trecho",
+            "in_point": 3,
+            "out_point": 8,
+            "tracks": [{"id": "v1", "kind": "video", "clips": [{
+                "assetId": uploaded["id"], "start": 2, "sourceIn": 3,
+                "duration": 10, "properties": {"speed": 1},
+            }]}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"selected-range"
+    get_settings.cache_clear()
     uploaded = client.post(
         "/api/v1/media/assets",
         files={"file": ("story.mp4", b"story-video", "video/mp4")},

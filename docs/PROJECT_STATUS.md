@@ -30,6 +30,10 @@ Sem alterar o marco M0 e sem publicar em produção, foi validado localmente o r
 
 Na continuação do mesmo dia, o Workspace 2 foi validado até o Passo 5: preview funcional no Passo 3, Timeline integrada no Passo 4 e player final/central de exportação no Passo 5. A suíte frontend passou com 53 arquivos/178 testes, lint e build aprovados. A fila permanece local e o marco M0 continua `failed`; esta evidência não representa homologação de produção.
 
+Uma segunda passagem dos PDFs e textos anexados acrescentou rastreabilidade para recursos profissionais ainda ausentes e entregou localmente o primeiro deles: IN/OUT de sequência agora afeta régua, atalhos, player final e render backend. Testes direcionados: 25 frontend e 8 backend aprovados. Isto não altera o marco M0, não torna a fila durável e não equivale a publicação.
+
+Após teste manual do usuário, três bloqueios funcionais permanecem abertos e anulam qualquer alegação de conclusão da jornada: erro da agulha em uso real; player interrompendo/interpretando incorretamente lacunas que deveriam reproduzir preto e silêncio; e falha da transição `aguardando_aprovacao → em_aprovacao`. Eles estão rastreados como `MM-TL-NEEDLE-003`, `MM-PLAYER-GAP-001` e `MM-FLOW-AP-003`. A suíte frontend terminou com 53 arquivos/181 testes aprovados, lint e build aprovados, mas esses testes não substituem a reprodução manual dos três defeitos. O build mantém avisos não bloqueantes já conhecidos.
+
 ## Entrega isolada — contrato de observação do HUB
 
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.

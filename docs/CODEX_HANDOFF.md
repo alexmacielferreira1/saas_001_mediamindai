@@ -1,5 +1,24 @@
 # Handoff do MediaMind AI
 
+## Atualização 27/09/2026 — segunda passagem dos anexos e intervalo real de sequência
+
+- Os dois PDFs extensos e os três textos anexados foram novamente confrontados; dois textos eram cópias exatas e foram consolidados sem perder requisito.
+- A matriz agora registra explicitamente Media Processor, estados duráveis de job, pacote profissional de exportação, trilhas especializadas, waveform, captions e operações em lote do Acervo.
+- Timeline 2 ganhou IN/OUT real por botões e atalhos I/O, visualização do intervalo na régua e limpeza da faixa.
+- O player final inicia no IN, limita o seek ao OUT e retorna ao IN. A exportação envia a faixa e o backend corta clipes nas bordas, ajustando o `source_in`.
+- Evidência direcionada: 25 testes frontend e 8 testes de mídia backend aprovados. Suíte completa, lint e build ainda devem ser repetidos antes de fechar o bloco.
+- Nada foi publicado; filas duráveis, waveform, captions avançadas e pacote profissional completo permanecem claramente pendentes.
+
+### Correções obrigatórias relatadas no último teste do usuário
+
+Interromper novas expansões até fechar estes três defeitos observáveis:
+
+1. **Agulha da Timeline (`MM-TL-NEEDLE-003`)** — continua gerando erro no navegador do usuário. Os testes automatizados existentes não encerram o defeito. Reproduzir com gesto real, capturar console e validar clique/arraste na régua e nas faixas depois de rerender e zoom.
+2. **Lacunas no player (`MM-PLAYER-GAP-001`)** — ausência de clipe não encerra a sequência. O relógio deve continuar, com quadro preto e silêncio, retomando o próximo clipe no timecode correto. O mesmo vale para preview e render.
+3. **Aprovação (`MM-FLOW-AP-003`)** — `aguardando_aprovacao → em_aprovacao` não está persistindo/aparecendo. Corrigir a ação e provar saída da origem, entrada no destino e permanência após reload.
+
+O relato anexado sobre a agulha também consolida requisitos já registrados de keyframes/curvas, Passos 4 e 5, Ingest, roteiro, players compartilhados, fila e edição em lote. Não duplicar essas tarefas. Estado de verificação ao pausar: suíte frontend completa com **53 arquivos/181 testes aprovados**, lint e build aprovados; testes direcionados de mídia backend com **8 aprovados**. O build mantém avisos conhecidos de Browserslist, import dinâmico ineficaz e chunk grande.
+
 ## Atualização 27/09/2026 — Workspace 2 funcional, player final e lista consolidada
 
 - Passo 3 passou a controlar mídia real: play/pause, seek, mute, IN/OUT, marcador, captura de frame e Inspector com propriedades, efeitos, cor e áudio.

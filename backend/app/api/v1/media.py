@@ -80,6 +80,28 @@ class ClipExportRequest(BaseModel):
 class TimelineExportRequest(BaseModel):
     name: str = Field(default="MediaMind", max_length=180)
     tracks: list[dict] = Field(default_factory=list)
+    in_point: float | None = Field(default=None, ge=0)
+    out_point: float | None = Field(default=None, ge=0)
+
+
+def trim_clip_to_export_range(clip: dict, in_point: float | None, out_point: float | None) -> dict | None:
+    """Return an export segment clipped to the sequence IN/OUT selection."""
+    clip_start = max(0, float(clip.get("start", 0)))
+    clip_duration = max(0, float(clip.get("duration", 0)))
+    clip_end = clip_start + clip_duration
+    range_start = max(0, float(in_point or 0))
+    range_end = float(out_point) if out_point is not None else clip_end
+    overlap_start = max(clip_start, range_start)
+    overlap_end = min(clip_end, range_end)
+    if overlap_end <= overlap_start:
+        return None
+    properties = clip.get("properties") or {}
+    speed = max(0.25, min(4.0, float(properties.get("speed", 1) or 1)))
+    return {
+        "source_in": max(0, float(clip.get("sourceIn", 0))) + ((overlap_start - clip_start) * speed),
+        "duration": max(1 / 30, (overlap_end - overlap_start) * speed),
+        "properties": properties,
+    }
 
 
 def find_ffmpeg() -> Path:
@@ -348,15 +370,16 @@ def export_local_timeline(payload: TimelineExportRequest):
     storage = LocalMediaStorage(get_settings().media_root)
     segments = []
     for clip in sorted((main_track or {}).get("clips", []), key=lambda item: item.get("start", 0)):
+        trimmed = trim_clip_to_export_range(clip, payload.in_point, payload.out_point)
+        if not trimmed:
+            continue
         asset = catalog.get(str(clip.get("assetId")))
         if not asset:
             continue
         segments.append(
             {
                 "source": storage.resolve(asset["storage_key"]),
-                "source_in": max(0, float(clip.get("sourceIn", 0))),
-                "duration": max(1 / 30, float(clip.get("duration", 0))),
-                "properties": clip.get("properties") or {},
+                **trimmed,
             }
         )
     destination = (
@@ -561,6 +584,9 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
     storage = LocalMediaStorage(get_settings().media_root)
     segments = []
     for clip in clips:
+        trimmed = trim_clip_to_export_range(clip, payload.in_point, payload.out_point)
+        if not trimmed:
+            continue
         try:
             asset_id = UUID(str(clip.get("assetId")))
         except (TypeError, ValueError):
@@ -569,9 +595,7 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
         segments.append(
             {
                 "source": storage.resolve(record.data["storage_key"]),
-                "source_in": max(0, float(clip.get("sourceIn", 0))),
-                "duration": max(1 / 30, float(clip.get("duration", 0))),
-                "properties": clip.get("properties") or {},
+                **trimmed,
             }
         )
     export_id = uuid4()

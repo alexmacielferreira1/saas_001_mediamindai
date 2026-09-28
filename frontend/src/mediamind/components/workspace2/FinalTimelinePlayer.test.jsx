@@ -37,4 +37,17 @@ describe('final timeline player', () => {
     expect(pause).toHaveBeenCalled();
     play.mockRestore(); pause.mockRestore();
   });
+
+  it('previews only the marked IN/OUT range', () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    render(<FinalTimelinePlayer timeline={{ ...timeline, inPoint: 2, outPoint: 8 }} />);
+
+    expect(screen.getByLabelText('Posição do vídeo final')).toHaveAttribute('min', '2');
+    expect(screen.getByLabelText('Posição do vídeo final')).toHaveAttribute('max', '8');
+    expect(screen.getByText(/00:02 \/ 00:08/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Posição do vídeo final'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar ao início do vídeo final' }));
+    expect(screen.getByLabelText('Posição do vídeo final')).toHaveValue('2');
+    pause.mockRestore();
+  });
 });

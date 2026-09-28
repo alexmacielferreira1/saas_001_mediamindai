@@ -26,6 +26,15 @@ function timelinePayload(project, timeline) {
   };
 }
 
+function timelineRenderPayload(project, timeline) {
+  return {
+    name: timeline?.name || project?.title,
+    tracks: timeline?.tracks || [],
+    in_point: timeline?.inPoint ?? null,
+    out_point: timeline?.outPoint ?? null,
+  };
+}
+
 function toMaterials(timeline) {
   return (timeline?.tracks || []).flatMap((track) => track.clips || []).filter((clip) => clip.assetId).map((clip) => ({ nome: clip.filename || clip.name }));
 }
@@ -107,7 +116,7 @@ export default function Workspace2Export({ project, timeline, onSave, onNotice }
     try {
       const result = job.kind === 'batch-clip'
         ? await exportMediaClip({ asset_id: job.clip.assetId, source_in: job.clip.sourceIn, duration: job.clip.duration, properties: job.clip.properties })
-        : await exportTimeline({ name: timeline?.name || project?.title, tracks: timeline?.tracks || [] });
+        : await exportTimeline(timelineRenderPayload(project, timeline));
       const url = URL.createObjectURL(result.blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click(); URL.revokeObjectURL(url);
       const next = queue.map((item) => item.id === job.id ? { ...item, status: 'completed', completedAt: new Date().toISOString(), filename: result.filename } : item);
       persistQueue(next); onNotice(`Processamento concluído: ${result.filename}`);
@@ -119,7 +128,7 @@ export default function Workspace2Export({ project, timeline, onSave, onNotice }
   const renderNow = async () => {
     onNotice('Renderizando sequência agora…');
     try {
-      const result = await exportTimeline({ name: timeline?.name || project?.title, tracks: timeline?.tracks || [] });
+      const result = await exportTimeline(timelineRenderPayload(project, timeline));
       const url = URL.createObjectURL(result.blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click(); URL.revokeObjectURL(url);
       onNotice(`Render concluído: ${result.filename}`);
     } catch (error) { onNotice(error?.message || 'Não foi possível renderizar a sequência.'); }

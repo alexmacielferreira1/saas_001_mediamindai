@@ -25,6 +25,9 @@ import {
   updateKeyframeCurve,
   removeTrack,
   separateClipAudio,
+  setTimelineIn,
+  setTimelineOut,
+  clearTimelineRange,
 } from './timeline2Model';
 
 describe('Timeline 2 document model', () => {
@@ -99,6 +102,15 @@ describe('Timeline 2 document model', () => {
     expect(setPlayhead(base, 50).playhead).toBe(10);
     expect(setZoom(base, 0.01).zoom).toBe(0.25);
     expect(setZoom(base, 20).zoom).toBe(8);
+  });
+
+  it('stores a valid sequence IN/OUT range and can clear it', () => {
+    const base = workspace2ToTimeline2({ blocks: [{ id: 'a', title: 'A', type: 'media', duration: 10 }] });
+    const ranged = setTimelineOut(setTimelineIn(setPlayhead(base, 2), 2), 8);
+    expect(ranged).toMatchObject({ inPoint: 2, outPoint: 8 });
+    expect(setTimelineIn(ranged, 9)).toMatchObject({ inPoint: 8, outPoint: 8 });
+    expect(setTimelineOut(ranged, 1)).toMatchObject({ inPoint: 1, outPoint: 1 });
+    expect(clearTimelineRange(ranged)).toMatchObject({ inPoint: null, outPoint: null });
   });
 
   it('adds real media references to a compatible track at the requested time', () => {

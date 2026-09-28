@@ -62,3 +62,15 @@ O texto de revisão do usuário foi incorporado como requisito, mas itens só mu
 | MM-ACERVO-DETAIL-001 | pending | Detalhes do Acervo abrem como janela indesejada | painel lateral editável sem perder contexto da lista |
 | MM-ADMIN-002 | pending | Gestão/relatórios/configurações pouco editáveis | telas administrativas reais, inclusive configuração de IA por provedor sem expor secrets |
 | MM-BATCH-001 | in_progress | Edição em lote/fila precisava configuração e execução | lote configura legenda/pausas/texto/formato/destino e gera trabalhos processáveis; persistência em banco/worker ainda pendente |
+| MM-TL-RANGE-001 | done_local | Faltavam IN/OUT reais da sequência | I/O e botões marcam faixa, régua mostra intervalo, player final limita a prévia e backend recorta o render |
+| MM-TL-TRACKS-002 | in_progress | Fontes especificam V1/V2, G1, T1, C1, A1 e M1 | vídeo/áudio/texto existem; criar tipos especializados com regras de empilhamento |
+| MM-AUDIO-WAVE-001 | pending | Waveform, mixagem, fade e stretch ausentes | derivados reais, sincronia, controles e render; não usar desenho fictício |
+| MM-CAPTION-001 | pending | Legendas sincronizadas e style pack de 32 presets ausentes | captions temporais editáveis, tradução/karaoke, presets e render testado |
+| MM-PROCESSOR-001 | pending | Processamento pesado ainda ocorre na requisição local | Media Processor/worker idempotente com progresso, retry, cancelamento e falha explícita |
+| MM-JOBS-001 | pending | Fila local não é durável | estados `queued/preparing/rendering/packaging/validating/ready/failed`, banco, worker e auditoria |
+| MM-ACERVO-BATCH-001 | pending | Faltam ações em lote e duplicidade por conteúdo | mover/taguear/categorizar/indexar/reprocessar/exportar/baixar/arquivar com checksum/fingerprint |
+| MM-EXPORT-PACK-002 | in_progress | Exportação externa ainda não forma pacote profissional validado | perfis Premiere/DaVinci/Final Cut/Avid, handles, sidecars, legendas, checksums, relink e validação |
+| MM-PLAYER-SHARED-001 | in_progress | Players permanecem inconsistentes entre módulos | componente compartilhado com seek, IN/OUT, SMPTE, marcadores, comentários e estados reais |
+| MM-TL-NEEDLE-003 | **P0 open** | Usuário confirma que a agulha ainda produz erro no uso real, apesar dos testes sintéticos | reproduzir com ponteiro real no navegador, registrar console/stack, corrigir clique e arraste sem depender de `setPointerCapture`; validar régua, faixa, zoom e rerender |
+| MM-PLAYER-GAP-001 | **P0 pending** | Player final para ou seleciona clipe incorreto quando há lacuna na Timeline | relógio da sequência continua monotônico; tela fica preta e áudio fica silencioso até o próximo clipe; play/pause/seek e IN/OUT continuam ativos; render inclui black/silence no intervalo |
+| MM-FLOW-AP-003 | **P0 open** | Itens não avançam de `aguardando_aprovacao` para `em_aprovacao` | ação explícita persiste a etapa canônica, remove da origem, aparece no destino após reload e registra histórico/auditoria |

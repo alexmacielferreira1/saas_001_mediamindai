@@ -9,7 +9,7 @@ import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploa
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
   addMarker, addMediaClip, addPropertyKeyframe, addTextClip, addTrack, createTimeline2Document, deleteClips, duplicateClip, moveClip, removePropertyKeyframe, removeTrack, rippleDelete,
-  separateClipAudio, setPlayhead, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
+  clearTimelineRange, separateClipAudio, setPlayhead, setTimelineIn, setTimelineOut, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
   getActiveClips, getClipPropertiesAtTime, getTimelineGeometry, pointerToTimelineTime, updateClipProperties, updateKeyframeCurve,
 } from '../lib/timeline2Model';
 
@@ -165,7 +165,7 @@ export default function Timeline2({ embedded = false }) {
   };
   const exportSequence = async () => {
     setExporting(true); setNotice('Renderizando a sequência da trilha principal…');
-    try { downloadExport(await exportTimeline({ name: document.name, tracks: document.tracks })); }
+    try { downloadExport(await exportTimeline({ name: document.name, tracks: document.tracks, in_point: document.inPoint, out_point: document.outPoint })); }
     catch (error) { setNotice(error?.message || 'Não foi possível exportar a sequência.'); }
     finally { setExporting(false); }
   };
@@ -196,6 +196,8 @@ export default function Timeline2({ embedded = false }) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
       else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeSelected(); }
       else if (event.key.toLowerCase() === 's') { event.preventDefault(); applySplit(); }
+      else if (event.key.toLowerCase() === 'i') { event.preventDefault(); commit((current) => setTimelineIn(current)); }
+      else if (event.key.toLowerCase() === 'o') { event.preventDefault(); commit((current) => setTimelineOut(current)); }
       else if (event.code === 'Space') { event.preventDefault(); togglePlayback(); }
       else if (event.key.toLowerCase() === 'k') { event.preventDefault(); mediaRefs.current.forEach((player) => player.pause()); setPlaying(false); }
       else if (event.key.toLowerCase() === 'l') { event.preventDefault(); if (!playing) togglePlayback(); }
@@ -361,6 +363,10 @@ export default function Timeline2({ embedded = false }) {
             <button type="button" onClick={rippleRemoveSelected} disabled={!selected} aria-label="Excluir com ripple" title="Ripple delete" className="w2-button disabled:opacity-40"><Crop size={14} /></button>
             <button type="button" onClick={() => commit(toggleSnapping)} aria-label={document.snapEnabled ? 'Desativar snapping' : 'Ativar snapping'} className={`w2-button ${document.snapEnabled ? 'border-sky-500 text-sky-300' : ''}`}><Magnet size={14} /> Snapping</button>
             <button type="button" onClick={() => commit((current) => addMarker(current, { label: `Marcador ${current.markers.length + 1}` }))} aria-label="Adicionar marcador" title="Marcador no playhead" className="w2-button"><BookmarkPlus size={14} /></button>
+            <button type="button" onClick={() => commit((current) => setTimelineIn(current))} aria-label="Marcar IN" title="Marcar entrada da sequência (I)" className="w2-button">IN</button>
+            <button type="button" onClick={() => commit((current) => setTimelineOut(current))} aria-label="Marcar OUT" title="Marcar saída da sequência (O)" className="w2-button">OUT</button>
+            <button type="button" onClick={() => commit(clearTimelineRange)} aria-label="Limpar IN e OUT" title="Usar toda a sequência" className="w2-button text-slate-400">Limpar</button>
+            <span className="flex items-center gap-1 rounded border border-slate-800 bg-slate-950/60 px-2 py-1 font-mono text-[9px] text-slate-400"><span>IN</span><strong data-testid="timeline-in-point" className="text-emerald-300">{document.inPoint == null ? '—' : formatTime(document.inPoint)}</strong><span className="ml-1">OUT</span><strong data-testid="timeline-out-point" className="text-amber-300">{document.outPoint == null ? '—' : formatTime(document.outPoint)}</strong></span>
             <span className="mx-1 h-6 w-px bg-slate-700" />
             <button type="button" onClick={() => commit((current) => addTrack(current, 'video'))} aria-label="Adicionar trilha de vídeo" className="w2-button"><Plus size={13} /> Vídeo</button>
             <button type="button" onClick={() => commit((current) => addTrack(current, 'audio'))} aria-label="Adicionar trilha de áudio" className="w2-button"><Plus size={13} /> Áudio</button>
@@ -369,7 +375,7 @@ export default function Timeline2({ embedded = false }) {
           </div>
           <div className="border-b border-slate-800 px-3 py-1 text-[10px] text-sky-300" role="status">{notice}</div>
           <div className="relative flex-1 overflow-auto bg-[#031022] p-3">
-            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer may already be inactive */ } movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
+            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer may already be inactive */ } movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.inPoint != null && document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-x border-emerald-400/70 bg-emerald-400/10" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(1, (document.outPoint - document.inPoint) * timelineGeometry.pixelsPerSecond)}px` }} />}{document.inPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-emerald-400" style={{ left: `${document.inPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.outPoint != null && <span aria-hidden="true" className="pointer-events-none absolute bottom-0 top-0 w-0.5 bg-amber-400" style={{ left: `${document.outPoint * timelineGeometry.pixelsPerSecond}px` }} />}{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
             <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }} />
             {document.tracks.map((track) => (
               <div key={track.id} data-track-id={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>

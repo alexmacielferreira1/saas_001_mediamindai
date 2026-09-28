@@ -95,3 +95,29 @@ Essa separação evita duas timelines concorrentes e dá ao editor a área neces
 ### Limites reais desta fundação
 
 Ainda não estão marcados como prontos: seleção múltipla/box selection, waveform real, clipboard, ripple insert, reordenação de trilhas, legendas sincronizadas por transcrição, efeitos avançados renderizados, graph editor completo, fila durável no banco/worker, IA real e publicação automática. O render local depende de FFmpeg; produção ainda exige storage, jobs, auditoria e homologação próprios.
+
+## Segunda passagem das fontes extensas — 27/09/2026
+
+Foram confrontados integralmente os textos extraídos de `Saas atualização 14092026.pdf` (837 páginas), `AJUSTAR SAAS 16092026.pdf` (754 páginas) e os três textos anexados ao chat. Dois desses textos são cópias byte a byte e, portanto, contam como uma única fonte de requisito, sem duplicar tarefas. Os PDFs são requisitos históricos e referência funcional; não substituem as decisões atuais do MediaMind nem autorizam publicação.
+
+| Requisito confirmado nas fontes | Estado no MediaMind local | Destino/aceite |
+|---|---|---|
+| IN/OUT de sequência, régua, agulha, marcadores e navegação por quadro | **implementado localmente**: IN/OUT com I/O, indicação na régua, preview final e render recortado | Timeline 2 / Passos 4 e 5; manter teste de modelo, interface, player e backend |
+| Trilhas profissionais V/A e trilhas especializadas G/T/C/M | **parcial**: vídeo, áudio e texto reais; criação/remoção e áudio original separado | tipar grafismo, legenda e música sem quebrar os documentos existentes |
+| Waveform, mixagem, ganho, fade, stretch e sincronismo | **pendente** | pipeline de derivados + editor de áudio; sem waveform inventada |
+| Legendas sincronizadas, edição por palavra, tradução, karaoke e 32 estilos do `.aiedita` | **pendente** | modelo temporal de captions, importação do style pack e render verificável |
+| Detecção de momentos/falas, remoção de pausas, reframe e tracking | **contratos planejados; IA real pendente** | jobs duráveis e resultados revisáveis; nunca declarar sucesso simulado |
+| Processador de mídia externo para FFmpeg, proxy, waveform, render e Whisper | **render FFmpeg local existe; serviço durável pendente** | contrato idempotente, progresso, retry, cancelamento, indisponibilidade explícita |
+| Estados `queued → preparing → rendering_optional_assets → packaging → validating → ready/failed` | **fila local parcial** | persistir no backend/worker, com auditoria e retomada |
+| Pacote profissional Premiere/DaVinci/Final Cut/Avid, handles, relink, sidecars e checksums | **parcial**: projeto MediaMind, XML, EDL, OTIO e PDF locais | acrescentar perfil de destino, mídia consolidada/referenciada, handles, legendas e validação |
+| Operações em lote no Acervo, reprocessar IA, exportar metadados, arquivar e detectar duplicados | **pendente** | seleção em lote com permissão, checksum/fingerprint e jobs auditáveis |
+| Players comuns com IN/OUT, thumbnails, waveform, SMPTE, comentários e capítulos | **parcial** | consolidar componente compartilhado em Pesquisa, Revisão, Finalizado e Publicação |
+| Separar claramente visual, local, backend real, persistido e pronto para produção | **regra adotada** | nenhum estado de documentação pode omitir essa distinção |
+
+### Fontes adicionais desta passagem
+
+| Fonte | SHA-256 | Tratamento |
+|---|---|---|
+| `Saas atualização 14092026.pdf` | `D0EF5DBFAFDC406E7124B372B5215F47C003BC69ECAC726CC8A92B0B709D337A` | requisitos e referência histórica, preservado |
+| `AJUSTAR SAAS 16092026.pdf` | `46DAF7CB1394DA9D3DEC9ADDD293B38F4EFD7A61C6F31E76273420B3384731A6` | requisitos e referência histórica, preservado |
+| textos anexados sobre comparação MediaMind/AI Edita | um texto introdutório + uma revisão repetida duas vezes | incorporados como requisitos, não como instruções de execução |

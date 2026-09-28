@@ -18,6 +18,7 @@ Atualização: 27/09/2026.
 | Exportação | `frontend/src/mediamind/components/workspace2/Workspace2Export.jsx` | formatos, render, lote, aprovação e fila |
 | Player final | `frontend/src/mediamind/components/workspace2/FinalTimelinePlayer.jsx` | prévia funcional da sequência montada antes da saída |
 | Referência funcional | `docs/AI_EDITA_INVENTARIO_E_MATRIZ.md` | inventário, comparação e estado recurso a recurso |
+| Continuidade integral do chat | `docs/CHAT_CONTINUIDADE_AI_EDITA_2026-09-27.md` | todos os pedidos consolidados por tela, fluxo, editor, backend e aceite |
 
 ## Proteções
 

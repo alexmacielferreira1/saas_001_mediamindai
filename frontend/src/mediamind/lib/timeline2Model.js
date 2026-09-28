@@ -48,12 +48,28 @@ export function createTimeline2Document({ id = 'timeline2-draft', name = 'Projet
     fps,
     duration: 0,
     playhead: 0,
+    inPoint: null,
+    outPoint: null,
     zoom: 1,
     snapEnabled: true,
     tracks: DEFAULT_TRACKS.map((track) => ({ ...track, locked: false, muted: false, hidden: false, clips: [] })),
     markers: [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function setTimelineIn(document, time = document.playhead) {
+  const next = Math.max(0, Math.min(document.duration, Number(time) || 0));
+  return { ...document, inPoint: document.outPoint == null ? next : Math.min(next, document.outPoint), updatedAt: new Date().toISOString() };
+}
+
+export function setTimelineOut(document, time = document.playhead) {
+  const next = Math.max(0, Math.min(document.duration, Number(time) || 0));
+  return { ...document, inPoint: document.inPoint == null ? document.inPoint : Math.min(document.inPoint, next), outPoint: next, updatedAt: new Date().toISOString() };
+}
+
+export function clearTimelineRange(document) {
+  return { ...document, inPoint: null, outPoint: null, updatedAt: new Date().toISOString() };
 }
 
 export function addTrack(document, kind = 'video') {

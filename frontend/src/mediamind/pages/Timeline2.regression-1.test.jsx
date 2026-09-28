@@ -101,4 +101,20 @@ describe('Timeline 2 pointer regressions', () => {
     expect(within(audioTrack).getByRole('button')).toHaveTextContent(/Entrevista real · áudio/i);
     expect(screen.getByRole('button', { name: /Áudio já separado/i })).toBeDisabled();
   });
+
+  it('marks sequence IN and OUT with buttons and I/O shortcuts', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+    const playhead = screen.getByLabelText('Playhead');
+
+    fireEvent.change(playhead, { target: { value: '2' } });
+    fireEvent.keyDown(window, { key: 'i' });
+    expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('00:00:02:00');
+    fireEvent.change(playhead, { target: { value: '8' } });
+    fireEvent.keyDown(window, { key: 'o' });
+    expect(screen.getByTestId('timeline-out-point')).toHaveTextContent('00:00:08:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar IN e OUT' }));
+    expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('—');
+  });
 });
