@@ -9,6 +9,18 @@ const DEFAULT_TRACKS = [
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 8;
 
+const trackNumber = (track) => Number(String(track?.id || '').replace(/\D/g, '')) || 0;
+
+export function getTimelineDisplayTracks(document) {
+  const rank = { text: 0, video: 1, audio: 2 };
+  return [...(document?.tracks || [])].sort((left, right) => {
+    const kindDifference = (rank[left.kind] ?? 3) - (rank[right.kind] ?? 3);
+    if (kindDifference) return kindDifference;
+    const numberDifference = trackNumber(left) - trackNumber(right);
+    return left.kind === 'audio' ? numberDifference : -numberDifference;
+  });
+}
+
 export function getTimelineGeometry(duration, zoom = 1) {
   const pixelsPerSecond = 40 * Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number(zoom) || 1));
   return { pixelsPerSecond, width: Math.max(900, Math.max(0, Number(duration) || 0) * pixelsPerSecond) };

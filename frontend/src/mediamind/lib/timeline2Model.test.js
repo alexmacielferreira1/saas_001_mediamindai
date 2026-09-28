@@ -16,6 +16,7 @@ import {
   updateClipProperties,
   workspace2ToTimeline2,
   getActiveClips,
+  getTimelineDisplayTracks,
   getTimelineGeometry,
   pointerToTimelineTime,
   addPropertyKeyframe,
@@ -36,6 +37,14 @@ describe('Timeline 2 document model', () => {
 
     expect(document).toMatchObject({ id: 'news-1', name: 'Jornal 12h', fps: 30, playhead: 0, zoom: 1, snapEnabled: true });
     expect(document.tracks.map((track) => track.kind)).toEqual(['video', 'video', 'text', 'audio', 'audio']);
+  });
+
+  it('shows higher visual layers above lower layers while keeping audio below', () => {
+    const document = addTrack(addTrack(createTimeline2Document(), 'video'), 'text');
+
+    expect(getTimelineDisplayTracks(document).map((track) => track.id)).toEqual([
+      't2', 't1', 'v3', 'v2', 'v1', 'a1', 'a2',
+    ]);
   });
 
   it('adds compatible tracks and only removes empty user tracks', () => {
