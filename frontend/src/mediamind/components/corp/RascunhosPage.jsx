@@ -123,7 +123,8 @@ function RascunhoActions({ proj, onMarcar, onRegistrar }) {
 
 export default function RascunhosPage({ newDraftSignal = 0 }) {
   const projetos = useProducaoProjetos();
-  const meus = projetos.filter((p) => ['rascunho', 'agendamentos', 'gravacoes', 'para_editar', 'em_edicao'].includes(isProjectInProductionStage(p, 'agendamentos') ? 'agendamentos' : p.etapa));
+  // Cada produção aparece em uma única fila. Ao avançar, ela deixa de ser rascunho.
+  const meus = projetos.filter((p) => p.etapa === 'rascunho');
   const [selectedId, setSelectedId] = useState(meus[0]?.id);
   const selected = meus.find((p) => p.id === selectedId) || meus[0];
 
@@ -153,7 +154,7 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
   function removePresenter(i) { updateProjeto(selected.id, { apresentadores: selected.apresentadores.filter((_, idx) => idx !== i) }); }
   function loadDefaults() { updateProjeto(selected.id, { apresentadores: MOCK_CORP_PRESENTERS.map((p) => ({ nome: p.nome, cg: p.cg })) }); }
 
-  const editable = selected.etapa === 'rascunho' || isProjectInProductionStage(selected, 'agendamentos');
+  const editable = selected.etapa === 'rascunho';
   const st = STATUS[selected.etapa];
 
   return (

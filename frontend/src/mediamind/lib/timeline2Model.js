@@ -56,6 +56,28 @@ export function createTimeline2Document({ id = 'timeline2-draft', name = 'Projet
   };
 }
 
+export function addTrack(document, kind = 'video') {
+  const normalized = ['video', 'audio', 'text'].includes(kind) ? kind : 'video';
+  const prefix = normalized === 'video' ? 'v' : normalized === 'audio' ? 'a' : 't';
+  const label = normalized === 'video' ? 'Vídeo' : normalized === 'audio' ? 'Áudio' : 'Texto';
+  const nextNumber = Math.max(0, ...document.tracks.filter((track) => track.kind === normalized).map((track) => Number(String(track.id).replace(/\D/g, '')) || 0)) + 1;
+  const track = { id: `${prefix}${nextNumber}`, kind: normalized, name: `${label} ${nextNumber}`, locked: false, muted: false, hidden: false, userCreated: true, clips: [] };
+  const tracks = [...document.tracks];
+  const insertAt = normalized === 'text'
+    ? Math.max(0, tracks.findIndex((candidate) => candidate.kind === 'video'))
+    : normalized === 'video'
+      ? (tracks.findIndex((candidate) => candidate.kind === 'audio') < 0 ? tracks.length : tracks.findIndex((candidate) => candidate.kind === 'audio'))
+      : tracks.length;
+  tracks.splice(insertAt, 0, track);
+  return { ...document, tracks, updatedAt: new Date().toISOString() };
+}
+
+export function removeTrack(document, trackId) {
+  const track = document.tracks.find((candidate) => candidate.id === trackId);
+  if (!track?.userCreated || track.clips.length) return document;
+  return { ...document, tracks: document.tracks.filter((candidate) => candidate.id !== trackId), updatedAt: new Date().toISOString() };
+}
+
 export function workspace2ToTimeline2({ project = {}, blocks = [], selectedAssets = [] } = {}) {
   const document = createTimeline2Document({ id: project.id || 'workspace2-draft', name: project.title || 'Workspace 2' });
   let cursor = 0;
@@ -92,7 +114,11 @@ export function workspace2ToTimeline2({ project = {}, blocks = [], selectedAsset
     });
     cursor += duration;
   });
-  return { ...document, tracks, duration: cursor };
+  let prepared = { ...document, tracks, duration: cursor };
+  tracks.flatMap((track) => track.clips).filter((clip) => clip.kind === 'video' && clip.src).forEach((clip) => {
+    prepared = separateClipAudio(prepared, clip.id);
+  });
+  return prepared;
 }
 
 export function addMediaClip(document, media, { trackId, start = document.playhead } = {}) {
@@ -121,6 +147,27 @@ export function addMediaClip(document, media, { trackId, start = document.playhe
     selected: false,
   });
   tracks[trackIndex].clips.sort((a, b) => a.start - b.start);
+  return replaceTracks(document, tracks);
+}
+
+export function separateClipAudio(document, clipId) {
+  const located = locateClip(document, clipId);
+  if (!located || located.clip.kind !== 'video' || !located.clip.src || located.clip.properties?.audioDisabled) return document;
+  const audioTrackIndex = document.tracks.findIndex((track) => track.kind === 'audio' && !track.locked);
+  if (audioTrackIndex < 0) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  const video = tracks[located.trackIndex].clips[located.clipIndex];
+  video.properties = { ...video.properties, audioDisabled: true };
+  tracks[audioTrackIndex].clips.push({
+    ...video,
+    id: `${video.id}-audio`,
+    name: `${video.name} · áudio`,
+    kind: 'audio',
+    trackId: tracks[audioTrackIndex].id,
+    linkedTo: video.id,
+    properties: { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: Number(video.properties?.volume) || 0, speed: Number(video.properties?.speed) || 1 },
+  });
+  tracks[audioTrackIndex].clips.sort((a, b) => a.start - b.start);
   return replaceTracks(document, tracks);
 }
 

@@ -228,6 +228,12 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
     onEnviarEditor?.(project.id);
   }
 
+  function approveVersion() {
+    const openReviewNotes = annotations.filter((item) => item.status !== 'resolvida').length + DEMO_COMMENTS.length;
+    if (openReviewNotes > 0 && !window.confirm(`Existem ${openReviewNotes} apontamentos abertos. Deseja aprovar esta versão mesmo assim?`)) return;
+    onAprovar?.(project.id);
+  }
+
   const draws = annotations.filter((a) => a.kind === 'desenho');
 
   return (
@@ -261,7 +267,7 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
         </aside>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3"><p className="text-[9px] text-slate-500"><span className="font-semibold text-rose-300">Existem {DEMO_COMMENTS.length+annotations.length} apontamentos nesta revisão.</span><br/>A produção retornará para edição se houver solicitação de ajustes.</p><div className="flex gap-2"><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-amber-500 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/10"><RotateCcw size={12}/>Solicitar alterações</button><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-rose-500 px-3 py-2 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"><XCircle size={12}/>Rejeitar</button><button onClick={()=>onAprovar?.(project.id)} disabled={loading} className="flex items-center gap-1 rounded bg-emerald-500 px-4 py-2 text-[10px] font-bold text-slate-950 hover:bg-emerald-400"><CheckCircle2 size={12}/>Aprovar versão</button></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3"><p className="text-[9px] text-slate-500"><span className="font-semibold text-rose-300">Existem {DEMO_COMMENTS.length+annotations.length} apontamentos nesta revisão.</span><br/>A produção retornará para edição se houver solicitação de ajustes.</p><div className="flex gap-2"><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-amber-500 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/10"><RotateCcw size={12}/>Solicitar alterações</button><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-rose-500 px-3 py-2 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"><XCircle size={12}/>Rejeitar</button><button onClick={approveVersion} disabled={loading} className="flex items-center gap-1 rounded bg-emerald-500 px-4 py-2 text-[10px] font-bold text-slate-950 hover:bg-emerald-400"><CheckCircle2 size={12}/>Aprovar versão</button></div></footer>
     </div>
   );
 }

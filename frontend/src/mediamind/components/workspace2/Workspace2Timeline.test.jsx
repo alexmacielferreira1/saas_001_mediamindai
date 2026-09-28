@@ -31,4 +31,33 @@ describe('Workspace 2 timeline step', () => {
     fireEvent.drop(screen.getByText('GC – Cidade que avança · solte uma mídia aqui').closest('.flex.h-11'), { dataTransfer: transfer });
     expect(onAddAsset).toHaveBeenCalledWith(assets[0]);
   });
+
+  it('controls real media playback, IN/OUT points and markers', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const media = { ...assets[0], asset_type: 'video', stream_url: '/media/interview.mp4' };
+    render(<Workspace2Timeline selectedAssets={[media]} previewAsset={media} compact />);
+
+    const video = screen.getByTestId('workspace2-preview-media');
+    Object.defineProperty(video, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(video);
+    video.currentTime = 12;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduzir mídia' }));
+    expect(play).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar mídia' }));
+    expect(pause).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar IN' }));
+    expect(screen.getByTestId('workspace2-in-point')).toHaveTextContent('00:12');
+    video.currentTime = 31;
+    fireEvent.timeUpdate(video);
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar OUT' }));
+    expect(screen.getByTestId('workspace2-out-point')).toHaveTextContent('00:31');
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar marcador' }));
+    expect(screen.getByRole('status')).toHaveTextContent(/Marcador adicionado em 00:31/i);
+
+    play.mockRestore();
+    pause.mockRestore();
+  });
 });

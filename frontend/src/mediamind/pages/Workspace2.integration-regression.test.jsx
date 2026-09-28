@@ -30,6 +30,10 @@ describe('Workspace 2 integrated editing flow', () => {
   });
 
   it('opens the centralized export surface as step 5', () => {
+    localStorage.setItem('mm_timeline2_project:workspace2-draft', JSON.stringify({
+      id: 'workspace2-draft', name: 'Persistido', duration: 4, fps: 30, markers: [],
+      tracks: [{ id: 'v1', kind: 'video', name: 'Vídeo', clips: [{ id: 'persisted-clip', kind: 'video', name: 'Corte persistido', duration: 4, start: 0 }] }],
+    }));
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
     fireEvent.click(screen.getByRole('button', { name: /5\s*exportação/i }));
@@ -38,5 +42,6 @@ describe('Workspace 2 integrated editing flow', () => {
     expect(screen.getByRole('button', { name: 'Salvar projeto no MediaMind' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Exportar projeto MediaMind' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Exportar XML Premiere / DaVinci' })).toBeInTheDocument();
+    expect(screen.getByText(/1 clipes em 1 trilhas/i)).toBeInTheDocument();
   });
 });

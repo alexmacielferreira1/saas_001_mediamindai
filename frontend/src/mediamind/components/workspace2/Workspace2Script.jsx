@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { Download, Film, GripVertical, MoreVertical, Play, Plus, Save, Send, Trash2, Type } from 'lucide-react';
 import { formatDuration, MOCK_SCRIPTS } from '../../data';
 
@@ -6,8 +7,20 @@ export default function Workspace2Script({
   onAddText = () => {}, onStepChange = () => {}, project = {}, onProjectChange = () => {},
   onSave = () => {}, onSaveAs = () => {}, onExport = () => {}, onNotice = () => {},
 }) {
+  const [activeScriptId, setActiveScriptId] = useState(MOCK_SCRIPTS[0]?.id);
+  const [mediaQuery, setMediaQuery] = useState('');
   const mediaCount = blocks.filter((block) => block.type === 'media').length;
   const textCount = blocks.filter((block) => block.type === 'text').length;
+  const visibleAssets = useMemo(() => {
+    const query = mediaQuery.trim().toLocaleLowerCase('pt-BR');
+    return query ? selectedAssets.filter((asset) => asset.title?.toLocaleLowerCase('pt-BR').includes(query)) : selectedAssets;
+  }, [mediaQuery, selectedAssets]);
+  const openScript = (script) => {
+    setActiveScriptId(script.id);
+    onProjectChange('title', script.title);
+    if (script.project_name) onProjectChange('program', script.project_name);
+    onNotice(`Roteiro “${script.title}” aberto`);
+  };
   const handleDrop = (event) => {
     event.preventDefault();
     const id = event.dataTransfer.getData('application/x-workspace2-asset');
@@ -20,7 +33,7 @@ export default function Workspace2Script({
       <aside className="w2-panel overflow-hidden">
         <div className="border-b border-slate-800 px-4 py-3 text-base font-bold">Roteiros ({MOCK_SCRIPTS.length})</div>
         <div className="p-3"><button type="button" className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950"><Plus size={15} /> Criar novo roteiro</button></div>
-        <div className="space-y-2 px-3">{MOCK_SCRIPTS.map((script, index) => <article key={script.id} className={`rounded-xl border p-3 ${index === 0 ? 'border-sky-400 bg-sky-950/30' : 'border-slate-700 bg-slate-950/40'}`}><div className="flex items-start justify-between"><div><h3 className="text-sm font-bold">{script.title}</h3><p className="text-xs text-slate-400">{script.project_name}</p></div><MoreVertical size={15} /></div><div className="mt-4 flex items-center justify-between text-[10px]"><span className={`rounded-full px-2 py-1 ${script.status === 'approved' ? 'bg-emerald-950 text-emerald-300' : 'bg-slate-800 text-slate-300'}`}>{script.status === 'approved' ? 'Aprovado' : script.status === 'draft' ? 'Rascunho' : 'Em revisão'}</span><span>{script.clip_count} blocos · {script.duration_label}</span></div></article>)}</div>
+        <div className="space-y-2 px-3">{MOCK_SCRIPTS.map((script) => <button type="button" aria-label={`Abrir roteiro ${script.title}`} aria-pressed={activeScriptId === script.id} onClick={() => openScript(script)} key={script.id} className={`block w-full rounded-xl border p-3 text-left ${activeScriptId === script.id ? 'border-sky-400 bg-sky-950/30' : 'border-slate-700 bg-slate-950/40 hover:border-slate-500'}`}><div className="flex items-start justify-between"><div><h3 className="text-sm font-bold">{script.title}</h3><p className="text-xs text-slate-400">{script.project_name}</p></div><MoreVertical size={15} /></div><div className="mt-4 flex items-center justify-between text-[10px]"><span className={`rounded-full px-2 py-1 ${script.status === 'approved' ? 'bg-emerald-950 text-emerald-300' : 'bg-slate-800 text-slate-300'}`}>{script.status === 'approved' ? 'Aprovado' : script.status === 'draft' ? 'Rascunho' : 'Em revisão'}</span><span>{script.clip_count} blocos · {script.duration_label}</span></div></button>)}</div>
       </aside>
 
       <main className="flex min-w-0 flex-col gap-2">
@@ -41,7 +54,8 @@ export default function Workspace2Script({
 
       <aside className="w2-panel overflow-hidden">
         <header className="border-b border-slate-800 px-4 py-3"><h2 className="font-bold">Mídias selecionadas da Pesquisa ({selectedAssets.length})</h2><p className="text-[11px] text-slate-400">Disponíveis para uso no roteiro.</p></header>
-        <div className="space-y-2 p-3">{selectedAssets.map((asset) => <article draggable onDragStart={(event) => event.dataTransfer.setData('application/x-workspace2-asset', String(asset.id))} key={asset.id} className="flex cursor-grab items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 p-2"><span className="grid h-12 w-16 place-items-center rounded bg-gradient-to-br from-sky-950 to-amber-400 text-2xl">{asset.icon}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{asset.title}</p><p className="text-[10px] text-slate-400">{formatDuration(asset.duration || 0)} · ASSET-00-{asset.id}</p></div><button type="button" aria-label={`Adicionar ${asset.title}`} onClick={() => onAddAsset(asset)} className="grid h-8 w-8 place-items-center rounded-lg border border-sky-700 text-sky-300 hover:bg-sky-950"><Plus size={15} /></button></article>)}</div>
+        <div className="p-3 pb-0"><input aria-label="Pesquisa rápida de mídias" value={mediaQuery} onChange={(event) => setMediaQuery(event.target.value)} placeholder="Pesquisa rápida neste projeto…" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs" /></div>
+        <div className="space-y-2 p-3">{visibleAssets.map((asset) => <article draggable onDragStart={(event) => event.dataTransfer.setData('application/x-workspace2-asset', String(asset.id))} key={asset.id} className="flex cursor-grab items-center gap-3 rounded-xl border border-slate-700 bg-slate-950 p-2"><span className="grid h-12 w-16 place-items-center rounded bg-gradient-to-br from-sky-950 to-amber-400 text-2xl">{asset.icon}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold">{asset.title}</p><p className="text-[10px] text-slate-400">{formatDuration(asset.duration || 0)} · ASSET-00-{asset.id}</p></div><button type="button" aria-label={`Adicionar ${asset.title}`} onClick={() => onAddAsset(asset)} className="grid h-8 w-8 place-items-center rounded-lg border border-sky-700 text-sky-300 hover:bg-sky-950"><Plus size={15} /></button></article>)}{visibleAssets.length === 0 && <p className="rounded-lg border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500">Nenhuma mídia selecionada corresponde à pesquisa.</p>}</div>
         <div className="mx-3 mt-6 rounded-xl border border-sky-800 bg-sky-950/30 p-3 text-xs text-sky-200"><strong className="block">Buscar mais mídias</strong><button type="button" onClick={() => onStepChange('search')} className="mt-3 w-full rounded-lg border border-sky-700 py-2">Abrir pesquisa de mídias</button></div>
       </aside>
     </section>

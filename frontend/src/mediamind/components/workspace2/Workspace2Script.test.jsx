@@ -24,4 +24,18 @@ describe('Workspace 2 script step', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ir para Timeline' }));
     expect(onStepChange).toHaveBeenCalledWith('timeline');
   });
+
+  it('selects any script in the list and filters the quick media search', () => {
+    const onProjectChange = vi.fn();
+    render(<Workspace2Script selectedAssets={[asset, { id: 8, title: 'Entrevista coletiva', duration: 30, icon: '🎤' }]} onProjectChange={onProjectChange} />);
+
+    const scripts = screen.getAllByRole('button', { name: /Abrir roteiro/i });
+    fireEvent.click(scripts[1]);
+    expect(scripts[1]).toHaveAttribute('aria-pressed', 'true');
+    expect(onProjectChange).toHaveBeenCalledWith('title', expect.any(String));
+
+    fireEvent.change(screen.getByLabelText('Pesquisa rápida de mídias'), { target: { value: 'entrevista' } });
+    expect(screen.queryByText(asset.title)).not.toBeInTheDocument();
+    expect(screen.getByText('Entrevista coletiva')).toBeInTheDocument();
+  });
 });

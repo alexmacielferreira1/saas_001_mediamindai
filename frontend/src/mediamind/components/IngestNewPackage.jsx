@@ -5,7 +5,9 @@ import {
   FileVideo, FileAudio, FileImage, FileText, Check,
 } from 'lucide-react';
 import { uploadFile } from '../../api/uploads';
+import { uploadMediaAsset } from '../../api/media';
 import { base44 } from '../../api/base44Client';
+import { readLocalDemoSession } from '../lib/demoAccess';
 import { pendingUploadEntries } from '../lib/ingestUploadPlan';
 
 const PROGRAMS = ['Jornal do Meio Dia', 'Jornal da Noite', 'Especial Enchentes RS', 'Documentário Turismo', 'Campanha Institucional'];
@@ -43,19 +45,24 @@ export default function IngestNewPackage() {
 
   async function continueFlow() {
     if (step < 3) { setStep(step + 1); return; }
-    if (!name || files.length === 0 || uploading) return;
+    if (files.length === 0 || uploading) return;
     setUploading(true);
     setUploadError('');
     const queue = pendingUploadEntries(files);
     for (const entry of queue) {
       try {
         setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploading' } : item));
-        const uploaded = await uploadFile(entry.file);
+        const isMedia = ['video', 'audio'].includes(entry.type);
+        const uploaded = readLocalDemoSession() && isMedia
+          ? await uploadMediaAsset(entry.file)
+          : await uploadFile(entry.file);
         await base44.entities.Asset.create({
           title: entry.name, filename: entry.name, asset_type: entry.type,
-          file_size: entry.file.size, file_url: uploaded.file_url,
+          file_size: entry.file.size, file_url: uploaded.file_url || uploaded.stream_url,
           file_sha256: uploaded.sha256,
-          package_name: name, folder, program_name: program, ai_status: aiEnabled ? 'pending' : 'disabled',
+          media_asset_id: uploaded.id || null,
+          package_name: name.trim() || null, folder: folder.trim() || null, program_name: program || null,
+          ai_status: aiEnabled ? 'pending' : 'disabled',
         });
         setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploaded' } : item));
       } catch {
@@ -134,11 +141,11 @@ export default function IngestNewPackage() {
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-slate-300">Nome do pacote <span className="text-rose-400">*</span></span>
+                  <span className="text-xs font-semibold text-slate-300">Nome do pacote <span className="font-normal text-slate-500">(opcional)</span></span>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ex.: Pacote 01 — Entrevistas"
+                    placeholder="Sem nome — você poderá alterar depois"
                     className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-sky-500"
                   />
                 </label>
@@ -297,7 +304,7 @@ export default function IngestNewPackage() {
         </button>
         <button
           onClick={continueFlow}
-          disabled={uploading || (step === 3 && (!name || files.length === 0))}
+          disabled={uploading || (step === 3 && files.length === 0)}
           className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-sky-400"
         >
           {uploading ? 'Enviando…' : step === 3 ? uploadError ? 'Continuar envio' : 'Iniciar envio' : 'Criar pacote e continuar →'}

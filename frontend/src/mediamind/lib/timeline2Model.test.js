@@ -19,9 +19,12 @@ import {
   getTimelineGeometry,
   pointerToTimelineTime,
   addPropertyKeyframe,
+  addTrack,
   getClipPropertiesAtTime,
   removePropertyKeyframe,
   updateKeyframeCurve,
+  removeTrack,
+  separateClipAudio,
 } from './timeline2Model';
 
 describe('Timeline 2 document model', () => {
@@ -30,6 +33,15 @@ describe('Timeline 2 document model', () => {
 
     expect(document).toMatchObject({ id: 'news-1', name: 'Jornal 12h', fps: 30, playhead: 0, zoom: 1, snapEnabled: true });
     expect(document.tracks.map((track) => track.kind)).toEqual(['video', 'video', 'text', 'audio', 'audio']);
+  });
+
+  it('adds compatible tracks and only removes empty user tracks', () => {
+    const base = createTimeline2Document();
+    const expanded = addTrack(addTrack(base, 'video'), 'audio');
+    expect(expanded.tracks.find((track) => track.id === 'v3')).toMatchObject({ kind: 'video', name: 'Vídeo 3' });
+    expect(expanded.tracks.find((track) => track.id === 'a3')).toMatchObject({ kind: 'audio', name: 'Áudio 3' });
+    expect(removeTrack(expanded, 'v3').tracks.some((track) => track.id === 'v3')).toBe(false);
+    expect(removeTrack(addMediaClip(expanded, { id: 'x', kind: 'video', duration: 2 }, { trackId: 'v3' }), 'v3').tracks.some((track) => track.id === 'v3')).toBe(true);
   });
 
   it('converts every Workspace 2 block and keeps asset ids', () => {
@@ -101,6 +113,17 @@ describe('Timeline 2 document model', () => {
 
     const withAudio = addMediaClip(withVideo, { id: 'audio-1', name: 'trilha.mp3', kind: 'audio', duration: 9 }, { trackId: 'a2' });
     expect(withAudio.tracks.find((track) => track.id === 'a2').clips[0].kind).toBe('audio');
+  });
+
+  it('separates embedded video audio into a linked editable audio clip', () => {
+    const withVideo = addMediaClip(createTimeline2Document(), { id: 'camera', name: 'camera.mp4', kind: 'video', duration: 8, src: '/camera.mp4' });
+    const separated = separateClipAudio(withVideo, withVideo.tracks.find((track) => track.id === 'v1').clips[0].id);
+    const video = separated.tracks.find((track) => track.id === 'v1').clips[0];
+    const audio = separated.tracks.find((track) => track.id === 'a1').clips[0];
+
+    expect(video.properties.audioDisabled).toBe(true);
+    expect(audio).toMatchObject({ kind: 'audio', src: '/camera.mp4', linkedTo: video.id, start: 0, duration: 8 });
+    expect(separateClipAudio(separated, video.id)).toBe(separated);
   });
 
   it('duplicates, ripple deletes and edits clip properties', () => {

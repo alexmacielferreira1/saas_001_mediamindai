@@ -28,6 +28,8 @@ Não ignorar testes nem desligar verificações. Resolver a causa e executar nov
 
 Sem alterar o marco M0 e sem publicar em produção, foi validado localmente o recorte Timeline 2 + início da esteira. Login demo, mídia real do Acervo, régua/agulha, clique nas faixas, posição de drop, arraste de clipe e transição `Rascunhos → Agendamentos` foram exercitados. A transição permaneceu após reload. Suítes: 51 arquivos/166 testes frontend e 154 testes backend; lint e build aprovados. A validação total segue parcial porque as etapas restantes e a persistência PostgreSQL ponta a ponta ainda não foram homologadas.
 
+Na continuação do mesmo dia, o Workspace 2 foi validado até o Passo 5: preview funcional no Passo 3, Timeline integrada no Passo 4 e player final/central de exportação no Passo 5. A suíte frontend passou com 53 arquivos/178 testes, lint e build aprovados. A fila permanece local e o marco M0 continua `failed`; esta evidência não representa homologação de produção.
+
 ## Entrega isolada — contrato de observação do HUB
 
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.

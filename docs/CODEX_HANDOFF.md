@@ -1,5 +1,16 @@
 # Handoff do MediaMind AI
 
+## Atualização 27/09/2026 — Workspace 2 funcional, player final e lista consolidada
+
+- Passo 3 passou a controlar mídia real: play/pause, seek, mute, IN/OUT, marcador, captura de frame e Inspector com propriedades, efeitos, cor e áudio.
+- Roteiro permite abrir qualquer item da lista e ganhou pesquisa rápida de mídias sem voltar ao Passo 1.
+- Passo 4 permanece dentro do Workspace e ganhou keyframes/curvas, atalhos de navegação, trilhas adicionáveis/removíveis e separação do áudio original.
+- Passo 5 usa o documento realmente editado e salvo; ganhou player final, exportações de projeto/intercâmbio, render, aprovação, lote e fila local.
+- Ingest local passou a aceitar pacote sem nome e enviar mídia ao Acervo; Rascunhos filtra somente rascunhos; aprovação com pendências exige confirmação.
+- A lista de erros trazida pelo usuário está rastreada em `CODEX_BACKLOG.md`, distinguindo `done_local`, `in_progress` e `pending`.
+- Evidência atual: 53 arquivos/178 testes frontend aprovados, lint aprovado e build aprovado. Há avisos conhecidos do React em testes negativos, Browserslist desatualizado, import dinâmico ineficaz e chunk grande; nenhum derrubou o gate.
+- O Passo 5 ficou aberto no navegador local para inspeção. Nenhum deploy, Render, Neon ou produção foi alterado.
+
 ## Atualização 27/09/2026 — QA funcional da Timeline 2 e da esteira
 
 - Timeline 2 validada no navegador local com mídia real do Acervo: inclusão na trilha, seleção e movimentação da agulha pela régua funcionam.

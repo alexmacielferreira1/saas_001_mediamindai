@@ -90,6 +90,13 @@ export default function Workspace2() {
     setNotice('Projeto preparado para a Timeline 2');
     setActiveStep('timeline');
   };
+  const preparedTimeline = workspace2ToTimeline2({ project, blocks, selectedAssets });
+  const latestTimeline = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`mm_timeline2_project:${preparedTimeline.id}`));
+      return saved?.tracks ? saved : preparedTimeline;
+    } catch { return preparedTimeline; }
+  })();
 
   const shared = {
     assets,
@@ -136,7 +143,7 @@ export default function Workspace2() {
       {activeStep === 'script' && <Workspace2Script {...shared} />}
       {activeStep === 'preview' && <Workspace2Timeline {...shared} compact onOpenTimeline={openTimeline2} />}
       {activeStep === 'timeline' && <Timeline2 embedded />}
-      {activeStep === 'export' && <Workspace2Export project={project} timeline={workspace2ToTimeline2({ project, blocks, selectedAssets })} onSave={saveProject} onNotice={setNotice} />}
+      {activeStep === 'export' && <Workspace2Export project={project} timeline={latestTimeline} onSave={saveProject} onNotice={setNotice} />}
     </div>
   );
 }

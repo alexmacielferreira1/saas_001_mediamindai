@@ -40,3 +40,25 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md` e `ai/01_IMPLEMENTATION_PLAN.md`. Catálogo funcional: `ai/03_PRODUCT_CAPABILITY_CATALOG.md`. Especificações: `ai/00_RAG_MCP_FINETUNING_MASTER.md`, `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
 
 Pronto exige teste automatizado, evidência local/publicada quando aplicável e documentação atualizada.
+
+## Lista funcional consolidada — inspeção de 27/09/2026
+
+O texto de revisão do usuário foi incorporado como requisito, mas itens só mudam para concluídos com ação real e teste.
+
+| ID | Estado | Erro/requisito | Aceite mínimo |
+|---|---|---|---|
+| MM-UX-RA-001 | done_local | Rascunhos exibia itens de outras etapas | lista mostra somente `etapa=rascunho`; ao avançar o item desaparece |
+| MM-UX-PR-001 | pending | Sugestões de convidados sem nome/cargo predefinidos | sugestões selecionáveis e editáveis, persistidas no programa/agendamento |
+| MM-FLOW-GR-001 | pending | Gravações vazia após confirmar agendamento | confirmar gravação cria/atualiza registro visível e auditável |
+| MM-INGEST-002 | in_progress | Arquivo ingerido não aparece; ações “puxar para editar”, atribuir e concluir não alteram fluxo | upload local real aparece no Acervo/Gravações e cada ação persiste/transiciona |
+| MM-FLOW-ED-002 | in_progress | Duplicidade “Material para editar”/“Em edição” e destinos incorretos | menu único `Edição`, estados internos claros e transições canônicas testadas |
+| MM-FLOW-AP-002 | in_progress | Aguardando aprovação não chega à revisão; solicitar alteração não volta à Edição | transições reais, item sai da origem e aparece no destino após reload |
+| MM-APPROVAL-002 | done_local | Aprovar versão com alterações abertas não pede confirmação | confirmação obrigatória antes de aprovar com pendências |
+| MM-PLAYER-001 | in_progress | Players, IN/OUT e marcações inconsistentes entre telas | componente funcional compartilhado em revisão, finalizado, publicação e exportação |
+| MM-EXPORT-PLAYER-001 | done_local | Passo 5 não possuía player da versão final | sequência editada tem play/pause, seek, mute, timecode, clipe/texto/áudio ativos |
+| MM-PUB-002 | pending | Finalizado → Cortes/Agendar e Para publicação/Publicados com ações/layout incompletos | transições, salvamento, cantos/layout padrão, botões e players funcionais |
+| MM-SOCIAL-002 | pending | Adicionar canal não permite escolher/configurar e ícones estão genéricos | seletor de rede/canal, credenciais seguras, formatos e ícones corretos |
+| MM-ANALYTICS-002 | pending | Analytics poluído e sem recorte útil | filtros por canal, formato, período e conteúdo com visual progressivo |
+| MM-ACERVO-DETAIL-001 | pending | Detalhes do Acervo abrem como janela indesejada | painel lateral editável sem perder contexto da lista |
+| MM-ADMIN-002 | pending | Gestão/relatórios/configurações pouco editáveis | telas administrativas reais, inclusive configuração de IA por provedor sem expor secrets |
+| MM-BATCH-001 | in_progress | Edição em lote/fila precisava configuração e execução | lote configura legenda/pausas/texto/formato/destino e gera trabalhos processáveis; persistência em banco/worker ainda pendente |

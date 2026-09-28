@@ -4,8 +4,8 @@
   "manual_checks": {
     "frontend_functional_validation": {
       "status": "partial",
-      "updated_at": "2026-09-27T19:28:00Z",
-      "notes": "Timeline 2 e transição Rascunhos → Agendamentos exercitadas no navegador local, incluindo persistência após reload. 166 testes frontend, 154 testes backend, lint e build aprovados. Restante da esteira e persistência PostgreSQL ainda pendentes."
+      "updated_at": "2026-09-28T00:55:00Z",
+      "notes": "Workspace 2 exercitado localmente até o Passo 5, incluindo Timeline e player final. 178 testes frontend, lint e build aprovados; backend permanecia em 154 testes na última execução. Restante da esteira, fila durável e persistência PostgreSQL ponta a ponta ainda pendentes."
     }
   },
   "milestones": {

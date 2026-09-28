@@ -68,4 +68,37 @@ describe('Timeline 2 pointer regressions', () => {
     const saved = JSON.parse(localStorage.getItem('mm_timeline2_project:timeline2-local'));
     expect(saved.tracks[0].clips[0].keyframes.scale[0]).toMatchObject({ value: 100, easing: 'bezier' });
   });
+
+  it('navigates by frame and to sequence boundaries with professional shortcuts', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+    const playhead = screen.getByLabelText('Playhead');
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(Number(playhead.value)).toBeCloseTo(1 / 30, 4);
+    fireEvent.keyDown(window, { key: 'End' });
+    expect(playhead).toHaveValue('20');
+    fireEvent.keyDown(window, { key: 'Home' });
+    expect(playhead).toHaveValue('0');
+  });
+
+  it('adds and removes real empty tracks from the editor toolbar', () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar trilha de vídeo' }));
+    expect(screen.getByTestId('timeline2-track-v3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remover Vídeo 3' }));
+    expect(screen.queryByTestId('timeline2-track-v3')).not.toBeInTheDocument();
+  });
+
+  it('separates the original audio of an imported video into the audio track', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+    fireEvent.click(screen.getByRole('button', { name: /Separar áudio original/i }));
+
+    const audioTrack = screen.getByTestId('timeline2-track-a1').querySelector('[data-track-canvas]');
+    expect(within(audioTrack).getByRole('button')).toHaveTextContent(/Entrevista real · áudio/i);
+    expect(screen.getByRole('button', { name: /Áudio já separado/i })).toBeDisabled();
+  });
 });
