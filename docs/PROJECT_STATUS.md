@@ -36,7 +36,11 @@ Após teste manual do usuário, três bloqueios funcionais permanecem abertos e 
 
 ### Correção funcional local — 28/09/2026
 
-A agulha vertical passou a capturar seu próprio gesto sem movimentar o clipe abaixo; o relógio do preview e do player final continua durante lacunas, exibindo quadro preto até o próximo clipe; e a ação rápida de `Aguardando aprovação` agora executa a transição canônica para `Em aprovação`. Os três caminhos foram cobertos por 14 testes focados e validados no navegador local. `MM-PLAYER-GAP-001` continua parcialmente aberto apenas para fazer o render do backend materializar preto e silêncio no arquivo exportado.
+A agulha vertical passou a capturar seu próprio gesto sem movimentar o clipe abaixo; o relógio do preview e do player final continua durante lacunas, exibindo quadro preto até o próximo clipe; e a ação rápida de `Aguardando aprovação` agora executa a transição canônica para `Em aprovação`. Os três caminhos foram cobertos por 14 testes focados e validados no navegador local.
+
+O render backend também passou a preservar a posição temporal dos clipes: lacunas são materializadas como vídeo preto 1280×720/30 fps com áudio silencioso 48 kHz. A integração foi exercitada com o FFmpeg distribuído junto da referência AI Edita; 1 segundo vazio seguido de 1 segundo de mídia produziu MP4 com 2,021 segundos. Assim, `MM-PLAYER-GAP-001` está concluído localmente, sem publicação em produção.
+
+Verificação posterior: suíte completa com 158 testes backend aprovados e 2 testes de integração ignorados pelo ambiente; Ruff e formatação dos arquivos alterados aprovados. O frontend permanece na evidência imediatamente anterior de 186 testes, lint e build aprovados.
 
 ## Entrega isolada — contrato de observação do HUB
 

@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import shutil
@@ -84,7 +85,9 @@ class TimelineExportRequest(BaseModel):
     out_point: float | None = Field(default=None, ge=0)
 
 
-def trim_clip_to_export_range(clip: dict, in_point: float | None, out_point: float | None) -> dict | None:
+def trim_clip_to_export_range(
+    clip: dict, in_point: float | None, out_point: float | None
+) -> dict | None:
     """Return an export segment clipped to the sequence IN/OUT selection."""
     clip_start = max(0, float(clip.get("start", 0)))
     clip_duration = max(0, float(clip.get("duration", 0)))
@@ -98,8 +101,10 @@ def trim_clip_to_export_range(clip: dict, in_point: float | None, out_point: flo
     properties = clip.get("properties") or {}
     speed = max(0.25, min(4.0, float(properties.get("speed", 1) or 1)))
     return {
-        "source_in": max(0, float(clip.get("sourceIn", 0))) + ((overlap_start - clip_start) * speed),
+        "source_in": max(0, float(clip.get("sourceIn", 0)))
+        + ((overlap_start - clip_start) * speed),
         "duration": max(1 / 30, (overlap_end - overlap_start) * speed),
+        "timeline_start": overlap_start - range_start,
         "properties": properties,
     }
 
@@ -208,6 +213,74 @@ def render_media_clip(
         raise PublicError(422, "EXPORT_FAILED", "Não foi possível exportar este clipe.") from error
 
 
+def render_timeline_gap(destination: Path, *, duration: float) -> None:
+    """Render a standards-matched black frame and silent audio timeline gap."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    safe_duration = max(1 / 30, float(duration))
+    width, height = 1280, 720
+    frame_source = destination.parent / "black.png"
+    if not frame_source.exists():
+        frame_source.write_bytes(
+            base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            )
+        )
+    command = [
+        str(find_ffmpeg()),
+        "-y",
+        "-loop",
+        "1",
+        "-framerate",
+        "30",
+        "-i",
+        str(frame_source),
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=r=48000:cl=stereo",
+        "-t",
+        str(safe_duration),
+        "-shortest",
+        "-vf",
+        f"scale={width}:{height}",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        str(destination),
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True, timeout=30 * 60)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        destination.unlink(missing_ok=True)
+        raise PublicError(
+            422, "EXPORT_FAILED", "Não foi possível preservar uma lacuna da sequência."
+        ) from error
+
+
+def build_timeline_render_plan(segments: list[dict]) -> list[dict]:
+    """Interleave media with black/silent gaps according to timeline positions."""
+    plan: list[dict] = []
+    cursor = 0.0
+    for segment in sorted(segments, key=lambda item: float(item.get("timeline_start", 0))):
+        start = max(0.0, float(segment.get("timeline_start", 0)))
+        if start - cursor >= 1 / 30:
+            plan.append({"kind": "gap", "duration": start - cursor})
+        speed = max(0.25, min(4.0, float((segment.get("properties") or {}).get("speed", 1) or 1)))
+        output_duration = max(1 / 30, float(segment["duration"]) / speed)
+        plan.append({"kind": "media", **segment})
+        cursor = max(cursor, start + output_duration)
+    return plan
+
+
 def render_timeline(segments: list[dict], destination: Path) -> None:
     if not segments:
         raise PublicError(
@@ -215,15 +288,18 @@ def render_timeline(segments: list[dict], destination: Path) -> None:
         )
     segment_root = destination.parent / "segments"
     rendered = []
-    for index, segment in enumerate(segments):
+    for index, segment in enumerate(build_timeline_render_plan(segments)):
         output = segment_root / f"{index:04d}.mp4"
-        render_media_clip(
-            segment["source"],
-            output,
-            source_in=segment["source_in"],
-            duration=segment["duration"],
-            properties=segment["properties"],
-        )
+        if segment["kind"] == "gap":
+            render_timeline_gap(output, duration=segment["duration"])
+        else:
+            render_media_clip(
+                segment["source"],
+                output,
+                source_in=segment["source_in"],
+                duration=segment["duration"],
+                properties=segment["properties"],
+            )
         rendered.append(output.resolve())
     concat_file = destination.parent / "concat.txt"
     concat_file.write_text(
