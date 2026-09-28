@@ -10,11 +10,11 @@ describe('production navigation', () => {
     expect(labels).not.toContain('Workspace');
     expect(labels).not.toContain('Modo roteiro');
     expect(labels).toContain('Workspace 2');
-    expect(labels).toContain('Timeline 2');
-    expect(labels).toContain('Material para editar');
+    expect(labels).not.toContain('Timeline 2');
+    expect(labels).not.toContain('Material para editar');
+    expect(labels).toContain('Edição');
     expect(labels).toContain('Aguardando aprovação');
     expect(labels).toContain('Para publicação');
     expect(labels).toContain('Publicado');
-    expect(NAV_GROUPS.flatMap((group) => group.items).find((item) => item.label === 'Timeline 2').to).toBe('/timeline2');
   });
 });

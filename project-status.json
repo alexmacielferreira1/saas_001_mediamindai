@@ -1,6 +1,13 @@
 {
   "product": "mediamind",
   "current_milestone": "M0",
+  "manual_checks": {
+    "frontend_functional_validation": {
+      "status": "partial",
+      "updated_at": "2026-09-27T19:28:00Z",
+      "notes": "Timeline 2 e transição Rascunhos → Agendamentos exercitadas no navegador local, incluindo persistência após reload. 166 testes frontend, 154 testes backend, lint e build aprovados. Restante da esteira e persistência PostgreSQL ainda pendentes."
+    }
+  },
   "milestones": {
     "M0": {
       "name": "bootstrap",

@@ -1,6 +1,8 @@
 # ruff: noqa: F811
 
 from app.core.config import get_settings
+from app.main import app
+from fastapi.testclient import TestClient
 from test_permission_groups_api import PASSWORD, permission_client  # noqa: F401
 
 
@@ -46,6 +48,26 @@ def test_media_upload_creates_tenant_asset_and_atomic_original(
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()["assets"]] == [asset["id"]]
 
+    get_settings.cache_clear()
+
+
+def test_local_demo_media_works_without_database(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    uploaded = client.post(
+        "/api/v1/media/local/assets",
+        files={"file": ("demo.mp4", b"demo-video", "video/mp4")},
+    )
+    listed = client.get("/api/v1/media/local/assets")
+
+    assert uploaded.status_code == 201
+    asset = uploaded.json()
+    assert asset["stream_url"].endswith(f"/media/local/assets/{asset['id']}/stream")
+    assert listed.json()["assets"][0]["id"] == asset["id"]
+    assert client.get(asset["stream_url"]).content == b"demo-video"
     get_settings.cache_clear()
 
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
 
 describe('media API', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
 
   it('lists persisted media assets', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
@@ -11,6 +11,17 @@ describe('media API', () => {
     )));
 
     await expect(listMediaAssets()).resolves.toEqual([{ id: 'asset-1', filename: 'video.mp4' }]);
+  });
+
+  it('uses the disk-backed local catalog for demo sessions', async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({ selected_tenant_id: 'mediamind-demo' }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ assets: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )));
+
+    await listMediaAssets();
+
+    expect(fetch).toHaveBeenCalledWith('/api/v1/media/local/assets', expect.any(Object));
   });
 
   it('uploads the real file as multipart data', async () => {

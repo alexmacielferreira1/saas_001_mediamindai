@@ -63,6 +63,8 @@ export function StageDragArea({ onMove, className = '', children, disableBack = 
         {dragId != null && (
           <>
             <div
+              role="region"
+              aria-label={prevLabel ? `Soltar para ${prevLabel}` : 'Início da esteira'}
               onDragOver={(e) => { if (prevLabel) { e.preventDefault(); setOver('left'); } }}
               onDragLeave={() => setOver((o) => (o === 'left' ? null : o))}
               onDrop={(e) => { e.preventDefault(); if (prevLabel) drop(-1); }}
@@ -74,6 +76,8 @@ export function StageDragArea({ onMove, className = '', children, disableBack = 
               </div>
             </div>
             <div
+              role="region"
+              aria-label={nextLabel ? `Soltar para ${nextLabel}` : 'Fim da esteira'}
               onDragOver={(e) => { if (nextLabel) { e.preventDefault(); setOver('right'); } }}
               onDragLeave={() => setOver((o) => (o === 'right' ? null : o))}
               onDrop={(e) => { e.preventDefault(); if (nextLabel) drop(1); }}

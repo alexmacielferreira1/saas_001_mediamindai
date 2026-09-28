@@ -18,6 +18,10 @@ import {
   getActiveClips,
   getTimelineGeometry,
   pointerToTimelineTime,
+  addPropertyKeyframe,
+  getClipPropertiesAtTime,
+  removePropertyKeyframe,
+  updateKeyframeCurve,
 } from './timeline2Model';
 
 describe('Timeline 2 document model', () => {
@@ -131,6 +135,21 @@ describe('Timeline 2 document model', () => {
     expect(active[1]).toMatchObject({ sourceTime: 4, layerIndex: 1 });
     const hidden = { ...document, tracks: document.tracks.map((track) => track.id === 'v2' ? { ...track, hidden: true } : track) };
     expect(getActiveClips(hidden, 4).map((item) => item.name)).toEqual(['Base']);
+  });
+
+  it('stores, interpolates and removes property keyframes without changing the source clip', () => {
+    const base = workspace2ToTimeline2({ blocks: [{ id: 'a', title: 'A', type: 'media', duration: 10 }] });
+    const first = addPropertyKeyframe(base, 'a', 'scale', { time: 0, value: 100, easing: 'linear' });
+    const animated = addPropertyKeyframe(first, 'a', 'scale', { time: 10, value: 200, easing: 'linear' });
+    const clip = animated.tracks[0].clips[0];
+
+    expect(base.tracks[0].clips[0].keyframes).toBeUndefined();
+    expect(clip.keyframes.scale).toHaveLength(2);
+    expect(getClipPropertiesAtTime(clip, 5).scale).toBe(150);
+
+    const curved = updateKeyframeCurve(animated, 'a', 'scale', 10, { easing: 'bezier', bezier: [0.2, 0.8, 0.8, 0.2] });
+    expect(curved.tracks[0].clips[0].keyframes.scale[1]).toMatchObject({ easing: 'bezier', bezier: [0.2, 0.8, 0.8, 0.2] });
+    expect(removePropertyKeyframe(curved, 'a', 'scale', 10).tracks[0].clips[0].keyframes.scale).toHaveLength(1);
   });
 });
 

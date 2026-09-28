@@ -1,13 +1,19 @@
 import { request } from './httpClient';
 
+function mediaPrefix() {
+  try {
+    return import.meta.env.DEV && localStorage.getItem('mm_demo_session_v1') ? '/media/local' : '/media';
+  } catch { return '/media'; }
+}
+
 export async function listMediaAssets() {
-  return (await request('/media/assets')).assets;
+  return (await request(`${mediaPrefix()}/assets`)).assets;
 }
 
 export function uploadMediaAsset(file) {
   const body = new FormData();
   body.append('file', file);
-  return request('/media/assets', { method: 'POST', body });
+  return request(`${mediaPrefix()}/assets`, { method: 'POST', body });
 }
 
 export function mediaStreamUrl(asset) {
@@ -16,7 +22,7 @@ export function mediaStreamUrl(asset) {
 
 async function requestMediaExport(path, payload) {
   const origin = import.meta.env.VITE_API_URL || '';
-  const response = await fetch(`${origin}/api/v1/media/exports/${path}`, {
+  const response = await fetch(`${origin}/api/v1${mediaPrefix()}/exports/${path}`, {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'video/mp4', 'Content-Type': 'application/json' },

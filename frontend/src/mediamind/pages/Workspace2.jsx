@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, LayoutTemplate, Lock, PanelLeft, PanelRight, Unlock, Upload } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import Workspace2Stepper from '../components/workspace2/Workspace2Stepper';
 import Workspace2Search from '../components/workspace2/Workspace2Search';
 import Workspace2Script from '../components/workspace2/Workspace2Script';
 import Workspace2Timeline from '../components/workspace2/Workspace2Timeline';
+import Workspace2Export from '../components/workspace2/Workspace2Export';
+import Timeline2 from './Timeline2';
 import { appendScriptBlock, appendTextBlock, removeScriptBlock, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 
 export default function Workspace2() {
-  const navigate = useNavigate();
   const initialProject = {
     title: 'Jornal 12h - 15/05/2026', segment: 'Jornalismo', program: 'Jornal do Meio Dia',
     status: 'Rascunho', version: 'v1.0', estimatedDuration: '02:48:10', reporter: 'João Silva',
@@ -88,7 +88,7 @@ export default function Workspace2() {
     const document = workspace2ToTimeline2({ project, blocks, selectedAssets });
     localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(document));
     setNotice('Projeto preparado para a Timeline 2');
-    navigate('/timeline2');
+    setActiveStep('timeline');
   };
 
   const shared = {
@@ -135,6 +135,8 @@ export default function Workspace2() {
       {activeStep === 'search' && <Workspace2Search {...shared} />}
       {activeStep === 'script' && <Workspace2Script {...shared} />}
       {activeStep === 'preview' && <Workspace2Timeline {...shared} compact onOpenTimeline={openTimeline2} />}
+      {activeStep === 'timeline' && <Timeline2 embedded />}
+      {activeStep === 'export' && <Workspace2Export project={project} timeline={workspace2ToTimeline2({ project, blocks, selectedAssets })} onSave={saveProject} onNotice={setNotice} />}
     </div>
   );
 }

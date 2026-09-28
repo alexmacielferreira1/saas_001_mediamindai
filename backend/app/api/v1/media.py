@@ -2,6 +2,7 @@ import json
 import re
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -40,6 +41,33 @@ ALLOWED_MEDIA = {
     ".webm": ("video", {"video/webm", "audio/webm"}),
     ".webp": ("image", {"image/webp"}),
 }
+LOCAL_DEMO_TENANT = UUID("00000000-0000-4000-8000-000000000001")
+
+
+def require_local_media() -> None:
+    if get_settings().environment == "production":
+        raise PublicError(404, "NOT_FOUND", "Recurso não encontrado.")
+
+
+def local_catalog_path() -> Path:
+    return get_settings().media_root / str(LOCAL_DEMO_TENANT) / "assets.json"
+
+
+def load_local_catalog() -> list[dict]:
+    path = local_catalog_path()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_local_catalog(assets: list[dict]) -> None:
+    path = local_catalog_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.part")
+    temporary.write_text(json.dumps(assets, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 class ClipExportRequest(BaseModel):
@@ -207,6 +235,144 @@ def classify_upload(file: UploadFile) -> tuple[str, str]:
     if config is None or (file.content_type or "") not in config[1]:
         raise PublicError(422, "INVALID_MEDIA_TYPE", "Tipo de mídia não permitido.")
     return suffix, config[0]
+
+
+@router.post("/local/assets", status_code=201)
+async def upload_local_asset(file: Annotated[UploadFile, File()]):
+    require_local_media()
+    suffix, asset_type = classify_upload(file)
+    asset_id = uuid4()
+    storage = LocalMediaStorage(get_settings().media_root)
+    stored = await storage.save_original(
+        LOCAL_DEMO_TENANT, asset_id, file, get_settings().media_max_upload_bytes
+    )
+    now = datetime.now(UTC).isoformat()
+    asset = {
+        "id": str(asset_id),
+        "tenant_id": str(LOCAL_DEMO_TENANT),
+        "filename": file.filename or f"media{suffix}",
+        "title": Path(file.filename or "media").stem,
+        "asset_type": asset_type,
+        "mime_type": stored.mime_type,
+        "file_size": stored.size,
+        "sha256": stored.sha256,
+        "storage_key": stored.relative_key,
+        "media_status": "uploaded",
+        "stream_url": f"/api/v1/media/local/assets/{asset_id}/stream",
+        "created_date": now,
+        "updated_date": now,
+        **probe_media(storage.resolve(stored.relative_key)),
+    }
+    catalog = load_local_catalog()
+    save_local_catalog([asset, *[item for item in catalog if item.get("id") != str(asset_id)]])
+    return {key: value for key, value in asset.items() if key != "storage_key"}
+
+
+@router.get("/local/assets")
+def list_local_assets():
+    require_local_media()
+    return {
+        "assets": [
+            {key: value for key, value in asset.items() if key != "storage_key"}
+            for asset in load_local_catalog()
+        ]
+    }
+
+
+def find_local_asset(asset_id: UUID) -> dict:
+    require_local_media()
+    asset = next((item for item in load_local_catalog() if item.get("id") == str(asset_id)), None)
+    if asset is None:
+        raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+    return asset
+
+
+@router.get("/local/assets/{asset_id}/stream")
+def stream_local_asset(asset_id: UUID, request: Request):
+    asset = find_local_asset(asset_id)
+    source = LocalMediaStorage(get_settings().media_root).resolve(asset["storage_key"])
+    if not source.is_file():
+        raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+    size = source.stat().st_size
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=0"}
+    range_value = request.headers.get("range")
+    if not range_value:
+        return FileResponse(source, media_type=asset.get("mime_type"), headers=headers)
+    try:
+        start, end = parse_byte_range(range_value, size)
+    except (TypeError, ValueError):
+        return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+    return StreamingResponse(
+        iter_file_range(source, start, end),
+        status_code=206,
+        media_type=asset.get("mime_type"),
+        headers={
+            **headers,
+            "Content-Range": f"bytes {start}-{end}/{size}",
+            "Content-Length": str(end - start + 1),
+        },
+    )
+
+
+@router.post("/local/exports/clip")
+def export_local_clip(payload: ClipExportRequest):
+    asset = find_local_asset(payload.asset_id)
+    if asset.get("asset_type") != "video":
+        raise PublicError(422, "VIDEO_REQUIRED", "Selecione um clipe de vídeo para exportar.")
+    storage = LocalMediaStorage(get_settings().media_root)
+    destination = (
+        get_settings().media_root / str(LOCAL_DEMO_TENANT) / "exports" / str(uuid4()) / "clip.mp4"
+    )
+    render_media_clip(
+        storage.resolve(asset["storage_key"]),
+        destination,
+        source_in=payload.source_in,
+        duration=payload.duration,
+        properties=payload.properties,
+    )
+    return FileResponse(
+        destination,
+        media_type="video/mp4",
+        filename=f"{Path(asset['filename']).stem}-editado.mp4",
+    )
+
+
+@router.post("/local/exports/timeline")
+def export_local_timeline(payload: TimelineExportRequest):
+    require_local_media()
+    main_track = next(
+        (track for track in payload.tracks if track.get("id") == "v1"),
+        next((track for track in payload.tracks if track.get("kind") == "video"), None),
+    )
+    catalog = {item["id"]: item for item in load_local_catalog()}
+    storage = LocalMediaStorage(get_settings().media_root)
+    segments = []
+    for clip in sorted((main_track or {}).get("clips", []), key=lambda item: item.get("start", 0)):
+        asset = catalog.get(str(clip.get("assetId")))
+        if not asset:
+            continue
+        segments.append(
+            {
+                "source": storage.resolve(asset["storage_key"]),
+                "source_in": max(0, float(clip.get("sourceIn", 0))),
+                "duration": max(1 / 30, float(clip.get("duration", 0))),
+                "properties": clip.get("properties") or {},
+            }
+        )
+    destination = (
+        get_settings().media_root
+        / str(LOCAL_DEMO_TENANT)
+        / "exports"
+        / str(uuid4())
+        / "timeline.mp4"
+    )
+    render_timeline(segments, destination)
+    safe_name = re.sub(r"[^\w.-]+", "-", payload.name, flags=re.UNICODE).strip("-.")
+    return FileResponse(
+        destination,
+        media_type="video/mp4",
+        filename=f"{safe_name or 'MediaMind'}-editado.mp4",
+    )
 
 
 @router.post("/assets", status_code=201)

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Timeline2 from './Timeline2';
 
@@ -78,5 +78,60 @@ describe('Timeline 2', () => {
     await waitFor(() => expect(mediaApi.uploadMediaAsset).toHaveBeenCalledWith(file));
     expect((await screen.findAllByText('Novo vídeo')).length).toBeGreaterThan(0);
     expect(screen.getByRole('status')).toHaveTextContent(/ao acervo/i);
+  });
+
+  it('positions the playhead by clicking the ruler and the track canvas', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+
+    const ruler = screen.getByRole('slider', { name: 'Régua e agulha da timeline' });
+    vi.spyOn(ruler, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 900 });
+    fireEvent.pointerDown(ruler, { clientX: 550, pointerId: 1 });
+    expect(screen.getByLabelText('Playhead')).toHaveValue('15');
+
+    const canvas = screen.getByTestId('timeline2-track-v1').querySelector('[data-track-canvas]');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 900 });
+    fireEvent.pointerDown(canvas, { clientX: 400, pointerId: 2 });
+    expect(screen.getByLabelText('Playhead')).toHaveValue('10');
+  });
+
+  it('drops archive media at the pointer time instead of the old playhead', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    const add = await screen.findByRole('button', { name: 'Adicionar Entrevista real' });
+    const media = add.closest('[draggable="true"]');
+    const canvas = screen.getByTestId('timeline2-track-v1').querySelector('[data-track-canvas]');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 900 });
+
+    const drop = createEvent.drop(canvas, {
+      dataTransfer: {
+        getData: (type) => type === 'application/x-timeline2-media'
+          ? JSON.stringify({ id: realAsset.id, name: realAsset.title, kind: 'video', duration: 20, src: realAsset.stream_url })
+          : '',
+      },
+    });
+    Object.defineProperty(drop, 'clientX', { value: 550 });
+    fireEvent(canvas, drop);
+
+    expect(media).toBeInTheDocument();
+    expect(screen.getByLabelText('Posição do clipe')).toHaveValue(15);
+  });
+
+  it('moves an existing clip horizontally with a pointer drag', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+
+    const canvas = screen.getByTestId('timeline2-track-v1').querySelector('[data-track-canvas]');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ left: 100, width: 900 });
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => canvas) });
+    const clip = canvas.querySelector('button[title^="Arraste"]');
+
+    fireEvent.pointerDown(clip, { clientX: 100, clientY: 10, button: 0, buttons: 1, pointerId: 3 });
+    fireEvent.pointerMove(clip, { clientX: 400, clientY: 10, button: 0, buttons: 1, pointerId: 3 });
+    fireEvent.pointerUp(clip, { clientX: 400, clientY: 10, button: 0, pointerId: 3 });
+
+    expect(screen.getByLabelText('Posição do clipe')).toHaveValue(10);
   });
 });

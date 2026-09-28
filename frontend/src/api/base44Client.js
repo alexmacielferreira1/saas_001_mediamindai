@@ -3,14 +3,42 @@ import { readLocalDemoSession } from '../mediamind/lib/demoAccess';
 
 const listeners = new Map();
 const demoEntities = new Map();
+const DEMO_ENTITY_STORAGE_PREFIX = 'mediamind_demo_entities_v1';
+
+function demoEntityKey(entity) {
+  const session = readLocalDemoSession();
+  const scope = session?.id || session?.email || 'local';
+  return `${DEMO_ENTITY_STORAGE_PREFIX}:${scope}:${entity}`;
+}
+
+function readDemoEntities(entity) {
+  const key = demoEntityKey(entity);
+  if (demoEntities.has(key)) return demoEntities.get(key);
+  try {
+    const stored = JSON.parse(globalThis.localStorage?.getItem(key) || '[]');
+    const records = Array.isArray(stored) ? stored : [];
+    demoEntities.set(key, records);
+    return records;
+  } catch {
+    demoEntities.set(key, []);
+    return [];
+  }
+}
+
+function writeDemoEntities(entity, records) {
+  const key = demoEntityKey(entity);
+  demoEntities.set(key, records);
+  try { globalThis.localStorage?.setItem(key, JSON.stringify(records)); } catch { /* memória continua disponível */ }
+}
+
 function emit(entity, event) {
   for (const listener of listeners.get(entity) || []) listener(event);
 }
 
 function entityClient(entity) {
   const path = `/records/${encodeURIComponent(entity)}`;
-  const demoList = () => demoEntities.get(entity) || [];
-  const saveDemoList = (records) => demoEntities.set(entity, records);
+  const demoList = () => readDemoEntities(entity);
+  const saveDemoList = (records) => writeDemoEntities(entity, records);
   return {
     async list(sort = '-created_date', limit = 100) {
       if (readLocalDemoSession()) return demoList().slice(0, limit);

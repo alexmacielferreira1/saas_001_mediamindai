@@ -1,5 +1,15 @@
 # Handoff do MediaMind AI
 
+## Atualização 27/09/2026 — QA funcional da Timeline 2 e da esteira
+
+- Timeline 2 validada no navegador local com mídia real do Acervo: inclusão na trilha, seleção e movimentação da agulha pela régua funcionam.
+- A área completa das faixas agora posiciona a agulha; a soltura de mídia usa o ponto real do drop, e o arraste horizontal de clipes possui teste de regressão.
+- As zonas de drop da esteira receberam nomes acessíveis e o movimento só alcança a etapa imediatamente anterior ou seguinte da ordem canônica.
+- O modo demo local passou a persistir entidades no armazenamento do navegador, separado por usuário. Uma transição `Rascunhos → Agendamentos` foi executada no navegador e permaneceu correta após reload.
+- Evidência automatizada: 51 arquivos/166 testes frontend e 154 testes backend aprovados; lint e build aprovados. Avisos conhecidos de chunk e deprecações do TestClient continuam sem derrubar os gates.
+- A implementação concorrente já existente do Workspace 2 foi preservada: Timeline embutida na etapa 4 e Central de exportação na etapa 5 também passaram na suíte completa.
+- Produção/Render/Neon não foram alterados nem publicados neste bloco.
+
 ## Atualização 26/09/2026 — Timeline 2 / AI Edita
 
 - Fontes do AI Edita inventariadas sem executar binários; hashes e matriz estão em `AI_EDITA_INVENTARIO_E_MATRIZ.md`.

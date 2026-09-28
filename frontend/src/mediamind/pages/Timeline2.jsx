@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, BookmarkPlus, Captions, ChevronLeft, ChevronRight, Copy, Crop, Download, Eye, EyeOff,
-  FolderOpen, Lock, Magnet, MousePointer2, Music, Pause, Play, Plus, Redo2, Save,
+  Diamond, FolderOpen, Lock, Magnet, MousePointer2, Music, Pause, Play, Plus, Redo2, Save,
   Scissors, SlidersHorizontal, Sparkles, Trash2, Type, Undo2, Unlock, Upload, Volume2,
   VolumeX, Wand2, ZoomIn,
 } from 'lucide-react';
 import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
-  addMarker, addMediaClip, addTextClip, createTimeline2Document, deleteClips, duplicateClip, moveClip, rippleDelete,
+  addMarker, addMediaClip, addPropertyKeyframe, addTextClip, createTimeline2Document, deleteClips, duplicateClip, moveClip, removePropertyKeyframe, rippleDelete,
   setPlayhead, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
-  getActiveClips, getTimelineGeometry, pointerToTimelineTime, updateClipProperties,
+  getActiveClips, getClipPropertiesAtTime, getTimelineGeometry, pointerToTimelineTime, updateClipProperties, updateKeyframeCurve,
 } from '../lib/timeline2Model';
 
 const INITIAL_DOCUMENT = createTimeline2Document({ id: 'timeline2-local', name: 'Novo projeto MediaMind' });
@@ -38,7 +38,7 @@ const assetToMedia = (asset) => ({
   origin: 'acervo',
 });
 
-export default function Timeline2() {
+export default function Timeline2({ embedded = false }) {
   const initial = useMemo(() => {
     try {
       const workspaceDraft = JSON.parse(localStorage.getItem('mm_workspace2_timeline2_draft'));
@@ -55,12 +55,13 @@ export default function Timeline2() {
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [autoKeyframe, setAutoKeyframe] = useState(false);
   const [notice, setNotice] = useState('Importe um arquivo ou adicione uma mídia do acervo.');
   const fileInputRef = useRef(null);
   const mediaRefs = useRef(new Map());
   const pointerGestureRef = useRef(null);
   const selected = document.tracks.flatMap((track) => track.clips).find((clip) => clip.id === selectedClipId);
-  const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected?.properties || {}) };
+  const selectedProperties = { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(selected ? getClipPropertiesAtTime(selected, document.playhead) : {}) };
   const activeClips = useMemo(() => getActiveClips(document, document.playhead), [document]);
   const activeVisuals = activeClips.filter((clip) => clip.kind === 'video' || clip.kind === 'text');
   const activeAudio = activeClips.filter((clip) => clip.kind === 'audio');
@@ -81,11 +82,11 @@ export default function Timeline2() {
   const removeSelected = () => selected && commit((current) => deleteClips(current, [selected.id]));
   const rippleRemoveSelected = () => selected && commit((current) => rippleDelete(current, [selected.id]));
   const changeTrim = (edge, value) => selected && commit((current) => trimClip(current, selected.id, { edge, time: Number(value) }));
-  const addToTimeline = (media, trackId) => {
+  const addToTimeline = (media, trackId, start = document.playhead) => {
     const clipId = `clip-${media.id}-${Date.now()}`;
-    commit((current) => addMediaClip(current, { ...media, clipId }, { trackId, start: current.playhead }));
+    commit((current) => addMediaClip(current, { ...media, clipId }, { trackId, start }));
     setSelectedClipId(clipId);
-    setNotice(`${media.name} adicionado à timeline em ${formatTime(document.playhead)}.`);
+    setNotice(`${media.name} adicionado à timeline em ${formatTime(start)}.`);
   };
   const importFiles = async (event) => {
     const files = Array.from(event.target.files || []);
@@ -132,7 +133,21 @@ export default function Timeline2() {
     if (attempts.some((result) => result.status === 'fulfilled')) setPlaying(true);
     else setNotice('O navegador não conseguiu reproduzir esta mídia. Gere ou selecione um proxy compatível.');
   };
-  const setProperty = (field, value) => selected && commit((current) => updateClipProperties(current, selected.id, { [field]: Number(value) }));
+  const setProperty = (field, value) => selected && commit((current) => (autoKeyframe
+    ? addPropertyKeyframe(current, selected.id, field, { value: Number(value) })
+    : updateClipProperties(current, selected.id, { [field]: Number(value) })));
+  const keyframeAtPlayhead = (field) => {
+    if (!selected) return null;
+    const localTime = document.playhead - selected.start;
+    return (selected.keyframes?.[field] || []).find((item) => Math.abs(item.time - localTime) <= (0.5 / document.fps));
+  };
+  const toggleKeyframe = (field) => selected && commit((current) => (keyframeAtPlayhead(field)
+    ? removePropertyKeyframe(current, selected.id, field)
+    : addPropertyKeyframe(current, selected.id, field, { value: selectedProperties[field] })));
+  const setKeyframeCurve = (field, easing) => selected && commit((current) => {
+    const withKeyframe = keyframeAtPlayhead(field) ? current : addPropertyKeyframe(current, selected.id, field, { value: selectedProperties[field] });
+    return updateKeyframeCurve(withKeyframe, selected.id, field, current.playhead, { easing });
+  });
   const downloadExport = ({ blob, filename }) => {
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement('a');
@@ -196,28 +211,42 @@ export default function Timeline2() {
       commit((current) => moveClip(current, clipId, { start: time, trackId: track.id }));
       setSelectedClipId(clipId); setNotice(`Clipe movido para ${track.name} em ${formatTime(time)}.`); return;
     }
-    try { const media = JSON.parse(event.dataTransfer.getData('application/x-timeline2-media')); addToTimeline(media, track.id); } catch { setNotice('Não foi possível adicionar essa mídia.'); }
+    try {
+      const media = JSON.parse(event.dataTransfer.getData('application/x-timeline2-media'));
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const time = pointerToTimelineTime(event.clientX, bounds, scaleDuration);
+      addToTimeline(media, track.id, time);
+    } catch { setNotice('Não foi possível adicionar essa mídia.'); }
   };
-  const positionFromPointer = (event, element = event.currentTarget) => {
+  const movePlayheadFromPointer = (event) => {
+    const element = event.currentTarget;
+    if (!element?.getBoundingClientRect) return;
     const bounds = element.getBoundingClientRect();
-    return pointerToTimelineTime(event.clientX, bounds, scaleDuration);
+    const pointerTime = pointerToTimelineTime(event.clientX, bounds, scaleDuration);
+    updateTransient((current) => setPlayhead(current, pointerTime));
   };
-  const movePlayheadFromPointer = (event) => updateTransient((current) => setPlayhead(current, positionFromPointer(event)));
   const startClipGesture = (event, clip, mode = 'move') => {
     if (activeTool !== 'select') return;
     const canvas = event.currentTarget.closest('[data-track-canvas]');
     if (!canvas) return;
     event.preventDefault(); event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    const pointerTime = positionFromPointer(event, canvas);
-    pointerGestureRef.current = { clipId: clip.id, canvas, mode, offset: pointerTime - clip.start };
+    try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* gesture remains usable without capture */ }
+    const canvasBounds = canvas.getBoundingClientRect();
+    const pointerTime = pointerToTimelineTime(event.clientX, canvasBounds, scaleDuration);
+    pointerGestureRef.current = {
+      clipId: clip.id,
+      bounds: { left: canvasBounds.left, width: canvasBounds.width },
+      duration: scaleDuration,
+      mode,
+      offset: pointerTime - clip.start,
+    };
     setSelectedClipId(clip.id);
     beginGesture();
   };
   const updateClipGesture = (event) => {
     const gesture = pointerGestureRef.current;
     if (!gesture) return;
-    const pointerTime = positionFromPointer(event, gesture.canvas);
+    const pointerTime = pointerToTimelineTime(event.clientX, gesture.bounds, gesture.duration);
     if (gesture.mode === 'move') {
       const hoveredTrack = globalThis.document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.('[data-track-id]');
       updateTransient((current) => moveClip(current, gesture.clipId, { start: pointerTime - gesture.offset, trackId: hoveredTrack?.dataset.trackId }));
@@ -236,7 +265,7 @@ export default function Timeline2() {
   ];
 
   return (
-    <div className="-m-4 flex min-h-[calc(100vh-4rem)] flex-col bg-[#020817] p-4 text-slate-100">
+    <div className={`${embedded ? 'min-h-[760px]' : '-m-4 min-h-[calc(100vh-4rem)]'} flex flex-col bg-[#020817] p-4 text-slate-100`}>
       <header className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-sky-400">Editor não destrutivo · mídia local e acervo</p>
@@ -274,7 +303,7 @@ export default function Timeline2() {
                 {libraryTab === 'project' && !projectMedia.length && <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-xl border border-dashed border-slate-700 p-6 text-xs text-slate-400"><Upload className="mx-auto mb-2" />Arraste ou selecione vídeos e áudios</button>}
               </div>
             </>}
-            {(activePanel === 'text' || activePanel === 'captions') && <div><h2 className="text-xs font-bold uppercase text-slate-400">{activePanel === 'captions' ? 'Legendas' : 'Texto'}</h2><textarea value={textValue} onChange={(event) => setTextValue(event.target.value)} aria-label={activePanel === 'captions' ? 'Texto da legenda' : 'Texto do elemento'} placeholder={activePanel === 'captions' ? 'Digite a legenda...' : 'Digite o texto...'} className="mt-3 h-28 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" /><button type="button" onClick={() => addText(activePanel === 'captions')} className="mt-3 w2-button w-full justify-center"><Plus size={14} /> Adicionar no playhead</button></div>}
+            {(activePanel === 'text' || activePanel === 'captions') && <div><h2 className="text-xs font-bold uppercase text-slate-400">{activePanel === 'captions' ? 'Legendas' : 'Texto'}</h2><textarea value={textValue} onChange={(event) => setTextValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addText(activePanel === 'captions'); } }} aria-label={activePanel === 'captions' ? 'Texto da legenda' : 'Texto do elemento'} placeholder={activePanel === 'captions' ? 'Digite a legenda e pressione Enter...' : 'Digite o texto e pressione Enter...'} className="mt-3 h-28 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" /><button type="button" onClick={() => addText(activePanel === 'captions')} className="mt-3 w2-button w-full justify-center"><Plus size={14} /> Adicionar no playhead</button></div>}
             {activePanel === 'elements' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Elementos</h2><div className="mt-3 grid grid-cols-2 gap-2">{['◼ Forma', '● Círculo', '→ Seta', '★ Destaque'].map((item) => <button key={item} type="button" onClick={() => { setTextValue(item); commit((current) => addTextClip(current, item, { properties: { text: item, fontSize: 64 } })); setNotice(`${item} adicionado.`); }} className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs hover:border-sky-500">{item}</button>)}</div></div>}
             {activePanel === 'effects' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Efeitos rápidos</h2><div className="mt-3 space-y-2">{[['Fade 50%', { opacity: 50 }], ['Zoom 120%', { scale: 120 }], ['Girar 15°', { rotation: 15 }], ['Velocidade 2x', { speed: 2 }]].map(([label, values]) => <button key={label} type="button" disabled={!selected} onClick={() => commit((current) => updateClipProperties(current, selected.id, values))} className="w2-button w-full justify-center disabled:opacity-40">{label}</button>)}</div></div>}
             {activePanel === 'adjust' && <div><h2 className="text-xs font-bold uppercase text-slate-400">Ajustes</h2><p className="mt-3 text-xs leading-5 text-slate-400">Use o Inspetor à direita para posição, trim, transformação, velocidade e áudio do clipe selecionado.</p><button type="button" onClick={() => commit(toggleSnapping)} className="mt-4 w2-button w-full justify-center"><Magnet size={14} /> Snapping {document.snapEnabled ? 'ligado' : 'desligado'}</button></div>}
@@ -302,13 +331,13 @@ export default function Timeline2() {
           <h2 className="text-xs font-bold uppercase text-slate-400">Inspetor</h2>
           {selected ? <div className="mt-3 space-y-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"><p className="text-sm font-bold">{selected.name}</p><p className="text-[10px] text-slate-500">{selected.id} · {selected.trackId}</p></div>
-            <label className="block text-xs text-slate-400">Posição na timeline<input aria-label="Posição do clipe" type="number" step={1 / document.fps} value={selected.start} onChange={(event) => commit((current) => moveClip(current, selected.id, { start: Number(event.target.value) }))} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
-            <label className="block text-xs text-slate-400">Início do conteúdo (trim)<input aria-label="Início do clipe" type="number" step={1 / document.fps} value={selected.start} onChange={(event) => changeTrim('start', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
-            <label className="block text-xs text-slate-400">Fim na timeline<input aria-label="Fim do clipe" type="number" step={1 / document.fps} value={selected.start + selected.duration} onChange={(event) => changeTrim('end', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
+            <label className="block text-xs text-slate-400">Posição na timeline<input aria-label="Posição do clipe" type="number" step="0.001" value={Number(selected.start.toFixed(3))} onChange={(event) => commit((current) => moveClip(current, selected.id, { start: Number(event.target.value) }))} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
+            <label className="block text-xs text-slate-400">Início do conteúdo (trim)<input aria-label="Início do clipe" type="number" step="0.001" value={Number(selected.start.toFixed(3))} onChange={(event) => changeTrim('start', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
+            <label className="block text-xs text-slate-400">Fim na timeline<input aria-label="Fim do clipe" type="number" step="0.001" value={Number((selected.start + selected.duration).toFixed(3))} onChange={(event) => changeTrim('end', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
             <dl className="grid grid-cols-2 gap-2 text-xs"><dt className="text-slate-500">Source IN</dt><dd>{formatTime(selected.sourceIn)}</dd><dt className="text-slate-500">Source OUT</dt><dd>{formatTime(selected.sourceOut)}</dd></dl>
-            <div className="border-t border-slate-800 pt-3"><h3 className="mb-3 text-xs font-bold uppercase text-sky-300">Transformação</h3>{[
+            <div className="border-t border-slate-800 pt-3"><div className="mb-3 flex items-center justify-between"><h3 className="text-xs font-bold uppercase text-sky-300">Transformação</h3><label className="flex items-center gap-2 text-[10px] text-slate-400"><input type="checkbox" checked={autoKeyframe} onChange={(event) => setAutoKeyframe(event.target.checked)} /> Auto keyframe</label></div>{[
               ['Posição X', 'x', -500, 500, 1], ['Posição Y', 'y', -500, 500, 1], ['Escala', 'scale', 10, 300, 1], ['Rotação', 'rotation', -180, 180, 1], ['Opacidade', 'opacity', 0, 100, 1],
-            ].map(([label, field, min, max, step]) => <label key={field} className="mb-3 block text-xs text-slate-400"><span className="mb-1 flex justify-between"><span>{label}</span><strong className="text-slate-200">{selectedProperties[field]}{['scale', 'opacity'].includes(field) ? '%' : ''}</strong></span><input aria-label={label} type="range" min={min} max={max} step={step} value={selectedProperties[field]} onChange={(event) => setProperty(field, event.target.value)} className="w-full" /></label>)}</div>
+            ].map(([label, field, min, max, step]) => { const currentKeyframe = keyframeAtPlayhead(field); return <div key={field} className="mb-3 rounded-lg border border-slate-800 bg-slate-950/40 p-2"><span className="mb-1 flex items-center justify-between text-xs text-slate-400"><span>{label}</span><span className="flex items-center gap-2"><strong className="text-slate-200">{Number(Number(selectedProperties[field]).toFixed(3))}{['scale', 'opacity'].includes(field) ? '%' : ''}</strong><button type="button" onClick={() => toggleKeyframe(field)} aria-label={`${currentKeyframe ? 'Remover' : 'Adicionar'} keyframe ${label}`} title="Ativar/desativar keyframe neste quadro" className={currentKeyframe ? 'text-amber-300' : 'text-slate-600 hover:text-slate-200'}><Diamond size={13} fill={currentKeyframe ? 'currentColor' : 'none'} /></button></span></span><input aria-label={label} type="range" min={min} max={max} step={step} value={selectedProperties[field]} onChange={(event) => setProperty(field, event.target.value)} className="w-full" />{currentKeyframe && <div className="mt-2 flex items-center justify-between gap-2"><label className="text-[10px] text-slate-500">Curva<select aria-label={`Curva do keyframe ${label}`} value={currentKeyframe.easing || 'smooth'} onChange={(event) => setKeyframeCurve(field, event.target.value)} className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200"><option value="hold">Degrau</option><option value="linear">Linear</option><option value="smooth">Suave</option><option value="bezier">Bézier</option></select></label><span className="h-7 w-16 rounded border border-slate-700 bg-slate-900 p-1"><svg viewBox="0 0 56 20" className="h-full w-full" aria-label={`Gráfico da curva ${label}`}><path d={currentKeyframe.easing === 'hold' ? 'M1 19 H54 V1' : currentKeyframe.easing === 'linear' ? 'M1 19 L55 1' : 'M1 19 C18 19 38 1 55 1'} fill="none" stroke="currentColor" strokeWidth="2" className="text-sky-400" /></svg></span></div>}</div>; })}</div>
             {selected.kind !== 'text' && <div className="border-t border-slate-800 pt-3"><h3 className="mb-3 text-xs font-bold uppercase text-emerald-300">Tempo e áudio</h3><label className="mb-3 block text-xs text-slate-400"><span className="mb-1 flex justify-between"><span>Velocidade</span><strong>{selectedProperties.speed}x</strong></span><input aria-label="Velocidade" type="range" min="0.25" max="4" step="0.25" value={selectedProperties.speed} onChange={(event) => setProperty('speed', event.target.value)} className="w-full" /></label><label className="block text-xs text-slate-400"><span className="mb-1 flex justify-between"><span>Volume</span><strong>{selectedProperties.volume} dB</strong></span><input aria-label="Volume" type="range" min="-60" max="6" step="1" value={selectedProperties.volume} onChange={(event) => setProperty('volume', event.target.value)} className="w-full" /></label></div>}
           </div> : <div className="grid h-full min-h-64 place-items-center text-center"><div><SlidersHorizontal className="mx-auto text-slate-600" size={38} /><h3 className="mt-4 font-bold">Nenhum elemento selecionado</h3><p className="mt-2 text-xs text-slate-500">Clique em um clipe para editar suas propriedades.</p></div></div>}
         </aside>
@@ -330,12 +359,12 @@ export default function Timeline2() {
           </div>
           <div className="border-b border-slate-800 px-3 py-1 text-[10px] text-sky-300" role="status">{notice}</div>
           <div className="relative flex-1 overflow-auto bg-[#031022] p-3">
-            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { event.currentTarget.setPointerCapture?.(event.pointerId); movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
+            <div role="slider" aria-label="Régua e agulha da timeline" aria-valuemin="0" aria-valuemax={scaleDuration} aria-valuenow={document.playhead} onPointerDown={(event) => { try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* pointer may already be inactive */ } movePlayheadFromPointer(event); }} onPointerMove={(event) => { if (event.buttons === 1) movePlayheadFromPointer(event); }} className="relative ml-32 h-7 shrink-0 cursor-ew-resize border-b border-slate-700" style={{ width: `${timelineGeometry.width}px` }}><div className="pointer-events-none flex justify-between text-[10px] text-slate-500"><span>00:00</span><span>{formatTime(scaleDuration / 2)}</span><span>{formatTime(scaleDuration)}</span></div>{document.markers.map((marker) => <span key={marker.id} title={`${marker.label} · ${formatTime(marker.time)}`} className="absolute bottom-0 h-3 w-0.5 bg-amber-400" style={{ left: `${marker.time * timelineGeometry.pixelsPerSecond}px` }} />)}<span className="pointer-events-none absolute -bottom-2 z-30 h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[8px] border-x-transparent border-t-rose-500" style={{ left: `${document.playhead * timelineGeometry.pixelsPerSecond}px` }} /></div>
             <div className="pointer-events-none absolute bottom-3 top-10 z-20 w-px bg-rose-500" style={{ left: `${140 + (document.playhead * timelineGeometry.pixelsPerSecond)}px` }} />
             {document.tracks.map((track) => (
               <div key={track.id} data-track-id={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
                 <div className="flex w-32 shrink-0 items-center gap-1 border-r border-slate-700 px-2"><span className="min-w-0 flex-1"><strong className="block text-xs uppercase">{track.id}</strong><small className="block truncate text-[9px] text-slate-500">{track.name}</small></span><button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'locked'))} aria-label={`${track.locked ? 'Destravar' : 'Travar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.locked ? <Lock size={11} /> : <Unlock size={11} />}</button>{track.kind === 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'muted'))} aria-label={`${track.muted ? 'Ativar' : 'Silenciar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>}{track.kind !== 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'hidden'))} aria-label={`${track.hidden ? 'Mostrar' : 'Ocultar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.hidden ? <EyeOff size={11} /> : <Eye size={11} />}</button>}</div>
-                <div data-track-canvas className={`relative shrink-0 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${timelineGeometry.width}px` }}>
+                <div data-track-canvas aria-label={`Área da faixa ${track.name}`} className={`relative shrink-0 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onPointerDown={(event) => { if (event.target === event.currentTarget) movePlayheadFromPointer(event); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${timelineGeometry.width}px` }}>
                   {track.clips.map((clip) => <button key={clip.id} type="button" onPointerDown={(event) => startClipGesture(event, clip)} onPointerMove={updateClipGesture} onPointerUp={endClipGesture} onPointerCancel={endClipGesture} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover entre trilhas; use as alças para aparar" className={`group absolute top-1 h-10 touch-none cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span onPointerDown={(event) => startClipGesture(event, clip, 'start')} className="absolute inset-y-0 left-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => startClipGesture(event, clip, 'end')} className="absolute inset-y-0 right-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /></button>)}
                 </div>
               </div>

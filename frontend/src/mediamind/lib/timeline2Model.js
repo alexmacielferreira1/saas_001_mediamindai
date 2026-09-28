@@ -233,6 +233,83 @@ export function updateClipProperties(document, clipId, properties) {
   return replaceTracks(document, tracks);
 }
 
+export function addPropertyKeyframe(document, clipId, property, { time = document.playhead, value, easing = 'smooth', bezier = [0.33, 0, 0.67, 1] } = {}) {
+  const located = locateClip(document, clipId);
+  if (!located || located.track.locked || !property) return document;
+  const localTime = Math.max(0, Math.min(located.clip.duration, Number(time) - located.clip.start));
+  const currentValue = Number(value ?? located.clip.properties?.[property] ?? 0);
+  const existing = located.clip.keyframes?.[property] || [];
+  const keyframe = { time: localTime, value: currentValue, easing, bezier };
+  const keyframes = [...existing.filter((item) => Math.abs(item.time - localTime) > 1e-6), keyframe].sort((a, b) => a.time - b.time);
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[located.trackIndex].clips[located.clipIndex] = {
+    ...located.clip,
+    keyframes: { ...(located.clip.keyframes || {}), [property]: keyframes },
+  };
+  return replaceTracks(document, tracks);
+}
+
+export function removePropertyKeyframe(document, clipId, property, time = document.playhead) {
+  const located = locateClip(document, clipId);
+  const existing = located?.clip.keyframes?.[property];
+  if (!located || located.track.locked || !existing?.length) return document;
+  const localTime = Math.max(0, Math.min(located.clip.duration, Number(time) - located.clip.start));
+  const keyframes = existing.filter((item) => Math.abs(item.time - localTime) > (0.5 / document.fps));
+  if (keyframes.length === existing.length) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[located.trackIndex].clips[located.clipIndex] = {
+    ...located.clip,
+    keyframes: { ...(located.clip.keyframes || {}), [property]: keyframes },
+  };
+  return replaceTracks(document, tracks);
+}
+
+export function updateKeyframeCurve(document, clipId, property, time, curve = {}) {
+  const located = locateClip(document, clipId);
+  const existing = located?.clip.keyframes?.[property];
+  if (!located || located.track.locked || !existing?.length) return document;
+  const localTime = Math.max(0, Math.min(located.clip.duration, Number(time) - located.clip.start));
+  let changed = false;
+  const keyframes = existing.map((item) => {
+    if (Math.abs(item.time - localTime) > (0.5 / document.fps)) return item;
+    changed = true;
+    return { ...item, ...curve };
+  });
+  if (!changed) return document;
+  const tracks = document.tracks.map(cloneTrack);
+  tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, keyframes: { ...(located.clip.keyframes || {}), [property]: keyframes } };
+  return replaceTracks(document, tracks);
+}
+
+function interpolationProgress(progress, keyframe) {
+  const t = Math.max(0, Math.min(1, progress));
+  if (keyframe?.easing === 'hold') return 0;
+  if (keyframe?.easing === 'linear') return t;
+  if (keyframe?.easing === 'bezier') {
+    const [, firstY = 0, , secondY = 1] = keyframe.bezier || [];
+    const inverse = 1 - t;
+    return (3 * inverse * inverse * t * firstY) + (3 * inverse * t * t * secondY) + (t ** 3);
+  }
+  return t * t * (3 - (2 * t));
+}
+
+export function getClipPropertiesAtTime(clip, programTime) {
+  const properties = { ...(clip.properties || {}) };
+  const localTime = Math.max(0, Math.min(clip.duration, Number(programTime) - clip.start));
+  Object.entries(clip.keyframes || {}).forEach(([property, keyframes]) => {
+    if (!keyframes.length) return;
+    const rightIndex = keyframes.findIndex((item) => item.time >= localTime);
+    if (rightIndex === 0) { properties[property] = keyframes[0].value; return; }
+    if (rightIndex < 0) { properties[property] = keyframes.at(-1).value; return; }
+    const left = keyframes[rightIndex - 1];
+    const right = keyframes[rightIndex];
+    const progress = (localTime - left.time) / Math.max(1e-9, right.time - left.time);
+    const eased = interpolationProgress(progress, right);
+    properties[property] = left.value + ((right.value - left.value) * eased);
+  });
+  return properties;
+}
+
 export function addTextClip(document, text, options = {}) {
   const value = String(text || '').trim();
   if (!value) return document;
@@ -272,9 +349,11 @@ export function getActiveClips(document, time = document.playhead) {
     return track.clips
       .filter((clip) => programTime >= clip.start && programTime < clip.start + clip.duration)
       .map((clip) => {
-        const speed = Math.max(0.25, Math.min(4, Number(clip.properties?.speed) || 1));
+        const properties = getClipPropertiesAtTime(clip, programTime);
+        const speed = Math.max(0.25, Math.min(4, Number(properties.speed) || 1));
         return {
           ...clip,
+          properties,
           layerIndex,
           muted: Boolean(track.muted),
           sourceTime: clip.sourceIn + ((programTime - clip.start) * speed),

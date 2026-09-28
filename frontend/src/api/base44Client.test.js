@@ -13,6 +13,7 @@ describe('compatibility entity client', () => {
     vi.resetModules();
     requestMock.mockReset();
     readDemoMock.mockReset();
+    localStorage.clear();
   });
 
   it('keeps local demo entity operations in memory without protected HTTP calls', async () => {
@@ -24,6 +25,18 @@ describe('compatibility entity client', () => {
     await expect(base44.entities.AgendaEvento.list('ordem', 20)).resolves.toEqual([created]);
     await expect(base44.entities.AgendaEvento.update(created.id, { titulo: 'Pauta revisada' }))
       .resolves.toEqual(expect.objectContaining({ titulo: 'Pauta revisada' }));
+    expect(requestMock).not.toHaveBeenCalled();
+  });
+
+  it('restores local demo entities after the application reloads', async () => {
+    readDemoMock.mockReturnValue({ id: 'demo-editor' });
+    const firstClient = (await import('./base44Client')).base44;
+    const created = await firstClient.entities.ProducaoProjeto.create({ titulo: 'Produção persistida', etapa: 'rascunho' });
+
+    vi.resetModules();
+    const reloadedClient = (await import('./base44Client')).base44;
+
+    await expect(reloadedClient.entities.ProducaoProjeto.list('ordem', 20)).resolves.toEqual([created]);
     expect(requestMock).not.toHaveBeenCalled();
   });
 
