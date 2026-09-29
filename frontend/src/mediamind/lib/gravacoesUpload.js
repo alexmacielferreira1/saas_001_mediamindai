@@ -16,15 +16,17 @@ export async function uploadRecordingFiles(files, upload) {
     try {
       if (!file.size) throw new Error('Arquivo vazio');
       const result = await upload(file);
-      if (!result?.file_url) throw new Error('Upload sem URL confirmada');
+      const url = result?.stream_url || result?.file_url;
+      if (!url) throw new Error('Upload sem URL confirmada');
       uploaded.push({
-        id: result.file_url,
+        id: result.id || url,
+        mediaAssetId: result.id || null,
         nome: file.name,
         caminhoRelativo: file.webkitRelativePath || file.name,
         pastaOrigem: file.webkitRelativePath?.split('/')[0] || '',
         tamanho: formatBytes(file.size),
         recebido: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        url: result.file_url,
+        url,
         sha256: result.sha256,
       });
     } catch {

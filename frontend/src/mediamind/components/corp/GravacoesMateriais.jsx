@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand, CheckCircle2, Database, CalendarDays, MapPin, Clock3, FolderOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { base44 } from '@/api/base44Client';
+import { uploadMediaAsset } from '@/api/media';
 import { useProducaoProjetos, updateProjeto, transicionar } from '../../lib/producaoStore';
 import { useModoTransicao, setModoTransicao, TRANSITION_MODES } from '../../lib/producaoConfig';
 import { useAuth } from '../../auth';
@@ -57,7 +57,7 @@ export default function GravacoesMateriais() {
     try {
       const { uploaded: novos, failed } = await uploadRecordingFiles(
         files,
-        (file) => base44.integrations.Core.UploadPublicFile({ file }),
+        uploadMediaAsset,
       );
       const jaTem = (rec.materiais || []).length > 0;
       if (novos.length) updateProjeto(rec.id, { materiais: [...(rec.materiais || []), ...novos] });
@@ -195,7 +195,7 @@ export default function GravacoesMateriais() {
               </label>
             </div>
             <span className="max-w-xl text-[9px] leading-4 text-slate-600">Ao apontar uma pasta, todos os arquivos e subpastas são preparados para o ingest, mantendo a organização original.</span>
-          </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Envio privado ao servidor</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Somente arquivos confirmados pela API aparecem como recebidos. O limite atual é 100 MB por arquivo. Pacote Ingest, proxy, IA e arquivos maiores ainda dependem de implementação.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação do tipo','Limite por arquivo','Checksum no servidor','Aviso de falhas sem falso sucesso'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
+          </div><aside className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><div className="flex gap-2"><Database size={20} className="text-sky-400"/><div><p className="text-xs font-bold text-slate-200">Envio privado ao Acervo</p><p className="mt-1 text-[9px] leading-4 text-slate-500">Somente arquivos confirmados pela API aparecem como recebidos. Mídias de até 4 GB são armazenadas no Acervo e permanecem vinculadas à gravação. Proxy e processamento por IA continuam como etapas posteriores.</p></div></div><div className="mt-3 space-y-1 text-[9px] text-slate-400">{['Validação do tipo','Limite por arquivo','Checksum no servidor','Aviso de falhas sem falso sucesso'].map((item)=><p key={item} className="flex items-center gap-1"><CheckCircle2 size={10} className="text-sky-400"/>{item}</p>)}</div></aside></div>
 
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase text-slate-500">Materiais recebidos ({materiais.length})</p>

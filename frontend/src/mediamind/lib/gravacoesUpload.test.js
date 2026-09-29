@@ -19,6 +19,26 @@ describe('upload de materiais de gravação', () => {
     })]);
   });
 
+  it('aceita a resposta do Acervo e preserva o vínculo com o ativo de mídia', async () => {
+    const file = { name: 'CAM_B_002.mp4', size: 4096, webkitRelativePath: '' };
+    const upload = vi.fn().mockResolvedValue({
+      id: 'asset-42',
+      stream_url: '/api/v1/media/local/assets/asset-42/stream',
+      sha256: 'media-sha',
+    });
+
+    const result = await uploadRecordingFiles([file], upload);
+
+    expect(result.failed).toEqual([]);
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      id: 'asset-42',
+      mediaAssetId: 'asset-42',
+      nome: 'CAM_B_002.mp4',
+      url: '/api/v1/media/local/assets/asset-42/stream',
+      sha256: 'media-sha',
+    })]);
+  });
+
   it('não inventa URL local ao falhar e continua os outros arquivos', async () => {
     const files = [{ name: 'falhou.mp4', size: 10 }, { name: 'ok.mp4', size: 20 }];
     const upload = vi.fn()
