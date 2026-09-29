@@ -64,9 +64,11 @@ export const ALL_SUBTABS = [
 const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'workspace2', 'roteiro'];
 const OV = ['overview'];
 const VG = ['visao_geral'];
+export const MVP_SUBTABS = ['workspace2', 'gravacoes', 'em_edicao', 'finalizado'];
 
 export const ROLE_SUBTABS = {
   admin: null,
+  mvp: MVP_SUBTABS,
   producer: [...OV, 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'aguardando_aprovacao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'para_publicar', 'publicado', 'analytics', ...COMMON_IDS],
   editor: [...VG, 'agendamentos', 'gravacoes', 'em_edicao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'publicacoes', 'analytics', ...COMMON_IDS],
   videomaker: [...VG, 'agendamentos', 'gravacoes', ...COMMON_IDS],

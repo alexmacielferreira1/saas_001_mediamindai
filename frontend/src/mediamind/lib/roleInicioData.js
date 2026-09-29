@@ -37,6 +37,7 @@ function prettify(s) {
 const CONFIG = {
   superadmin: { label: 'Operação completa', emoji: '🛡️', items: MOCK_CORP_PRODUCTIONS, title: (r) => r.titulo, sub: (r) => `${r.programa} · ${r.episodio}`, status: (r) => r.status, done: ['publicado'] },
   admin: { label: 'Operação completa', emoji: '⚙️', items: MOCK_CORP_PRODUCTIONS, title: (r) => r.titulo, sub: (r) => `${r.programa} · ${r.episodio}`, status: (r) => r.status, done: ['publicado'] },
+  mvp: { label: 'Percurso MVP', emoji: '🎬', items: [], title: (r) => r.titulo, sub: (r) => r.programa, status: (r) => r.status, done: [] },
   producer: { label: 'Produções', emoji: '🎬', items: MOCK_CORP_PRODUCTIONS, title: (r) => r.titulo, sub: (r) => `${r.programa} · ${r.episodio}`, status: (r) => r.status, done: ['publicado'] },
   editor: { label: 'Edições', emoji: '✂️', items: MOCK_CORP_EDITS, title: (r) => r.titulo, sub: (r) => r.programa, status: (r) => r.status, done: (r) => r.progresso >= 100 },
   videomaker: { label: 'Captações', emoji: '🎥', items: MOCK_CORP_RECORDINGS, title: (r) => `${r.episodio} — ${r.titulo}`, sub: (r) => `${r.programa} · ${r.estudio}`, status: (r) => r.status, done: ['gravada'] },
@@ -79,6 +80,7 @@ const AGENDA_TYPES = {
   diretor_programa: ALL_AGENDA_TYPES,
   coordenador_comunicacao: ALL_AGENDA_TYPES,
   producer: ['gravacao', 'edicao', 'aprovacao', 'publicacao'],
+  mvp: [],
   editor: ['edicao'], motion_designer: ['edicao'], audiovisual: ['edicao'],
   videomaker: ['gravacao'], apresentador: ['gravacao'], cenografo: ['gravacao'],
   locutor: ['gravacao'], sonoplasta: ['gravacao'], fotografo: ['gravacao'],

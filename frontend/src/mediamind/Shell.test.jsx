@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { NAV_GROUPS } from './Shell';
+import { NAV_GROUPS, navigationForRole } from './Shell';
 
 describe('production navigation', () => {
   it('shows only the approved operational workflow', () => {
@@ -16,5 +16,10 @@ describe('production navigation', () => {
     expect(labels).toContain('Aguardando aprovação');
     expect(labels).toContain('Para publicação');
     expect(labels).toContain('Publicado');
+  });
+
+  it('shows the MVP profile only its six selected existing screens', () => {
+    const labels = navigationForRole('mvp').flatMap((group) => group.items.map((item) => item.label));
+    expect(labels).toEqual(['Início', 'Workspace 2', 'Gravações', 'Edição', 'Finalizado', 'Acervo']);
   });
 });

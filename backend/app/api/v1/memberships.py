@@ -25,7 +25,7 @@ from app.tenancy.permissions import require_permission
 router = APIRouter(prefix="/memberships", tags=["permissions"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
-ALLOWED_ROLES = {role for _email, _name, role in DEMO_ACCOUNTS}
+ALLOWED_ROLES = {role for _email, _name, role in DEMO_ACCOUNTS} | {"mvp"}
 ADMINISTRATIVE_ROLES = {"admin", "superadmin"}
 ALLOWED_SCREENS = {
     "producao",

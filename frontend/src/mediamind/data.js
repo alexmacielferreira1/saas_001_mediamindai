@@ -20,7 +20,7 @@ export const MOCK_USERS = [
 ];
 
 export const USER_ROLE_LABELS = {
-  viewer: 'Visitante', producer: 'Produtor', editor: 'Editor',
+  viewer: 'Visitante', mvp: 'MVP', producer: 'Produtor', editor: 'Editor',
   journalist: 'Jornalista', cedoc: 'CEDOC', admin: 'Administrador',
 };
 
