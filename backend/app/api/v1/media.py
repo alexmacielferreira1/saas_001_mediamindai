@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -479,6 +479,9 @@ async def upload_asset(
     current: Authenticated,
     session: DbSession,
     file: Annotated[UploadFile, File()],
+    origin: Annotated[str | None, Form(max_length=64)] = None,
+    project_id: Annotated[str | None, Form(max_length=180)] = None,
+    recording_id: Annotated[str | None, Form(max_length=180)] = None,
 ):
     membership = require_membership(current)
     require_permission(session, current, "assets.write")
@@ -505,6 +508,9 @@ async def upload_asset(
             "sha256": stored.sha256,
             "storage_key": stored.relative_key,
             "media_status": "uploaded",
+            **({"origin": origin} if origin else {}),
+            **({"project_id": project_id} if project_id else {}),
+            **({"recording_id": recording_id} if recording_id else {}),
             **media_metadata,
         },
     )

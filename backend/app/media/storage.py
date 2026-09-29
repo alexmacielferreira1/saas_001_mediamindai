@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
@@ -6,14 +5,7 @@ from uuid import UUID
 from fastapi import UploadFile
 
 from app.core.errors import PublicError
-
-
-@dataclass(frozen=True)
-class StoredMedia:
-    relative_key: str
-    size: int
-    sha256: str
-    mime_type: str
+from app.media.storage_backend import StoredMedia
 
 
 class LocalMediaStorage:
@@ -64,11 +56,48 @@ class LocalMediaStorage:
             mime_type=upload.content_type or "application/octet-stream",
         )
 
-    def resolve(self, relative_key: str) -> Path:
+    def save_derived(
+        self,
+        tenant_id: UUID,
+        asset_id: UUID,
+        source: Path,
+        *,
+        filename: str,
+        mime_type: str,
+    ) -> StoredMedia:
+        destination_dir = self.asset_root(tenant_id, asset_id) / "derived"
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / Path(filename).name
+        temporary = destination.with_suffix(f"{destination.suffix}.part")
+        digest = sha256()
+        size = 0
+        try:
+            with source.open("rb") as input_file, temporary.open("wb") as output:
+                while chunk := input_file.read(1024 * 1024):
+                    size += len(chunk)
+                    digest.update(chunk)
+                    output.write(chunk)
+            temporary.replace(destination)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            destination.unlink(missing_ok=True)
+            self._remove_empty_parents(destination_dir, self.root)
+            raise
+        return StoredMedia(
+            relative_key=destination.relative_to(self.root).as_posix(),
+            size=size,
+            sha256=digest.hexdigest(),
+            mime_type=mime_type,
+        )
+
+    def resolve_local(self, relative_key: str) -> Path:
         candidate = (self.root / relative_key).resolve()
         if self.root not in candidate.parents:
             raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
         return candidate
+
+    def resolve(self, relative_key: str) -> Path:
+        return self.resolve_local(relative_key)
 
     def delete_asset(self, tenant_id: UUID, asset_id: UUID) -> None:
         root = self.asset_root(tenant_id, asset_id)

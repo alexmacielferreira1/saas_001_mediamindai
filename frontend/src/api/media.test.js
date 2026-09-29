@@ -31,12 +31,17 @@ describe('media API', () => {
     )));
     const file = new File(['video'], 'real.mp4', { type: 'video/mp4' });
 
-    const uploaded = await uploadMediaAsset(file);
+    const uploaded = await uploadMediaAsset(file, {
+      origin: 'recording', project_id: 'project-17', recording_id: 'recording-4',
+    });
 
     expect(uploaded.id).toBe('asset-2');
     const [, options] = fetch.mock.calls[0];
     expect(options.body).toBeInstanceOf(FormData);
     expect(options.body.get('file')).toBe(file);
+    expect(options.body.get('origin')).toBe('recording');
+    expect(options.body.get('project_id')).toBe('project-17');
+    expect(options.body.get('recording_id')).toBe('recording-4');
   });
 
   it('keeps same-origin stream paths usable by authenticated players', () => {
