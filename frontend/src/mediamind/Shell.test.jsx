@@ -18,8 +18,10 @@ describe('production navigation', () => {
     expect(labels).toContain('Publicado');
   });
 
-  it('shows the MVP profile only its six selected existing screens', () => {
+  it('shows the MVP profile its selected workflow, including recording prerequisites', () => {
     const labels = navigationForRole('mvp').flatMap((group) => group.items.map((item) => item.label));
-    expect(labels).toEqual(['Início', 'Workspace 2', 'Gravações', 'Edição', 'Finalizado', 'Acervo']);
+    expect(labels).toEqual([
+      'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição', 'Finalizado', 'Acervo',
+    ]);
   });
 });

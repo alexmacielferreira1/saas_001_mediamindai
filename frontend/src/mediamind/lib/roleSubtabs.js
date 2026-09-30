@@ -64,7 +64,9 @@ export const ALL_SUBTABS = [
 const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'workspace2', 'roteiro'];
 const OV = ['overview'];
 const VG = ['visao_geral'];
-export const MVP_SUBTABS = ['workspace2', 'gravacoes', 'em_edicao', 'finalizado'];
+export const MVP_SUBTABS = [
+  'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'finalizado',
+];
 
 export const ROLE_SUBTABS = {
   admin: null,
