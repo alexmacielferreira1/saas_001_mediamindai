@@ -30,7 +30,7 @@ export const NAV_GROUPS = [
       { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
       { to: '/corp?tab=producao&sub=em_edicao', label: 'Edição', icon: Scissors, sub: 'em_edicao' },
       { to: '/corp?tab=producao&sub=aguardando_aprovacao', label: 'Aguardando aprovação', icon: Calendar, sub: 'aguardando_aprovacao' },
-      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em aprovação', icon: CheckCircle2, sub: 'em_aprovacao' },
+      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em revisão', icon: CheckCircle2, sub: 'em_aprovacao' },
       { to: '/corp?tab=producao&sub=finalizado', label: 'Finalizado', icon: Flag, sub: 'finalizado' },
       { to: '/corp?tab=producao&sub=redes_sociais', label: 'Redes sociais', icon: Share2, sub: 'redes_sociais' },
       { to: '/corp?tab=producao&sub=para_publicar', label: 'Para publicação', icon: Send, sub: 'para_publicar' },
@@ -55,7 +55,7 @@ export const NAV_GROUPS = [
 
 const MVP_LABELS = new Set([
   'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-  'Em aprovação', 'Finalizado', 'Acervo',
+  'Em revisão', 'Finalizado', 'Acervo',
 ]);
 
 export function navigationForRole(role) {

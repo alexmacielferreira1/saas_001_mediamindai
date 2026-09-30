@@ -29,7 +29,7 @@ describe('central de edição e aprovação', () => {
 
     expect(screen.getAllByText('Projeto aguardando').length).toBeGreaterThan(0);
     expect(screen.queryByText('Projeto em edição')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Enviar pra aprovação/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enviar para revisão/i }));
     expect(transicionar).toHaveBeenCalledWith(2, 'em_aprovacao', expect.objectContaining({ quem: 'Alex' }));
     expect(setEtapa).not.toHaveBeenCalled();
   });
@@ -37,7 +37,15 @@ describe('central de edição e aprovação', () => {
   it('advances a waiting card to approval from its inline workflow button', () => {
     render(<EdicaoPage initialLane="aguardando" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar para Em aprovação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para Em revisão' }));
     expect(transicionar).toHaveBeenCalledWith(2, 'em_aprovacao', expect.objectContaining({ quem: 'Alex' }));
+  });
+
+  it('sends a project straight from editing to review', () => {
+    render(<EdicaoPage initialLane="em_edicao" />);
+
+    expect(screen.getByRole('button', { name: 'Alteração 1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Enviar para revisão/i }));
+    expect(transicionar).toHaveBeenCalledWith(1, 'em_aprovacao', expect.objectContaining({ quem: 'Alex' }));
   });
 });

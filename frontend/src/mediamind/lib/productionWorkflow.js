@@ -4,8 +4,8 @@ export const PRODUCTION_STAGES = [
   { id: 'gravacoes', label: 'Gravações' },
   { id: 'para_editar', label: 'Material para editar' },
   { id: 'em_edicao', label: 'Em edição' },
-  { id: 'aguardando_aprovacao', label: 'Aguardando aprovação' },
-  { id: 'em_aprovacao', label: 'Em aprovação' },
+  { id: 'aguardando_aprovacao', label: 'Alteração' },
+  { id: 'em_aprovacao', label: 'Em revisão' },
   { id: 'finalizado', label: 'Finalizado' },
   { id: 'redes_sociais', label: 'Redes sociais' },
   { id: 'para_publicar', label: 'Para publicação' },
@@ -13,7 +13,9 @@ export const PRODUCTION_STAGES = [
   { id: 'analytics', label: 'Analytics' },
 ];
 
-export const PRODUCTION_STAGE_ORDER = PRODUCTION_STAGES.map((stage) => stage.id);
+export const PRODUCTION_STAGE_ORDER = PRODUCTION_STAGES
+  .map((stage) => stage.id)
+  .filter((stage) => stage !== 'aguardando_aprovacao');
 
 const LEGACY_STAGE_ALIASES = {
   aguardando: 'aguardando_aprovacao',
@@ -23,7 +25,7 @@ const LEGACY_STAGE_ALIASES = {
 
 export function normalizeProductionStage(stage) {
   const normalized = LEGACY_STAGE_ALIASES[stage] || stage;
-  return PRODUCTION_STAGE_ORDER.includes(normalized) ? normalized : 'revisar_classificacao';
+  return PRODUCTION_STAGES.some((item) => item.id === normalized) ? normalized : 'revisar_classificacao';
 }
 
 export function resolveProjectProductionStage(project) {
@@ -44,6 +46,7 @@ export function isScheduleReady(project) {
 
 export function getAdjacentProductionStage(stage, direction) {
   const current = normalizeProductionStage(stage);
+  if (current === 'aguardando_aprovacao') return direction > 0 ? 'em_aprovacao' : 'em_edicao';
   const index = PRODUCTION_STAGE_ORDER.indexOf(current);
   if (index < 0) return null;
   return PRODUCTION_STAGE_ORDER[index + Math.sign(direction)] || null;

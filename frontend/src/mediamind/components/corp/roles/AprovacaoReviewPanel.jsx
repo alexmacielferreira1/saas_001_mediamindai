@@ -3,10 +3,10 @@ import {
   Play, Pause, Save, CheckCircle2, Trash2, MousePointer2, Pen, Highlighter,
   LogIn, LogOut, MessageSquare, Eraser, ArrowUpRight, Square, Circle, Type, Download, FileVideo, FileText, History, XCircle, RotateCcw,
 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
 
 const DURATION = 180000; // mock 3min
 const VW = 1000, VH = 562;
+const reviewStorageKey = (projectId) => `mediamind:review:${projectId}`;
 
 function fmt(ms) {
   const s = Math.floor((ms || 0) / 1000);
@@ -123,17 +123,14 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
   const erasingRef = useRef(false);
 
   useEffect(() => {
-    let alive = true;
-    setAnnotations([]);
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(reviewStorageKey(project.id)) || 'null'); } catch { saved = null; }
+    setAnnotations(Array.isArray(saved?.annotations) ? saved.annotations.map(decodeAnno) : []);
+    setGeneralComment(saved?.generalComment || '');
     setTime(0);
     setPlaying(false);
     setTool('play');
-    setLoading(true);
-    base44.entities.ComentarioRevisao.filter({ asset_id: project.id })
-      .then((list) => { if (alive) setAnnotations(list.map(decodeAnno)); })
-      .catch(() => {})
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+    setLoading(false);
   }, [project.id]);
 
   useEffect(() => {
@@ -206,24 +203,9 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
     setTime(Math.round(ratio * DURATION));
   }
 
-  async function salvarEnviar() {
+  function salvarEnviar() {
     setLoading(true);
-    const novos = annotations.filter((a) => !a._id && (a.kind === 'desenho' ? a.points.length >= 2 : true));
-    if (novos.length) {
-      try {
-        await base44.entities.ComentarioRevisao.bulkCreate(
-          novos.map((a) => ({
-            asset_id: project.id,
-            asset_title: project.titulo,
-            timecode_ms: a.timecode_ms,
-            timecode_label: a.timecode_label,
-            texto: encodeAnno(a),
-            status: 'aberta',
-            versao: 'v1',
-          }))
-        );
-      } catch { /* ignore */ }
-    }
+    localStorage.setItem(reviewStorageKey(project.id), JSON.stringify({ annotations, generalComment }));
     setLoading(false);
     onEnviarEditor?.(project.id);
   }
@@ -238,14 +220,14 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-900/20">
-      <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Aprovação da produção</p><h2 className="text-base font-semibold text-slate-100">{project.titulo}</h2><p className="text-[10px] text-slate-500">Revise a versão, adicione comentários e solicite ajustes se necessário.</p></div><div className="text-right"><p className="text-[11px] font-semibold text-slate-200">{project.programa} · {project.episodio}</p><span className="mt-1 inline-block rounded bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-300">V3 · Rodada 3 · Em aprovação</span></div></header>
+      <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Revisão da produção</p><h2 className="text-base font-semibold text-slate-100">{project.titulo}</h2><p className="text-[10px] text-slate-500">Revise a versão, adicione comentários e solicite ajustes se necessário.</p></div><div className="text-right"><p className="text-[11px] font-semibold text-slate-200">{project.programa} · {project.episodio}</p><span className="mt-1 inline-block rounded bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase text-amber-300">V3 · Rodada 3 · Em revisão</span></div></header>
 
-      <div className="grid grid-cols-6 border-b border-slate-800 bg-slate-950/25">{['Planejamento','Gravação','Edição','Aprovação','Publicação','Concluído'].map((stage, i) => <div key={stage} className={`flex items-center gap-2 border-r border-slate-800 px-3 py-2 ${i === 3 ? 'bg-sky-500/15' : ''}`}><span className={`flex size-6 items-center justify-center rounded-full text-[10px] font-bold ${i <= 3 ? 'bg-sky-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>{i + 1}</span><div><p className={`text-[9px] font-semibold ${i === 3 ? 'text-sky-300' : 'text-slate-400'}`}>{stage}</p><p className="text-[8px] text-slate-600">{i === 3 ? 'Revisar e aprovar' : i < 3 ? 'Concluído' : 'Pendente'}</p></div></div>)}</div>
+      <div className="grid grid-cols-6 border-b border-slate-800 bg-slate-950/25">{['Planejamento','Gravação','Edição','Revisão','Publicação','Concluído'].map((stage, i) => <div key={stage} className={`flex items-center gap-2 border-r border-slate-800 px-3 py-2 ${i === 3 ? 'bg-sky-500/15' : ''}`}><span className={`flex size-6 items-center justify-center rounded-full text-[10px] font-bold ${i <= 3 ? 'bg-sky-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>{i + 1}</span><div><p className={`text-[9px] font-semibold ${i === 3 ? 'text-sky-300' : 'text-slate-400'}`}>{stage}</p><p className="text-[8px] text-slate-600">{i === 3 ? 'Revisar e aprovar' : i < 3 ? 'Concluído' : 'Pendente'}</p></div></div>)}</div>
 
       <div className="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[205px_minmax(420px,1fr)_270px]">
         <aside className="min-h-0 overflow-y-auto border-b border-slate-800 bg-slate-950/25 xl:border-b-0 xl:border-r">
-          <section className="border-b border-slate-800 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Informações da produção</p><button className="rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300">Editar</button></div><div className="mt-3 flex items-center gap-2"><div className="flex size-11 items-center justify-center rounded bg-sky-950 text-sm font-bold text-sky-300">{project.programa?.slice(0,2).toUpperCase()}</div><div><p className="text-[11px] font-semibold text-slate-200">{project.programa}</p><p className="text-[10px] text-slate-500">{project.titulo}</p></div></div><p className="mt-3 text-[9px] leading-relaxed text-slate-500">{project.pauta || 'Conteúdo audiovisual em revisão final para distribuição.'}</p><div className="mt-3 grid grid-cols-2 gap-2 text-[9px]"><div><p className="text-slate-600">Duração</p><p className="text-slate-300">00:28:40</p></div><div><p className="text-slate-600">Editor</p><p className="text-slate-300">{project.editor || project.responsavel || 'Equipe'}</p></div><div><p className="text-slate-600">Status</p><p className="text-amber-300">Em aprovação</p></div><div><p className="text-slate-600">Prazo</p><p className="text-slate-300">19/09 18:00</p></div></div></section>
-          <section className="p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Versões da edição</p><button className="rounded bg-sky-500 px-2 py-1 text-[9px] font-bold text-slate-950">+ Nova versão</button></div><div className="mt-2 space-y-2">{[['V3','Em aprovação','Alex Maciel','text-amber-300'],['V2','Alterações solicitadas','Elisa Pereira','text-rose-300'],['V1','Aprovada (anterior)','Marcelo Silva','text-emerald-300']].map(([v,s,a,t],i)=><button key={v} className={`w-full rounded border p-2 text-left ${i===0?'border-sky-500 bg-sky-950/30':'border-slate-800 bg-slate-950/30'}`}><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-200">{v}</span><span className={`text-[8px] font-bold ${t}`}>{s}</span></div><p className="mt-1 text-[8px] text-slate-500">10/09/2026 · {a}</p></button>)}</div><button className="mt-2 w-full rounded border border-slate-700 py-1.5 text-[9px] text-sky-300">Comparar versões</button></section>
+          <section className="border-b border-slate-800 p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Informações da produção</p><button className="rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300">Editar</button></div><div className="mt-3 flex items-center gap-2"><div className="flex size-11 items-center justify-center rounded bg-sky-950 text-sm font-bold text-sky-300">{project.programa?.slice(0,2).toUpperCase()}</div><div><p className="text-[11px] font-semibold text-slate-200">{project.programa}</p><p className="text-[10px] text-slate-500">{project.titulo}</p></div></div><p className="mt-3 text-[9px] leading-relaxed text-slate-500">{project.pauta || 'Conteúdo audiovisual em revisão final para distribuição.'}</p><div className="mt-3 grid grid-cols-2 gap-2 text-[9px]"><div><p className="text-slate-600">Duração</p><p className="text-slate-300">00:28:40</p></div><div><p className="text-slate-600">Editor</p><p className="text-slate-300">{project.editor || project.responsavel || 'Equipe'}</p></div><div><p className="text-slate-600">Status</p><p className="text-amber-300">Em revisão</p></div><div><p className="text-slate-600">Prazo</p><p className="text-slate-300">19/09 18:00</p></div></div></section>
+          <section className="p-3"><div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-300">Versões da edição</p><button className="rounded bg-sky-500 px-2 py-1 text-[9px] font-bold text-slate-950">+ Nova versão</button></div><div className="mt-2 space-y-2">{[['V3','Em revisão','Alex Maciel','text-amber-300'],['V2','Alterações solicitadas','Elisa Pereira','text-rose-300'],['V1','Aprovada (anterior)','Marcelo Silva','text-emerald-300']].map(([v,s,a,t],i)=><button key={v} className={`w-full rounded border p-2 text-left ${i===0?'border-sky-500 bg-sky-950/30':'border-slate-800 bg-slate-950/30'}`}><div className="flex items-center justify-between"><span className="text-sm font-bold text-slate-200">{v}</span><span className={`text-[8px] font-bold ${t}`}>{s}</span></div><p className="mt-1 text-[8px] text-slate-500">10/09/2026 · {a}</p></button>)}</div><button className="mt-2 w-full rounded border border-slate-700 py-1.5 text-[9px] text-sky-300">Comparar versões</button></section>
         </aside>
 
         <main className="min-h-0 overflow-y-auto p-2">
@@ -267,7 +249,7 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
         </aside>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3"><p className="text-[9px] text-slate-500"><span className="font-semibold text-rose-300">Existem {DEMO_COMMENTS.length+annotations.length} apontamentos nesta revisão.</span><br/>A produção retornará para edição se houver solicitação de ajustes.</p><div className="flex gap-2"><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-amber-500 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/10"><RotateCcw size={12}/>Solicitar alterações</button><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-rose-500 px-3 py-2 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"><XCircle size={12}/>Rejeitar</button><button onClick={approveVersion} disabled={loading} className="flex items-center gap-1 rounded bg-emerald-500 px-4 py-2 text-[10px] font-bold text-slate-950 hover:bg-emerald-400"><CheckCircle2 size={12}/>Aprovar versão</button></div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 px-4 py-3"><p className="text-[9px] text-slate-500"><span className="font-semibold text-rose-300">Existem {DEMO_COMMENTS.length+annotations.length} apontamentos nesta revisão.</span><br/>A produção retornará para a fila Alteração quando forem solicitados ajustes.</p><div className="flex gap-2"><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-amber-500 px-3 py-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/10"><RotateCcw size={12}/>Enviar para Alteração</button><button onClick={salvarEnviar} disabled={loading} className="flex items-center gap-1 rounded border border-rose-500 px-3 py-2 text-[10px] font-bold text-rose-300 hover:bg-rose-500/10"><XCircle size={12}/>Rejeitar e enviar para Alteração</button><button onClick={approveVersion} disabled={loading} className="flex items-center gap-1 rounded bg-emerald-500 px-4 py-2 text-[10px] font-bold text-slate-950 hover:bg-emerald-400"><CheckCircle2 size={12}/>Aprovar versão</button></div></footer>
     </div>
   );
 }

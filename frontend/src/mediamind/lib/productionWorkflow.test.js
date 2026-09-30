@@ -19,7 +19,6 @@ describe('canonical production workflow', () => {
       'gravacoes',
       'para_editar',
       'em_edicao',
-      'aguardando_aprovacao',
       'em_aprovacao',
       'finalizado',
       'redes_sociais',
@@ -67,7 +66,7 @@ describe('canonical production workflow', () => {
   it('only moves to the adjacent stage', () => {
     expect(getAdjacentProductionStage('rascunho', 1)).toBe('agendamentos');
     expect(getAdjacentProductionStage('gravacao', 1)).toBe('para_editar');
-    expect(getAdjacentProductionStage('em_aprovacao', -1)).toBe('aguardando_aprovacao');
+    expect(getAdjacentProductionStage('em_aprovacao', -1)).toBe('em_edicao');
     expect(getAdjacentProductionStage('analytics', 1)).toBeNull();
     expect(getAdjacentProductionStage('etapa_desconhecida', 1)).toBeNull();
     expect(productionStageLabel('gravacao')).toBe('Gravações');

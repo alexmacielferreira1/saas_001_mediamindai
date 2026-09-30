@@ -22,7 +22,7 @@ describe('production navigation', () => {
     const labels = navigationForRole('mvp').flatMap((group) => group.items.map((item) => item.label));
     expect(labels).toEqual([
       'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-      'Em aprovação', 'Finalizado', 'Acervo',
+      'Em revisão', 'Finalizado', 'Acervo',
     ]);
   });
 });

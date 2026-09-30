@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { useProducaoProjetos, setEtapa, moverEtapa } from '../../../lib/producaoStore';
+import { useProducaoProjetos, setEtapa, moverEtapa, transicionar } from '../../../lib/producaoStore';
 import { StageDragArea, DraggableStageCard } from '../StageDragList';
 import AprovacaoReviewPanel from './AprovacaoReviewPanel';
 
-// Em aprovação: lista de projetos em "em_aprovacao" + player de conferência ao lado.
-// Marcações/ajustes salvos vão pro editor (em_edicao); aprovar avança p/ finalizado.
+// Em revisão: lista de projetos em "em_aprovacao" + player de conferência ao lado.
+// Marcações/ajustes salvos vão para Alteração; aprovar avança para Finalizado.
 export default function AprovacoesPage() {
   const projetos = useProducaoProjetos();
   const emAprov = projetos.filter((p) => p.etapa === 'em_aprovacao');
@@ -23,7 +23,7 @@ export default function AprovacoesPage() {
         <div className="border-b border-slate-800 p-3">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Review & Approval</p>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300">
-            <CheckCircle2 size={14} className="text-emerald-400" /> Em aprovação
+            <CheckCircle2 size={14} className="text-emerald-400" /> Em revisão
           </p>
           <p className="mt-0.5 text-[10px] text-slate-500">{emAprov.length} projeto(s) aguardando conferência</p>
         </div>
@@ -49,7 +49,7 @@ export default function AprovacoesPage() {
           <AprovacaoReviewPanel
             key={sel.id}
             project={sel}
-            onEnviarEditor={(id) => { setEtapa(id, 'em_edicao'); afterAction(id); }}
+            onEnviarEditor={(id) => { transicionar(id, 'aguardando_aprovacao', { obs: 'Revisão devolvida com alterações solicitadas' }); afterAction(id); }}
             onAprovar={(id) => { setEtapa(id, 'finalizado'); afterAction(id); }}
           />
         ) : (
