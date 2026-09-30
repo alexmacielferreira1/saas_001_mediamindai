@@ -21,7 +21,7 @@ export default function AprovacoesPage() {
     <div className="grid h-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35 lg:grid-cols-[minmax(290px,30%)_1fr]">
       <div className="flex h-full min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="border-b border-slate-800 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Review & Approval</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Revisão da produção</p>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-300">
             <CheckCircle2 size={14} className="text-emerald-400" /> Em revisão
           </p>
@@ -30,7 +30,7 @@ export default function AprovacoesPage() {
         <StageDragArea onMove={moverEtapa} className="flex-1 min-h-0">
           <div className="h-full divide-y divide-slate-800 overflow-y-auto">
             {emAprov.length === 0 ? (
-              <p className="px-3 py-8 text-center text-[11px] text-slate-500">Nenhum projeto em aprovação.</p>
+              <p className="px-3 py-8 text-center text-[11px] text-slate-500">Nenhum projeto em revisão.</p>
             ) : (
               emAprov.map((p) => (
                 <DraggableStageCard key={p.id} id={p.id} etapa={p.etapa} onClick={() => setSelId(p.id)} className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${sel?.id === p.id ? 'border-l-sky-400 bg-sky-950/35' : 'border-l-transparent hover:bg-slate-900/60'}`}>

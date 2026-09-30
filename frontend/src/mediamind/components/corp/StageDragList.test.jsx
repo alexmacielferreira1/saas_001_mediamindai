@@ -26,4 +26,11 @@ describe('stage movement controls', () => {
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'p1');
     expect(onMove).toHaveBeenCalledWith('p1', 1);
   });
+
+  it('returns an item from Em revisão to Alteração', () => {
+    const onMove = vi.fn();
+    render(<StageDragArea onMove={onMove}><DraggableStageCard id="p2" etapa="em_aprovacao">Revisão</DraggableStageCard></StageDragArea>);
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para Alteração' }));
+    expect(onMove).toHaveBeenCalledWith('p2', -1);
+  });
 });

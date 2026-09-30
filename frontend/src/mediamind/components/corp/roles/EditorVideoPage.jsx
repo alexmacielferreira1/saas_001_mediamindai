@@ -21,7 +21,7 @@ const SUBTABS = [
   { id: 'agendamentos', name: 'Agendamentos', Icon: Calendar },
   { id: 'gravacoes', name: 'Gravações', Icon: Clapperboard },
   { id: 'em_edicao', name: 'Em edição', Icon: EditIcon },
-  { id: 'em_aprovacao', name: 'Em aprovação', Icon: CheckCircle2 },
+  { id: 'em_aprovacao', name: 'Em revisão', Icon: CheckCircle2 },
   { id: 'finalizado', name: 'Finalizado', Icon: Flag },
   { id: 'redes_sociais', name: 'Redes sociais', Icon: Share2 },
   { id: 'publicacoes', name: 'Publicações', Icon: Send },

@@ -47,6 +47,7 @@ export function isScheduleReady(project) {
 export function getAdjacentProductionStage(stage, direction) {
   const current = normalizeProductionStage(stage);
   if (current === 'aguardando_aprovacao') return direction > 0 ? 'em_aprovacao' : 'em_edicao';
+  if (current === 'em_aprovacao' && direction < 0) return 'aguardando_aprovacao';
   const index = PRODUCTION_STAGE_ORDER.indexOf(current);
   if (index < 0) return null;
   return PRODUCTION_STAGE_ORDER[index + Math.sign(direction)] || null;
@@ -56,8 +57,7 @@ export function getProductionTransition(stage, direction) {
   if (direction !== -1 && direction !== 1) return { ok: false, reason: 'invalid_direction' };
   const from = normalizeProductionStage(stage);
   if (from === 'revisar_classificacao') return { ok: false, reason: 'unknown_stage' };
-  const index = PRODUCTION_STAGE_ORDER.indexOf(from);
-  const to = PRODUCTION_STAGE_ORDER[index + direction];
+  const to = getAdjacentProductionStage(from, direction);
   if (!to) return { ok: false, reason: direction < 0 ? 'first_stage' : 'last_stage' };
   return { ok: true, from, to };
 }

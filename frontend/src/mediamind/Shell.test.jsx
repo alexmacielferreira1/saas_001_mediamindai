@@ -13,7 +13,7 @@ describe('production navigation', () => {
     expect(labels).not.toContain('Timeline 2');
     expect(labels).not.toContain('Material para editar');
     expect(labels).toContain('Edição');
-    expect(labels).toContain('Aguardando aprovação');
+    expect(labels).toContain('Alteração');
     expect(labels).toContain('Para publicação');
     expect(labels).toContain('Publicado');
   });

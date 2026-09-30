@@ -12,9 +12,9 @@ const EDICAO_STATUS = [
   { value: 'rascunho_corte', label: 'Rascunho de corte' },
   { value: 'corte_fino', label: 'Corte fino' },
   { value: 'revisao_interna', label: 'Revisão interna' },
-  { value: 'pronto_para_aprovacao', label: 'Pronto p/ aprovação' },
+  { value: 'pronto_para_aprovacao', label: 'Pronto para revisão' },
 ];
-const STATUS_LABEL = { rascunho_corte: 'Rascunho de corte', corte_fino: 'Corte fino', revisao_interna: 'Revisão interna', pronto_para_aprovacao: 'Pronto p/ aprovação' };
+const STATUS_LABEL = { rascunho_corte: 'Rascunho de corte', corte_fino: 'Corte fino', revisao_interna: 'Revisão interna', pronto_para_aprovacao: 'Pronto para revisão' };
 
 function inputCls() {
   return 'w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500';
@@ -58,7 +58,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
 
   function enviarParaAprovacao() {
     if (!sel) return;
-    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação' });
+    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão' });
     toast({ title: 'Versão enviada para Em revisão', description: 'A entrega já está disponível para conferência.' });
   }
 
@@ -114,7 +114,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           { label: 'Na fila de edição', value: emEdicao.length, Icon: Scissors, tone: 'text-sky-300' },
           { label: 'Com prazo definido', value: comPrazo, Icon: Clock3, tone: 'text-violet-300' },
           { label: 'Em revisão interna', value: emRevisao, Icon: CircleAlert, tone: 'text-amber-300' },
-          { label: 'Prontas para aprovação', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
+          { label: 'Prontas para revisão', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
         ].map(({ label, value, Icon, tone }) => (
           <div key={label} className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 last:border-b-0 sm:border-r xl:border-b-0">
             <Icon size={15} className={tone} />
@@ -150,7 +150,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           const laneIndex = project ? EDITING_LANES.indexOf(laneForEditingProject(project)) : -1;
           const target = EDITING_LANES[laneIndex + dir];
           if (project && dir > 0 && laneIndex >= EDITING_LANES.indexOf('em_edicao')) {
-            transicionar(project.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação pela fila de edição' });
+            transicionar(project.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão pela fila de edição' });
             toast({ title: 'Versão enviada para Em revisão', description: 'A entrega entrou na conferência.' });
           } else if (target) moveToLane(id, target);
         }} disableBack={disableBack} className="flex-1 min-h-0">
