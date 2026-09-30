@@ -9,6 +9,17 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 5. Completar matriz manual de perfis/tenant/logout e Google OAuth publicado.
 6. Atualizar PPT do produto real.
 
+## MediaMind Creative Engine — integração AI Edita
+
+- **MM-CREATIVE-001 — in_progress:** implementar a matriz AI Edita → MediaMind registrada em `docs/ai-edita-integration/`, preservando identidade, stack e funcionalidades.
+- **MM-THEME-001 — pending:** tema global Claro/Escuro/Sistema com tokens semânticos e preferência persistida.
+- **MM-EDITOR-CMDS-001 — in_progress:** completar seleção múltipla, clipboard, duplicate, ripple, snapping central, markers e atalhos como comandos reversíveis.
+- **MM-EDITOR-AUDIO-001 — pending:** waveform, separação de áudio, mixer, cache e derivados reais.
+- **MM-EDITOR-MOTION-001 — pending:** keyframes completos, easing, Bezier, Graph Editor, máscaras e render das propriedades animadas.
+- **MM-BRAND-001 — pending:** Style Packs, templates e Brand Kit versionados por empresa/programa.
+- **MM-AI-EDITPLAN-001 — pending:** EditingPlan neutro de fornecedor, validado, explicável, reversível e aplicado à Timeline real.
+- **MM-EDITOR-UX-001 — pending:** painéis redimensionáveis, layouts salvos, modo rápido/profissional, command palette, menus contextuais e acessibilidade.
+
 ## P0 adicionados em 23/09/2026
 
 - **MM-AI-001 — in_progress:** erro `functions.invoke` removido por adaptador local e endpoint protegido; configurar provider/modelos, schemas por função, quotas, rate limit, auditoria, redaction e testes antes de habilitar IA real.
