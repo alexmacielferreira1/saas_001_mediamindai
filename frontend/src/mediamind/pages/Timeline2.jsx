@@ -243,7 +243,7 @@ export default function Timeline2({ embedded = false }) {
   }, [activeClips, playing]);
   useEffect(() => {
     const onKeyDown = (event) => {
-      const editingField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName);
+      const editingField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target?.tagName) && event.target?.type !== 'range';
       if (editingField) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
       else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeSelected(); }
@@ -425,7 +425,12 @@ export default function Timeline2({ embedded = false }) {
           </div>
           <div className="mt-3 flex items-center gap-3">
             <button type="button" onClick={togglePlayback} disabled={!hasTimedSequence} aria-label={playing ? 'Pausar' : 'Reproduzir'} className="grid size-11 place-items-center rounded-full bg-sky-500 text-slate-950 disabled:opacity-40">{playing ? <Pause size={18} /> : <Play size={18} fill="currentColor" />}</button>
-            <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => updateTransient((current) => setPlayhead(current, event.target.value))} className="flex-1" />
+            <div className="relative h-9 flex-1" aria-label="Linha do tempo do player">
+              {document.inPoint != null && document.outPoint != null && <span data-testid="player-in-out-range" aria-hidden="true" className="pointer-events-none absolute top-1/2 h-2 -translate-y-1/2 rounded bg-emerald-400/35" style={{ left: `${(document.inPoint / document.duration) * 100}%`, width: `${((document.outPoint - document.inPoint) / document.duration) * 100}%` }} />}
+              {document.inPoint != null && <span data-testid="player-in-marker" title={`IN ${formatTime(document.inPoint)}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-emerald-400" style={{ left: `${(document.inPoint / document.duration) * 100}%` }}><span className="absolute -top-1 -translate-x-1/2 rounded bg-emerald-500 px-1 text-[8px] font-black text-slate-950">I</span></span>}
+              {document.outPoint != null && <span data-testid="player-out-marker" title={`OUT ${formatTime(document.outPoint)}`} className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-amber-400" style={{ left: `${(document.outPoint / document.duration) * 100}%` }}><span className="absolute -top-1 -translate-x-1/2 rounded bg-amber-400 px-1 text-[8px] font-black text-slate-950">O</span></span>}
+              <input aria-label="Playhead" type="range" min="0" max={document.duration} step={1 / document.fps} value={document.playhead} onChange={(event) => updateTransient((current) => setPlayhead(current, event.target.value))} className="absolute inset-x-0 top-1/2 z-10 w-full -translate-y-1/2" />
+            </div>
           </div>
         </main>
 

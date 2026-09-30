@@ -115,13 +115,17 @@ describe('Timeline 2 pointer regressions', () => {
     const playhead = screen.getByLabelText('Playhead');
 
     fireEvent.change(playhead, { target: { value: '2' } });
-    fireEvent.keyDown(window, { key: 'i' });
+    fireEvent.keyDown(playhead, { key: 'i' });
     expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('00:00:02:00');
+    expect(screen.getByTestId('player-in-marker')).toHaveStyle({ left: '10%' });
     fireEvent.change(playhead, { target: { value: '8' } });
-    fireEvent.keyDown(window, { key: 'o' });
+    fireEvent.keyDown(playhead, { key: 'o' });
     expect(screen.getByTestId('timeline-out-point')).toHaveTextContent('00:00:08:00');
+    expect(screen.getByTestId('player-out-marker')).toHaveStyle({ left: '40%' });
+    expect(screen.getByTestId('player-in-out-range')).toHaveStyle({ left: '10%', width: '30%' });
     fireEvent.click(screen.getByRole('button', { name: 'Limpar IN e OUT' }));
     expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('—');
+    expect(screen.queryByTestId('player-in-marker')).not.toBeInTheDocument();
   });
 
   it('drags the vertical playhead handle without moving the clip underneath it', async () => {
