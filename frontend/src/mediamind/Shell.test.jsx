@@ -21,7 +21,8 @@ describe('production navigation', () => {
   it('shows the MVP profile its selected workflow, including recording prerequisites', () => {
     const labels = navigationForRole('mvp').flatMap((group) => group.items.map((item) => item.label));
     expect(labels).toEqual([
-      'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição', 'Finalizado', 'Acervo',
+      'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
+      'Aguardando aprovação', 'Em aprovação', 'Finalizado', 'Acervo',
     ]);
   });
 });

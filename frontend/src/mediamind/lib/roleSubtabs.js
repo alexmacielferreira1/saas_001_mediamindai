@@ -65,7 +65,8 @@ const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'workspace2', 'roteiro'];
 const OV = ['overview'];
 const VG = ['visao_geral'];
 export const MVP_SUBTABS = [
-  'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'finalizado',
+  'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+  'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
 ];
 
 export const ROLE_SUBTABS = {

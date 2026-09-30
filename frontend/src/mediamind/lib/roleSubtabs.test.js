@@ -24,7 +24,8 @@ describe('producer role workflow access', () => {
 
   it('selects only the existing MVP workflow screens', () => {
     expect(MVP_SUBTABS).toEqual([
-      'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'finalizado',
+      'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+      'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
     ]);
     expect(ROLE_SUBTABS.mvp).toEqual(MVP_SUBTABS);
     expect(getActiveSubtabs('mvp')).toEqual(MVP_SUBTABS);
