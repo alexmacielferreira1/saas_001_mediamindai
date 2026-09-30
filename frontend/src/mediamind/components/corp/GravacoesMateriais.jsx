@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Upload, FileVideo, Trash2, Eye, Clapperboard, AlertTriangle, Settings2, UserPlus, Hand, CheckCircle2, Database, CalendarDays, MapPin, Clock3, FolderOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { base44 } from '@/api/base44Client';
 import { useProducaoProjetos, updateProjeto, transicionar } from '../../lib/producaoStore';
 import { useModoTransicao, setModoTransicao, TRANSITION_MODES } from '../../lib/producaoConfig';
 import { useAuth } from '../../auth';
 import { uploadRecordingFiles } from '../../lib/gravacoesUpload';
 import { isProjectInProductionStage } from '../../lib/productionWorkflow';
+import { uploadMvpMedia } from '../../lib/mediaUpload';
 
 // Gravações (Produção): o videomaker vê a gravação atribuída, marca o status
 // (agendada → gravando → gravada), sobe os arquivos gravados (drag-and-drop/ingest)
@@ -57,7 +57,8 @@ export default function GravacoesMateriais() {
     try {
       const { uploaded: novos, failed } = await uploadRecordingFiles(
         files,
-        (file) => base44.integrations.Core.UploadPublicFile({ file }),
+        uploadMvpMedia,
+        { projectId: String(rec.id), recordingId: String(rec.gravacao_id || rec.id) },
       );
       const jaTem = (rec.materiais || []).length > 0;
       if (novos.length) updateProjeto(rec.id, { materiais: [...(rec.materiais || []), ...novos] });
