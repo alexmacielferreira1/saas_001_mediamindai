@@ -31,6 +31,7 @@ Legenda: `[x]` implementado/verificado; `[~]` parcial; `[ ]` pendente; `[!]` blo
 - [ ] Comentários de aprovação ligados à Timeline.
 - [ ] Modo rápido/profissional sobre a mesma engine.
 - [ ] Revisão final da árvore AI Edita contra a matriz.
+- [ ] Medição persistente de uso/custo/quota e cobrança por tenant conforme `MEDIAMIND_USAGE_COST_AND_BILLING.md`.
 
 ## Continuidade
 

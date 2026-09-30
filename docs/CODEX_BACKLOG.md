@@ -47,6 +47,7 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 - **MM-TEXT-EDIT-001 — P2, pending:** edição não destrutiva por texto, limpeza de fala revisável, undo e histórico.
 - **MM-BROLL-001 — P3, blocked_by MM-KNOWLEDGE-001:** busca e sugestão de B-roll no acervo autorizado antes de fontes externas ou geração.
 - **MM-AI-COST-001 — P1, pending:** orçamento, estimativa, quotas, cache, reutilização de análise e bloqueio de cobrança duplicada por tenant/job.
+  - Contrato consolidado em `MEDIAMIND_USAGE_COST_AND_BILLING.md`: estimativa, reserva, uso real, reconciliação, franquia/excedente, BYO provider, rateio e integração com a Central.
 
 Ordem detalhada: `PDF6_IMPLEMENTATION_ROADMAP.md` e `ai/01_IMPLEMENTATION_PLAN.md`. Catálogo funcional: `ai/03_PRODUCT_CAPABILITY_CATALOG.md`. Especificações: `ai/00_RAG_MCP_FINETUNING_MASTER.md`, `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md` e `MEDIAMIND_EXPORT_PACKAGE.md`.
 
