@@ -136,6 +136,37 @@ describe('Timeline 2 document model', () => {
     expect(withAudio.tracks.find((track) => track.id === 'a2').clips[0].kind).toBe('audio');
   });
 
+  it('trims an earlier clip when a new video overwrites the same layer', () => {
+    let document = addMediaClip(createTimeline2Document(), { id: 'a', clipId: 'a', name: 'A', kind: 'video', duration: 10 }, { trackId: 'v1', start: 0 });
+    document = addMediaClip(document, { id: 'b', clipId: 'b', name: 'B', kind: 'video', duration: 4 }, { trackId: 'v1', start: 6 });
+    expect(document.tracks.find((track) => track.id === 'v1').clips).toEqual([
+      expect.objectContaining({ id: 'a', start: 0, duration: 6, sourceOut: 6 }),
+      expect.objectContaining({ id: 'b', start: 6, duration: 4 }),
+    ]);
+  });
+
+  it('splits a clip when an inserted video overwrites its middle', () => {
+    let document = addMediaClip(createTimeline2Document(), { id: 'a', clipId: 'a', name: 'A', kind: 'video', duration: 10 }, { trackId: 'v1', start: 0 });
+    document = addMediaClip(document, { id: 'b', clipId: 'b', name: 'B', kind: 'video', duration: 3 }, { trackId: 'v1', start: 3 });
+    const clips = document.tracks.find((track) => track.id === 'v1').clips;
+    expect(clips).toHaveLength(3);
+    expect(clips[0]).toMatchObject({ id: 'a', start: 0, duration: 3, sourceIn: 0, sourceOut: 3 });
+    expect(clips[1]).toMatchObject({ id: 'b', start: 3, duration: 3 });
+    expect(clips[2]).toMatchObject({ start: 6, duration: 4, sourceIn: 6, sourceOut: 10 });
+  });
+
+  it('overwrites only the destination layer when moving a clip upward', () => {
+    let document = addMediaClip(createTimeline2Document(), { id: 'a', clipId: 'a', name: 'A', kind: 'video', duration: 10 }, { trackId: 'v1', start: 0 });
+    document = addMediaClip(document, { id: 'b', clipId: 'b', name: 'B', kind: 'video', duration: 4 }, { trackId: 'v2', start: 0 });
+    document = moveClip(document, 'b', { trackId: 'v1', start: 5 });
+    expect(document.tracks.find((track) => track.id === 'v1').clips).toEqual([
+      expect.objectContaining({ id: 'a', start: 0, duration: 5 }),
+      expect.objectContaining({ id: 'b', start: 5, duration: 4, trackId: 'v1' }),
+      expect.objectContaining({ start: 9, duration: 1, sourceIn: 9 }),
+    ]);
+    expect(document.tracks.find((track) => track.id === 'v2').clips).toHaveLength(0);
+  });
+
   it('separates embedded video audio into a linked editable audio clip', () => {
     const withVideo = addMediaClip(createTimeline2Document(), { id: 'camera', name: 'camera.mp4', kind: 'video', duration: 8, src: '/camera.mp4' });
     const separated = separateClipAudio(withVideo, withVideo.tracks.find((track) => track.id === 'v1').clips[0].id);

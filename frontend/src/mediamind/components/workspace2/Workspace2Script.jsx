@@ -4,7 +4,7 @@ import { formatDuration, MOCK_SCRIPTS } from '../../data';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, filterWorkspaceAssets } from '../../lib/workspace2Model';
 
 export default function Workspace2Script({
-  assets = [], selectedAssets = [], selectedIds = [], blocks = [], onAddAsset = () => {}, onRemoveBlock = () => {},
+  assets = [], selectedAssets = [], selectedIds = [], blocks = [], onAddAsset = () => {}, onRemoveBlock = () => {}, onReorderBlocks = () => {},
   onToggle = () => {}, onPreview = () => {}, mediaSearch, onMediaSearchChange,
   onAddText = () => {}, onStepChange = () => {}, project = {}, onProjectChange = () => {},
   onSave = () => {}, onSaveAs = () => {}, onExport = () => {}, onNotice = () => {},
@@ -37,6 +37,13 @@ export default function Workspace2Script({
     const id = event.dataTransfer.getData('application/x-workspace2-asset');
     const asset = availableAssets.find((item) => String(item.id) === id);
     if (asset) addAsset(asset);
+  };
+  const handleBlockDrop = (event, targetId) => {
+    const draggedId = event.dataTransfer.getData('application/x-workspace2-block');
+    if (!draggedId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onReorderBlocks(draggedId, targetId);
   };
   const field = (label, name, type = 'input') => <label className="text-[10px] text-slate-400"><span className="mb-1 block">{label}</span>{type === 'select' ? <select aria-label={label} value={project[name] || ''} onChange={(event) => onProjectChange(name, event.target.value)} className="w-full rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option>Jornalismo</option><option>Entretenimento</option><option>Institucional</option></select> : <input aria-label={label} value={project[name] || ''} onChange={(event) => onProjectChange(name, event.target.value)} className="w-full rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white" />}</label>;
   return (
@@ -72,7 +79,7 @@ export default function Workspace2Script({
 
         <div className="w2-panel flex-1 p-3" onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
           <header className="mb-3 flex items-center justify-between"><div><h2 className="text-base font-bold">Roteiro / Blocos ({blocks.length})</h2><p className="text-[10px] text-sky-300">Arraste mídias da coluna esquerda →</p></div><div className="flex gap-2"><button type="button" onClick={() => onAddText('Novo bloco de texto')} className="w2-button"><Type size={14} /> Adicionar texto</button><button type="button" onClick={() => onNotice('Arraste os blocos pela alça para reordenar')} className="w2-button"><GripVertical size={14} /> Reordenar</button></div></header>
-          {blocks.length === 0 ? <div className="grid min-h-72 place-items-center rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500"><div><Film className="mx-auto mb-3" /><p>Adicione mídias selecionadas ao roteiro.</p></div></div> : <div className="space-y-2">{blocks.map((block, index) => <article key={block.id} className={`flex items-center gap-3 rounded-xl border p-3 ${block.type === 'text' ? 'border-violet-700 bg-violet-950/20' : 'border-sky-700 bg-sky-950/20'}`}><GripVertical size={16} className="text-slate-500" /><span className="w-6 text-xs text-slate-400">{String(index + 1).padStart(2, '0')}</span><span className={`grid h-9 w-9 place-items-center rounded-lg ${block.type === 'text' ? 'bg-violet-800' : 'bg-sky-800'}`}>{block.type === 'text' ? <Type size={16} /> : <Film size={16} />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{block.title}</p><p className="text-[10px] text-slate-400">{block.type === 'text' ? 'Bloco de texto' : `MÍDIA · ${formatDuration(block.duration || 0)}`}</p></div><button type="button" aria-label={`Remover bloco ${block.title}`} onClick={() => onRemoveBlock(block.id)} className="rounded p-2 text-slate-500 hover:bg-rose-950 hover:text-rose-300"><Trash2 size={15} /></button></article>)}</div>}
+          {blocks.length === 0 ? <div className="grid min-h-72 place-items-center rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500"><div><Film className="mx-auto mb-3" /><p>Adicione mídias selecionadas ao roteiro.</p></div></div> : <div className="space-y-2">{blocks.map((block, index) => <article key={block.id} aria-label={`Bloco ${index + 1}: ${block.title}`} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-workspace2-block', String(block.id)); }} onDragOver={(event) => { if (event.dataTransfer.types?.includes?.('application/x-workspace2-block')) event.preventDefault(); }} onDrop={(event) => handleBlockDrop(event, block.id)} className={`flex cursor-grab items-center gap-3 rounded-xl border p-3 active:cursor-grabbing ${block.type === 'text' ? 'border-violet-700 bg-violet-950/20' : 'border-sky-700 bg-sky-950/20'}`}><GripVertical size={16} className="text-slate-500" /><span className="w-6 text-xs text-slate-400">{String(index + 1).padStart(2, '0')}</span><span className={`grid h-9 w-9 place-items-center rounded-lg ${block.type === 'text' ? 'bg-violet-800' : 'bg-sky-800'}`}>{block.type === 'text' ? <Type size={16} /> : <Film size={16} />}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{block.title}</p><p className="text-[10px] text-slate-400">{block.type === 'text' ? 'Bloco de texto' : `MÍDIA · ${formatDuration(block.duration || 0)}`}</p></div><button type="button" aria-label={`Remover bloco ${block.title}`} onClick={() => onRemoveBlock(block.id)} className="rounded p-2 text-slate-500 hover:bg-rose-950 hover:text-rose-300"><Trash2 size={15} /></button></article>)}</div>}
         </div>
       </main>
 

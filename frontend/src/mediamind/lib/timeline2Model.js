@@ -53,6 +53,32 @@ const replaceTracks = (document, tracks) => ({
   updatedAt: new Date().toISOString(),
 });
 
+function overwriteTrackClips(clips, incoming, fps) {
+  const frame = 1 / fps;
+  const incomingStart = incoming.start;
+  const incomingEnd = incoming.start + incoming.duration;
+  return clips.flatMap((clip) => {
+    const clipEnd = clip.start + clip.duration;
+    if (clipEnd <= incomingStart || clip.start >= incomingEnd) return [clip];
+    if (clip.start >= incomingStart && clipEnd <= incomingEnd) return [];
+    if (clip.start < incomingStart && clipEnd > incomingEnd) {
+      const leftDuration = incomingStart - clip.start;
+      const rightDuration = clipEnd - incomingEnd;
+      const left = { ...clip, duration: leftDuration, sourceOut: clip.sourceIn + leftDuration };
+      const rightSourceIn = clip.sourceIn + (incomingEnd - clip.start);
+      const right = { ...clip, id: `${clip.id}-overwrite-${Math.round(incomingEnd * fps)}`, start: incomingEnd, duration: rightDuration, sourceIn: rightSourceIn };
+      return [left, right].filter((item) => item.duration >= frame);
+    }
+    if (clip.start < incomingStart) {
+      const duration = incomingStart - clip.start;
+      return duration >= frame ? [{ ...clip, duration, sourceOut: clip.sourceIn + duration }] : [];
+    }
+    const delta = incomingEnd - clip.start;
+    const duration = clipEnd - incomingEnd;
+    return duration >= frame ? [{ ...clip, start: incomingEnd, duration, sourceIn: clip.sourceIn + delta }] : [];
+  });
+}
+
 export function createTimeline2Document({ id = 'timeline2-draft', name = 'Projeto sem título', fps = 30 } = {}) {
   return {
     id,
@@ -158,7 +184,7 @@ export function addMediaClip(document, media, { trackId, start = document.playhe
   const clipStart = Math.max(0, snapTime(document, Number(start) || 0));
   const tracks = document.tracks.map(cloneTrack);
   const baseId = String(media.id || `media-${Date.now()}`);
-  tracks[trackIndex].clips.push({
+  const incoming = {
     id: media.clipId || `${baseId}-${Date.now()}-${tracks[trackIndex].clips.length}`,
     assetId: media.id ?? null,
     name: media.name || 'Mídia sem título',
@@ -173,7 +199,9 @@ export function addMediaClip(document, media, { trackId, start = document.playhe
     origin: media.origin || 'project',
     properties: { opacity: 100, scale: 100, rotation: 0, x: 0, y: 0, volume: 0, speed: 1, ...(media.properties || {}) },
     selected: false,
-  });
+  };
+  tracks[trackIndex].clips = overwriteTrackClips(tracks[trackIndex].clips, incoming, document.fps);
+  tracks[trackIndex].clips.push(incoming);
   tracks[trackIndex].clips.sort((a, b) => a.start - b.start);
   return replaceTracks(document, tracks);
 }
@@ -220,7 +248,9 @@ export function moveClip(document, clipId, { start, trackId } = {}) {
   const tracks = document.tracks.map(cloneTrack);
   const [clip] = tracks[located.trackIndex].clips.splice(located.clipIndex, 1);
   const nextStart = Math.max(0, snapTime(document, Number(start) || 0, clipId));
-  tracks[destinationIndex].clips.push({ ...clip, trackId: destination.id, start: nextStart });
+  const incoming = { ...clip, trackId: destination.id, start: nextStart };
+  tracks[destinationIndex].clips = overwriteTrackClips(tracks[destinationIndex].clips, incoming, document.fps);
+  tracks[destinationIndex].clips.push(incoming);
   tracks[destinationIndex].clips.sort((a, b) => a.start - b.start);
   return replaceTracks(document, tracks);
 }

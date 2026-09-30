@@ -7,7 +7,7 @@ import Workspace2Script from '../components/workspace2/Workspace2Script';
 import Workspace2Timeline from '../components/workspace2/Workspace2Timeline';
 import Workspace2Export from '../components/workspace2/Workspace2Export';
 import Timeline2 from './Timeline2';
-import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, toggleSelectedAsset } from '../lib/workspace2Model';
+import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 
 export default function Workspace2() {
@@ -113,6 +113,7 @@ export default function Workspace2() {
     onAddAsset: (asset) => { if (!locked) setBlocks((items) => appendScriptBlock(items, asset)); },
     onAddText: (text) => { if (!locked) setBlocks((items) => appendTextBlock(items, text)); },
     onRemoveBlock: (id) => { if (!locked) setBlocks((items) => removeScriptBlock(items, id)); },
+    onReorderBlocks: (draggedId, targetId) => { if (!locked) setBlocks((items) => reorderScriptBlocks(items, draggedId, targetId)); },
     onStepChange: (step) => step === 'timeline' ? openTimeline2() : setActiveStep(step),
     project,
     onProjectChange: (field, value) => { if (!locked) setProject((current) => ({ ...current, [field]: value })); },
