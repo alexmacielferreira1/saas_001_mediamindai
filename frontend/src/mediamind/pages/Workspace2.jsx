@@ -7,6 +7,7 @@ import Workspace2Script from '../components/workspace2/Workspace2Script';
 import Workspace2Timeline from '../components/workspace2/Workspace2Timeline';
 import Workspace2Export from '../components/workspace2/Workspace2Export';
 import Timeline2 from './Timeline2';
+import UploadReceiptPanel from '../components/UploadReceiptPanel';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 
@@ -26,6 +27,7 @@ export default function Workspace2() {
   const [notice, setNotice] = useState('Projeto ativo · Não salvo');
   const [showPreview, setShowPreview] = useState(true);
   const [locked, setLocked] = useState(false);
+  const [uploadReceipts, setUploadReceipts] = useState([]);
   const importRef = useRef(null);
   const projectImportRef = useRef(null);
   const selectedAssets = useMemo(
@@ -81,6 +83,7 @@ export default function Workspace2() {
       setAssets((current) => [...normalized, ...current.filter((item) => !normalized.some((next) => next.id === item.id))]);
       setSelectedIds((current) => [...new Set([...current, ...normalized.map((item) => item.id)])]);
       setPreviewAssetId(normalized[0]?.id || null);
+      setUploadReceipts(normalized);
       setNotice(`${normalized.length} arquivo(s) enviados ao Acervo e selecionados para o projeto.`);
     } catch (error) { setNotice(error?.message || 'Falha ao enviar mídia para o Acervo.'); }
     event.target.value = '';
@@ -134,6 +137,7 @@ export default function Workspace2() {
         <div className="flex-1"><Workspace2Stepper activeStep={activeStep} onStepChange={(step) => step === 'timeline' ? openTimeline2() : setActiveStep(step)} selectedCount={selectedIds.length} onSave={saveProject} onReset={resetProject} /></div>
       </div>
       <div role="status" className="mb-3 min-h-5 text-right text-xs text-sky-300">{notice}</div>
+      <UploadReceiptPanel assets={uploadReceipts} />
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
         <button type="button" onClick={() => setActiveStep('search')} className={`w2-button ${activeStep === 'search' ? 'border-sky-500 bg-sky-500 text-slate-950' : ''}`}><PanelLeft size={14} /> Pesquisa</button>
         <button type="button" onClick={() => setShowPreview((value) => !value)} className={`w2-button ${showPreview ? 'border-sky-500 bg-sky-500 text-slate-950' : ''}`}><PanelRight size={14} /> Prévia</button>

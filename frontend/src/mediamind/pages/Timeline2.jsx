@@ -13,6 +13,7 @@ import {
   getActiveClips, getClipPropertiesAtTime, getTimelineDisplayTracks, getTimelineGeometry, pointerToTimelineTime, updateClipProperties, updateKeyframeCurve,
 } from '../lib/timeline2Model';
 import { CAPTION_PRESETS, captionPresetToProperties, getCaptionPreset } from '../lib/captionPresets';
+import UploadReceiptPanel from '../components/UploadReceiptPanel';
 
 const INITIAL_DOCUMENT = createTimeline2Document({ id: 'timeline2-local', name: 'Novo projeto MediaMind' });
 
@@ -59,6 +60,7 @@ export default function Timeline2({ embedded = false }) {
   const [exporting, setExporting] = useState(false);
   const [autoKeyframe, setAutoKeyframe] = useState(false);
   const [notice, setNotice] = useState('Importe um arquivo ou adicione uma mídia do acervo.');
+  const [uploadReceipts, setUploadReceipts] = useState([]);
   const fileInputRef = useRef(null);
   const mediaRefs = useRef(new Map());
   const pointerGestureRef = useRef(null);
@@ -107,6 +109,7 @@ export default function Timeline2({ embedded = false }) {
     setUploading(true);
     try {
       const uploaded = await Promise.all(accepted.map((file) => uploadMediaAsset(file)));
+      setUploadReceipts(uploaded);
       setAssets((current) => [...uploaded, ...current.filter((item) => !uploaded.some((next) => next.id === item.id))]);
       const imported = uploaded.map(assetToMedia);
       if (imported[0]) addToTimeline(imported[0]);
@@ -133,7 +136,9 @@ export default function Timeline2({ embedded = false }) {
       setPlaying(false);
       return;
     }
-    const startTime = document.playhead >= document.duration ? 0 : document.playhead;
+    const rangeStart = document.inPoint ?? 0;
+    const rangeEnd = document.outPoint ?? document.duration;
+    const startTime = document.playhead < rangeStart || document.playhead >= rangeEnd ? rangeStart : document.playhead;
     if (startTime !== document.playhead) updateTransient((current) => setPlayhead(current, startTime));
     playbackClockRef.current = { timelineTime: startTime, wallTime: Date.now() };
     setPlaying(true);
@@ -214,16 +219,17 @@ export default function Timeline2({ embedded = false }) {
     const timer = window.setInterval(() => {
       const clock = playbackClockRef.current;
       if (!clock) return;
-      const next = Math.min(document.duration, clock.timelineTime + ((Date.now() - clock.wallTime) / 1000));
+      const playbackEnd = document.outPoint ?? document.duration;
+      const next = Math.min(playbackEnd, clock.timelineTime + ((Date.now() - clock.wallTime) / 1000));
       updateTransient((current) => setPlayhead(current, next));
-      if (next >= document.duration) {
+      if (next >= playbackEnd) {
         mediaRefs.current.forEach((player) => player.pause());
         playbackClockRef.current = null;
         setPlaying(false);
       }
     }, 33);
     return () => window.clearInterval(timer);
-  }, [document.duration, playing, updateTransient]);
+  }, [document.duration, document.outPoint, playing, updateTransient]);
   useEffect(() => {
     if (!playing) return;
     activeClips.forEach((clip) => {
@@ -356,6 +362,8 @@ export default function Timeline2({ embedded = false }) {
         </div>
       </header>
 
+      <UploadReceiptPanel assets={uploadReceipts} />
+
       <div className="grid flex-1 grid-cols-[260px_minmax(500px,1fr)_280px] grid-rows-[minmax(300px,42vh)_1fr] gap-2 overflow-hidden">
         <aside className="w2-panel grid min-h-0 grid-cols-[48px_1fr] overflow-hidden">
           <nav aria-label="Módulos do editor" className="flex flex-col items-center gap-1 border-r border-slate-800 bg-slate-950/80 py-2">
@@ -467,7 +475,7 @@ export default function Timeline2({ embedded = false }) {
               <div key={track.id} data-track-id={track.id} data-testid={`timeline2-track-${track.id}`} className="flex h-12 border-b border-slate-800" style={{ width: `${128 + timelineGeometry.width}px` }}>
                 <div className="flex w-32 shrink-0 items-center gap-1 border-r border-slate-700 px-2"><span className="min-w-0 flex-1"><strong className="block text-xs uppercase">{track.id}</strong><small className="block truncate text-[9px] text-slate-500">{track.name}</small></span><button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'locked'))} aria-label={`${track.locked ? 'Destravar' : 'Travar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.locked ? <Lock size={11} /> : <Unlock size={11} />}</button>{track.kind === 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'muted'))} aria-label={`${track.muted ? 'Ativar' : 'Silenciar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.muted ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>}{track.kind !== 'audio' && <button type="button" onClick={() => commit((current) => toggleTrackState(current, track.id, 'hidden'))} aria-label={`${track.hidden ? 'Mostrar' : 'Ocultar'} ${track.name}`} className="text-slate-500 hover:text-white">{track.hidden ? <EyeOff size={11} /> : <Eye size={11} />}</button>}{track.userCreated && <button type="button" disabled={track.clips.length > 0} onClick={() => commit((current) => removeTrack(current, track.id))} aria-label={`Remover ${track.name}`} title={track.clips.length ? 'Remova os clipes antes de excluir a trilha' : 'Remover trilha'} className="text-slate-500 hover:text-rose-300 disabled:opacity-25"><Trash2 size={11} /></button>}</div>
                 <div data-track-canvas aria-label={`Área da faixa ${track.name}`} className={`relative shrink-0 ${track.hidden || track.muted ? 'opacity-35' : ''}`} onPointerDown={(event) => { if (event.target === event.currentTarget) movePlayheadFromPointer(event); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnTrack(event, track)} style={{ width: `${timelineGeometry.width}px` }}>
-                  {track.clips.map((clip) => <button key={clip.id} type="button" onPointerDown={(event) => startClipGesture(event, clip)} onPointerMove={updateClipGesture} onPointerUp={endClipGesture} onPointerCancel={endClipGesture} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover entre trilhas; use as alças para aparar" className={`group absolute top-1 h-10 touch-none cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span onPointerDown={(event) => startClipGesture(event, clip, 'start')} className="absolute inset-y-0 left-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span onPointerDown={(event) => startClipGesture(event, clip, 'end')} className="absolute inset-y-0 right-0 z-10 w-2 touch-none cursor-ew-resize bg-white/30 opacity-0 group-hover:opacity-100" /></button>)}
+                  {track.clips.map((clip) => <button key={clip.id} type="button" onPointerDown={(event) => startClipGesture(event, clip)} onPointerMove={updateClipGesture} onPointerUp={endClipGesture} onPointerCancel={endClipGesture} onClick={() => { setSelectedClipId(clip.id); if (activeTool === 'blade') commit((current) => splitClip(current, clip.id, current.playhead)); }} title="Arraste para mover entre trilhas; use as alças para aparar ou estender" className={`group absolute top-1 h-10 touch-none cursor-grab overflow-hidden rounded border px-3 text-left text-[10px] shadow active:cursor-grabbing ${trackColor[clip.kind]} ${selectedClipId === clip.id ? 'border-amber-300 ring-2 ring-amber-300/50' : 'border-white/10'}`} style={{ left: `${clip.start * timelineGeometry.pixelsPerSecond}px`, width: `${Math.max(8, clip.duration * timelineGeometry.pixelsPerSecond)}px` }}><span role="slider" aria-label={`Aparar início de ${clip.name}`} aria-valuenow={clip.start} tabIndex={0} onPointerDown={(event) => startClipGesture(event, clip, 'start')} className={`absolute inset-y-0 left-0 z-10 w-2 touch-none cursor-ew-resize bg-white/50 ${selectedClipId === clip.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} /><span className="block truncate font-bold">{clip.name}</span><span className="opacity-70">{formatTime(clip.duration)}</span><span role="slider" aria-label={`Aparar fim de ${clip.name}`} aria-valuenow={clip.start + clip.duration} tabIndex={0} onPointerDown={(event) => startClipGesture(event, clip, 'end')} className={`absolute inset-y-0 right-0 z-10 w-2 touch-none cursor-ew-resize bg-white/50 ${selectedClipId === clip.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} /></button>)}
                 </div>
               </div>
             ))}

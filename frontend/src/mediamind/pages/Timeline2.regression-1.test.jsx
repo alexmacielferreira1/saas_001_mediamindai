@@ -158,6 +158,26 @@ describe('Timeline 2 pointer regressions', () => {
     vi.useRealTimers();
   });
 
+  it('uses the same control for play and pause and respects sequence IN and OUT', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    let draft = addMediaClip(createTimeline2Document({ id: 'range-project' }), {
+      id: 'range-asset', clipId: 'range-clip', name: 'Faixa', kind: 'video', duration: 10,
+    }, { trackId: 'v1', start: 0 });
+    draft = { ...draft, playhead: 0, inPoint: 2, outPoint: 4 };
+    localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(draft));
+    render(<Timeline2 />);
+
+    const control = screen.getByRole('button', { name: 'Reproduzir' });
+    fireEvent.click(control);
+    expect(control).toHaveAccessibleName('Pausar');
+    expect(screen.getByLabelText('Playhead')).toHaveValue('2');
+    act(() => vi.advanceTimersByTime(2100));
+    expect(control).toHaveAccessibleName('Reproduzir');
+    expect(Number(screen.getByLabelText('Playhead').value)).toBeCloseTo(4, 1);
+    vi.useRealTimers();
+  });
+
   it('plays a timed sequence as black when its media source is temporarily unavailable', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));

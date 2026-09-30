@@ -134,4 +134,13 @@ describe('Timeline 2', () => {
 
     expect(screen.getByLabelText('Posição do clipe')).toHaveValue(10);
   });
+
+  it('exposes left and right trim handles as editor controls', async () => {
+    render(<Timeline2 />);
+    fireEvent.click(screen.getByRole('button', { name: /Acervo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar Entrevista real' }));
+
+    expect(screen.getByLabelText('Aparar início de Entrevista real')).toHaveAttribute('role', 'slider');
+    expect(screen.getByLabelText('Aparar fim de Entrevista real')).toHaveAttribute('role', 'slider');
+  });
 });

@@ -160,6 +160,7 @@ export function workspace2ToTimeline2({ project = {}, blocks = [], selectedAsset
       duration,
       sourceIn: 0,
       sourceOut: duration,
+      sourceDuration: duration,
       src: block.src || block.stream_url || null,
       mimeType: block.mimeType || block.mime_type || null,
       origin: block.origin || (block.assetId ? 'acervo' : 'workspace'),
@@ -194,6 +195,7 @@ export function addMediaClip(document, media, { trackId, start = document.playhe
     duration,
     sourceIn: 0,
     sourceOut: duration,
+    sourceDuration: Math.max(duration, Number(media.sourceDuration) || duration),
     src: media.src || null,
     mimeType: media.mimeType || null,
     origin: media.origin || 'project',
@@ -259,18 +261,26 @@ export function trimClip(document, clipId, { edge, time } = {}) {
   const located = locateClip(document, clipId);
   if (!located || located.track.locked) return document;
   const frame = 1 / document.fps;
-  const clipEnd = located.clip.start + located.clip.duration;
   const requested = snapTime(document, Number(time), clipId);
-  if (edge === 'start' && requested >= located.clip.start && requested <= clipEnd - frame) {
-    const delta = requested - located.clip.start;
+  const clipEnd = located.clip.start + located.clip.duration;
+  const sourceDuration = Math.max(located.clip.sourceOut, Number(located.clip.sourceDuration) || located.clip.sourceOut);
+  const neighbours = located.track.clips.filter((clip) => clip.id !== clipId);
+  const previousEnd = neighbours.filter((clip) => clip.start + clip.duration <= located.clip.start).reduce((latest, clip) => Math.max(latest, clip.start + clip.duration), 0);
+  const nextStart = neighbours.filter((clip) => clip.start >= clipEnd).reduce((earliest, clip) => Math.min(earliest, clip.start), Number.POSITIVE_INFINITY);
+  if (edge === 'start') {
+    const earliestSourceStart = Math.max(0, located.clip.start - located.clip.sourceIn);
+    const nextStartTime = Math.max(previousEnd, earliestSourceStart, Math.min(requested, clipEnd - frame));
+    const delta = nextStartTime - located.clip.start;
     const tracks = document.tracks.map(cloneTrack);
-    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, start: requested, duration: located.clip.duration - delta, sourceIn: located.clip.sourceIn + delta };
+    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, start: nextStartTime, duration: located.clip.duration - delta, sourceIn: located.clip.sourceIn + delta, sourceDuration };
     return replaceTracks(document, tracks);
   }
-  if (edge === 'end' && requested >= located.clip.start + frame && requested <= clipEnd) {
+  if (edge === 'end') {
+    const latestSourceEnd = located.clip.start + (sourceDuration - located.clip.sourceIn);
+    const nextEndTime = Math.max(located.clip.start + frame, Math.min(requested, latestSourceEnd, nextStart));
     const tracks = document.tracks.map(cloneTrack);
-    const duration = requested - located.clip.start;
-    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, duration, sourceOut: located.clip.sourceIn + duration };
+    const duration = nextEndTime - located.clip.start;
+    tracks[located.trackIndex].clips[located.clipIndex] = { ...located.clip, duration, sourceOut: located.clip.sourceIn + duration, sourceDuration };
     return replaceTracks(document, tracks);
   }
   return document;

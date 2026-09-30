@@ -95,6 +95,22 @@ describe('Timeline 2 document model', () => {
     expect(clips[1]).toMatchObject({ start: 6, duration: 4, sourceIn: 6, sourceOut: 10 });
   });
 
+  it('re-extends a trimmed clip up to its source bounds without overlapping neighbours', () => {
+    let base = workspace2ToTimeline2({ blocks: [
+      { id: 'a', title: 'A', type: 'media', duration: 10 },
+      { id: 'b', title: 'B', type: 'media', duration: 5 },
+    ] });
+    base = trimClip(base, 'a', { edge: 'start', time: 3 });
+    base = trimClip(base, 'a', { edge: 'end', time: 7 });
+
+    const extendedStart = trimClip(base, 'a', { edge: 'start', time: 1 });
+    const extended = trimClip(extendedStart, 'a', { edge: 'end', time: 14 });
+    const clip = extended.tracks[0].clips.find((item) => item.id === 'a');
+
+    expect(clip).toMatchObject({ start: 1, duration: 9, sourceIn: 1, sourceOut: 10, sourceDuration: 10 });
+    expect(clip.start + clip.duration).toBeLessThanOrEqual(extended.tracks[0].clips.find((item) => item.id === 'b').start);
+  });
+
   it('rejects edits on locked tracks and no-ops split at clip boundaries', () => {
     const base = workspace2ToTimeline2({ blocks: [{ id: 'a', title: 'A', type: 'media', duration: 10 }] });
     const locked = { ...base, tracks: base.tracks.map((track, index) => index === 0 ? { ...track, locked: true } : track) };
