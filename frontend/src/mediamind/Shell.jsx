@@ -55,7 +55,7 @@ export const NAV_GROUPS = [
 
 const MVP_LABELS = new Set([
   'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-  'Aguardando aprovação', 'Em aprovação', 'Finalizado', 'Acervo',
+  'Em aprovação', 'Finalizado', 'Acervo',
 ]);
 
 export function navigationForRole(role) {
