@@ -50,7 +50,11 @@ describe('materiais de gravação', () => {
 
     fireEvent.change(input, { target: { files: [file] } });
 
-    await waitFor(() => expect(uploadMediaAsset).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(uploadMediaAsset).toHaveBeenCalledWith(file, {
+      origin: 'recording',
+      project_id: 'gravacao-1',
+      recording_id: 'gravacao-1',
+    }));
     expect(legacyUpload).not.toHaveBeenCalled();
     expect(updateProjeto).toHaveBeenCalledWith('gravacao-1', {
       materiais: [expect.objectContaining({

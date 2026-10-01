@@ -38,6 +38,7 @@ def _base_query(tenant_id: UUID):
         .where(Membership.tenant_id == tenant_id)
     )
 
+
 def _summary(membership, user, profile, last_access_at) -> AdminUserSummary:
     return AdminUserSummary(
         id=user.id,
@@ -135,4 +136,3 @@ def suspend_admin_user(
         failed_login_attempts=user.failed_login_attempts,
         locked_until=user.locked_until,
     )
-
