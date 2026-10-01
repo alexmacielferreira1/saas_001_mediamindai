@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Check, Download, Film, GripVertical, MoreVertical, Play, Plus, Save, Search, Send, Trash2, Type } from 'lucide-react';
+import { Check, Download, FileText, Film, GripVertical, MoreVertical, Play, Plus, Save, Search, Send, Trash2, Type } from 'lucide-react';
 import { formatDuration, MOCK_SCRIPTS } from '../../data';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, filterWorkspaceAssets } from '../../lib/workspace2Model';
+
+const SCRIPT_TEMPLATES = ['Reportagem', 'Entrevista', 'Cabeça + off + sonora'];
 
 export default function Workspace2Script({
   assets = [], selectedAssets = [], selectedIds = [], blocks = [], onAddAsset = () => {}, onRemoveBlock = () => {}, onReorderBlocks = () => {},
@@ -31,6 +33,10 @@ export default function Workspace2Script({
     onProjectChange('title', script.title);
     if (script.project_name) onProjectChange('program', script.project_name);
     onNotice(`Roteiro “${script.title}” aberto`);
+  };
+  const applyTemplate = (template) => {
+    onProjectChange('template', template);
+    onNotice(`Modelo de roteiro “${template}” aplicado`);
   };
   const handleDrop = (event) => {
     event.preventDefault();
@@ -84,6 +90,10 @@ export default function Workspace2Script({
       </main>
 
       <aside aria-label="Lista de roteiros" className="w2-panel overflow-hidden">
+        <section className="border-b border-slate-800 p-3">
+          <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-bold">Modelos de roteiro</h2><span className="rounded-full bg-emerald-950 px-2 py-1 text-[9px] font-bold uppercase text-emerald-300">Clicáveis</span></div>
+          <div className="grid gap-2">{SCRIPT_TEMPLATES.map((name) => <button type="button" aria-pressed={project.template === name} onClick={() => applyTemplate(name)} key={name} className={`rounded-xl border p-3 text-left transition hover:border-sky-500 ${project.template === name ? 'border-sky-400 bg-sky-950/40' : 'border-slate-800 bg-slate-950/50'}`}><FileText className="mb-2 text-sky-400" size={20} /><p className="text-sm font-semibold text-slate-200">{name}</p><p className="mt-1 text-[11px] text-sky-400">Usar modelo</p></button>)}</div>
+        </section>
         <div className="border-b border-slate-800 px-4 py-3 text-base font-bold">Roteiros ({MOCK_SCRIPTS.length})</div>
         <div className="p-3"><button type="button" className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950"><Plus size={15} /> Criar novo roteiro</button></div>
         <div className="space-y-2 px-3">{MOCK_SCRIPTS.map((script) => <button type="button" aria-label={`Abrir roteiro ${script.title}`} aria-pressed={activeScriptId === script.id} onClick={() => openScript(script)} key={script.id} className={`block w-full rounded-xl border p-3 text-left ${activeScriptId === script.id ? 'border-sky-400 bg-sky-950/30' : 'border-slate-700 bg-slate-950/40 hover:border-slate-500'}`}><div className="flex items-start justify-between"><div><h3 className="text-sm font-bold">{script.title}</h3><p className="text-xs text-slate-400">{script.project_name}</p></div><MoreVertical size={15} /></div><div className="mt-4 flex items-center justify-between text-[10px]"><span className={`rounded-full px-2 py-1 ${script.status === 'approved' ? 'bg-emerald-950 text-emerald-300' : 'bg-slate-800 text-slate-300'}`}>{script.status === 'approved' ? 'Aprovado' : script.status === 'draft' ? 'Rascunho' : 'Em revisão'}</span><span>{script.clip_count} blocos · {script.duration_label}</span></div></button>)}</div>

@@ -70,6 +70,21 @@ describe('Workspace 2 script step', () => {
     expect(onAddAsset).toHaveBeenCalledWith(interview);
   });
 
+  it('offers the preserved script templates inside the workspace', () => {
+    const onProjectChange = vi.fn();
+    const onNotice = vi.fn();
+    render(<Workspace2Script project={{ template: '' }} onProjectChange={onProjectChange} onNotice={onNotice} />);
+
+    expect(screen.getByRole('heading', { name: 'Modelos de roteiro' })).toBeInTheDocument();
+    expect(screen.getByText('Clicáveis')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reportagem Usar modelo/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Entrevista Usar modelo/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Cabeça \+ off \+ sonora Usar modelo/i }));
+
+    expect(onProjectChange).toHaveBeenCalledWith('template', 'Cabeça + off + sonora');
+    expect(onNotice).toHaveBeenCalledWith('Modelo de roteiro “Cabeça + off + sonora” aplicado');
+  });
+
   it('drags a script card above another card to change the order', () => {
     const onReorderBlocks = vi.fn();
     const blocks = [

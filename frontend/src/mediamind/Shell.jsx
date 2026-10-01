@@ -25,7 +25,6 @@ export const NAV_GROUPS = [
       { to: '/corp?tab=producao&sub=overview', label: 'Visão geral', icon: LayoutDashboard, sub: 'overview' },
       { to: '/corp?tab=producao&sub=ingest', label: 'Ingest', icon: Layers, sub: 'ingest' },
       { to: '/corp?tab=producao&sub=workspace2', label: 'Workspace 2', icon: PanelsTopLeft, sub: 'workspace2' },
-      { to: '/roteiro2', label: 'Roteiro 2', icon: FileText },
       { to: '/corp?tab=producao&sub=rascunhos', label: 'Rascunhos', icon: FileText, sub: 'rascunhos' },
       { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
       { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },

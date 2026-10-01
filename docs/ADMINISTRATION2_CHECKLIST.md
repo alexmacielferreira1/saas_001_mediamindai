@@ -19,10 +19,11 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 | Administração de Acessos e Telas | Preservar | Incorporada como aba Acessos por Função |
 | Gestão, Auditoria e Processamentos | Preservar | Sem alteração estrutural |
 | Administração 2 | Adicionar | Rota paralela e navegação própria |
-| Usuários e detalhe | Completar | API tenant-scoped, lista, busca, filtro e detalhe implementados |
+| Usuários e detalhe | Parcial | API tenant-scoped, lista, busca, filtro e detalhe inicial; ciclo completo ainda pendente |
 | Ciclo de estado de conta | Completar | Primeiro evento `active → suspended` persistido e auditado |
-| Perfis, permissões com escopo, equipes e registros de tela | Adicionar | Próximos lotes |
-| Formulários, importações e segurança completa | Adicionar | Próximos lotes |
+| Perfis, permissões com escopo e equipes | Parcial | Prévia conectada ao que já existe; modelo relacional completo ainda pendente |
+| Telas/módulos, cadastros, integrações e configurações | Estruturar | Prévia navegável, sem persistência própria nem autorização backend |
+| Formulários, importações e segurança completa | Parcial | Prévia estrutural; fluxos reais e persistência ainda pendentes |
 | Roteiro atual | Preservar | Intocado |
 | Roteiro 2 | Adicionar | Primeira prévia visual isolada disponível em `/roteiro2` |
 
@@ -42,11 +43,11 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 - [x] Incorporar Acervo 2 e Gestão 2 na navegação paralela, preservando as rotas originais.
 - [x] Aplicar o sufixo 2 às áreas paralelas para evitar confusão.
 - [x] Aproximar Visão Geral, Usuários e detalhe da linguagem visual das referências.
-- [x] Criar previews visuais honestos para áreas ainda sem integração, com ações desabilitadas.
+- [x] Criar previews visuais identificadas como não integradas; isso não equivale a funcionalidade concluída.
 - [x] Criar `/roteiro2` e botão lateral separado de Workspace 2.
 - [x] Conectar o Roteiro 2 ao acervo real do tenant, mantendo criação e edição desabilitadas até existir persistência própria.
 - [x] Ativar Novo Roteiro 2, modelos, seleção de mídia, importação JSON e persistência de rascunhos em registro tenant-scoped `Script`.
-- [x] Transformar abas, itens e painéis das prévias administrativas em controles selecionáveis, eliminando elementos com aparência de botão que não respondiam.
+- [x] Tornar navegáveis as seleções locais das prévias; comandos de gravação continuam indisponíveis até existir backend real.
 - [x] Reorganizar a navegação paralela em nove áreas administrativas centrais e seis áreas relacionadas, com aba persistida na URL.
 - [x] Acrescentar cabeçalho e indicadores compactos à lista de usuários para aproximá-la da referência visual.
 - [x] Conectar Perfis e Funções 2 aos grupos reais, usuários vinculados e permissões do tenant.
@@ -59,6 +60,7 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 - [ ] Repetir suíte frontend completa sem concorrência; a execução teve 197 aprovados e 3 timeouts, todos verdes na reexecução isolada.
 - [x] Executar smoke com PostgreSQL/API disponíveis.
 - [x] Iniciar a convergência visual do Roteiro 2 com biblioteca identificada e preview usando o stream real de vídeo, imagem ou áudio do acervo.
+- [x] Substituir os placeholders vazios de Telas e Módulos, Cadastros, Integrações e Configurações por prévias estruturadas e navegáveis.
 
 ## Próximo ponto exato
 
@@ -70,7 +72,7 @@ Concluir o detalhe do usuário com reativação e revogação de sessões; em se
 - Alembic reconhece `0008_admin_user_status` como head.
 - Migration local aplicada após restaurar o PostgreSQL local.
 - Validação funcional: `/administration2` carregou 34 usuários do tenant e `/roteiro2` passou a consumir títulos, programa, duração, tipo e estado do acervo real.
-- Administração 2, Acervo 2, Gestão 2 e Roteiro 2 continuam como prévias paralelas; nenhuma rota original foi substituída.
+- Administração 2, Acervo 2, Gestão 2 e Roteiro 2 continuam como prévias paralelas; nenhuma rota original foi substituída. Prévia visual não significa implementação funcional completa.
 - O processo em `5174` foi confirmado como o worktree paralelo `.worktrees/mediamind-mvp`; ele não foi alterado nem encerrado.
 
 ## Pendências principais

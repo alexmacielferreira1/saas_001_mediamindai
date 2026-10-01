@@ -22,6 +22,7 @@ vi.mock('../components/corp/roles/AdminAcessosPage', () => ({
 }));
 
 import Administration2 from './Administration2';
+import { ApiError } from '../../api/httpClient';
 
 const USER = {
   id: 'user-1',
@@ -61,6 +62,13 @@ describe('Administration2 preview', () => {
     expect(screen.getByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
     expect(await screen.findByText('Alex Maciel Ferreira')).toBeInTheDocument();
+  });
+
+  it('does not call the API unavailable when only the demo session lacks authentication', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/sessão local de demonstração/i)).toBeInTheDocument();
+    expect(screen.queryByText(/API indisponível/i)).not.toBeInTheDocument();
   });
 
   it('opens user detail and persists suspension only after confirmation', async () => {
@@ -135,5 +143,18 @@ describe('Administration2 preview', () => {
     if (tab !== 'Visão Geral') fireEvent.click(screen.getByRole('button', { name: tab }));
     expect(await screen.findByRole('heading', { name: firstLandmark })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: secondLandmark })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Telas e Módulos 2', 'Registro de telas e módulos', 'Hierarquia do produto'],
+    ['Cadastros 2', 'Cadastros administrativos', 'Entidades cadastradas'],
+    ['Integrações 2', 'Integrações', 'Saúde das integrações'],
+    ['Configurações 2', 'Configurações administrativas', 'Identidade da organização'],
+  ])('renders a structured %s screen instead of an empty placeholder', async (tab, heading, landmark) => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: tab }));
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
+    expect(screen.queryByText('Área em preparação')).not.toBeInTheDocument();
   });
 });

@@ -124,7 +124,10 @@ export default function Administration2() {
       {active === 'forms' && <FormsPreview />}
       {active === 'imports' && <ImportsPreview />}
       {active === 'security' && <SecurityPreview users={payload?.items || []} />}
-      {!['overview', 'users', 'archive', 'management', 'access', 'profiles', 'permissions', 'teams', 'forms', 'imports', 'security'].includes(active) && <Preparing tab={ALL_TABS.find((tab) => tab.key === active)?.label} />}
+      {active === 'registry' && <RegistryPreview />}
+      {active === 'records' && <RecordsPreview />}
+      {active === 'integrations' && <IntegrationsPreview />}
+      {active === 'settings' && <SettingsPreview />}
     </div>
   );
 }
@@ -349,6 +352,51 @@ function ImportsPreview() {
 function SecurityPreview({ users }) {
   const blocked = users.filter((user) => user.status === 'blocked').length;
   return <div className="space-y-4"><PageLead title="Segurança" description="Políticas, sessões e eventos de autenticação." /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><DemoMetric label="MFA ativo" value="—" /><DemoMetric label="Usuários bloqueados" value={blocked} tone={blocked ? 'rose' : 'emerald'} /><DemoMetric label="Convites pendentes" value={users.filter((user) => user.status === 'invited').length} tone="amber" /><DemoMetric label="Sessões ativas" value="—" /><DemoMetric label="Tentativas (24h)" value="—" /></div><div className="grid gap-4 xl:grid-cols-2"><Panel title="Autenticação em duas etapas (MFA)"><div className="space-y-2">{['Superadmin', 'Administrador', 'Gestor de Acervo', 'Usuário padrão'].map((role, index) => <div key={role} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-3"><span>{role}</span><Badge tone={index < 2 ? 'pending' : 'info'}>{index < 2 ? 'Configuração pendente' : 'Opcional'}</Badge></div>)}</div></Panel><Panel title="Sessões ativas"><EmptyState icon={LockKeyhole} title="Sessões ainda não integradas" description="A visualização será ativada quando o endpoint de sessões estiver disponível." /></Panel></div><div className="grid gap-4 xl:grid-cols-2"><Panel title="Regras de bloqueio e proteção"><SecurityLine label="Bloqueio por tentativas" value="Não integrado" /><SecurityLine label="Tempo de bloqueio" value="Não integrado" /><SecurityLine label="Notificar administrador" value="Não integrado" /></Panel><Panel title="Histórico de segurança"><DemoTable headers={['Data', 'Evento', 'Usuário']} rows={[["Hoje", 'Auditoria operacional', 'sistema'], ['—', 'MFA', 'não integrado'], ['—', 'Sessões', 'não integrado']]} /></Panel></div></div>;
+}
+
+const SCREEN_TREE = [
+  ['Produção', '6 módulos', 'Workspace, Aprovação e Publicações'],
+  ['Acervo', '3 módulos', 'Arquivos, Usuários e Sistema'],
+  ['Gestão', '4 módulos', 'Visão Geral, Relatórios, Processamentos e Auditoria'],
+  ['Administração', '11 módulos', 'Usuários, acessos, equipes e governança'],
+];
+
+function RegistryPreview() {
+  const [selected, setSelected] = useState('Produção');
+  const selectedItem = SCREEN_TREE.find(([name]) => name === selected) || SCREEN_TREE[0];
+  return <div className="space-y-4"><PageLead title="Registro de telas e módulos" description="Mapa estrutural de produtos, módulos, telas, seções e ações controláveis." /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Produtos" value="1" /><DemoMetric label="Módulos mapeados" value="24" /><DemoMetric label="Telas catalogadas" value="68" /><DemoMetric label="Ações identificadas" value="142" /></div><div className="grid gap-4 xl:grid-cols-[360px_1fr]"><Panel title="Hierarquia do produto"><div className="rounded-lg border border-sky-900/70 bg-sky-950/20 p-3"><p className="font-semibold text-sky-200">MediaMind AI</p><p className="text-xs text-slate-500">Produto raiz · estrutura em validação</p></div><div className="mt-3 space-y-2">{SCREEN_TREE.map(([name, count, description]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`w-full rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-sky-800'}`}><div className="flex justify-between gap-3"><strong>{name}</strong><Badge tone="info">{count}</Badge></div><p className="mt-1 text-xs text-slate-500">{description}</p></button>)}</div></Panel><div className="space-y-4"><Panel title={`${selectedItem[0]} · estrutura selecionada`} right={<Badge tone="pending">Não persistido</Badge>}><div className="grid gap-3 sm:grid-cols-3"><DemoMetric label="Telas" value={selected === 'Administração' ? '15' : '8'} /><DemoMetric label="Seções e widgets" value={selected === 'Administração' ? '46' : '23'} /><DemoMetric label="Ações" value={selected === 'Administração' ? '39' : '18'} /></div></Panel><Panel title="Mapa de seções e ações"><DemoTable headers={['Nível', 'Identificador', 'Visibilidade', 'Ações']} rows={[["Módulo", selected, 'Herdada', 'Acessar'], ['Tela', selected === 'Produção' ? 'Workspace' : 'Visão Geral', 'Herdada', 'Visualizar, editar'], ['Seção', 'Painel principal', 'Herdada', 'Visualizar'], ['Widget', 'Indicadores', 'Exceção pendente', 'Visualizar, exportar']]} /><p className="mt-3 text-xs text-amber-300">Visibilidade e autorização de ação serão persistidas separadamente; esta tela ainda não altera permissões reais.</p></Panel></div></div></div>;
+}
+
+const RECORD_ENTITIES = [
+  ['Pessoa', '34', 'Usuários e contatos', 'Parcial'], ['Programa', '12', 'Produção editorial', 'Mapeado'],
+  ['Equipe', '7', 'Estrutura organizacional', 'Parcial'], ['Biblioteca', '6', 'Acervo', 'Mapeado'],
+  ['Definição de formulário', '9', 'Administração', 'Planejado'],
+];
+
+function RecordsPreview() {
+  const [selected, setSelected] = useState('Pessoa');
+  return <div className="space-y-4"><PageLead title="Cadastros administrativos" description="Catálogo das entidades compartilhadas e seus vínculos com os módulos." /><PreviewNotice /><div className="grid gap-4 xl:grid-cols-[420px_1fr]"><Panel title="Entidades cadastradas"><div className="space-y-2">{RECORD_ENTITIES.map(([name, count, domain, status]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`w-full rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-sky-800'}`}><div className="flex items-center justify-between"><strong>{name}</strong><span className="text-xl font-bold text-sky-300">{count}</span></div><div className="mt-1 flex items-center justify-between text-xs text-slate-500"><span>{domain}</span><span>{status}</span></div></button>)}</div></Panel><div className="space-y-4"><Panel title={`${selected} · definição`} right={<Badge tone="pending">Catálogo preliminar</Badge>}><div className="grid gap-3 sm:grid-cols-3"><DemoMetric label="Registros" value={RECORD_ENTITIES.find(([name]) => name === selected)?.[1] || '—'} /><DemoMetric label="Campos" value="8" /><DemoMetric label="Vínculos" value="3" /></div></Panel><Panel title="Campos e governança"><DemoTable headers={['Campo', 'Tipo', 'Obrigatório', 'Fonte']} rows={[["Nome", 'Texto', 'Sim', 'Cadastro'], ['Identificador', 'UUID', 'Sim', 'Sistema'], ['Status', 'Enum', 'Sim', 'Workflow'], ['Observações', 'Texto longo', 'Não', 'Cadastro']]} /><div className="mt-4 grid gap-3 sm:grid-cols-2"><SecurityLine label="Escopo do tenant" value="Obrigatório" /><SecurityLine label="Auditoria append-only" value="Planejada" /><SecurityLine label="Exclusão lógica" value="Planejada" /><SecurityLine label="Validação no servidor" value="Pendente" /></div></Panel></div></div></div>;
+}
+
+const INTEGRATIONS = [
+  ['API MediaMind', 'Interna', 'Endpoint local verificado'], ['PostgreSQL / Neon', 'Dados', 'Configuração não exibida'],
+  ['Armazenamento', 'Mídia', 'Estado não verificado'], ['Transcrição', 'IA', 'Estado não verificado'],
+  ['OCR', 'IA', 'Estado não verificado'], ['Redes sociais', 'Publicação', 'Não integradas'],
+];
+
+function IntegrationsPreview() {
+  const [selected, setSelected] = useState('API MediaMind');
+  return <div className="space-y-4"><PageLead title="Integrações" description="Inventário de conexões internas e externas, credenciais e sincronizações." /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-3"><DemoMetric label="Catalogadas" value="6" /><DemoMetric label="Verificadas nesta tela" value="0" tone="amber" /><DemoMetric label="Com monitoramento real" value="0" tone="rose" /></div><div className="grid gap-4 xl:grid-cols-[460px_1fr]"><Panel title="Saúde das integrações"><div className="space-y-2">{INTEGRATIONS.map(([name, type, status]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-sky-800'}`}><span><strong className="block">{name}</strong><span className="text-xs text-slate-500">{type}</span></span><Badge tone={status.includes('Não') || status.includes('não') ? 'pending' : 'info'}>{status}</Badge></button>)}</div></Panel><div className="space-y-4"><Panel title={selected} right={<Badge tone="pending">Somente inventário</Badge>}><dl className="grid gap-3 text-sm sm:grid-cols-2"><Info label="Ambiente">Não exposto</Info><Info label="Credenciais">Protegidas / não exibidas</Info><Info label="Última verificação">Não executada</Info><Info label="Responsável">A definir</Info></dl></Panel><Panel title="Eventos e sincronização"><EmptyState icon={Activity} title="Telemetria ainda não conectada" description="Quando houver endpoint de saúde e auditoria, esta área mostrará falhas, latência, tentativas e última sincronização reais." /></Panel></div></div></div>;
+}
+
+function SettingsPreview() {
+  const [section, setSection] = useState('Identidade');
+  const sections = ['Identidade', 'Localização', 'Aparência', 'Notificações', 'Governança'];
+  return <div className="space-y-4"><PageLead title="Configurações administrativas" description="Parâmetros organizacionais que afetam toda a experiência do tenant." /><PreviewNotice /><div className="grid gap-4 xl:grid-cols-[280px_1fr]"><Panel title="Seções"> <div className="space-y-2">{sections.map((item) => <button type="button" key={item} onClick={() => setSection(item)} className={`w-full rounded-lg border px-3 py-3 text-left text-sm ${section === item ? 'border-sky-500 bg-sky-950/30 text-sky-200' : 'border-slate-800 text-slate-400 hover:border-sky-800'}`}>{item}</button>)}</div></Panel><div className="space-y-4"><Panel title="Identidade da organização" right={<Badge tone="pending">Leitura preliminar</Badge>}><div className="grid gap-4 sm:grid-cols-2"><ReadOnlyField label="Nome da organização" value="MediaMind AI" /><ReadOnlyField label="Identificador do tenant" value="Oculto nesta prévia" /><ReadOnlyField label="Seção ativa" value={section} /><ReadOnlyField label="Estado" value="Aguardando API de configurações" /></div></Panel><Panel title={`${section} · parâmetros`}><div className="grid gap-3 sm:grid-cols-2"><SecurityLine label="Fuso horário" value="America/Sao_Paulo" /><SecurityLine label="Idioma" value="Português (Brasil)" /><SecurityLine label="Formato de data" value="DD/MM/AAAA" /><SecurityLine label="Persistência" value="Não integrada" /></div><p className="mt-4 rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-300">Campos permanecem somente leitura até existir autorização, validação, persistência e auditoria no backend.</p></Panel></div></div></div>;
+}
+
+function ReadOnlyField({ label, value }) {
+  return <label className="text-xs text-slate-500">{label}<input readOnly value={value} className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300" /></label>;
 }
 
 function DemoTable({ headers, rows }) {
