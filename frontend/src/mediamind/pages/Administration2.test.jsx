@@ -46,7 +46,7 @@ describe('Administration2 preview', () => {
   it('shows the parallel preview and loads real tenant users', async () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     expect(screen.getByText('Administração 2')).toBeInTheDocument();
-    expect(await screen.findByText('Ações administrativas')).toBeInTheDocument();
+    expect(await screen.findByText('Ações rápidas')).toBeInTheDocument();
     expect(screen.getByText('Alertas administrativos')).toBeInTheDocument();
     expect(screen.getByText('Status de segurança')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
@@ -114,5 +114,17 @@ describe('Administration2 preview', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
     expect(screen.getByText(/dados de demonstração visual/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Visão Geral', 'Ações rápidas', 'Últimas ações administrativas'],
+    ['Usuários', 'Convites pendentes', 'Acessos expirando'],
+    ['Perfis e Funções', 'Módulos liberados', 'Matriz resumida de permissões'],
+    ['Permissões', 'Resumo do perfil', 'Alterações recentes'],
+  ])('renders the main reference landmarks for %s', async (tab, firstLandmark, secondLandmark) => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    if (tab !== 'Visão Geral') fireEvent.click(screen.getByRole('button', { name: tab }));
+    expect(await screen.findByRole('heading', { name: firstLandmark })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: secondLandmark })).toBeInTheDocument();
   });
 });
