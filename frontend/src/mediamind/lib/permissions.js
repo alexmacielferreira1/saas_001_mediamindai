@@ -13,6 +13,7 @@ import { effectiveTabsForUser } from './roleCatalog';
 export const ROLE_CORP_ACCESS = {
   superadmin: '*',
   admin: '*',
+  mvp: ['producao'],
   producer: ['producao'],
   editor: ['editor_video'],
   cedoc: ['cedoc'],

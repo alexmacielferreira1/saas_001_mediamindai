@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendScriptBlock, appendTextBlock, removeScriptBlock, toggleSelectedAsset } from './workspace2Model';
+import { appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from './workspace2Model';
 
 describe('Workspace 2 shared state', () => {
   it('adds and removes a selected asset without duplicates', () => {
@@ -29,5 +29,12 @@ describe('Workspace 2 shared state', () => {
     expect(appendTextBlock([], 'Abertura do jornal')).toEqual([
       expect.objectContaining({ type: 'text', title: 'Abertura do jornal', text: 'Abertura do jornal' }),
     ]);
+  });
+
+  it('reorders a dragged block before the drop target without mutating the source', () => {
+    const blocks = [{ id: 'one' }, { id: 'two' }, { id: 'three' }];
+    const reordered = reorderScriptBlocks(blocks, 'three', 'one');
+    expect(reordered.map((block) => block.id)).toEqual(['three', 'one', 'two']);
+    expect(blocks.map((block) => block.id)).toEqual(['one', 'two', 'three']);
   });
 });

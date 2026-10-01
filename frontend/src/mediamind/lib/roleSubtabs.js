@@ -24,8 +24,8 @@ export const ALL_SUBTABS = [
   { id: 'agendamentos', name: 'Agendamentos' },
   { id: 'gravacoes', name: 'Gravações' },
   { id: 'em_edicao', name: 'Edição' },
-  { id: 'aguardando_aprovacao', name: 'Aguardando aprovação' },
-  { id: 'em_aprovacao', name: 'Em aprovação' },
+  { id: 'aguardando_aprovacao', name: 'Alteração' },
+  { id: 'em_aprovacao', name: 'Em revisão' },
   { id: 'finalizado', name: 'Finalizado' },
   { id: 'redes_sociais', name: 'Redes sociais' },
   { id: 'para_publicar', name: 'Para publicação' },
@@ -64,9 +64,14 @@ export const ALL_SUBTABS = [
 const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'workspace2', 'roteiro'];
 const OV = ['overview'];
 const VG = ['visao_geral'];
+export const MVP_SUBTABS = [
+  'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+  'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
+];
 
 export const ROLE_SUBTABS = {
   admin: null,
+  mvp: MVP_SUBTABS,
   producer: [...OV, 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao', 'aguardando_aprovacao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'para_publicar', 'publicado', 'analytics', ...COMMON_IDS],
   editor: [...VG, 'agendamentos', 'gravacoes', 'em_edicao', 'em_aprovacao', 'finalizado', 'redes_sociais', 'publicacoes', 'analytics', ...COMMON_IDS],
   videomaker: [...VG, 'agendamentos', 'gravacoes', ...COMMON_IDS],

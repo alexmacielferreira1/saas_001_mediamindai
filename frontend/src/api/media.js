@@ -10,9 +10,14 @@ export async function listMediaAssets() {
   return (await request(`${mediaPrefix()}/assets`)).assets;
 }
 
-export function uploadMediaAsset(file) {
+export function uploadMediaAsset(file, metadata = {}) {
   const body = new FormData();
   body.append('file', file);
+  for (const key of ['origin', 'project_id', 'recording_id']) {
+    if (metadata[key] !== undefined && metadata[key] !== null && metadata[key] !== '') {
+      body.append(key, String(metadata[key]));
+    }
+  }
   return request(`${mediaPrefix()}/assets`, { method: 'POST', body });
 }
 

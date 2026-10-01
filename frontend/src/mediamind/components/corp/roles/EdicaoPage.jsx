@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, MessageSquare, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useProducaoProjetos, addProjeto, updateProjeto, transicionar } from '../../../lib/producaoStore';
@@ -12,9 +12,9 @@ const EDICAO_STATUS = [
   { value: 'rascunho_corte', label: 'Rascunho de corte' },
   { value: 'corte_fino', label: 'Corte fino' },
   { value: 'revisao_interna', label: 'Revisão interna' },
-  { value: 'pronto_para_aprovacao', label: 'Pronto p/ aprovação' },
+  { value: 'pronto_para_aprovacao', label: 'Pronto para revisão' },
 ];
-const STATUS_LABEL = { rascunho_corte: 'Rascunho de corte', corte_fino: 'Corte fino', revisao_interna: 'Revisão interna', pronto_para_aprovacao: 'Pronto p/ aprovação' };
+const STATUS_LABEL = { rascunho_corte: 'Rascunho de corte', corte_fino: 'Corte fino', revisao_interna: 'Revisão interna', pronto_para_aprovacao: 'Pronto para revisão' };
 
 function inputCls() {
   return 'w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500';
@@ -28,7 +28,8 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   const { toast } = useToast();
   const editorName = user?.name || 'Editor';
   const emEdicao = projetos.filter((p) => ['para_editar', 'em_edicao', 'aguardando_aprovacao', 'aguardando'].includes(p.etapa));
-  const [selId, setSelId] = useState(emEdicao[0]?.id ?? null);
+  const initialProject = emEdicao.find((project) => laneForEditingProject(project) === initialLane) || emEdicao[0];
+  const [selId, setSelId] = useState(initialProject?.id ?? null);
   const sel = emEdicao.find((p) => p.id === selId) || emEdicao[0] || null;
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteObs, setAjusteObs] = useState('');
@@ -55,16 +56,10 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
     toast({ title: 'Ajuste solicitado ao videomaker', description: 'O projeto voltou pra Gravação com a observação.' });
   }
 
-  function pedirRevisaoProdutor() {
-    updateProjeto(sel.id, { revisao_intermediaria: true });
-    transicionar(sel.id, 'aguardando_aprovacao', { quem: editorName, obs: 'Revisão intermediária do produtor solicitada' });
-    toast({ title: 'Revisão do produtor solicitada', description: 'O projeto foi para Aguardando aprovação.' });
-  }
-
   function enviarParaAprovacao() {
     if (!sel) return;
-    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação' });
-    toast({ title: 'Versão enviada para Em aprovação', description: 'A entrega saiu da fila de espera e já está disponível para revisão.' });
+    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão' });
+    toast({ title: 'Versão enviada para Em revisão', description: 'A entrega já está disponível para conferência.' });
   }
 
   function moveToLane(projectId, targetLane) {
@@ -119,7 +114,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           { label: 'Na fila de edição', value: emEdicao.length, Icon: Scissors, tone: 'text-sky-300' },
           { label: 'Com prazo definido', value: comPrazo, Icon: Clock3, tone: 'text-violet-300' },
           { label: 'Em revisão interna', value: emRevisao, Icon: CircleAlert, tone: 'text-amber-300' },
-          { label: 'Prontas para aprovação', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
+          { label: 'Prontas para revisão', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
         ].map(({ label, value, Icon, tone }) => (
           <div key={label} className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 last:border-b-0 sm:border-r xl:border-b-0">
             <Icon size={15} className={tone} />
@@ -144,8 +139,8 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           {[
             ['para_editar', 'Para editar', queueCounts.para_editar],
             ['em_edicao', 'Em edição', queueCounts.em_edicao],
-            ['aguardando', 'Aguardando aprovação', queueCounts.aguardando],
-          ].map(([id, label, count]) => <button key={id} onClick={() => setQueueFilter(id)} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();moveToLane(e.dataTransfer.getData('text/plain'),id);}} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
+            ['aguardando', 'Alteração', queueCounts.aguardando],
+          ].map(([id, label, count]) => <button key={id} onClick={() => { setQueueFilter(id); const first = emEdicao.find((project) => laneForEditingProject(project) === id); if (first) setSelId(first.id); }} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();moveToLane(e.dataTransfer.getData('text/plain'),id);}} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
         </div>
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
@@ -154,11 +149,10 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           const project = emEdicao.find((item) => String(item.id) === String(id));
           const laneIndex = project ? EDITING_LANES.indexOf(laneForEditingProject(project)) : -1;
           const target = EDITING_LANES[laneIndex + dir];
-          if (target) moveToLane(id, target);
-          else if (project && dir > 0 && laneIndex === EDITING_LANES.length - 1) {
-            transicionar(project.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para aprovação pela fila de edição' });
-            toast({ title: 'Versão enviada para Em aprovação', description: 'A entrega saiu de Aguardando aprovação e entrou na revisão.' });
-          }
+          if (project && dir > 0 && laneIndex >= EDITING_LANES.indexOf('em_edicao')) {
+            transicionar(project.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão pela fila de edição' });
+            toast({ title: 'Versão enviada para Em revisão', description: 'A entrega entrou na conferência.' });
+          } else if (target) moveToLane(id, target);
         }} disableBack={disableBack} className="flex-1 min-h-0">
           <div className="h-full overflow-y-auto">
             {filteredQueue.length === 0 ? (
@@ -202,7 +196,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                   ['Processamento', '16/09/2026 09:12'],
                   ['Para editar', '17/09/2026 11:05'],
                   ['Em edição', '18/09/2026 10:23'],
-                  ['Aguardando aprovação', '—'],
+                  ['Em revisão', '—'],
                 ].map(([label, date], index) => <div key={label} className="relative z-10 text-center"><span className={`mx-auto flex size-6 items-center justify-center rounded-full border text-[9px] font-bold ${index < 4 ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-600 bg-slate-950 text-slate-500'}`}>{index < 3 ? '✓' : index + 1}</span><p className="mt-1 text-[9px] font-semibold text-slate-300">{label}</p><p className="text-[8px] tabular-nums text-slate-600">{date}</p></div>)}
               </div>
             </div>
@@ -365,13 +359,10 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
               <button onClick={() => setAjusteOpen(true)} className="flex items-center gap-1.5 rounded-md border border-rose-700/50 px-3 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-950/40">
                 <RotateCcw size={12} /> Solicitar ajuste ao videomaker
               </button>
-              <button onClick={pedirRevisaoProdutor} className="flex items-center gap-1.5 rounded-md border border-amber-700/50 px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-950/40">
-                <MessageSquare size={12} /> Pedir revisão do produtor
-              </button>
               <div className="ml-auto flex flex-wrap gap-2">
                 {selectedLaneIndex > 0 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex-1])} className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-300 hover:bg-slate-800"><ChevronLeft size={12}/> Etapa anterior</button>}
-                {selectedLaneIndex < EDITING_LANES.length-1 && <button onClick={()=>moveToLane(sel.id,EDITING_LANES[selectedLaneIndex+1])} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Próxima etapa <ChevronRight size={12}/></button>}
-                {selectedLane === 'aguardando' && <button onClick={enviarParaAprovacao} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Send size={12} /> Enviar pra aprovação</button>}
+                {selectedLane === 'para_editar' && <button onClick={()=>moveToLane(sel.id,'em_edicao')} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Iniciar edição</button>}
+                {(selectedLane === 'em_edicao' || selectedLane === 'aguardando') && <button onClick={enviarParaAprovacao} className="flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400"><Send size={12} /> Enviar para revisão</button>}
               </div>
             </div>
           </>

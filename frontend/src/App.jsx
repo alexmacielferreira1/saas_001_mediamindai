@@ -48,10 +48,10 @@ const AuthenticatedApp = () => {
         <Route path="/search" element={<Shell><SearchPage /></Shell>} />
         <Route path="/ingest" element={<ModuleRoute moduleId="ingest"><Shell><Ingest /></Shell></ModuleRoute>} />
         <Route path="/workspace" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
-        <Route path="/workspace2" element={<ModuleRoute moduleId="workspace"><Shell><Workspace2 /></Shell></ModuleRoute>} />
+        <Route path="/workspace2" element={<ModuleRoute moduleId="workspace2"><Shell><Workspace2 /></Shell></ModuleRoute>} />
         <Route path="/workspace/timeline" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
         <Route path="/timeline" element={<ModuleRoute moduleId="timeline"><Shell><Timeline /></Shell></ModuleRoute>} />
-        <Route path="/timeline2" element={<ModuleRoute moduleId="timeline"><Shell><Timeline2 /></Shell></ModuleRoute>} />
+        <Route path="/timeline2" element={<ModuleRoute moduleId="timeline2"><Shell><Timeline2 /></Shell></ModuleRoute>} />
         <Route path="/social" element={<ModuleRoute moduleId="social"><Shell><ViralClips /></Shell></ModuleRoute>} />
         <Route path="/clips" element={<Navigate to="/social" replace />} />
         <Route path="/publish" element={<Navigate to="/social" replace />} />
@@ -61,7 +61,7 @@ const AuthenticatedApp = () => {
         <Route path="/roteiro2" element={<ModuleRoute moduleId="workspace"><Shell><Roteiro2 /></Shell></ModuleRoute>} />
         <Route path="/reports" element={<Navigate to="/management?tab=reports" replace />} />
         <Route path="/corp" element={<ModuleRoute moduleId="corp"><Shell><Corp /></Shell></ModuleRoute>} />
-        <Route path="/assistente" element={<Shell><AssistenteIA /></Shell>} />
+        <Route path="/assistente" element={<ModuleRoute moduleId="assistente"><Shell><AssistenteIA /></Shell></ModuleRoute>} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

@@ -69,4 +69,23 @@ describe('Workspace 2 script step', () => {
     expect(onToggle).toHaveBeenCalledWith(8);
     expect(onAddAsset).toHaveBeenCalledWith(interview);
   });
+
+  it('drags a script card above another card to change the order', () => {
+    const onReorderBlocks = vi.fn();
+    const blocks = [
+      { id: 'b1', title: 'Primeiro', type: 'media', duration: 10 },
+      { id: 'b2', title: 'Segundo', type: 'media', duration: 10 },
+    ];
+    render(<Workspace2Script blocks={blocks} onReorderBlocks={onReorderBlocks} />);
+    const second = screen.getByRole('article', { name: 'Bloco 2: Segundo' });
+    const first = screen.getByRole('article', { name: 'Bloco 1: Primeiro' });
+    const dataTransfer = { setData: vi.fn(), getData: vi.fn(() => 'b2'), effectAllowed: '' };
+
+    fireEvent.dragStart(second, { dataTransfer });
+    fireEvent.dragOver(first, { dataTransfer });
+    fireEvent.drop(first, { dataTransfer });
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-workspace2-block', 'b2');
+    expect(onReorderBlocks).toHaveBeenCalledWith('b2', 'b1');
+  });
 });

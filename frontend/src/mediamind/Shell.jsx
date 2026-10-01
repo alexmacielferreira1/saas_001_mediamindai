@@ -30,8 +30,8 @@ export const NAV_GROUPS = [
       { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
       { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
       { to: '/corp?tab=producao&sub=em_edicao', label: 'Edição', icon: Scissors, sub: 'em_edicao' },
-      { to: '/corp?tab=producao&sub=aguardando_aprovacao', label: 'Aguardando aprovação', icon: Calendar, sub: 'aguardando_aprovacao' },
-      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em aprovação', icon: CheckCircle2, sub: 'em_aprovacao' },
+      { to: '/corp?tab=producao&sub=aguardando_aprovacao', label: 'Alteração', icon: Calendar, sub: 'aguardando_aprovacao' },
+      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em revisão', icon: CheckCircle2, sub: 'em_aprovacao' },
       { to: '/corp?tab=producao&sub=finalizado', label: 'Finalizado', icon: Flag, sub: 'finalizado' },
       { to: '/corp?tab=producao&sub=redes_sociais', label: 'Redes sociais', icon: Share2, sub: 'redes_sociais' },
       { to: '/corp?tab=producao&sub=para_publicar', label: 'Para publicação', icon: Send, sub: 'para_publicar' },
@@ -55,6 +55,18 @@ export const NAV_GROUPS = [
   },
 ];
 
+const MVP_LABELS = new Set([
+  'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
+  'Em revisão', 'Finalizado', 'Acervo',
+]);
+
+export function navigationForRole(role) {
+  if (role !== 'mvp') return NAV_GROUPS;
+  return NAV_GROUPS
+    .map((group) => ({ ...group, items: group.items.filter((item) => MVP_LABELS.has(item.label)) }))
+    .filter((group) => group.items.length > 0);
+}
+
 export default function Shell({ children }) {
   const { user, logout, roleLabels } = useAuth();
   const navigate = useNavigate();
@@ -62,6 +74,7 @@ export default function Shell({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const role = user?.role || 'default';
+  const navGroups = navigationForRole(role);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try { return Number(localStorage.getItem(`mm_sidebar_width__${role}`)) || 240; } catch { return 240; }
   });
@@ -142,7 +155,7 @@ export default function Shell({ children }) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-2">
-          {NAV_GROUPS.map((g) => (
+          {navGroups.map((g) => (
             <div key={g.group} className="mb-4">
               <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                 {g.group}

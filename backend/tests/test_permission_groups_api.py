@@ -336,6 +336,22 @@ def test_authorized_manager_can_update_membership_role(permission_client):
     }
 
 
+def test_authorized_manager_can_assign_additive_mvp_role(permission_client):
+    client, ids = permission_client
+    login(client)
+
+    response = client.put(
+        f"/api/v1/memberships/{ids['viewer_membership']}/role",
+        json={"role": "mvp"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "membership_id": str(ids["viewer_membership"]),
+        "role": "mvp",
+    }
+
+
 def test_cedoc_cannot_grant_administrative_role(permission_client):
     client, ids = permission_client
     login(client, "cedoc@mediamind.ai")

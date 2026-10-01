@@ -19,7 +19,6 @@ describe('canonical production workflow', () => {
       'gravacoes',
       'para_editar',
       'em_edicao',
-      'aguardando_aprovacao',
       'em_aprovacao',
       'finalizado',
       'redes_sociais',

@@ -115,13 +115,17 @@ describe('Timeline 2 pointer regressions', () => {
     const playhead = screen.getByLabelText('Playhead');
 
     fireEvent.change(playhead, { target: { value: '2' } });
-    fireEvent.keyDown(window, { key: 'i' });
+    fireEvent.keyDown(playhead, { key: 'i' });
     expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('00:00:02:00');
+    expect(screen.getByTestId('player-in-marker')).toHaveStyle({ left: '10%' });
     fireEvent.change(playhead, { target: { value: '8' } });
-    fireEvent.keyDown(window, { key: 'o' });
+    fireEvent.keyDown(playhead, { key: 'o' });
     expect(screen.getByTestId('timeline-out-point')).toHaveTextContent('00:00:08:00');
+    expect(screen.getByTestId('player-out-marker')).toHaveStyle({ left: '40%' });
+    expect(screen.getByTestId('player-in-out-range')).toHaveStyle({ left: '10%', width: '30%' });
     fireEvent.click(screen.getByRole('button', { name: 'Limpar IN e OUT' }));
     expect(screen.getByTestId('timeline-in-point')).toHaveTextContent('—');
+    expect(screen.queryByTestId('player-in-marker')).not.toBeInTheDocument();
   });
 
   it('drags the vertical playhead handle without moving the clip underneath it', async () => {
@@ -155,6 +159,26 @@ describe('Timeline 2 pointer regressions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduzir' }));
     act(() => vi.advanceTimersByTime(1500));
     expect(Number(screen.getByLabelText('Playhead').value)).toBeGreaterThanOrEqual(1.4);
+    vi.useRealTimers();
+  });
+
+  it('uses the same control for play and pause and respects sequence IN and OUT', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    let draft = addMediaClip(createTimeline2Document({ id: 'range-project' }), {
+      id: 'range-asset', clipId: 'range-clip', name: 'Faixa', kind: 'video', duration: 10,
+    }, { trackId: 'v1', start: 0 });
+    draft = { ...draft, playhead: 0, inPoint: 2, outPoint: 4 };
+    localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(draft));
+    render(<Timeline2 />);
+
+    const control = screen.getByRole('button', { name: 'Reproduzir' });
+    fireEvent.click(control);
+    expect(control).toHaveAccessibleName('Pausar');
+    expect(screen.getByLabelText('Playhead')).toHaveValue('2');
+    act(() => vi.advanceTimersByTime(2100));
+    expect(control).toHaveAccessibleName('Reproduzir');
+    expect(Number(screen.getByLabelText('Playhead').value)).toBeCloseTo(4, 1);
     vi.useRealTimers();
   });
 

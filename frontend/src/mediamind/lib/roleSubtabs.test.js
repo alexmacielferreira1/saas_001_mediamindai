@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ALL_SUBTABS, ROLE_SUBTABS, getActiveSubtabs } from './roleSubtabs';
+import { ALL_SUBTABS, MVP_SUBTABS, ROLE_SUBTABS, getActiveSubtabs } from './roleSubtabs';
 
 describe('producer role workflow access', () => {
   it('exposes editing as one screen while keeping the approval queues', () => {
@@ -20,5 +20,14 @@ describe('producer role workflow access', () => {
     expect(getActiveSubtabs('producer')).toEqual([
       'overview', 'em_edicao', 'aguardando_aprovacao',
     ]);
+  });
+
+  it('selects only the existing MVP workflow screens', () => {
+    expect(MVP_SUBTABS).toEqual([
+      'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+      'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
+    ]);
+    expect(ROLE_SUBTABS.mvp).toEqual(MVP_SUBTABS);
+    expect(getActiveSubtabs('mvp')).toEqual(MVP_SUBTABS);
   });
 });

@@ -6,9 +6,9 @@ import { DraggableStageCard, StageDragArea } from './StageDragList';
 
 describe('stage movement controls', () => {
   it('offers accessible previous and next actions', async () => {
-    const onMove = vi.fn().mockResolvedValue({ ok: true, project: { etapa: 'aguardando_aprovacao' } });
+    const onMove = vi.fn().mockResolvedValue({ ok: true, project: { etapa: 'em_aprovacao' } });
     render(<StageDragArea onMove={onMove}><DraggableStageCard id="p1" etapa="em_edicao">Projeto</DraggableStageCard></StageDragArea>);
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar para Aguardando aprovação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar para Em revisão' }));
     expect(onMove).toHaveBeenCalledWith('p1', 1);
     expect(screen.getByRole('button', { name: 'Voltar para Material para editar' })).toBeEnabled();
   });
@@ -19,11 +19,18 @@ describe('stage movement controls', () => {
     const dataTransfer = { effectAllowed: '', setData: vi.fn() };
 
     fireEvent.dragStart(screen.getByText('Projeto'), { dataTransfer });
-    const nextZone = screen.getByRole('region', { name: 'Soltar para Aguardando aprovação' });
+    const nextZone = screen.getByRole('region', { name: 'Soltar para Em revisão' });
     fireEvent.dragOver(nextZone, { dataTransfer });
     fireEvent.drop(nextZone, { dataTransfer });
 
     expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'p1');
     expect(onMove).toHaveBeenCalledWith('p1', 1);
+  });
+
+  it('returns an item from Em revisão to Alteração', () => {
+    const onMove = vi.fn();
+    render(<StageDragArea onMove={onMove}><DraggableStageCard id="p2" etapa="em_aprovacao">Revisão</DraggableStageCard></StageDragArea>);
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar para Alteração' }));
+    expect(onMove).toHaveBeenCalledWith('p2', -1);
   });
 });

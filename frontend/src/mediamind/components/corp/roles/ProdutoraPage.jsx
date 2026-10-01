@@ -28,6 +28,7 @@ import PanelSplit from '../../ui/PanelSplit';
 import RelatoriosEquipePanel from '../RelatoriosEquipePanel';
 import { COMMON_SUBTABS, CommonScreen, COMMON_IDS } from './CommonScreens';
 import RoleInicio from '../RoleInicio';
+import { useAuth } from '../../../auth';
 
 // Pipeline unificado de Produção (podcast): o projeto evolui por estágios.
 // Cada guia mostra os projetos do seu contexto — rascunho → gravação → edição →
@@ -40,8 +41,8 @@ export const PRODUCTION_SUBTABS = [
   { id: 'agendamentos', name: 'Agendamentos', Icon: Calendar },
   { id: 'gravacoes', name: 'Gravações', Icon: Clapperboard },
   { id: 'em_edicao', name: 'Edição', Icon: Scissors },
-  { id: 'aguardando_aprovacao', name: 'Aguardando aprovação', Icon: CalendarClock },
-  { id: 'em_aprovacao', name: 'Em aprovação', Icon: CheckCircle2 },
+  { id: 'aguardando_aprovacao', name: 'Alteração', Icon: CalendarClock },
+  { id: 'em_aprovacao', name: 'Em revisão', Icon: CheckCircle2 },
   { id: 'finalizado', name: 'Finalizado', Icon: Flag },
   { id: 'redes_sociais', name: 'Redes sociais', Icon: Share2 },
   { id: 'para_publicar', name: 'Para publicação', Icon: Send },
@@ -58,11 +59,13 @@ export function normalizeProductionSubtab(subtab) {
 }
 
 export default function ProdutoraPage() {
-  const [sub, setSub] = useState('overview');
+  const { user } = useAuth();
+  const role = user?.role === 'mvp' ? 'mvp' : 'producer';
+  const [sub, setSub] = useState(role === 'mvp' ? 'workspace2' : 'overview');
   const [newDraftSignal, setNewDraftSignal] = useState(0);
   const [mediaHandoff, setMediaHandoff] = useState(null);
   const [params, setParams] = useSearchParams();
-  const tabs = useMemo(() => filterActiveSubtabs('producer', SUBTABS), []);
+  const tabs = useMemo(() => filterActiveSubtabs(role, SUBTABS), [role]);
   useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, [sub, tabs]);
   useEffect(() => {
     const requested = normalizeProductionSubtab(params.get('sub'));

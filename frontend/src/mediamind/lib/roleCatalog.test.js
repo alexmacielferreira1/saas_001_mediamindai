@@ -19,4 +19,10 @@ describe('IAcervo Corp privileged access', () => {
     expect(effectiveTabsForUser({ id: 'alex', role: 'superadmin' }, ids)).toEqual(ids);
     expect(effectiveTabsForUser({ id: 'admin', role: 'admin' }, ids)).toEqual(ids);
   });
+
+  it('keeps the MVP profile additive and limited to the existing production screen', () => {
+    const ids = CORP_TABS.map((tab) => tab.id);
+    expect(getCargoDefaultTabs('mvp')).toEqual(['producao']);
+    expect(effectiveTabsForUser({ id: 'mvp-user', role: 'mvp' }, ids)).toEqual(['producao']);
+  });
 });

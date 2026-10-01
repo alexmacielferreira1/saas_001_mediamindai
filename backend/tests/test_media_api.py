@@ -26,6 +26,7 @@ def test_media_upload_creates_tenant_asset_and_atomic_original(
     response = client.post(
         "/api/v1/media/assets",
         files={"file": ("reportagem.mp4", b"real-video-bytes", "video/mp4")},
+        data={"origin": "recording", "project_id": "project-17", "recording_id": "recording-4"},
     )
 
     assert response.status_code == 201
@@ -36,6 +37,9 @@ def test_media_upload_creates_tenant_asset_and_atomic_original(
     assert asset["file_size"] == 16
     assert asset["sha256"] == "c986372cb64bb5d854d6d97a58e6a893564850db144f18b23daea00fcb72d5a5"
     assert asset["media_status"] == "uploaded"
+    assert asset["origin"] == "recording"
+    assert asset["project_id"] == "project-17"
+    assert asset["recording_id"] == "recording-4"
     assert asset["duration"] == 12.5
     assert asset["width"] == 1920
     assert asset["stream_url"] == f"/api/v1/media/assets/{asset['id']}/stream"

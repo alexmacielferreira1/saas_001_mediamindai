@@ -14,6 +14,7 @@
 export const ROLE_CATALOG = [
   { id: 'superadmin', name: 'Superadministrador', description: 'Acesso total ao sistema e às empresas.', defaultTabs: '*' },
   { id: 'admin', name: 'Administrador', description: 'Acesso total ao sistema.', defaultTabs: '*' },
+  { id: 'mvp', name: 'MVP', description: 'Percurso utilizável de produção audiovisual.', defaultTabs: ['producao'] },
   { id: 'producer', name: 'Produtor', description: 'Produção de conteúdo audiovisual.', defaultTabs: ['producao'] },
   { id: 'editor', name: 'Editor de vídeo', description: 'Edição e pós-produção.', defaultTabs: ['editor_video'] },
   { id: 'videomaker', name: 'Videomaker', description: 'Gravação e captação.', defaultTabs: ['videomaker'] },

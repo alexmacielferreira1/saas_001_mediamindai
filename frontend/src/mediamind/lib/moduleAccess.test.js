@@ -14,4 +14,13 @@ describe('module route access', () => {
     expect(canAccessModule('editor', 'social')).toBe(true);
     expect(canAccessModule('producer', 'ingest')).toBe(true);
   });
+
+  it('limits the MVP profile to its existing route surfaces', () => {
+    for (const moduleId of ['home', 'corp', 'acervo', 'workspace2', 'timeline2']) {
+      expect(canAccessModule('mvp', moduleId)).toBe(true);
+    }
+    for (const moduleId of ['assistente', 'ingest', 'workspace', 'timeline', 'social', 'management']) {
+      expect(canAccessModule('mvp', moduleId)).toBe(false);
+    }
+  });
 });

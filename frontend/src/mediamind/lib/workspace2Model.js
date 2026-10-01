@@ -57,3 +57,14 @@ export function appendTextBlock(blocks, text = 'Novo bloco de texto') {
 export function removeScriptBlock(blocks, blockId) {
   return blocks.filter((block) => block.id !== blockId);
 }
+
+export function reorderScriptBlocks(blocks, draggedId, targetId) {
+  const from = blocks.findIndex((block) => String(block.id) === String(draggedId));
+  const to = blocks.findIndex((block) => String(block.id) === String(targetId));
+  if (from < 0 || to < 0 || from === to) return blocks;
+  const reordered = [...blocks];
+  const [dragged] = reordered.splice(from, 1);
+  const targetIndex = reordered.findIndex((block) => String(block.id) === String(targetId));
+  reordered.splice(targetIndex, 0, dragged);
+  return reordered;
+}
