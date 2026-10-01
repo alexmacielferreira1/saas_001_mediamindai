@@ -29,6 +29,7 @@ class User(Base):
     email_normalized: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
     full_name: Mapped[str] = mapped_column(String(200), default="")
+    account_status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

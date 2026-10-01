@@ -9,6 +9,17 @@ Fonte geral: `../../_documentacao/CODEX_BACKLOG.md`.
 5. Completar matriz manual de perfis/tenant/logout e Google OAuth publicado.
 6. Atualizar PPT do produto real.
 
+## Requisitos recuperados da auditoria de chats — 29/09/2026
+
+- **MM-ASSET-ACL-001 — P0, pending:** política por asset com modos `all`, `all_except` e `only`, seleção por departamento/função/grupo/usuário e enforcement no backend para metadados, original, derivados, stream e download. Criar migration compatível, decisão de precedência, auditoria e testes de isolamento antes da UI.
+- **MM-MVP-JOURNEY-001 — P0, in_progress:** o perfil MVP apenas seleciona telas existentes; provar login → upload local → Acervo → stream/player → ação editorial → reload em PostgreSQL/storage reais, sem Base44, mock ou modo demo.
+- **MM-INGEST-ADMIN-001 — P1, pending:** convergir ingest administrativo em lote com `HUB-IMPORT-001`/`MM-IMPORT-001`: mapeamento, validação, dry-run, resultado por linha, idempotência, histórico e auditoria.
+- **MM-REVIEW-COLLAB-001 — P1, pending:** completar revisão colaborativa por versão e timecode com threads, menções, anexos/anotações, estados resolvido/aberto, comparação e histórico auditável; reaproveitar o player compartilhado.
+- **MM-PERSONA-UX-001 — P2, pending:** permitir experiência inicial por função/perfil e preferências individuais sem hardcode e sem usar ocultação visual como autorização; registrar origem da configuração e fallback seguro.
+- **MM-AUDIO-METADATA-001 — P2, pending:** permitir que áudio/IA sugira metadados com proveniência, confiança, revisão e confirmação humana; nenhuma sugestão vira dado canônico silenciosamente.
+- **HUB-STATUS-001 — P0, pending:** após o próximo gate completo, sincronizar este backlog, `PROJECT_STATUS.md`, `project-status.json` e handoff a partir da mesma evidência.
+- **HUB-AUDIT-001 — P0, in_progress:** manter `LogAuditoria` append-only e ampliar auditoria server-side transacional a upload, ACL, transições, jobs, IA, exportação e publicação.
+
 ## MediaMind Creative Engine — integração AI Edita
 
 - **MM-CREATIVE-001 — in_progress:** implementar a matriz AI Edita → MediaMind registrada em `docs/ai-edita-integration/`, preservando identidade, stack e funcionalidades.

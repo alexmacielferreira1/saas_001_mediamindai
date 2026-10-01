@@ -28,6 +28,8 @@ RECORD_WRITE_PERMISSIONS = {
     "ProducaoProjeto": "production.write",
     "Publicacao": "publishing.write",
     "Release": "publishing.write",
+    "Script": "production.write",
+    "ScriptTemplate": "production.write",
     "TranscricaoSegmento": "assets.write",
 }
 

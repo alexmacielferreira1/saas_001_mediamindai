@@ -14,6 +14,8 @@ import Login from './mediamind/pages/Login';
 import Home from './mediamind/pages/Home';
 import Acervo from './mediamind/pages/Acervo';
 import Management from './mediamind/pages/Management';
+import Administration2 from './mediamind/pages/Administration2';
+import Roteiro2 from './mediamind/pages/Roteiro2';
 import Corp from './mediamind/pages/Corp';
 import ViralClips from './mediamind/pages/ViralClips';
 import Ingest from './mediamind/pages/Ingest';
@@ -55,6 +57,8 @@ const AuthenticatedApp = () => {
         <Route path="/publish" element={<Navigate to="/social" replace />} />
         <Route path="/acervo" element={<ModuleRoute moduleId="acervo"><Shell><Acervo /></Shell></ModuleRoute>} />
         <Route path="/management" element={<ModuleRoute moduleId="management"><Shell><Management /></Shell></ModuleRoute>} />
+        <Route path="/administration2" element={<ModuleRoute moduleId="management"><Shell><Administration2 /></Shell></ModuleRoute>} />
+        <Route path="/roteiro2" element={<ModuleRoute moduleId="workspace"><Shell><Roteiro2 /></Shell></ModuleRoute>} />
         <Route path="/reports" element={<Navigate to="/management?tab=reports" replace />} />
         <Route path="/corp" element={<ModuleRoute moduleId="corp"><Shell><Corp /></Shell></ModuleRoute>} />
         <Route path="/assistente" element={<Shell><AssistenteIA /></Shell>} />

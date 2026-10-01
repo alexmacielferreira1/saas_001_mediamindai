@@ -44,6 +44,8 @@ ALLOWED_TYPES = {
     "ProducaoProjeto",
     "Publicacao",
     "Release",
+    "Script",
+    "ScriptTemplate",
     "TranscricaoSegmento",
 }
 

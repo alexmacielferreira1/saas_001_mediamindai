@@ -67,3 +67,11 @@ O relato anexado sobre a agulha também consolida requisitos já registrados de 
 - Nova prioridade registrada em `../../_documentacao/SOURCE_INTAKE_2026-09-23_ADMIN_PUBLICACAO_IMPORTACAO.md`: `Para publicar`, arquitetura de Administração e importação/exportação em massa estilo Power Query. Requisitos indexados não equivalem a telas implementadas.
 - PDF (6) revisado até a página 754. O conteúdo novo real, páginas 681–754, foi decomposto em `VIDEO_AI_PROVIDER_STRATEGY.md`, `EDGE_CEDOC_ARCHITECTURE.md`, `MEDIAMIND_EXPORT_PACKAGE.md` e `PDF6_IMPLEMENTATION_ROADMAP.md`.
 - Novos itens planejados: `MM-AI-VIDEO-001`, `MM-CLIP-ENGINE-001`, `MM-EXPORT-001` e `MM-EDGE-001`. Nenhum está implementado. A hipótese de integrar OpusClip foi superada: ele é somente benchmark funcional; o motor de cortes será próprio do MediaMind e usará componentes de IA por contratos neutros.
+
+## Consolidação dos anexos do Codex em 29/09/2026
+
+- Os 90 textos de `C:\Users\Alex\.codex\attachments` foram deduplicados em 58 conteúdos únicos e todos possuem linha no manifesto do HUB.
+- Requisitos audiovisuais recuperados foram ligados ao backlog em `CODEX_ATTACHMENTS_REQUIREMENTS.md`, incluindo ACL por asset, revisão colaborativa, UX por função, esteira, Workspace/Timeline, publicação, Creative/Clip Engine, RAG/MCP e custos.
+- A fonte completa e a classificação por SHA-256 estão em `../../_documentacao/CODEX_ATTACHMENTS_REQUIREMENTS_CONSOLIDATED_2026-09-29.md` e `../../_documentacao/CODEX_ATTACHMENTS_SOURCE_MANIFEST_2026-09-29.md`.
+- A integração direta com OpusClip permanece histórica; o motor próprio e os contratos neutros continuam canônicos.
+- Este bloco foi somente documental: não altera migrations, API, banco, Render/Neon ou a implementação atual.

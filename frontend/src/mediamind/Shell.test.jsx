@@ -6,6 +6,7 @@ describe('production navigation', () => {
   it('shows only the approved operational workflow', () => {
     const labels = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.label));
     expect(labels).not.toContain('IAcervo Corp');
+    expect(labels).toContain('Roteiro 2');
     expect(labels).not.toContain('Pesquisa');
     expect(labels).not.toContain('Workspace');
     expect(labels).not.toContain('Modo roteiro');
