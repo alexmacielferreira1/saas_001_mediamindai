@@ -31,10 +31,13 @@ describe('final timeline player', () => {
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     render(<FinalTimelinePlayer timeline={timeline} />);
 
+    expect(screen.queryByRole('button', { name: 'Pausar vídeo final' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduzir vídeo final' }));
     expect(play).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Reproduzir vídeo final' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pausar vídeo final' }));
     expect(pause).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Reproduzir vídeo final' })).toBeInTheDocument();
     play.mockRestore(); pause.mockRestore();
   });
 

@@ -28,6 +28,7 @@ export default function Workspace2Timeline({
   const [outPoint, setOutPoint] = useState(Number(active?.duration) || 0);
   const [markers, setMarkers] = useState([]);
   const [muted, setMuted] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const applyOperation = (message) => { setOperation(message); onNotice(message); };
   const suffix = (name, value) => name === 'Volume' ? `${Math.round((value - 60) / 6)} dB` : name === 'Velocidade' ? `${(value / 100).toFixed(1)}x` : name === 'Rotação' ? `${value}°` : `${value}%`;
   const effectiveDuration = mediaDuration || Number(active?.duration) || 0;
@@ -35,6 +36,21 @@ export default function Workspace2Timeline({
     const next = Math.max(0, Math.min(Number(value) || 0, effectiveDuration || Number.MAX_SAFE_INTEGER));
     if (mediaRef.current) mediaRef.current.currentTime = next;
     setCurrentTime(next);
+  };
+  const togglePlayback = async () => {
+    const media = mediaRef.current;
+    if (!media) return;
+    if (playing) {
+      media.pause();
+      setPlaying(false);
+      return;
+    }
+    try {
+      await media.play();
+      setPlaying(true);
+    } catch {
+      applyOperation('O navegador bloqueou a reprodução; clique novamente no player');
+    }
   };
   const captureFrame = () => {
     const media = mediaRef.current;
@@ -53,7 +69,7 @@ export default function Workspace2Timeline({
     applyOperation(`Frame capturado em ${formatDuration(currentTime)}`);
   };
   useEffect(() => {
-    setCurrentTime(0); setInPoint(0); setMarkers([]);
+    setCurrentTime(0); setInPoint(0); setMarkers([]); setPlaying(false);
     const duration = Number(active?.duration) || 0;
     setMediaDuration(duration); setOutPoint(duration);
   }, [active?.id]);
@@ -74,8 +90,8 @@ export default function Workspace2Timeline({
 
       <main className="w2-panel p-3">
         <header className="mb-2 flex items-center justify-between"><h2 className="font-bold">Preview – {active?.title || 'Nenhuma mídia'}</h2><Settings size={16} /></header>
-        {active?.stream_url && active.asset_type === 'video' ? <video ref={mediaRef} data-testid="workspace2-preview-media" key={active.id} src={active.stream_url} preload="metadata" onLoadedMetadata={(event) => { const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : Number(active.duration) || 0; setMediaDuration(duration); setOutPoint(duration); }} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} style={{ opacity: adjustments.Opacidade / 100, transform: `scale(${adjustments.Escala / 100}) rotate(${adjustments.Rotação}deg)` }} className="h-72 w-full rounded-lg bg-black object-contain" /> : active?.stream_url && active.asset_type === 'audio' ? <div className="grid h-72 place-items-center rounded-lg bg-slate-950"><audio ref={mediaRef} data-testid="workspace2-preview-media" key={active.id} src={active.stream_url} preload="metadata" onLoadedMetadata={(event) => { const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : Number(active.duration) || 0; setMediaDuration(duration); setOutPoint(duration); }} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} className="w-4/5" /></div> : <div className="grid h-72 place-items-center rounded-lg bg-gradient-to-br from-indigo-950 via-sky-800 to-orange-300 text-7xl">{active?.icon || '🎬'}</div>}
-        <div className="mt-3 flex items-center gap-3"><button type="button" aria-label="Pausar mídia" onClick={() => mediaRef.current?.pause()} className="grid h-9 w-9 place-items-center rounded-full bg-slate-800"><Pause size={16} /></button><button type="button" aria-label="Reproduzir mídia" onClick={() => mediaRef.current?.play()?.catch(() => applyOperation('O navegador bloqueou a reprodução; clique novamente no player'))} className="grid h-11 w-11 place-items-center rounded-full bg-sky-500 text-slate-950"><Play fill="currentColor" size={18} /></button><button type="button" aria-label={muted ? 'Ativar áudio' : 'Silenciar áudio'} onClick={() => setMuted((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full ${muted ? 'bg-rose-950 text-rose-300' : 'bg-slate-800'}`}><Volume2 size={16} /></button><input aria-label="Posição da prévia" type="range" min="0" max={Math.max(effectiveDuration, 0.01)} step="0.01" value={Math.min(currentTime, effectiveDuration || currentTime)} onChange={(event) => seek(event.target.value)} className="flex-1 accent-sky-500" /><span className="text-xs">{formatDuration(currentTime)} / {formatDuration(effectiveDuration)}</span></div>
+        {active?.stream_url && active.asset_type === 'video' ? <video ref={mediaRef} data-testid="workspace2-preview-media" key={active.id} src={active.stream_url} preload="metadata" onLoadedMetadata={(event) => { const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : Number(active.duration) || 0; setMediaDuration(duration); setOutPoint(duration); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} style={{ opacity: adjustments.Opacidade / 100, transform: `scale(${adjustments.Escala / 100}) rotate(${adjustments.Rotação}deg)` }} className="h-72 w-full rounded-lg bg-black object-contain" /> : active?.stream_url && active.asset_type === 'audio' ? <div className="grid h-72 place-items-center rounded-lg bg-slate-950"><audio ref={mediaRef} data-testid="workspace2-preview-media" key={active.id} src={active.stream_url} preload="metadata" onLoadedMetadata={(event) => { const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : Number(active.duration) || 0; setMediaDuration(duration); setOutPoint(duration); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} className="w-4/5" /></div> : <div className="grid h-72 place-items-center rounded-lg bg-gradient-to-br from-indigo-950 via-sky-800 to-orange-300 text-7xl">{active?.icon || '🎬'}</div>}
+        <div className="mt-3 flex items-center gap-3"><button type="button" aria-label={playing ? 'Pausar mídia' : 'Reproduzir mídia'} onClick={togglePlayback} className="grid h-11 w-11 place-items-center rounded-full bg-sky-500 text-slate-950">{playing ? <Pause size={18} /> : <Play fill="currentColor" size={18} />}</button><button type="button" aria-label={muted ? 'Ativar áudio' : 'Silenciar áudio'} onClick={() => setMuted((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full ${muted ? 'bg-rose-950 text-rose-300' : 'bg-slate-800'}`}><Volume2 size={16} /></button><input aria-label="Posição da prévia" type="range" min="0" max={Math.max(effectiveDuration, 0.01)} step="0.01" value={Math.min(currentTime, effectiveDuration || currentTime)} onChange={(event) => seek(event.target.value)} className="flex-1 accent-sky-500" /><span className="text-xs">{formatDuration(currentTime)} / {formatDuration(effectiveDuration)}</span></div>
         <div className="mt-3 grid grid-cols-3 gap-2"><div data-testid="workspace2-in-point" className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs">IN&nbsp; {formatDuration(inPoint)}</div><div data-testid="workspace2-out-point" className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs">OUT&nbsp; {formatDuration(outPoint)}</div><div className="rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs">Duração&nbsp; {formatDuration(Math.max(0, outPoint - inPoint))}</div></div>
         <div className="mt-3 grid grid-cols-4 gap-2"><button type="button" aria-label="Marcar IN" onClick={() => { setInPoint(Math.min(currentTime, outPoint)); applyOperation(`Entrada marcada em ${formatDuration(currentTime)}`); }} className="w2-button justify-center"><Flag size={14} /> Marcar IN</button><button type="button" aria-label="Marcar OUT" onClick={() => { setOutPoint(Math.max(currentTime, inPoint)); applyOperation(`Saída marcada em ${formatDuration(currentTime)}`); }} className="w2-button justify-center"><Flag size={14} /> Marcar OUT</button><button type="button" aria-label="Adicionar marcador" onClick={() => { setMarkers((items) => [...items, currentTime]); applyOperation(`Marcador adicionado em ${formatDuration(currentTime)}`); }} className="w2-button justify-center"><Flag size={14} /> Adicionar marcador ({markers.length})</button><button type="button" aria-label="Capturar frame" onClick={captureFrame} className="w2-button justify-center"><Camera size={14} /> Capturar frame</button></div>
         {compact && <div role="status" className="mt-2 min-h-4 text-[10px] text-sky-300">{operation}</div>}

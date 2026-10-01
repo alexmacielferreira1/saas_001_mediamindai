@@ -43,10 +43,14 @@ describe('Workspace 2 timeline step', () => {
     fireEvent.loadedMetadata(video);
     video.currentTime = 12;
     fireEvent.timeUpdate(video);
+    expect(screen.queryByRole('button', { name: 'Pausar mídia' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduzir mídia' }));
     expect(play).toHaveBeenCalled();
+    await screen.findByRole('button', { name: 'Pausar mídia' });
+    expect(screen.queryByRole('button', { name: 'Reproduzir mídia' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pausar mídia' }));
     expect(pause).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Reproduzir mídia' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Marcar IN' }));
     expect(screen.getByTestId('workspace2-in-point')).toHaveTextContent('00:12');
