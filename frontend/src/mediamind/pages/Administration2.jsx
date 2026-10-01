@@ -5,6 +5,7 @@ import {
   UserCog, Users,
 } from 'lucide-react';
 import { getAdminUser, listAdminActivity, listAdminUsers, suspendAdminUser } from '../../api/admin';
+import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
 import Acervo from './Acervo';
@@ -64,11 +65,13 @@ export default function Administration2() {
   const [active, setActive] = useState(initialTab);
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
+  const [fallbackKind, setFallbackKind] = useState('');
   const [groups, setGroups] = useState([]);
   const [activity, setActivity] = useState([]);
 
   async function load(filters = {}) {
     setError('');
+    setFallbackKind('');
     try {
       const [users, permissionGroups, events] = await Promise.all([
         listAdminUsers({ page: 1, pageSize: 100, search: '', status: '', ...filters }),
@@ -76,11 +79,17 @@ export default function Administration2() {
         listAdminActivity().catch(() => []),
       ]);
       setPayload(users); setGroups(permissionGroups); setActivity(events);
-    } catch {
+    } catch (reason) {
       setPayload(ADMIN_DEMO_PAYLOAD);
       setGroups(ADMIN_DEMO_GROUPS);
       setActivity([]);
-      setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');
+      if (reason instanceof ApiError && reason.status === 401) {
+        setFallbackKind('demo');
+        setError('Sessão local de demonstração: os painéis administrativos exibem dados de exemplo; entre com uma sessão real para consultar o tenant.');
+      } else {
+        setFallbackKind('offline');
+        setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');
+      }
     }
   }
 
@@ -111,7 +120,7 @@ export default function Administration2() {
 
       <AdminTabs label="Navegação principal da Administração 2" tabs={CORE_TABS} active={active} onChange={openTab} />
       <AdminTabs label="Áreas relacionadas" tabs={RELATED_TABS} active={active} onChange={openTab} compact />
-      {error && <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</div>}
+      {error && <div role={fallbackKind === 'offline' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'offline' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
       {!payload && !error ? <Loading label="Carregando Administração 2..." /> : null}
       {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} />}
       {active === 'users' && <UsersTab initialPayload={payload} onReload={load} />}
