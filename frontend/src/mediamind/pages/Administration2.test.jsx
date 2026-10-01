@@ -46,12 +46,21 @@ describe('Administration2 preview', () => {
   it('shows the parallel preview and loads real tenant users', async () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     expect(screen.getByText('Administração 2')).toBeInTheDocument();
-    expect(await screen.findByText('Ações administrativas')).toBeInTheDocument();
+    expect(await screen.findByText('Ações rápidas')).toBeInTheDocument();
     expect(screen.getByText('Alertas administrativos')).toBeInTheDocument();
     expect(screen.getByText('Status de segurança')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
     expect(await screen.findByText('Editor Local')).toBeInTheDocument();
     expect(listAdminUsersMock).toHaveBeenCalledWith({ page: 1, pageSize: 100, search: '', status: '' });
+  });
+
+  it('keeps the administration preview navigable when the API is unavailable', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/exibindo dados de demonstração/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
+    expect(await screen.findByText('Alex Maciel Ferreira')).toBeInTheDocument();
   });
 
   it('opens user detail and persists suspension only after confirmation', async () => {
@@ -114,5 +123,17 @@ describe('Administration2 preview', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
     expect(screen.getByText(/dados de demonstração visual/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Visão Geral', 'Ações rápidas', 'Últimas ações administrativas'],
+    ['Usuários', 'Convites pendentes', 'Acessos expirando'],
+    ['Perfis e Funções', 'Módulos liberados', 'Matriz resumida de permissões'],
+    ['Permissões', 'Resumo do perfil', 'Alterações recentes'],
+  ])('renders the main reference landmarks for %s', async (tab, firstLandmark, secondLandmark) => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    if (tab !== 'Visão Geral') fireEvent.click(screen.getByRole('button', { name: tab }));
+    expect(await screen.findByRole('heading', { name: firstLandmark })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: secondLandmark })).toBeInTheDocument();
   });
 });
