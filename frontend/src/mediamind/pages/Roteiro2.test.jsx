@@ -9,7 +9,7 @@ import Roteiro2 from './Roteiro2';
 
 describe('Roteiro 2 preview', () => {
   beforeEach(() => {
-    listMediaAssetsMock.mockResolvedValue([{ id: 'asset-1', title: 'Entrevista real', program_name: 'Jornal local', duration: 125, asset_type: 'video', status: 'indexed' }]);
+    listMediaAssetsMock.mockResolvedValue([{ id: 'asset-1', title: 'Entrevista real', program_name: 'Jornal local', duration: 125, asset_type: 'video', status: 'indexed', stream_url: '/api/v1/media/assets/asset-1/stream' }]);
   });
 
   it('keeps the preview distinct from Workspace 2 and connects the archive', async () => {
@@ -17,9 +17,11 @@ describe('Roteiro 2 preview', () => {
     expect(screen.getByRole('heading', { name: 'Roteiro 2' })).toBeInTheDocument();
     expect(screen.getByText('Prévia paralela')).toBeInTheDocument();
     expect((await screen.findAllByText('Entrevista real')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Mídias do acervo para roteiros')).toBeInTheDocument();
+    expect(screen.getByText(/Mídias do acervo para roteiros/)).toBeInTheDocument();
     expect(screen.getAllByText('Jornal local').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Novo roteiro 2' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Importar' })).toBeEnabled();
+    expect(await screen.findByTestId('roteiro2-media-preview')).toHaveAttribute('src', '/api/v1/media/assets/asset-1/stream');
+    expect(screen.getByText('Biblioteca de roteiros')).toBeInTheDocument();
   });
 });

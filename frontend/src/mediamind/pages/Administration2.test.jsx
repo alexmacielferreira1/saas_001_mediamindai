@@ -49,7 +49,7 @@ describe('Administration2 preview', () => {
     expect(await screen.findByText('Ações administrativas')).toBeInTheDocument();
     expect(screen.getByText('Alertas administrativos')).toBeInTheDocument();
     expect(screen.getByText('Status de segurança')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Usuários 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
     expect(await screen.findByText('Editor Local')).toBeInTheDocument();
     expect(listAdminUsersMock).toHaveBeenCalledWith({ page: 1, pageSize: 100, search: '', status: '' });
   });
@@ -58,7 +58,7 @@ describe('Administration2 preview', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     suspendAdminUserMock.mockResolvedValue({ ...USER, status: 'suspended' });
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    fireEvent.click(screen.getByRole('button', { name: 'Usuários 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver Editor Local' }));
     expect(await screen.findByRole('heading', { name: 'Editor Local' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Suspender usuário' }));
@@ -68,7 +68,7 @@ describe('Administration2 preview', () => {
 
   it('embeds the existing access screen without replacing it', () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    fireEvent.click(screen.getByRole('button', { name: 'Acessos por Função 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Acessos por Função' }));
     expect(screen.getByText('Tela atual preservada')).toBeInTheDocument();
   });
 
@@ -81,11 +81,25 @@ describe('Administration2 preview', () => {
 
   it('shows real user data across the detail tabs', async () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    fireEvent.click(screen.getByRole('button', { name: 'Usuários 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Ver Editor Local' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Módulos' }));
     expect(screen.getByText('Nenhuma tela extra liberada.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Segurança' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Segurança' })[1]);
     expect(screen.getByText('Tentativas falhas')).toBeInTheDocument();
+  });
+
+  it('opens a requested administration section from the URL', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument();
+    expect(screen.getByText('Contas, convites, perfis e atividade de acesso.')).toBeInTheDocument();
+  });
+
+  it('uses the compact core navigation and keeps contextual areas separate', async () => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByLabelText('Navegação principal da Administração 2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Áreas relacionadas')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Acervo 2' })).toBeInTheDocument();
   });
 });

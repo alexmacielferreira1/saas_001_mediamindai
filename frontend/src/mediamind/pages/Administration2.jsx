@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Activity, AlertTriangle, LayoutDashboard, LockKeyhole, Search, ShieldCheck,
   UserCog, Users,
@@ -10,23 +11,24 @@ import Acervo from './Acervo';
 import Management from './Management';
 import { Badge, Button, EmptyState, Loading, Panel, SearchInput, Stat, Tabs } from '../ui';
 
-const MAIN_TABS = [
+const CORE_TABS = [
   { key: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
-  { key: 'users', label: 'Usuários 2', icon: Users },
-  { key: 'archive', label: 'Acervo 2' },
-  { key: 'management', label: 'Gestão 2' },
-  { key: 'access', label: 'Acessos por Função 2', icon: UserCog },
-  { key: 'profiles', label: 'Perfis e Funções 2' },
-  { key: 'permissions', label: 'Permissões 2' },
-  { key: 'teams', label: 'Equipes, Setores e Unidades 2' },
-  { key: 'registry', label: 'Telas e Módulos 2' },
-  { key: 'records', label: 'Cadastros 2' },
-  { key: 'forms', label: 'Formulários 2' },
-  { key: 'imports', label: 'Importações 2' },
-  { key: 'integrations', label: 'Integrações 2' },
-  { key: 'security', label: 'Segurança 2', icon: LockKeyhole },
-  { key: 'settings', label: 'Configurações 2' },
+  { key: 'users', label: 'Usuários', icon: Users },
+  { key: 'access', label: 'Acessos por Função', icon: UserCog },
+  { key: 'profiles', label: 'Perfis e Funções' },
+  { key: 'permissions', label: 'Permissões' },
+  { key: 'teams', label: 'Equipes' },
+  { key: 'forms', label: 'Formulários' },
+  { key: 'imports', label: 'Importações' },
+  { key: 'security', label: 'Segurança', icon: LockKeyhole },
 ];
+
+const RELATED_TABS = [
+  { key: 'archive', label: 'Acervo 2' }, { key: 'management', label: 'Gestão 2' },
+  { key: 'registry', label: 'Telas e Módulos 2' }, { key: 'records', label: 'Cadastros 2' },
+  { key: 'integrations', label: 'Integrações 2' }, { key: 'settings', label: 'Configurações 2' },
+];
+const ALL_TABS = [...CORE_TABS, ...RELATED_TABS];
 
 const STATUS = {
   active: ['Ativo', 'success'], invited: ['Convidado', 'info'], suspended: ['Suspenso', 'pending'],
@@ -39,7 +41,10 @@ function UserStatus({ value }) {
 }
 
 export default function Administration2() {
-  const [active, setActive] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const initialTab = ALL_TABS.some((tab) => tab.key === requestedTab) ? requestedTab : 'overview';
+  const [active, setActive] = useState(initialTab);
   const [payload, setPayload] = useState(null);
   const [error, setError] = useState('');
   const [groups, setGroups] = useState([]);
@@ -60,6 +65,14 @@ export default function Administration2() {
   }
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (ALL_TABS.some((tab) => tab.key === requestedTab)) setActive(requestedTab);
+  }, [requestedTab]);
+
+  function openTab(key) {
+    setActive(key);
+    setSearchParams(key === 'overview' ? {} : { tab: key }, { replace: true });
+  }
 
   return (
     <div className="space-y-5 pb-8">
@@ -76,17 +89,18 @@ export default function Administration2() {
         </div>
       </header>
 
-      <AdminTabs tabs={MAIN_TABS} active={active} onChange={setActive} />
+      <AdminTabs label="Navegação principal da Administração 2" tabs={CORE_TABS} active={active} onChange={openTab} />
+      <AdminTabs label="Áreas relacionadas" tabs={RELATED_TABS} active={active} onChange={openTab} compact />
       {error && <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">{error}</div>}
       {!payload && !error ? <Loading label="Carregando Administração 2..." /> : null}
-      {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={setActive} />}
+      {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} />}
       {active === 'users' && <UsersTab initialPayload={payload} onReload={load} />}
       {active === 'archive' && <EmbeddedArea title="Acervo 2"><Acervo /></EmbeddedArea>}
       {active === 'management' && <EmbeddedArea title="Gestão 2"><Management /></EmbeddedArea>}
       {active === 'access' && <AdminAcessosPage />}
       {active === 'profiles' && <ProfilesTab groups={groups} users={payload?.items || []} />}
       {active === 'permissions' && <PermissionsTab groups={groups} />}
-      {!['overview', 'users', 'archive', 'management', 'access', 'profiles', 'permissions'].includes(active) && <Preparing tab={MAIN_TABS.find((tab) => tab.key === active)?.label} />}
+      {!['overview', 'users', 'archive', 'management', 'access', 'profiles', 'permissions'].includes(active) && <Preparing tab={ALL_TABS.find((tab) => tab.key === active)?.label} />}
     </div>
   );
 }
@@ -152,8 +166,8 @@ function PermissionsTab({ groups }) {
   return <div className="space-y-4"><div><h2 className="text-xl font-bold text-slate-50">Permissões 2</h2><p className="text-sm text-slate-400">Matriz real de permissões por perfil.</p></div><Panel title="Matriz de permissões"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-800 text-xs uppercase text-slate-500"><tr><th className="p-3">Permissão</th>{groups.map((group) => <th key={group.id} className="p-3">{group.name}</th>)}</tr></thead><tbody>{codes.map((code) => <tr key={code} className="border-b border-slate-800/60"><td className="p-3 font-medium text-slate-200">{code}</td>{groups.map((group) => <td key={group.id} className="p-3"><Badge tone={group.permission_codes.includes(code) ? 'success' : 'error'}>{group.permission_codes.includes(code) ? 'Permitido' : 'Negado'}</Badge></td>)}</tr>)}</tbody></table>{!codes.length && <p className="py-8 text-center text-sm text-slate-500">Nenhuma permissão cadastrada.</p>}</div></Panel></div>;
 }
 
-function AdminTabs({ tabs, active, onChange }) {
-  return <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/30 p-1"><div className="flex min-w-max gap-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.key} type="button" onClick={() => onChange(tab.key)} className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${active === tab.key ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>{Icon && <Icon size={15} />}{tab.label}</button>; })}</div></div>;
+function AdminTabs({ label, tabs, active, onChange, compact = false }) {
+  return <nav aria-label={label} className={`overflow-x-auto border border-slate-800 bg-slate-950/40 ${compact ? '-mt-3 rounded-lg p-1' : 'rounded-xl p-1.5'}`}><div className="flex min-w-max gap-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.key} type="button" onClick={() => onChange(tab.key)} className={`flex shrink-0 items-center gap-2 rounded-lg font-medium transition ${compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} ${active === tab.key ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}>{Icon && <Icon size={15} />}{tab.label}</button>; })}</div></nav>;
 }
 
 function AlertLine({ tone, text }) {
@@ -189,7 +203,16 @@ function UsersTab({ initialPayload, onReload }) {
 
   if (selected) return <UserDetail user={selected} onChange={setSelected} onBack={() => setSelected(null)} onReload={onReload} />;
   return (
-    <Panel title="Usuários do tenant" right={<Badge tone="info">{payload?.total || 0} registros</Badge>}>
+    <div className="space-y-4">
+      <div><h2 className="text-xl font-bold text-slate-50">Usuários</h2><p className="text-sm text-slate-400">Contas, convites, perfis e atividade de acesso.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <UserMetric label="Ativos" value={visible.filter((user) => user.status === 'active').length} tone="emerald" />
+        <UserMetric label="Convites" value={visible.filter((user) => user.status === 'invited').length} tone="amber" />
+        <UserMetric label="Suspensos" value={visible.filter((user) => user.status === 'suspended').length} tone="rose" />
+        <UserMetric label="Bloqueados" value={visible.filter((user) => user.status === 'blocked').length} tone="rose" />
+        <UserMetric label="Total" value={payload?.total || 0} tone="sky" />
+      </div>
+      <Panel title="Usuários do tenant" right={<Badge tone="info">{payload?.total || 0} registros</Badge>}>
       <form onSubmit={applyFilters} className="mb-4 flex flex-wrap gap-2">
         <SearchInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" className="min-w-64 flex-1" />
         <select aria-label="Filtrar por status" value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-300">
@@ -200,8 +223,14 @@ function UsersTab({ initialPayload, onReload }) {
       {visible.length === 0 ? <EmptyState icon={Users} title="Nenhum usuário encontrado" description="Ajuste os filtros ou confira o tenant selecionado." /> : (
         <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-800 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Usuário</th><th className="px-3 py-2">Função</th><th className="px-3 py-2">Perfil</th><th className="px-3 py-2">Estado</th><th className="px-3 py-2 text-right">Ações</th></tr></thead><tbody>{visible.map((user) => <tr key={user.id} className="border-b border-slate-800/70"><td className="px-3 py-3"><p className="font-medium text-slate-200">{user.full_name || user.email}</p><p className="text-xs text-slate-500">{user.email}</p></td><td className="px-3 py-3 text-slate-400">{user.tenant_role}</td><td className="px-3 py-3 text-slate-400">{user.profile_name || 'Sem perfil'}</td><td className="px-3 py-3"><UserStatus value={user.status} /></td><td className="px-3 py-3 text-right"><Button aria-label={`Ver ${user.full_name || user.email}`} variant="ghost" size="sm" onClick={() => openUser(user.id)}>Ver detalhe</Button></td></tr>)}</tbody></table></div>
       )}
-    </Panel>
+      </Panel>
+    </div>
   );
+}
+
+function UserMetric({ label, value, tone }) {
+  const tones = { sky: 'text-sky-300', emerald: 'text-emerald-300', amber: 'text-amber-300', rose: 'text-rose-300' };
+  return <div className="rounded-xl border border-slate-800 bg-slate-950/45 px-4 py-3"><p className="text-xs text-slate-500">{label}</p><p className={`mt-1 text-2xl font-bold ${tones[tone]}`}>{value}</p></div>;
 }
 
 function UserDetail({ user, onChange, onBack, onReload }) {

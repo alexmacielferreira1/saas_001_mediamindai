@@ -47,6 +47,8 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 - [x] Conectar o Roteiro 2 ao acervo real do tenant, mantendo criação e edição desabilitadas até existir persistência própria.
 - [x] Ativar Novo Roteiro 2, modelos, seleção de mídia, importação JSON e persistência de rascunhos em registro tenant-scoped `Script`.
 - [x] Transformar abas, itens e painéis das prévias administrativas em controles selecionáveis, eliminando elementos com aparência de botão que não respondiam.
+- [x] Reorganizar a navegação paralela em nove áreas administrativas centrais e seis áreas relacionadas, com aba persistida na URL.
+- [x] Acrescentar cabeçalho e indicadores compactos à lista de usuários para aproximá-la da referência visual.
 - [x] Conectar Perfis e Funções 2 aos grupos reais, usuários vinculados e permissões do tenant.
 - [x] Conectar Permissões 2 à matriz real por grupo e exibir auditoria recente na Visão Geral.
 - [x] Carregar até 100 vínculos na Administração 2 para que os indicadores não representem apenas a primeira página.
@@ -56,6 +58,7 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 - [x] Reexecutar isoladamente os 3 testes frontend que excederam 5 s na suíte concorrente: 20 testes aprovados.
 - [ ] Repetir suíte frontend completa sem concorrência; a execução teve 197 aprovados e 3 timeouts, todos verdes na reexecução isolada.
 - [x] Executar smoke com PostgreSQL/API disponíveis.
+- [x] Iniciar a convergência visual do Roteiro 2 com biblioteca identificada e preview usando o stream real de vídeo, imagem ou áudio do acervo.
 
 ## Próximo ponto exato
 
