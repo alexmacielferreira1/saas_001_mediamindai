@@ -102,4 +102,17 @@ describe('Administration2 preview', () => {
     expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Acervo 2' })).toBeInTheDocument();
   });
+
+  it.each([
+    ['Equipes', 'Equipes / Setores / Unidades', 'Membros da equipe'],
+    ['Formulários', 'Formulários', 'Pré-visualização do formulário'],
+    ['Importações', 'Importação de Dados', 'Mapeamento de colunas'],
+    ['Segurança', 'Segurança', 'Sessões ativas'],
+  ])('renders a reference-shaped %s screen', async (tab, heading, landmark) => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: tab }));
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
+    expect(screen.getByText(/dados de demonstração visual/i)).toBeInTheDocument();
+  });
 });

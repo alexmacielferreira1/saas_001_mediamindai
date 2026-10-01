@@ -81,7 +81,7 @@ As maiores distâncias são:
 - [ ] Implementar Acessos por Função conforme `10_33_49 PM`, sem duplicar grupos de permissão existentes.
 - [ ] Implementar Perfis e Funções conforme `10_34_47 PM`, com resumo, módulos, funções associadas, usuários e histórico.
 - [ ] Implementar matriz de Permissões conforme `10_33_58 PM`, incluindo permitido, negado, herdado e exceção individual.
-- [ ] Implementar Equipes/Setores/Unidades conforme `10_34_06 PM`, com membros e vínculos reais.
+- [x] Criar a prévia visual de Equipes/Setores/Unidades conforme `10_34_06 PM`, com seleção e membros demonstrativos claramente identificados. A conexão com vínculos reais permanece pendente.
 - [ ] Registrar módulos, telas, seções, widgets e ações para que a matriz deixe de depender de nomes soltos.
 - [ ] Cobrir negação, escalada de privilégio, IDOR e isolamento entre tenants.
 
@@ -100,9 +100,9 @@ Antes de ativar mudanças sensíveis, aprovar uma matriz inicial:
 
 ## Fase 3 — áreas administrativas especializadas
 
-- [ ] **Formulários:** modelo versionado, campos, vínculo com entidades, publicação, respostas e histórico; visual conforme `10_34_16 PM`.
-- [ ] **Importações:** upload, preview, mapeamento, validação, commit idempotente e relatório por linha; visual conforme `10_34_39 PM`.
-- [ ] **Segurança:** MFA, política de senha, bloqueios, sessões, tentativas e histórico conforme `10_34_54 PM`/`10_35_00 PM`.
+- [x] **Formulários (prévia visual):** catálogo e pré-visualização conforme `10_34_16 PM`, explicitamente demonstrativos e sem ações falsas. Modelo versionado, publicação, respostas e histórico reais permanecem pendentes.
+- [x] **Importações (prévia visual):** arquivo, mapeamento e validação conforme `10_34_39 PM`, explicitamente demonstrativos. Upload, commit idempotente e relatório real permanecem pendentes.
+- [x] **Segurança (prévia visual):** KPIs, MFA, regras, sessões e histórico conforme `10_34_54 PM`/`10_35_00 PM`; métricas sem endpoint aparecem como indisponíveis. Políticas e sessões reais permanecem pendentes.
 - [ ] **Telas e módulos:** catálogo persistente e navegável, alimentando permissões e auditoria.
 - [ ] **Integrações e configurações:** inventário real, estado de conexão, testes de conexão e escopo; não exibir conectores fictícios como ativos.
 - [ ] **Cadastros:** definir quais entidades pertencem à Administração e quais pertencem ao domínio de Acervo/Produção antes de criar UI definitiva.
@@ -191,6 +191,6 @@ Antes de ativar mudanças sensíveis, aprovar uma matriz inicial:
 | `target_visual_score` | `9/10` após Fases 0–6 |
 | `references_reviewed` | 26 imagens de Administração, Acervo, Gestão e Roteiro |
 | `highest_priority` | arquitetura administrativa, usuários/detalhe, matriz de acesso e editor audiovisual |
-| `implementation_started` | não; esta entrega é somente revisão e plano |
+| `implementation_started` | sim; navegação, indicadores conectados, mídia real do Roteiro 2 e prévias estruturais de Equipes, Formulários, Importações e Segurança foram implementados |
 
 Decisões em aberto: matriz definitiva de perfis/escopos; shell administrativo canônico; prioridade de responsividade móvel; ordem entre o editor de Roteiro 2 e as áreas administrativas especializadas.

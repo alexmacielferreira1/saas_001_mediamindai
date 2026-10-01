@@ -100,7 +100,11 @@ export default function Administration2() {
       {active === 'access' && <AdminAcessosPage />}
       {active === 'profiles' && <ProfilesTab groups={groups} users={payload?.items || []} />}
       {active === 'permissions' && <PermissionsTab groups={groups} />}
-      {!['overview', 'users', 'archive', 'management', 'access', 'profiles', 'permissions'].includes(active) && <Preparing tab={ALL_TABS.find((tab) => tab.key === active)?.label} />}
+      {active === 'teams' && <TeamsPreview />}
+      {active === 'forms' && <FormsPreview />}
+      {active === 'imports' && <ImportsPreview />}
+      {active === 'security' && <SecurityPreview users={payload?.items || []} />}
+      {!['overview', 'users', 'archive', 'management', 'access', 'profiles', 'permissions', 'teams', 'forms', 'imports', 'security'].includes(active) && <Preparing tab={ALL_TABS.find((tab) => tab.key === active)?.label} />}
     </div>
   );
 }
@@ -270,6 +274,48 @@ function TagList({ items }) {
 
 function EmbeddedArea({ title, children }) {
   return <section className="rounded-2xl border border-sky-900/50 bg-slate-950/30 p-4"><div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-400">Dentro da Administração 2</p><h2 className="mt-1 text-lg font-bold text-slate-100">{title}</h2></div><Badge tone="violet">Prévia 2</Badge></div>{children}</section>;
+}
+
+const DEMO_TEAMS = [
+  ['Produção', '18 membros', 'Mariana Silva'], ['Jornalismo', '12 membros', 'Carlos Mendes'],
+  ['Audiovisual', '11 membros', 'Rafael Lima'], ['Social Media', '7 membros', 'Juliana Costa'],
+  ['CEDOC', '6 membros', 'Ana Paula Ribeiro'], ['Comunicação', '9 membros', 'Felipe Martins'],
+];
+
+function PreviewNotice() {
+  return <div className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">Dados de demonstração visual — estrutura preparada conforme as referências; alterações permanecem desabilitadas até a conexão do backend.</div>;
+}
+
+function PageLead({ title, description, action }) {
+  return <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-50">{title}</h2><p className="mt-1 text-sm text-slate-400">{description}</p></div>{action}</div>;
+}
+
+function DemoMetric({ label, value, tone = 'sky' }) {
+  const colors = { sky: 'text-sky-300', emerald: 'text-emerald-300', amber: 'text-amber-300', rose: 'text-rose-300' };
+  return <div className="rounded-xl border border-slate-800 bg-slate-950/45 p-4"><p className="text-xs text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${colors[tone]}`}>{value}</p></div>;
+}
+
+function TeamsPreview() {
+  const [selected, setSelected] = useState('Audiovisual');
+  return <div className="space-y-4"><PageLead title="Equipes / Setores / Unidades" description="Estrutura operacional, responsáveis e vínculos da organização." action={<Button disabled>+ Nova equipe</Button>} /><PreviewNotice /><div className="grid gap-4 xl:grid-cols-[340px_1fr]"><Panel title="Equipes da organização"><SearchInput placeholder="Buscar equipe ou responsável" value="" readOnly /><div className="mt-3 space-y-2">{DEMO_TEAMS.map(([name, count, lead]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`w-full rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40'}`}><div className="flex justify-between"><strong>{name}</strong><span className="text-sky-400">›</span></div><p className="text-xs text-slate-400">{count}</p><p className="text-xs text-slate-500">Responsável: {lead}</p></button>)}</div></Panel><div className="space-y-4"><Panel title={selected} right={<Badge tone="success">Ativa</Badge>}><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Membros" value="11" /><DemoMetric label="Unidade" value="Produção" /><DemoMetric label="Setores" value="2" /><DemoMetric label="Funções" value="5" /></div></Panel><Panel title="Membros da equipe"><DemoTable headers={['Nome', 'Função', 'Perfil', 'Status']} rows={[["Rafael Lima", 'Coordenador', 'Administrador', 'Ativo'], ['Marina Souza', 'Videomaker', 'Usuário', 'Ativo'], ['Bruno Carvalho', 'Editor de vídeo', 'Usuário', 'Ativo'], ['Larissa Fernandes', 'Motion Designer', 'Usuário', 'Ativo']]} /></Panel></div></div></div>;
+}
+
+function FormsPreview() {
+  const forms = [['Cadastro de convidado', 'Público', '243 respostas'], ['Autorização de imagem', 'Público', '189 respostas'], ['Novo programa', 'Interno', 'Rascunho'], ['Solicitação de mídia', 'Público', '67 respostas']];
+  return <div className="space-y-4"><PageLead title="Formulários" description="Formulários conectados às entidades administrativas." action={<Button disabled>+ Novo formulário</Button>} /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Ativos" value="9" tone="emerald" /><DemoMetric label="Rascunhos" value="3" /><DemoMetric label="Externos" value="4" /><DemoMetric label="Respostas no mês" value="126" /></div><div className="grid gap-4 xl:grid-cols-[360px_1fr]"><Panel title="Formulários cadastrados"><div className="space-y-2">{forms.map(([name, scope, count], index) => <button key={name} className={`w-full rounded-lg border p-3 text-left ${index === 0 ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40'}`}><strong>{name}</strong><p className="mt-1 text-xs text-slate-500">{scope} · {count}</p></button>)}</div></Panel><Panel title="Pré-visualização do formulário"><div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5"><h3 className="text-lg font-bold">Cadastro de convidado</h3><p className="text-sm text-slate-400">Preencha seus dados para participar do evento.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{['Nome completo', 'E-mail', 'Telefone', 'Empresa'].map((label) => <label key={label} className="text-xs text-slate-400">{label}<input disabled placeholder={label} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2" /></label>)}</div><label className="mt-3 block text-xs text-slate-400">Observações<textarea disabled className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3" /></label><Button disabled className="mt-4 w-full">Enviar formulário</Button></div></Panel></div></div>;
+}
+
+function ImportsPreview() {
+  return <div className="space-y-4"><PageLead title="Importação de Dados" description="Upload, mapeamento, validação e relatório antes da gravação." action={<Button disabled>+ Nova importação</Button>} /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Importações no mês" value="4" /><DemoMetric label="Última concluída" value="Hoje" tone="emerald" /><DemoMetric label="Erros pendentes" value="11" tone="rose" /><DemoMetric label="Modelos salvos" value="2" /></div><div className="grid gap-4 xl:grid-cols-3"><Panel title="Arquivo e pré-visualização"><p className="rounded-lg border border-emerald-900 bg-emerald-950/20 p-3 text-sm text-emerald-300">usuarios_setembro.xlsx · arquivo processado</p><DemoTable headers={['Nome', 'E-mail', 'Equipe']} rows={[["Ana Souza", 'ana@empresa.com', 'Produto'], ['Bruno Martins', 'bruno@empresa.com', 'Tecnologia'], ['Carla Mendes', 'carla@empresa.com', 'Marketing']]} /></Panel><Panel title="Mapeamento de colunas"><div className="space-y-2">{[['Nome completo', 'name'], ['E-mail', 'email'], ['Equipe', 'team'], ['Cargo', 'job_title'], ['Status', 'status']].map(([source, target]) => <div key={source} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-sm"><span>{source}</span><Badge tone="info">{target}</Badge></div>)}</div></Panel><Panel title="Resultado da validação"><div className="grid grid-cols-3 gap-2"><DemoMetric label="Válidas" value="468" tone="emerald" /><DemoMetric label="Alertas" value="21" tone="amber" /><DemoMetric label="Erros" value="11" tone="rose" /></div><div className="mt-3"><DemoTable headers={['Linha', 'Problema']} rows={[[12, 'E-mail inválido'], [28, 'Equipe não encontrada'], [47, 'Data inválida']]} /></div></Panel></div></div>;
+}
+
+function SecurityPreview({ users }) {
+  const blocked = users.filter((user) => user.status === 'blocked').length;
+  return <div className="space-y-4"><PageLead title="Segurança" description="Políticas, sessões e eventos de autenticação." /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><DemoMetric label="MFA ativo" value="—" /><DemoMetric label="Usuários bloqueados" value={blocked} tone={blocked ? 'rose' : 'emerald'} /><DemoMetric label="Convites pendentes" value={users.filter((user) => user.status === 'invited').length} tone="amber" /><DemoMetric label="Sessões ativas" value="—" /><DemoMetric label="Tentativas (24h)" value="—" /></div><div className="grid gap-4 xl:grid-cols-2"><Panel title="Autenticação em duas etapas (MFA)"><div className="space-y-2">{['Superadmin', 'Administrador', 'Gestor de Acervo', 'Usuário padrão'].map((role, index) => <div key={role} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-3"><span>{role}</span><Badge tone={index < 2 ? 'pending' : 'info'}>{index < 2 ? 'Configuração pendente' : 'Opcional'}</Badge></div>)}</div></Panel><Panel title="Sessões ativas"><EmptyState icon={LockKeyhole} title="Sessões ainda não integradas" description="A visualização será ativada quando o endpoint de sessões estiver disponível." /></Panel></div><div className="grid gap-4 xl:grid-cols-2"><Panel title="Regras de bloqueio e proteção"><SecurityLine label="Bloqueio por tentativas" value="Não integrado" /><SecurityLine label="Tempo de bloqueio" value="Não integrado" /><SecurityLine label="Notificar administrador" value="Não integrado" /></Panel><Panel title="Histórico de segurança"><DemoTable headers={['Data', 'Evento', 'Usuário']} rows={[["Hoje", 'Auditoria operacional', 'sistema'], ['—', 'MFA', 'não integrado'], ['—', 'Sessões', 'não integrado']]} /></Panel></div></div>;
+}
+
+function DemoTable({ headers, rows }) {
+  return <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-900 text-slate-500"><tr>{headers.map((header) => <th key={header} className="px-3 py-2">{header}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-b border-slate-800 text-slate-300">{row.map((cell, cellIndex) => <td key={cellIndex} className="px-3 py-2">{cell}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function Preparing({ tab }) {
