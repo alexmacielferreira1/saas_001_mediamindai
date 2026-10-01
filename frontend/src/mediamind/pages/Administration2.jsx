@@ -35,6 +35,23 @@ const STATUS = {
   blocked: ['Bloqueado', 'error'], disabled: ['Desativado', 'error'], expired: ['Expirado', 'pending'],
 };
 
+const ADMIN_DEMO_PAYLOAD = {
+  items: [
+    { id: 'demo-1', full_name: 'Alex Maciel Ferreira', email: 'alex@mediamind.ai', tenant_role: 'Administrador', profile_name: 'Administrador', profile_id: 'demo-admin', status: 'active' },
+    { id: 'demo-2', full_name: 'Marina Alves', email: 'marina@mediamind.ai', tenant_role: 'Produtora', profile_name: 'Editor', profile_id: 'demo-editor', status: 'active' },
+    { id: 'demo-3', full_name: 'João Ribeiro', email: 'joao@mediamind.ai', tenant_role: 'Revisor', profile_name: 'Revisor', profile_id: 'demo-reviewer', status: 'invited' },
+    { id: 'demo-4', full_name: 'Beatriz Santos', email: 'beatriz@mediamind.ai', tenant_role: 'Social Media', profile_name: 'Visualizador', profile_id: 'demo-viewer', status: 'suspended' },
+  ],
+  total: 4, page: 1, page_size: 25,
+};
+
+const ADMIN_DEMO_GROUPS = [
+  { id: 'demo-admin', name: 'Administrador', description: 'Acesso total ao sistema.', is_active: true, permission_codes: ['admin.manage', 'users.manage', 'archive.manage', 'production.approve'] },
+  { id: 'demo-editor', name: 'Editor Broadcast', description: 'Edição e finalização de conteúdos.', is_active: true, permission_codes: ['production.view', 'production.edit', 'archive.view'] },
+  { id: 'demo-reviewer', name: 'Revisor', description: 'Revisão e aprovação de conteúdo.', is_active: true, permission_codes: ['production.view', 'production.approve'] },
+  { id: 'demo-viewer', name: 'Visualizador', description: 'Acesso somente para consulta.', is_active: true, permission_codes: ['production.view', 'archive.view'] },
+];
+
 function UserStatus({ value }) {
   const [label, tone] = STATUS[value] || [value, 'info'];
   return <Badge tone={tone}>{label}</Badge>;
@@ -60,7 +77,10 @@ export default function Administration2() {
       ]);
       setPayload(users); setGroups(permissionGroups); setActivity(events);
     } catch {
-      setError('Não foi possível carregar a Administração. Confira a API e tente novamente.');
+      setPayload(ADMIN_DEMO_PAYLOAD);
+      setGroups(ADMIN_DEMO_GROUPS);
+      setActivity([]);
+      setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');
     }
   }
 
@@ -85,7 +105,7 @@ export default function Administration2() {
           <p className="mt-1 text-sm text-slate-400">Nova área para revisão, sem substituir a Administração atual.</p>
         </div>
         <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
-          Dados de usuários conectados ao tenant selecionado
+          {error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
         </div>
       </header>
 

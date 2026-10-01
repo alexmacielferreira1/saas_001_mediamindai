@@ -54,6 +54,15 @@ describe('Administration2 preview', () => {
     expect(listAdminUsersMock).toHaveBeenCalledWith({ page: 1, pageSize: 100, search: '', status: '' });
   });
 
+  it('keeps the administration preview navigable when the API is unavailable', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/exibindo dados de demonstração/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
+    expect(await screen.findByText('Alex Maciel Ferreira')).toBeInTheDocument();
+  });
+
   it('opens user detail and persists suspension only after confirmation', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     suspendAdminUserMock.mockResolvedValue({ ...USER, status: 'suspended' });
