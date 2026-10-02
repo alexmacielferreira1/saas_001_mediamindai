@@ -289,7 +289,7 @@ function UsersTab({ initialPayload, onReload, fallbackKind }) {
           <div className="space-y-2">{visible.filter((user) => user.status === 'invited').slice(0, 4).map((user) => <button type="button" key={user.id} onClick={() => openUser(user.id)} className="w-full rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-left hover:border-sky-700"><p className="text-sm font-medium text-slate-200">{user.full_name || user.email}</p><p className="mt-1 text-xs text-slate-500">{user.email}</p></button>)}{!visible.some((user) => user.status === 'invited') && <p className="text-sm text-slate-500">Nenhum convite aguardando aceite.</p>}</div>
         </Panel>
         <Panel title="Acessos expirando">
-          <div className="space-y-2"><AlertLine tone="amber" text="3 acessos temporários vencem nesta semana" /><AlertLine tone="sky" text="Revise perfis com escopo temporário" /></div>
+          <EmptyState icon={LockKeyhole} title="Validade ainda não integrada" description="O backend ainda não fornece datas de expiração para esta lista." />
         </Panel>
       </aside>
       </div>

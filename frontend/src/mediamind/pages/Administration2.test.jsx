@@ -70,6 +70,31 @@ describe('Administration2 preview', () => {
     expect(await screen.findByText('Alex Maciel Ferreira')).toBeInTheDocument();
   });
 
+  it('opens demonstration user details locally without calling the unavailable API again', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/API indisponível/i);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver Alex Maciel Ferreira' }));
+    expect(await screen.findByRole('heading', { name: 'Alex Maciel Ferreira' })).toBeInTheDocument();
+    expect(getAdminUserMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Suspender usuário' })).not.toBeInTheDocument();
+    expect(screen.getByText(/detalhe de demonstração/i)).toBeInTheDocument();
+  });
+
+  it('uses honest navigation labels and offline security status', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: /Gerenciar usuários/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Novo usuário/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Indisponível')).toBeInTheDocument();
+  });
+
+  it('changes the selected demonstration form preview', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=forms']}><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Autorização de imagem/i }));
+    expect(screen.getByRole('heading', { name: 'Autorização de imagem' })).toBeInTheDocument();
+  });
+
   it('does not call the API unavailable when only the demo session lacks authentication', async () => {
     listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }));
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
