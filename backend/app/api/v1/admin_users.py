@@ -22,8 +22,6 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 ACCOUNT_STATUSES = {"invited", "active", "suspended", "blocked", "disabled", "expired", "deleted"}
-
-
 def _base_query(tenant_id: UUID):
     last_access = (
         select(func.max(AuthSession.last_seen_at))

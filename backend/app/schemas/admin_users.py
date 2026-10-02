@@ -1,7 +1,8 @@
 from datetime import datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AdminUserSummary(BaseModel):
@@ -33,3 +34,28 @@ class AdminUserDetail(AdminUserSummary):
 
 class AdminUserStatusChange(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
+
+
+class AdminSettingsResponse(BaseModel):
+    organization_name: str
+    locale: str
+    timezone: str
+    date_format: str
+
+
+class AdminSettingsPatch(BaseModel):
+    organization_name: str | None = Field(default=None, min_length=2, max_length=200)
+    locale: str | None = Field(default=None, pattern=r"^[a-z]{2}-[A-Z]{2}$")
+    timezone: str | None = Field(default=None, min_length=3, max_length=80)
+    date_format: str | None = Field(default=None, pattern=r"^(DD/MM/YYYY|MM/DD/YYYY|YYYY-MM-DD)$")
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Fuso horário inválido.") from exc
+        return value

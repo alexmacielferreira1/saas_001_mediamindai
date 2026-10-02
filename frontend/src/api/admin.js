@@ -20,6 +20,14 @@ export function suspendAdminUser(userId, reason) {
   });
 }
 
+export function getAdminSettings() {
+  return request('/admin/settings');
+}
+
+export function updateAdminSettings(settings) {
+  return request('/admin/settings', { method: 'PATCH', body: settings });
+}
+
 export async function listAdminActivity(limit = 8) {
   return (await request(`/records/LogAuditoria?sort=-created_date&limit=${limit}`)).records;
 }

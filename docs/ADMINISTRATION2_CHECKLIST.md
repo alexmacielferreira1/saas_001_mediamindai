@@ -22,7 +22,8 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 | Usuários e detalhe | Parcial | API tenant-scoped, lista, busca, filtro e detalhe inicial; ciclo completo ainda pendente |
 | Ciclo de estado de conta | Completar | Primeiro evento `active → suspended` persistido e auditado |
 | Perfis, permissões com escopo e equipes | Parcial | Prévia conectada ao que já existe; modelo relacional completo ainda pendente |
-| Telas/módulos, cadastros, integrações e configurações | Estruturar | Prévia navegável, sem persistência própria nem autorização backend |
+| Telas/módulos, cadastros e integrações | Estruturar | Prévia navegável, sem persistência própria nem autorização backend |
+| Configurações | Funcional inicial | Leitura/gravação por tenant, validação, `permissions.manage` e auditoria `settings.updated` |
 | Formulários, importações e segurança completa | Parcial | Prévia estrutural; fluxos reais e persistência ainda pendentes |
 | Roteiro atual | Preservar | Intocado |
 | Roteiro 2 | Adicionar | Primeira prévia visual isolada disponível em `/roteiro2` |
@@ -61,6 +62,8 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 - [x] Executar smoke com PostgreSQL/API disponíveis.
 - [x] Iniciar a convergência visual do Roteiro 2 com biblioteca identificada e preview usando o stream real de vídeo, imagem ou áudio do acervo.
 - [x] Substituir os placeholders vazios de Telas e Módulos, Cadastros, Integrações e Configurações por prévias estruturadas e navegáveis.
+- [x] Remover contadores inventados de Telas e Módulos e Integrações.
+- [x] Conectar Configurações ao backend com escopo do tenant, validação, autorização, persistência e auditoria.
 
 ## Próximo ponto exato
 

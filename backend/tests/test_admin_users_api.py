@@ -44,10 +44,15 @@ def admin_users_client():
             full_name="Usuário Externo",
         )
         manage_users = Permission(code="users.manage", description="Gerenciar usuários")
-        session.add_all([tenant, other, manager, target, outsider, manage_users])
+        manage_permissions = Permission(
+            code="permissions.manage", description="Gerenciar configurações"
+        )
+        session.add_all(
+            [tenant, other, manager, target, outsider, manage_users, manage_permissions]
+        )
         session.flush()
         group = PermissionGroup(tenant_id=tenant.id, name="Administradores")
-        group.permissions = [manage_users]
+        group.permissions = [manage_users, manage_permissions]
         session.add(group)
         session.flush()
         manager_membership = Membership(
@@ -168,3 +173,41 @@ def test_admin_user_actions_reject_unknown_user_or_invalid_transition(admin_user
     assert first.status_code == 200
     assert second.status_code == 409
     assert second.json()["error_code"] == "USER_STATUS_CONFLICT"
+
+
+def test_admin_settings_are_tenant_scoped_validated_persisted_and_audited(admin_users_client):
+    client, ids = admin_users_client
+    login(client)
+
+    initial = client.get("/api/v1/admin/settings")
+    assert initial.status_code == 200
+    assert initial.json()["organization_name"] == "Empresa"
+    assert initial.json()["timezone"] == "America/Sao_Paulo"
+
+    updated = client.patch(
+        "/api/v1/admin/settings",
+        json={
+            "organization_name": "MediaMind Corp",
+            "locale": "pt-BR",
+            "timezone": "America/Recife",
+            "date_format": "DD/MM/YYYY",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["organization_name"] == "MediaMind Corp"
+
+    invalid = client.patch("/api/v1/admin/settings", json={"locale": "invalid"})
+    assert invalid.status_code == 422
+
+    with ids["session_factory"]() as session:
+        setting = session.scalar(
+            select(TenantRecord).where(TenantRecord.entity_type == "OrganizationSettings")
+        )
+        audit = session.scalar(
+            select(TenantRecord).where(
+                TenantRecord.entity_type == "LogAuditoria",
+                TenantRecord.data["action"].as_string() == "settings.updated",
+            )
+        )
+        assert setting.data["timezone"] == "America/Recife"
+        assert audit is not None

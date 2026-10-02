@@ -7,12 +7,16 @@ const listAdminUsersMock = vi.fn();
 const getAdminUserMock = vi.fn();
 const suspendAdminUserMock = vi.fn();
 const listAdminActivityMock = vi.fn();
+const getAdminSettingsMock = vi.fn();
+const updateAdminSettingsMock = vi.fn();
 
 vi.mock('../../api/admin', () => ({
   listAdminUsers: (...args) => listAdminUsersMock(...args),
   getAdminUser: (...args) => getAdminUserMock(...args),
   suspendAdminUser: (...args) => suspendAdminUserMock(...args),
   listAdminActivity: (...args) => listAdminActivityMock(...args),
+  getAdminSettings: (...args) => getAdminSettingsMock(...args),
+  updateAdminSettings: (...args) => updateAdminSettingsMock(...args),
 }));
 
 vi.mock('../../api/permissions', () => ({ listPermissionGroups: vi.fn().mockResolvedValue([]) }));
@@ -40,6 +44,8 @@ describe('Administration2 preview', () => {
     getAdminUserMock.mockReset();
     suspendAdminUserMock.mockReset();
     listAdminActivityMock.mockResolvedValue([]);
+    getAdminSettingsMock.mockResolvedValue({ organization_name: 'MediaMind AI', locale: 'pt-BR', timezone: 'America/Sao_Paulo', date_format: 'DD/MM/YYYY' });
+    updateAdminSettingsMock.mockImplementation(async (value) => value);
     listAdminUsersMock.mockResolvedValue({ items: [USER], total: 1, page: 1, page_size: 25 });
     getAdminUserMock.mockResolvedValue({ ...USER, extra_screens: [], restricted_screens: [], failed_login_attempts: 0 });
   });
@@ -156,5 +162,24 @@ describe('Administration2 preview', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
     expect(screen.queryByText('Área em preparação')).not.toBeInTheDocument();
+  });
+
+  it('does not present invented catalog and integration totals as real data', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=registry']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Registro de telas e módulos' })).toBeInTheDocument();
+    expect(screen.queryByText('142')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Integrações 2' }));
+    expect(await screen.findByRole('heading', { name: 'Integrações' })).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma integração validada por esta tela/)).toBeInTheDocument();
+  });
+
+  it('loads, validates and persists organization settings through the backend', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=settings']}><Administration2 /></MemoryRouter>);
+    const organization = await screen.findByLabelText('Nome da organização');
+    expect(organization).toHaveValue('MediaMind AI');
+    fireEvent.change(organization, { target: { value: 'MediaMind Corp' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar configurações' }));
+    await waitFor(() => expect(updateAdminSettingsMock).toHaveBeenCalledWith(expect.objectContaining({ organization_name: 'MediaMind Corp' })));
+    expect(await screen.findByText('Configurações salvas e auditadas.')).toBeInTheDocument();
   });
 });
