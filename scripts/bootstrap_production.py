@@ -1,7 +1,5 @@
 import os
 
-from sqlalchemy import select
-
 from app.db.session import SessionLocal
 from app.models.identity import (
     Membership,
@@ -11,7 +9,7 @@ from app.models.identity import (
     User,
 )
 from app.security.passwords import hash_password
-
+from sqlalchemy import select
 
 TENANT_NAME = "MediaMind AI"
 TENANT_SLUG = "mediamind"
