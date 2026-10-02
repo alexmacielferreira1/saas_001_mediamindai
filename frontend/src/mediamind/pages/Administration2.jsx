@@ -120,10 +120,12 @@ export default function Administration2() {
 
       <AdminTabs label="Navegação principal da Administração 2" tabs={CORE_TABS} active={active} onChange={openTab} />
       <AdminTabs label="Áreas relacionadas" tabs={RELATED_TABS} active={active} onChange={openTab} compact />
-      {error && <div role={fallbackKind === 'offline' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'offline' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
-      {!payload && !error ? <Loading label="Carregando Administração 2..." /> : null}
-      {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} />}
-      {active === 'users' && <UsersTab initialPayload={payload} onReload={load} />}
+      <div className="contents">
+        {error && <div role={fallbackKind === 'offline' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'offline' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
+        {!payload && !error ? <Loading label="Carregando Administração 2..." /> : null}
+      </div>
+      {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} fallbackKind={fallbackKind} />}
+      {active === 'users' && <UsersTab initialPayload={payload} onReload={load} fallbackKind={fallbackKind} />}
       {active === 'archive' && <EmbeddedArea title="Acervo 2"><Acervo /></EmbeddedArea>}
       {active === 'management' && <EmbeddedArea title="Gestão 2"><Management /></EmbeddedArea>}
       {active === 'access' && <AdminAcessosPage />}
@@ -141,7 +143,7 @@ export default function Administration2() {
   );
 }
 
-function Overview({ payload, groups, activity, onOpenTab }) {
+function Overview({ payload, groups, activity, onOpenTab, fallbackKind }) {
   const activeUsers = payload.items.filter((item) => item.status === 'active').length;
   const invited = payload.items.filter((item) => item.status === 'invited').length;
   const suspended = payload.items.filter((item) => item.status === 'suspended').length;
@@ -161,11 +163,11 @@ function Overview({ payload, groups, activity, onOpenTab }) {
           <p className="mb-4 text-xs text-slate-500">Acesse as tarefas administrativas mais comuns.</p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              ['Novo usuário', 'Cadastre uma conta', 'users'],
-              ['Convidar usuário', 'Gerencie convites', 'users'],
-              ['Novo perfil', 'Configure acessos', 'profiles'],
-              ['Nova importação', 'Importe dados em lote', 'imports'],
-              ['Novo formulário', 'Colete informações', 'forms'],
+              ['Gerenciar usuários', 'Consulte contas e convites', 'users'],
+              ['Revisar acessos', 'Confira perfis vinculados', 'users'],
+              ['Consultar perfis', 'Revise acessos disponíveis', 'profiles'],
+              ['Ver importações', 'Consulte o fluxo planejado', 'imports'],
+              ['Ver formulários', 'Consulte modelos de exemplo', 'forms'],
             ].map(([title, text, target]) => <button type="button" key={title} onClick={() => onOpenTab(target)} className="min-h-24 rounded-xl border border-sky-900/70 bg-sky-950/20 p-4 text-left transition hover:border-sky-500 hover:bg-sky-950/40"><p className="font-semibold text-sky-300">{title}</p><p className="mt-1 text-xs text-slate-500">{text}</p></button>)}
           </div>
         </Panel>
@@ -182,7 +184,7 @@ function Overview({ payload, groups, activity, onOpenTab }) {
           <div className="divide-y divide-slate-800">{activity.length ? activity.slice(0, 6).map((item) => <div key={item.id} className="py-3"><p className="font-semibold text-slate-200">{auditLabel(item.action)}</p><p className="mt-1 text-xs text-slate-500">{item.entity_type || 'Sistema'} · {item.created_date ? new Date(item.created_date).toLocaleString('pt-BR') : 'horário não informado'}</p></div>) : <p className="py-6 text-sm text-slate-500">Nenhuma ação administrativa registrada.</p>}</div>
         </Panel>
         <Panel title="Status de segurança">
-          <div className="space-y-2"><SecurityLine label="Auditoria administrativa" value="Operacional" /><SecurityLine label="Contas bloqueadas" value={String(blocked)} /><SecurityLine label="MFA para administradores" value="Não integrado" /><SecurityLine label="Política de senha" value="Não integrada" /></div>
+          <div className="space-y-2"><SecurityLine label="Auditoria administrativa" value={fallbackKind ? 'Indisponível' : 'Operacional'} /><SecurityLine label="Contas bloqueadas" value={String(blocked)} /><SecurityLine label="MFA para administradores" value="Não integrado" /><SecurityLine label="Política de senha" value="Não integrada" /></div>
         </Panel>
       </div>
     </div>
@@ -222,7 +224,7 @@ function SecurityLine({ label, value }) {
   return <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2"><span className="text-sm text-slate-300">{label}</span><Badge tone={value === 'Operacional' || value === '0' ? 'success' : 'pending'}>{value}</Badge></div>;
 }
 
-function UsersTab({ initialPayload, onReload }) {
+function UsersTab({ initialPayload, onReload, fallbackKind }) {
   const [payload, setPayload] = useState(initialPayload);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -236,11 +238,24 @@ function UsersTab({ initialPayload, onReload }) {
 
   async function applyFilters(event) {
     event.preventDefault();
+    if (fallbackKind) {
+      const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
+      setPayload({
+        ...initialPayload,
+        items: (initialPayload?.items || []).filter((user) => (!status || user.status === status) && (!normalizedSearch || `${user.full_name} ${user.email}`.toLocaleLowerCase('pt-BR').includes(normalizedSearch))),
+      });
+      return;
+    }
     setLoading(true);
     try { setPayload(await listAdminUsers({ page: 1, pageSize: 100, search, status })); } finally { setLoading(false); }
   }
 
   async function openUser(id) {
+    if (fallbackKind) {
+      const demoUser = visible.find((user) => user.id === id);
+      setSelected({ ...demoUser, extra_screens: [], restricted_screens: [], failed_login_attempts: 0, is_demo: true });
+      return;
+    }
     setSelected(await getAdminUser(id));
   }
 
@@ -255,6 +270,7 @@ function UsersTab({ initialPayload, onReload }) {
         <UserMetric label="Bloqueados" value={visible.filter((user) => user.status === 'blocked').length} tone="rose" />
         <UserMetric label="Total" value={payload?.total || 0} tone="sky" />
       </div>
+      {fallbackKind && <div role="status" className="rounded-lg border border-amber-800/60 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">A busca e os detalhes funcionam localmente nesta demonstração. Alterações de conta exigem conexão com o backend.</div>}
       <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
       <Panel title="Usuários do tenant" right={<Badge tone="info">{payload?.total || 0} registros</Badge>}>
       <form onSubmit={applyFilters} className="mb-4 flex flex-wrap gap-2">
@@ -301,7 +317,7 @@ function UserDetail({ user, onChange, onBack, onReload }) {
     <div className="space-y-4">
       <Button variant="ghost" onClick={onBack}>← Voltar para usuários</Button>
       <Panel right={<UserStatus value={user.status} />}>
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-slate-50">{user.full_name || user.email}</h2><p className="text-sm text-slate-400">{user.email}</p><p className="mt-2 text-xs text-slate-500">Função: {user.tenant_role} · Perfil: {user.profile_name || 'não atribuído'}</p></div>{user.status === 'active' && <Button variant="danger" loading={working} onClick={suspend}>Suspender usuário</Button>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-slate-50">{user.full_name || user.email}</h2><p className="text-sm text-slate-400">{user.email}</p><p className="mt-2 text-xs text-slate-500">Função: {user.tenant_role} · Perfil: {user.profile_name || 'não atribuído'}</p>{user.is_demo && <p className="mt-2 text-xs text-amber-300">Detalhe de demonstração — nenhuma alteração será enviada.</p>}</div>{user.status === 'active' && !user.is_demo && <Button variant="danger" loading={working} onClick={suspend}>Suspender usuário</Button>}</div>
       </Panel>
       <Tabs tabs={[['overview', 'Visão Geral'], ['access', 'Acesso'], ['roles', 'Funções'], ['teams', 'Equipes'], ['modules', 'Módulos'], ['permissions', 'Permissões'], ['security', 'Segurança'], ['activity', 'Atividade'], ['history', 'Histórico']].map(([key, label]) => ({ key, label }))} active={detailTab} onChange={setDetailTab} />
       {detailTab === 'overview' && <div className="grid gap-4 lg:grid-cols-2"><Panel title="Conta"><dl className="space-y-2 text-sm"><Info label="Estado"><UserStatus value={user.status} /></Info><Info label="Criado em">{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'Não informado'}</Info></dl></Panel><Panel title="Vínculo atual"><p className="text-sm text-slate-400">Função <strong className="text-slate-200">{user.tenant_role}</strong>{user.profile_name ? ` com perfil ${user.profile_name}` : ' sem perfil adicional'}.</p></Panel></div>}
@@ -339,6 +355,10 @@ function PageLead({ title, description, action }) {
   return <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold text-slate-50">{title}</h2><p className="mt-1 text-sm text-slate-400">{description}</p></div>{action}</div>;
 }
 
+function ReadOnlyAction({ children }) {
+  return <span className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs text-slate-400">{children} · requer backend</span>;
+}
+
 function DemoMetric({ label, value, tone = 'sky' }) {
   const colors = { sky: 'text-sky-300', emerald: 'text-emerald-300', amber: 'text-amber-300', rose: 'text-rose-300' };
   return <div className="rounded-xl border border-slate-800 bg-slate-950/45 p-4"><p className="text-xs text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${colors[tone]}`}>{value}</p></div>;
@@ -351,7 +371,8 @@ function TeamsPreview() {
 
 function FormsPreview() {
   const forms = [['Cadastro de convidado', 'Público', '243 respostas'], ['Autorização de imagem', 'Público', '189 respostas'], ['Novo programa', 'Interno', 'Rascunho'], ['Solicitação de mídia', 'Público', '67 respostas']];
-  return <div className="space-y-4"><PageLead title="Formulários" description="Formulários conectados às entidades administrativas." action={<Button disabled>+ Novo formulário</Button>} /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Ativos" value="9" tone="emerald" /><DemoMetric label="Rascunhos" value="3" /><DemoMetric label="Externos" value="4" /><DemoMetric label="Respostas no mês" value="126" /></div><div className="grid gap-4 xl:grid-cols-[360px_1fr]"><Panel title="Formulários cadastrados"><div className="space-y-2">{forms.map(([name, scope, count], index) => <button key={name} className={`w-full rounded-lg border p-3 text-left ${index === 0 ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40'}`}><strong>{name}</strong><p className="mt-1 text-xs text-slate-500">{scope} · {count}</p></button>)}</div></Panel><Panel title="Pré-visualização do formulário"><div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5"><h3 className="text-lg font-bold">Cadastro de convidado</h3><p className="text-sm text-slate-400">Preencha seus dados para participar do evento.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{['Nome completo', 'E-mail', 'Telefone', 'Empresa'].map((label) => <label key={label} className="text-xs text-slate-400">{label}<input disabled placeholder={label} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2" /></label>)}</div><label className="mt-3 block text-xs text-slate-400">Observações<textarea disabled className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3" /></label><Button disabled className="mt-4 w-full">Enviar formulário</Button></div></Panel></div></div>;
+  const [selected, setSelected] = useState(forms[0][0]);
+  return <div className="space-y-4"><PageLead title="Formulários" description="Formulários conectados às entidades administrativas." action={<ReadOnlyAction>Criação de formulário</ReadOnlyAction>} /><PreviewNotice /><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Ativos" value="9" tone="emerald" /><DemoMetric label="Rascunhos" value="3" /><DemoMetric label="Externos" value="4" /><DemoMetric label="Respostas no mês" value="126" /></div><div className="grid gap-4 xl:grid-cols-[360px_1fr]"><Panel title="Formulários cadastrados"><div className="space-y-2">{forms.map(([name, scope, count]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`w-full rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-sky-800'}`}><strong>{name}</strong><p className="mt-1 text-xs text-slate-500">{scope} · {count}</p></button>)}</div></Panel><Panel title="Pré-visualização do formulário"><div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5"><h3 className="text-lg font-bold">{selected}</h3><p className="text-sm text-slate-400">Prévia somente leitura do modelo selecionado.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{['Nome completo', 'E-mail', 'Telefone', 'Empresa'].map((label) => <label key={label} className="text-xs text-slate-400">{label}<input disabled placeholder={label} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2" /></label>)}</div><label className="mt-3 block text-xs text-slate-400">Observações<textarea disabled className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-3" /></label><p className="mt-4 text-xs text-slate-500">O envio permanece indisponível até existir endpoint com validação, persistência e auditoria.</p></div></Panel></div></div>;
 }
 
 function ImportsPreview() {
