@@ -4,8 +4,9 @@ Revision ID: 0008_admin_user_status
 Revises: 0007_hub_commands
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0008_admin_user_status"
 down_revision = "0007_hub_commands"
