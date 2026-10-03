@@ -209,7 +209,8 @@ Além dos testes direcionados, serão executados lint, verificação de tipos, b
 
 Não está fora de escopo refazer amplamente o frontend exclusivo da Administração 2 quando necessário para reproduzir as referências visuais.
 
+`Workspace2` e os Roteiros já integrados a ele são áreas protegidas nesta execução. Não alterar seus componentes, rotas, modelos, blocos, seleção de mídia, timeline ou fluxos; executar apenas testes de regressão para provar que a Administração não os afetou.
+
 ## Rollback
 
 O trabalho será dividido em commits pequenos por padrão de interação ou grupo de abas. Cada commit poderá ser revertido sem alterar banco ou migrations. O endpoint de configurações existente não será modificado sem necessidade comprovada.
-

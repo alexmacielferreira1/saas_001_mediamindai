@@ -69,6 +69,16 @@ Atualizado em 30/09/2026. Fonte: `MediaMind_AI_Especificacao_Administracao_e_Rot
 
 Concluir o detalhe do usuário com reativação e revogação de sessões; em seguida introduzir `Person`, funções múltiplas, perfis e escopos relacionais sem duplicar `Membership`/`PermissionGroup`.
 
+## Gate visual normativo de 02/10/2026
+
+- [x] Localizar o `.docx` original e as 26 imagens de referência.
+- [x] Mapear imagem por imagem e guia por guia em `docs/ADMINISTRATION2_VISUAL_AUDIT.md`.
+- [ ] Refazer as telas de Administração conforme as fotos, mesmo quando isso exigir substituir substancialmente o layout atual.
+- [ ] Implementar mestre–detalhe contextual e responsivo em todas as listas administrativas.
+- [ ] Personalizar a prévia de cada tipo de formulário; trocar somente o título não atende.
+- [ ] Validar todas as guias de usuário, perfil, equipe, formulários, importação e segurança.
+- [ ] Confirmar por regressão que `Workspace2` e os Roteiros dentro dele permanecem inalterados e funcionais.
+
 ## Evidência e bloqueios da sessão
 
 - `ruff`: aprovado.
