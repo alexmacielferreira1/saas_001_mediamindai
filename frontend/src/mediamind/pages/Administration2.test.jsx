@@ -101,10 +101,12 @@ describe('Administration2 preview', () => {
     expect(screen.getByRole('heading', { name: 'Autorização de imagem' })).toBeInTheDocument();
   });
 
-  it('does not call the API unavailable when only the demo session lacks authentication', async () => {
+  it('does not replace an expired real session with demonstration data', async () => {
     listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }));
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    expect(await screen.findByText(/sessão local de demonstração/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sessão expirou/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sessão local de demonstração/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex Maciel Ferreira')).not.toBeInTheDocument();
     expect(screen.queryByText(/API indisponível/i)).not.toBeInTheDocument();
   });
 

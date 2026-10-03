@@ -80,6 +80,16 @@ describe('MediaMind local authentication', () => {
     expect(result.current.user.email).toBe('alexmacielferreira@gmail.com');
   });
 
+  it('clears a stale identity when any request reports that authentication expired', async () => {
+    requestMock.mockResolvedValueOnce(session);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.user).not.toBeNull());
+
+    act(() => window.dispatchEvent(new Event('mediamind:authentication-required')));
+
+    expect(result.current.user).toBeNull();
+  });
+
   it('treats an expired session as signed out without exposing an error', async () => {
     requestMock.mockRejectedValueOnce(
       new ApiError({ status: 401, code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }),

@@ -55,6 +55,19 @@ describe('request', () => {
     await expect(result).rejects.toBeInstanceOf(ApiError);
   });
 
+  it('notifies the app when an authenticated request reports an expired session', async () => {
+    const listener = vi.fn();
+    window.addEventListener('mediamind:authentication-required', listener);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ error_code: 'AUTHENTICATION_REQUIRED', message: 'Faça login.' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )));
+
+    await expect(request('/admin/users')).rejects.toBeInstanceOf(ApiError);
+    expect(listener).toHaveBeenCalledOnce();
+    window.removeEventListener('mediamind:authentication-required', listener);
+  });
+
   it('serializes JSON bodies and preserves caller headers', async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: 'tenant-1' }), {

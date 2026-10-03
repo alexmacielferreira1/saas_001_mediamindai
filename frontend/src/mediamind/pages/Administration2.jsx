@@ -99,13 +99,16 @@ export default function Administration2() {
       ]);
       setPayload(users); setGroups(permissionGroups); setActivity(events);
     } catch (reason) {
-      setPayload(ADMIN_DEMO_PAYLOAD);
-      setGroups(ADMIN_DEMO_GROUPS);
-      setActivity([]);
       if (reason instanceof ApiError && reason.status === 401) {
-        setFallbackKind('demo');
-        setError('Sessão local de demonstração: os painéis administrativos exibem dados de exemplo; entre com uma sessão real para consultar o tenant.');
+        setPayload(null);
+        setGroups([]);
+        setActivity([]);
+        setFallbackKind('authentication');
+        setError('Sua sessão expirou. Redirecionando para entrar novamente.');
       } else {
+        setPayload(ADMIN_DEMO_PAYLOAD);
+        setGroups(ADMIN_DEMO_GROUPS);
+        setActivity([]);
         setFallbackKind('offline');
         setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');
       }

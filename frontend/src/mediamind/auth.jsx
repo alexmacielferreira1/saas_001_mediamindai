@@ -60,6 +60,16 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    function invalidateExpiredSession() {
+      localStorage.removeItem(DEMO_SESSION_KEY);
+      setError('');
+      setUser(null);
+    }
+    window.addEventListener('mediamind:authentication-required', invalidateExpiredSession);
+    return () => window.removeEventListener('mediamind:authentication-required', invalidateExpiredSession);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const restoredDemoUser = readDemoUser();
     if (restoredDemoUser) {

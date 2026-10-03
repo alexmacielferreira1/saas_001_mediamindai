@@ -41,6 +41,9 @@ export async function request(path, /** @type {Omit<RequestInit, 'body'> & {body
     : await response.json();
 
   if (!response.ok) {
+    if (response.status === 401 && payload?.error_code === 'AUTHENTICATION_REQUIRED') {
+      window.dispatchEvent(new Event('mediamind:authentication-required'));
+    }
     throw new ApiError({
       status: response.status,
       code: payload?.error_code,
