@@ -8,6 +8,31 @@ Transformar a Administração 2 em uma experiência funcional dentro do próprio
 
 O trabalho preserva as rotas, o backend e a identidade visual existentes. Ações sem suporte real permanecem indisponíveis e claramente identificadas; não serão simuladas como funcionais.
 
+## Referências visuais e rastreabilidade
+
+A comparação visual usará como fonte principal as páginas 19–25 de `AJUSTAR SAAS 16092026 (5).pdf`, identificadas no registro `_documentacao/SOURCE_INTAKE_2026-09-23_ADMIN_PUBLICACAO_IMPORTACAO.md`, além das 26 referências visuais citadas em `docs/ADMINISTRATION2_CHECKLIST.md`. Essas páginas cobrem visão geral, usuários e detalhe, acessos por função, perfis, permissões, equipes/setores/unidades, formulários, importação e segurança.
+
+Antes de alterar cada área, será registrada uma correspondência entre referência, aba, bloco visual, dados necessários e comportamento esperado. Imagens históricas de outros produtos do HUB não serão usadas como instrução para o MediaMind.
+
+A auditoria tratará cada divergência em uma destas classes:
+
+1. **Conteúdo ausente:** a referência exige um bloco ou detalhe e os dados já existem; o bloco deve ser implementado no contexto correto.
+2. **Estado vazio legítimo:** ainda não há dados ou integração; a área deve explicar o que está vazio, por que está vazio e qual ação real poderá preenchê-la.
+3. **Aplicação incorreta:** o conteúdo existe, mas está em aba, hierarquia, dimensão ou contexto diferente da referência; ele deve ser reposicionado sem duplicação.
+4. **Conteúdo não comprovado:** número, foto, estado, histórico ou integração não sustentado por fonte real; deve ser removido ou rotulado claramente como demonstração.
+
+Nenhuma lacuna será preenchida apenas para aproximar visualmente a tela. Fidelidade inclui também não mostrar informação que a aplicação não possui.
+
+## Fotografias, avatares e mídia
+
+- Fotos e avatares reais só aparecem quando associados ao registro correto e autorizados para exibição.
+- Na ausência de foto, usar iniciais ou placeholder neutro consistente; não reutilizar retratos genéricos como se fossem pessoas reais.
+- Miniaturas de mídia devem vir do asset correspondente. Falha de carregamento recebe fallback local e texto acessível, sem imagem aleatória.
+- Recorte e escala devem preservar proporção (`object-fit`) e evitar rostos, logos ou texto deformados.
+- Toda imagem informativa deve ter texto alternativo; imagens puramente decorativas devem ser ignoradas por tecnologia assistiva.
+- Cartões sem imagem não devem reservar grandes áreas vazias quando a referência não exigir esse espaço.
+- Estados de carregamento, imagem ausente e erro de mídia devem ser visualmente diferentes.
+
 ## Padrão de interação
 
 A interface seguirá o padrão mestre–detalhe:
@@ -160,6 +185,15 @@ Os testes da Administração 2 devem cobrir:
 - ações indisponíveis realmente desabilitadas;
 - erros de carregamento restritos ao painel de detalhe;
 - persistência de configurações e autorização existente.
+
+A validação visual também deve produzir evidência comparativa por aba em desktop e tela estreita, verificando:
+
+- presença e posição dos blocos previstos na referência;
+- ausência de grandes vazios acidentais, cortes, sobreposições ou conteúdo fora da grade;
+- fotos, avatares e miniaturas corretos, proporcionais e com fallback;
+- estados vazios explicativos sem dados inventados;
+- distinção visual entre item selecionável, informação estática e ação indisponível;
+- painel de detalhe utilizável sem abandonar o contexto da aba.
 
 Além dos testes direcionados, serão executados lint, verificação de tipos, build, suíte frontend completa e suíte backend quando houver alteração de contrato.
 
