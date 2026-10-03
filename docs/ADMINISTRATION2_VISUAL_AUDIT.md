@@ -8,6 +8,8 @@ As imagens de Administração são a fonte principal de verdade para layout, hie
 
 `Workspace2` e os Roteiros dentro dele estão protegidos: não alterar editor, modelos, blocos, seleção de mídia, timeline, rotas, dados ou fluxos já aprovados. As referências de Roteiro ficam preservadas para consulta e não autorizam refazer o Workspace.
 
+Funcionalidades reais já existentes na Administração também são protegidas. Se uma capacidade atual não tiver posição clara na foto, ela deve ser mantida em uma subguia contextual com nome descritivo e sufixo `+1`; não pode ser apagada para obter fidelidade visual. Duplicações visuais podem ser consolidadas somente quando apontarem para a mesma operação e o mesmo contrato de dados.
+
 ## Matriz imagem por imagem e guia por guia
 
 | Fonte | Guia ou subtela | Estrutura obrigatória | Interações e estados | Tratamento atual esperado |
@@ -56,4 +58,5 @@ Cada seleção precisa alterar campos, descrição, entidade, mapeamento e prév
 - [ ] Nenhum número, foto, sessão, tentativa, permissão ou histórico foi inventado como dado real.
 - [ ] `Workspace2` e seus Roteiros passaram nos testes existentes sem alteração funcional.
 - [ ] Acessos por Função preservou a lógica existente.
+- [ ] Toda funcionalidade anterior sem posição na referência foi preservada em subguia `+1` e testada.
 - [ ] Nenhum botão ativo ficou sem ação real.

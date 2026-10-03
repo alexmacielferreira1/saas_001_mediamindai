@@ -22,6 +22,7 @@
 - Preserve all pre-existing uncommitted work; stage only files owned by the current task.
 - Never expose credentials or secrets to the frontend, tests, documentation, screenshots, or commits.
 - Do not modify `Workspace2` or any Roteiro flow inside it; run their existing tests only as regression gates.
+- Preserve every working Administration capability; if a reference screen has no suitable placement, retain it in a descriptive contextual subtab whose label ends in `+1`.
 
 ## Review Focus
 

@@ -211,6 +211,8 @@ Não está fora de escopo refazer amplamente o frontend exclusivo da Administra�
 
 `Workspace2` e os Roteiros já integrados a ele são áreas protegidas nesta execução. Não alterar seus componentes, rotas, modelos, blocos, seleção de mídia, timeline ou fluxos; executar apenas testes de regressão para provar que a Administração não os afetou.
 
+Funcionalidades reais existentes na Administração são igualmente preservadas. Quando a referência não fornecer lugar adequado para uma capacidade já implementada, criar subguia contextual com nome descritivo terminado em `+1`, mantendo o contrato e os testes existentes. Fidelidade às fotos autoriza reorganizar a apresentação, não perder funcionalidade.
+
 ## Rollback
 
 O trabalho será dividido em commits pequenos por padrão de interação ou grupo de abas. Cada commit poderá ser revertido sem alterar banco ou migrations. O endpoint de configurações existente não será modificado sem necessidade comprovada.
