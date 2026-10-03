@@ -4,7 +4,7 @@
 
 **Goal:** Make every apparently interactive element in Administração 2 work inside its current context while correcting missing, empty, misplaced, and incorrectly illustrated content against the approved visual references.
 
-**Architecture:** Keep `Administration2` as the route and data coordinator, but extract reusable master-detail primitives and focused tab sections so selection, accessibility, empty states, and media fallbacks are consistent. Existing APIs remain the only source of persistent data; demo data never triggers mutations. Visual traceability is recorded per tab before implementation and verified with responsive screenshots after each slice.
+**Architecture:** Keep `Administration2` as the route and data coordinator, but allow its entire presentation layer to be substantially rebuilt around the approved photos. Extract reusable master-detail primitives and focused tab sections so selection, accessibility, empty states, and media fallbacks are consistent. Existing APIs remain the only source of persistent data; demo data never triggers mutations. Visual traceability is recorded per tab before implementation and verified with responsive screenshots after each slice.
 
 **Tech Stack:** React 18, React Router, Tailwind CSS, Vitest, Testing Library, Vite, existing MediaMind UI primitives.
 
@@ -12,7 +12,9 @@
 
 ## Global Constraints
 
-- Preserve existing frontend, backend, routes, flows, authentication, tenant isolation, and UI identity.
+- Administração 2 is an explicit exception to preserving the existing frontend layout: presentation, hierarchy, density, cards, tables, panels, and contextual navigation may change substantially to match the approved photos.
+- The reference photos are the primary source of truth for Administração 2 presentation, hierarchy, and interaction; when current UI and reference conflict, the reference wins within backend, security, permission, accessibility, and real-data constraints.
+- Preserve backend contracts, public routes, authentication, tenant isolation, permissions, and working business flows.
 - Do not create new backend endpoints or invent metrics, photos, health states, or history.
 - Use pages 19–25 of `AJUSTAR SAAS 16092026 (5).pdf` and the 26 references cited in `docs/ADMINISTRATION2_CHECKLIST.md`; do not copy imagery from other HUB products.
 - Keep actions without backend support visibly disabled and explain the missing dependency.
@@ -43,6 +45,8 @@
 - [ ] **Step 1: Record every Administration 2 reference and map it to its tab and visible blocks**
 
 Each row must classify the difference as `missing`, `legitimate-empty`, `misplaced`, `unproven`, or `matched`.
+
+For every `missing` or `misplaced` row, state whether the current block is retained, rebuilt, merged, moved, or removed. Do not default to retaining the current structure when it conflicts with the photo.
 
 - [ ] **Step 2: Audit photographs, avatars, thumbnails, reserved image areas, and image fallbacks**
 

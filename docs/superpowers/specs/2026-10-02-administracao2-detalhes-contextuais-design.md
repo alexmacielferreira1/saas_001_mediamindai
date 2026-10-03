@@ -6,13 +6,15 @@ Data: 02/10/2026
 
 Transformar a Administração 2 em uma experiência funcional dentro do próprio contexto. Todo item que aparenta ser interativo deve selecionar, expandir ou abrir detalhes na mesma tela. Atalhos não devem retirar o usuário da área atual nem perder filtros, seleção ou posição de trabalho.
 
-O trabalho preserva as rotas, o backend e a identidade visual existentes. Ações sem suporte real permanecem indisponíveis e claramente identificadas; não serão simuladas como funcionais.
+O trabalho preserva as rotas, o backend, a segurança e os contratos de dados existentes. **A Administração 2 é uma exceção à regra geral de preservação do layout atual:** sua composição visual poderá ser alterada substancialmente para refletir as fotos aprovadas, inclusive hierarquia, distribuição de blocos, densidade, cartões, tabelas, painéis, abas internas e navegação contextual. Ações sem suporte real permanecem indisponíveis e claramente identificadas; não serão simuladas como funcionais.
 
 ## Referências visuais e rastreabilidade
 
 A comparação visual usará como fonte principal as páginas 19–25 de `AJUSTAR SAAS 16092026 (5).pdf`, identificadas no registro `_documentacao/SOURCE_INTAKE_2026-09-23_ADMIN_PUBLICACAO_IMPORTACAO.md`, além das 26 referências visuais citadas em `docs/ADMINISTRATION2_CHECKLIST.md`. Essas páginas cobrem visão geral, usuários e detalhe, acessos por função, perfis, permissões, equipes/setores/unidades, formulários, importação e segurança.
 
 Antes de alterar cada área, será registrada uma correspondência entre referência, aba, bloco visual, dados necessários e comportamento esperado. Imagens históricas de outros produtos do HUB não serão usadas como instrução para o MediaMind.
+
+**Regra normativa da Administração 2:** as fotos de referência são a fonte principal de verdade para apresentação, hierarquia e interação. Quando a tela atual divergir da foto, prevalece a foto, desde que a mudança não viole isolamento de tenant, permissões, acessibilidade ou contratos reais de API. Não é necessário conservar um bloco visual apenas porque já existe; ele pode ser substituído, fundido ou reposicionado quando a matriz de referência demonstrar a divergência.
 
 A auditoria tratará cada divergência em uma destas classes:
 
@@ -204,6 +206,8 @@ Além dos testes direcionados, serão executados lint, verificação de tipos, b
 - Alterar rotas públicas, autenticação, tenant ou modelo de permissões.
 - Substituir a Administração atual ou remover as prévias preservadas.
 - Implementar criação de equipes, formulários, importações, integrações ou catálogo sem contrato backend validado.
+
+Não está fora de escopo refazer amplamente o frontend exclusivo da Administração 2 quando necessário para reproduzir as referências visuais.
 
 ## Rollback
 
