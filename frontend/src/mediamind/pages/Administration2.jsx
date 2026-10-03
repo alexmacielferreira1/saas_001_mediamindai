@@ -8,6 +8,7 @@ import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, susp
 import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
+import { ProfilesSection, TeamsSection, UsersSection } from '../components/admin2/PeopleAccessSections';
 import { readLocalDemoSession } from '../lib/demoAccess';
 import Acervo from './Acervo';
 import Management from './Management';
@@ -213,7 +214,7 @@ function auditLabel(action = '') {
   return labels[action] || action.replaceAll('.', ' ') || 'Ação administrativa';
 }
 
-function ProfilesTab({ groups, users }) {
+function LegacyProfilesTab({ groups, users }) {
   const [selected, setSelected] = useState(groups[0] || null);
   useEffect(() => { if (!selected && groups[0]) setSelected(groups[0]); }, [groups, selected]);
   if (!groups.length) return <div className="space-y-4"><Panel title="Perfis e Funções 2"><EmptyState icon={UserCog} title="Nenhum perfil cadastrado" description="Crie os primeiros grupos na Administração atual para visualizá-los aqui." /></Panel><div className="grid gap-4 lg:grid-cols-2"><Panel title="Módulos liberados"><p className="text-sm text-slate-500">Nenhum módulo liberado.</p></Panel><Panel title="Matriz resumida de permissões"><p className="text-sm text-slate-500">Nenhuma permissão cadastrada.</p></Panel></div></div>;
@@ -242,6 +243,17 @@ function SecurityLine({ label, value }) {
 }
 
 function UsersTab({ initialPayload, onReload, fallbackKind }) {
+  const [view, setView] = useState('reference');
+  async function suspend(user) {
+    if (!window.confirm(`Suspender ${user.full_name || user.email}?`)) return;
+    const updated = await suspendAdminUser(user.id, 'Suspensão confirmada pelo administrador.');
+    await onReload();
+    return updated;
+  }
+  return <div className="space-y-4"><PageLead title="Usuários" description="Contas, convites, perfis e atividade de acesso." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'previous' ? <LegacyUsersTab initialPayload={initialPayload} onReload={onReload} fallbackKind={fallbackKind} /> : <><div className="grid gap-3 md:grid-cols-2"><Panel title="Convites pendentes"><p className="text-sm text-slate-400">{(initialPayload?.items || []).filter((user) => user.status === 'invited').length} convite(s) aguardando aceite.</p></Panel><Panel title="Acessos expirando"><p className="text-sm text-slate-500">Validade ainda não integrada ao contrato da lista.</p></Panel></div><UsersSection users={initialPayload?.items || []} total={initialPayload?.total || 0} demoMode={Boolean(fallbackKind)} loadUser={fallbackKind ? undefined : getAdminUser} onSuspend={suspend} /></>}</div>;
+}
+
+function LegacyUsersTab({ initialPayload, onReload, fallbackKind }) {
   const [payload, setPayload] = useState(initialPayload);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -381,9 +393,19 @@ function DemoMetric({ label, value, tone = 'sky' }) {
   return <div className="rounded-xl border border-slate-800 bg-slate-950/45 p-4"><p className="text-xs text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${colors[tone]}`}>{value}</p></div>;
 }
 
-function TeamsPreview() {
+function LegacyTeamsPreview() {
   const [selected, setSelected] = useState('Audiovisual');
   return <div className="space-y-4"><PageLead title="Equipes / Setores / Unidades" description="Estrutura operacional, responsáveis e vínculos da organização." action={<Button disabled>+ Nova equipe</Button>} /><PreviewNotice /><div className="grid gap-4 xl:grid-cols-[340px_1fr]"><Panel title="Equipes da organização"><SearchInput placeholder="Buscar equipe ou responsável" value="" readOnly /><div className="mt-3 space-y-2">{DEMO_TEAMS.map(([name, count, lead]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`w-full rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40'}`}><div className="flex justify-between"><strong>{name}</strong><span className="text-sky-400">›</span></div><p className="text-xs text-slate-400">{count}</p><p className="text-xs text-slate-500">Responsável: {lead}</p></button>)}</div></Panel><div className="space-y-4"><Panel title={selected} right={<Badge tone="success">Ativa</Badge>}><div className="grid gap-3 sm:grid-cols-4"><DemoMetric label="Membros" value="11" /><DemoMetric label="Unidade" value="Produção" /><DemoMetric label="Setores" value="2" /><DemoMetric label="Funções" value="5" /></div></Panel><Panel title="Membros da equipe"><DemoTable headers={['Nome', 'Função', 'Perfil', 'Status']} rows={[["Rafael Lima", 'Coordenador', 'Administrador', 'Ativo'], ['Marina Souza', 'Videomaker', 'Usuário', 'Ativo'], ['Bruno Carvalho', 'Editor de vídeo', 'Usuário', 'Ativo'], ['Larissa Fernandes', 'Motion Designer', 'Usuário', 'Ativo']]} /></Panel></div></div></div>;
+}
+
+function ProfilesTab({ groups, users }) {
+  const [view, setView] = useState('reference');
+  return <div className="space-y-4"><PageLead title="Perfis e Funções" description="Perfis reutilizáveis, funções associadas e permissões efetivas." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <ProfilesSection groups={groups} users={users} /> : <LegacyProfilesTab groups={groups} users={users} />}</div>;
+}
+
+function TeamsPreview() {
+  const [view, setView] = useState('reference');
+  return <div className="space-y-4"><PageLead title="Equipes / Setores / Unidades" description="Estrutura operacional, responsáveis, membros e vínculos." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <TeamsSection /> : <LegacyTeamsPreview />}</div>;
 }
 
 function FormsPreview() {
