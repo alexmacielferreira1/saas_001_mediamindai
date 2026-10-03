@@ -8,6 +8,7 @@ import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, susp
 import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
+import { readLocalDemoSession } from '../lib/demoAccess';
 import Acervo from './Acervo';
 import Management from './Management';
 import { Badge, Button, EmptyState, Loading, Panel, SearchInput, Stat, Tabs } from '../ui';
@@ -53,6 +54,14 @@ const ADMIN_DEMO_GROUPS = [
   { id: 'demo-viewer', name: 'Visualizador', description: 'Acesso somente para consulta.', is_active: true, permission_codes: ['production.view', 'archive.view'] },
 ];
 
+const ADMIN_DEMO_SETTINGS_KEY = 'mediamind_admin_demo_settings_v1';
+const ADMIN_DEMO_SETTINGS = { organization_name: 'MediaMind AI', locale: 'pt-BR', timezone: 'America/Sao_Paulo', date_format: 'DD/MM/YYYY' };
+
+function readDemoSettings() {
+  try { return { ...ADMIN_DEMO_SETTINGS, ...JSON.parse(window.localStorage.getItem(ADMIN_DEMO_SETTINGS_KEY) || '{}') }; }
+  catch { return { ...ADMIN_DEMO_SETTINGS }; }
+}
+
 function UserStatus({ value }) {
   const [label, tone] = STATUS[value] || [value, 'info'];
   return <Badge tone={tone}>{label}</Badge>;
@@ -68,10 +77,18 @@ export default function Administration2() {
   const [fallbackKind, setFallbackKind] = useState('');
   const [groups, setGroups] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [localDemo] = useState(() => Boolean(readLocalDemoSession()));
 
   async function load(filters = {}) {
     setError('');
     setFallbackKind('');
+    if (localDemo) {
+      setPayload(ADMIN_DEMO_PAYLOAD);
+      setGroups(ADMIN_DEMO_GROUPS);
+      setActivity([]);
+      setFallbackKind('local-demo');
+      return;
+    }
     try {
       const [users, permissionGroups, events] = await Promise.all([
         listAdminUsers({ page: 1, pageSize: 100, search: '', status: '', ...filters }),
@@ -114,7 +131,7 @@ export default function Administration2() {
           <p className="mt-1 text-sm text-slate-400">Nova área para revisão, sem substituir a Administração atual.</p>
         </div>
         <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
-          {error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
+          {localDemo ? 'Modo local funcional' : error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
         </div>
       </header>
 
@@ -138,7 +155,7 @@ export default function Administration2() {
       {active === 'registry' && <RegistryPreview />}
       {active === 'records' && <RecordsPreview />}
       {active === 'integrations' && <IntegrationsPreview />}
-      {active === 'settings' && <SettingsPreview />}
+      {active === 'settings' && <SettingsPreview localDemo={localDemo} />}
     </div>
   );
 }
@@ -419,18 +436,28 @@ function IntegrationsPreview() {
   return <div className="space-y-4"><PageLead title="Integrações" description="Inventário de conexões internas e externas, credenciais e sincronizações." /><PreviewNotice /><div className="rounded-xl border border-amber-800/60 bg-amber-950/20 p-4 text-sm text-amber-200">Nenhuma integração validada por esta tela. Estados abaixo são inventário técnico, não monitoramento em tempo real.</div><div className="grid gap-4 xl:grid-cols-[460px_1fr]"><Panel title="Saúde das integrações"><div className="space-y-2">{INTEGRATIONS.map(([name, type, status]) => <button type="button" key={name} onClick={() => setSelected(name)} className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left ${selected === name ? 'border-sky-500 bg-sky-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-sky-800'}`}><span><strong className="block">{name}</strong><span className="text-xs text-slate-500">{type}</span></span><Badge tone={status.includes('Não') || status.includes('não') ? 'pending' : 'info'}>{status}</Badge></button>)}</div></Panel><div className="space-y-4"><Panel title={selected} right={<Badge tone="pending">Somente inventário</Badge>}><dl className="grid gap-3 text-sm sm:grid-cols-2"><Info label="Ambiente">Não exposto</Info><Info label="Credenciais">Protegidas / não exibidas</Info><Info label="Última verificação">Não executada</Info><Info label="Responsável">A definir</Info></dl></Panel><Panel title="Eventos e sincronização"><EmptyState icon={Activity} title="Telemetria ainda não conectada" description="Quando houver endpoint de saúde e auditoria, esta área mostrará falhas, latência, tentativas e última sincronização reais." /></Panel></div></div></div>;
 }
 
-function SettingsPreview() {
+function SettingsPreview({ localDemo = false }) {
   const [section, setSection] = useState('Identidade');
   const [form, setForm] = useState(null);
   const [state, setState] = useState({ loading: true, saving: false, error: '', success: '' });
   const sections = ['Identidade', 'Localização', 'Aparência', 'Notificações', 'Governança'];
   useEffect(() => {
+    if (localDemo) {
+      setForm(readDemoSettings());
+      setState((old) => ({ ...old, loading: false }));
+      return undefined;
+    }
     let active = true;
     getAdminSettings().then((value) => { if (active) { setForm(value); setState((old) => ({ ...old, loading: false })); } }).catch((reason) => { if (active) setState({ loading: false, saving: false, success: '', error: reason.status === 401 ? 'Entre com uma sessão real para editar as configurações do tenant.' : 'Não foi possível carregar as configurações.' }); });
     return () => { active = false; };
   }, []);
   async function save() {
     setState((old) => ({ ...old, saving: true, error: '', success: '' }));
+    if (localDemo) {
+      window.localStorage.setItem(ADMIN_DEMO_SETTINGS_KEY, JSON.stringify(form));
+      setState({ loading: false, saving: false, error: '', success: 'Configurações locais salvas.' });
+      return;
+    }
     try {
       const updated = await updateAdminSettings(form);
       setForm(updated);

@@ -9,6 +9,7 @@ const suspendAdminUserMock = vi.fn();
 const listAdminActivityMock = vi.fn();
 const getAdminSettingsMock = vi.fn();
 const updateAdminSettingsMock = vi.fn();
+const readLocalDemoSessionMock = vi.fn();
 
 vi.mock('../../api/admin', () => ({
   listAdminUsers: (...args) => listAdminUsersMock(...args),
@@ -20,6 +21,9 @@ vi.mock('../../api/admin', () => ({
 }));
 
 vi.mock('../../api/permissions', () => ({ listPermissionGroups: vi.fn().mockResolvedValue([]) }));
+vi.mock('../lib/demoAccess', () => ({
+  readLocalDemoSession: (...args) => readLocalDemoSessionMock(...args),
+}));
 
 vi.mock('../components/corp/roles/AdminAcessosPage', () => ({
   default: () => <div>Tela atual preservada</div>,
@@ -43,9 +47,11 @@ describe('Administration2 preview', () => {
     listAdminUsersMock.mockReset();
     getAdminUserMock.mockReset();
     suspendAdminUserMock.mockReset();
+    listAdminActivityMock.mockReset();
     listAdminActivityMock.mockResolvedValue([]);
     getAdminSettingsMock.mockResolvedValue({ organization_name: 'MediaMind AI', locale: 'pt-BR', timezone: 'America/Sao_Paulo', date_format: 'DD/MM/YYYY' });
     updateAdminSettingsMock.mockImplementation(async (value) => value);
+    readLocalDemoSessionMock.mockReturnValue(null);
     listAdminUsersMock.mockResolvedValue({ items: [USER], total: 1, page: 1, page_size: 25 });
     getAdminUserMock.mockResolvedValue({ ...USER, extra_screens: [], restricted_screens: [], failed_login_attempts: 0 });
   });
@@ -100,6 +106,26 @@ describe('Administration2 preview', () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     expect(await screen.findByText(/sessão local de demonstração/i)).toBeInTheDocument();
     expect(screen.queryByText(/API indisponível/i)).not.toBeInTheDocument();
+  });
+
+  it('uses the official local demo session without calling unavailable administrative endpoints', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Modo local funcional')).toBeInTheDocument();
+    expect(screen.queryByText(/API indisponível/i)).not.toBeInTheDocument();
+    expect(listAdminUsersMock).not.toHaveBeenCalled();
+    expect(listAdminActivityMock).not.toHaveBeenCalled();
+  });
+
+  it('persists local demo settings without calling the backend', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter initialEntries={['/administration2?tab=settings']}><Administration2 /></MemoryRouter>);
+    const organization = await screen.findByLabelText('Nome da organização');
+    fireEvent.change(organization, { target: { value: 'MediaMind Local' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar configurações' }));
+    expect(await screen.findByText('Configurações locais salvas.')).toBeInTheDocument();
+    expect(updateAdminSettingsMock).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem('mediamind_admin_demo_settings_v1')).organization_name).toBe('MediaMind Local');
   });
 
   it('opens user detail and persists suspension only after confirmation', async () => {
