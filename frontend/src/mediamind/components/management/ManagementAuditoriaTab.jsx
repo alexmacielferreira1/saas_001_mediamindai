@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ScrollText, Search } from 'lucide-react';
+import { ScrollText, Search, CheckCircle2, Upload, Download, AlertTriangle, Users } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { Panel } from '../../ui';
+import { DEMO_AUDIT_LOGS } from '../../lib/managementDemoData';
 
-export default function ManagementAuditoriaTab() {
+export default function ManagementAuditoriaTab({ localDemo = false }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -11,6 +12,11 @@ export default function ManagementAuditoriaTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    if (localDemo) {
+      setLogs(DEMO_AUDIT_LOGS.map((item) => ({ ...item, acao: item.action || item.acao || 'evento', entidade: item.entity_type || item.entidade || 'registro', detalhe: item.detail || item.detalhe || 'Evento administrativo registrado' })));
+      setLoading(false);
+      return;
+    }
     try {
       const list = await base44.entities.LogAuditoria.list('-created_date', 200);
       setLogs(list);
@@ -19,7 +25,7 @@ export default function ManagementAuditoriaTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [localDemo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -29,9 +35,19 @@ export default function ManagementAuditoriaTab() {
       (acao === 'all' || l.acao === acao) &&
       (!q || `${l.acao} ${l.entidade} ${l.detalhe} ${l.created_by || ''}`.toLowerCase().includes(q.toLowerCase()))
   );
+  const stats = [
+    ['Eventos', logs.length, ScrollText, 'text-sky-400'],
+    ['Aprovações', logs.filter((l) => String(l.acao).toLowerCase().includes('aprov')).length, CheckCircle2, 'text-emerald-400'],
+    ['Uploads', logs.filter((l) => String(l.acao).toLowerCase().includes('upload')).length, Upload, 'text-sky-400'],
+    ['Exportações', logs.filter((l) => String(l.acao).toLowerCase().includes('export')).length, Download, 'text-violet-400'],
+    ['Erros', logs.filter((l) => /erro|falha/i.test(`${l.acao} ${l.detalhe}`)).length, AlertTriangle, 'text-rose-400'],
+    ['Usuários', new Set(logs.map((l) => l.created_by).filter(Boolean)).size, Users, 'text-sky-400'],
+  ];
 
   return (
-    <Panel title="Auditoria" right={<ScrollText size={16} className="text-slate-500" />}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{stats.map(([label,value,Icon,color]) => <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/45 p-4"><Icon size={18} className={color}/><p className="mt-2 text-xs text-slate-400">{label}</p><p className="text-2xl font-bold text-slate-100">{value}</p></div>)}</div>
+    <Panel title="Linha do tempo da auditoria" right={<ScrollText size={16} className="text-slate-500" />}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -76,5 +92,6 @@ export default function ManagementAuditoriaTab() {
         ))}
       </div>
     </Panel>
+    </div>
   );
 }

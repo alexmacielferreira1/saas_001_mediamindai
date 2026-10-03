@@ -150,7 +150,7 @@ describe('Administration2 preview', () => {
 
   it('exposes every administration area from the approved specification', () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    ['Acervo 2', 'Gestão 2', 'Cadastros 2', 'Integrações 2', 'Configurações 2'].forEach((name) => {
+    ['Acervo', 'Gestão', 'Cadastros', 'Integrações', 'Configurações'].forEach((name) => {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     });
   });
@@ -176,20 +176,46 @@ describe('Administration2 preview', () => {
     expect(await screen.findByLabelText('Navegação principal da Administração 2')).toBeInTheDocument();
     expect(screen.getByLabelText('Áreas relacionadas')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Acervo 2' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Áreas relacionadas')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Acervo' })).toBeInTheDocument();
   });
 
   it.each([
     ['Equipes', 'Equipes / Setores / Unidades', 'Membros da equipe'],
     ['Formulários', 'Formulários', 'Pré-visualização do formulário'],
     ['Importações', 'Importação de Dados', 'Mapeamento de colunas'],
-    ['Segurança', 'Segurança', 'Sessões ativas'],
   ])('renders a reference-shaped %s screen', async (tab, heading, landmark) => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: tab }));
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: landmark })).toBeInTheDocument();
     expect(screen.getByText(/dados de demonstração visual/i)).toBeInTheDocument();
+  });
+
+  it('provides the complete security policy navigation from the reference', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter initialEntries={['/administration2?tab=security']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Política de segurança' })).toBeInTheDocument();
+    ['Autenticação', 'Senha', 'Sessões', 'Bloqueios', 'Convites'].forEach((name) => {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Senha' }));
+    expect(screen.getByRole('heading', { name: 'Política de senha' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Convites' }));
+    expect(screen.getByRole('heading', { name: 'Política de convites' })).toBeInTheDocument();
+  });
+
+  it('opens security actions in a sliding contextual drawer', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter initialEntries={['/administration2?tab=security']}><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurar MFA' }));
+    expect(screen.getByRole('dialog', { name: 'Configurar MFA' })).toBeInTheDocument();
+    expect(screen.getByText(/alterações desta demonstração ficam somente/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }));
+    expect(screen.queryByRole('dialog', { name: 'Configurar MFA' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver todas as sessões' })[0]);
+    expect(screen.getByRole('dialog', { name: 'Sessões ativas' })).toBeInTheDocument();
   });
 
   it.each([
@@ -205,10 +231,10 @@ describe('Administration2 preview', () => {
   });
 
   it.each([
-    ['Telas e Módulos 2', 'Registro de telas e módulos', 'Hierarquia do produto'],
-    ['Cadastros 2', 'Cadastros administrativos', 'Entidades cadastradas'],
-    ['Integrações 2', 'Integrações', 'Saúde das integrações'],
-    ['Configurações 2', 'Configurações administrativas', 'Identidade da organização'],
+    ['Telas e Módulos', 'Registro de telas e módulos', 'Hierarquia do produto'],
+    ['Cadastros', 'Cadastros administrativos', 'Entidades cadastradas'],
+    ['Integrações', 'Integrações', 'Saúde das integrações'],
+    ['Configurações', 'Configurações administrativas', 'Identidade da organização'],
   ])('renders a structured %s screen instead of an empty placeholder', async (tab, heading, landmark) => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: tab }));
@@ -221,7 +247,7 @@ describe('Administration2 preview', () => {
     render(<MemoryRouter initialEntries={['/administration2?tab=registry']}><Administration2 /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Registro de telas e módulos' })).toBeInTheDocument();
     expect(screen.queryByText('142')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Integrações 2' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Integrações' }));
     expect(await screen.findByRole('heading', { name: 'Integrações' })).toBeInTheDocument();
     expect(screen.getByText(/Nenhuma integração validada por esta tela/)).toBeInTheDocument();
   });

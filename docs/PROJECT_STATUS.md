@@ -55,3 +55,9 @@ Em 29/09, foi reproduzida e corrigida a falha de upload em **Gravações**. A ca
 Implementado localmente, sem publicação e sem avanço de marco: manifesto público e endpoints autenticados de saúde, prontidão e versão para a futura ponte Central ↔ MediaMind. O contrato exige token, audiência e escopo, diferencia liveness de prontidão de banco e não expõe credenciais. A entrega possui testes de contrato próprios; os gates M0 preexistentes continuam valendo integralmente.
 
 Também foi implementado o inbox local idempotente da ponte, restrito aos comandos de leitura `system.describe` e `media.count` em simulação. A migration `0007_hub_commands` foi aplicada ao PostgreSQL local; nenhuma variável ou migration foi aplicada no Render/Neon.
+
+## Administração, Acervo e Gestão — 03/10/2026
+
+O recorte local da Administração 2 foi consolidado sem substituir rotas legadas nem alterar Render/Neon. Acervo e Gestão permanecem embutidos na Administração, com detalhes expansíveis no próprio contexto; a tela operacional de usuários voltou a ser a implementação padrão para preservar consulta real, detalhe, módulos, segurança e suspensão confirmada. As áreas Acervo, Gestão, Telas e Módulos, Cadastros, Integrações e Configurações foram promovidas ao menu principal sem o sufixo “2”; o perfil MVP mantém sua rota legada `/acervo`.
+
+Evidência: 65 arquivos e 272 testes frontend aprovados, lint, typecheck e build aprovados. No navegador local foram conferidos os novos itens do menu, a rota `/administration2?tab=archive` e a abertura inline de detalhes em Gestão e Acervo. O build conserva apenas avisos não bloqueantes já conhecidos sobre Browserslist, import dinâmico e tamanho do bundle. M0 permanece `failed`; não houve deploy nem alteração de banco.

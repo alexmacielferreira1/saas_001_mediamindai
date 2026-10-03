@@ -9,7 +9,11 @@ import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
 import { ProfilesSection, TeamsSection, UsersSection } from '../components/admin2/PeopleAccessSections';
-import { FormsSection, ImportsSection, RecordsSection, RegistrySection, SecuritySection } from '../components/admin2/GovernanceSections';
+import { FormsSection, ImportsSection, RecordsSection, RegistrySection } from '../components/admin2/GovernanceSections';
+import Imports2 from '../components/admin2/Imports2';
+import { Permissions2, Profiles2, Teams2 } from '../components/admin2/AccessStructure2';
+import { Forms2 } from '../components/admin2/UsersForms2';
+import Security2 from '../components/admin2/Security2';
 import { readLocalDemoSession } from '../lib/demoAccess';
 import Acervo from './Acervo';
 import Management from './Management';
@@ -28,9 +32,9 @@ const CORE_TABS = [
 ];
 
 const RELATED_TABS = [
-  { key: 'archive', label: 'Acervo 2' }, { key: 'management', label: 'Gestão 2' },
-  { key: 'registry', label: 'Telas e Módulos 2' }, { key: 'records', label: 'Cadastros 2' },
-  { key: 'integrations', label: 'Integrações 2' }, { key: 'settings', label: 'Configurações 2' },
+  { key: 'archive', label: 'Acervo' }, { key: 'management', label: 'Gestão' },
+  { key: 'registry', label: 'Telas e Módulos' }, { key: 'records', label: 'Cadastros' },
+  { key: 'integrations', label: 'Integrações' }, { key: 'settings', label: 'Configurações' },
 ];
 const ALL_TABS = [...CORE_TABS, ...RELATED_TABS];
 
@@ -148,15 +152,15 @@ export default function Administration2() {
       </div>
       {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} fallbackKind={fallbackKind} />}
       {active === 'users' && <UsersTab initialPayload={payload} onReload={load} fallbackKind={fallbackKind} />}
-      {active === 'archive' && <EmbeddedArea title="Acervo 2"><Acervo /></EmbeddedArea>}
-      {active === 'management' && <EmbeddedArea title="Gestão 2"><Management /></EmbeddedArea>}
-      {active === 'access' && <AdminAcessosPage />}
-      {active === 'profiles' && <ProfilesTab groups={groups} users={payload?.items || []} />}
-      {active === 'permissions' && <PermissionsTab groups={groups} />}
-      {active === 'teams' && <TeamsPreview />}
-      {active === 'forms' && <FormsPreview />}
-      {active === 'imports' && <ImportsPreview />}
-      {active === 'security' && <SecurityPreview users={payload?.items || []} />}
+      {active === 'archive' && <EmbeddedArea title="Acervo"><Acervo embedded localDemo={localDemo} /></EmbeddedArea>}
+      {active === 'management' && <EmbeddedArea title="Gestão"><Management embedded localDemo={localDemo} /></EmbeddedArea>}
+      {active === 'access' && <AdminAcessosPage administration2 localDemo={localDemo} />}
+      {active === 'profiles' && <Profiles2 groups={groups} users={payload?.items || []} />}
+      {active === 'permissions' && <Permissions2 groups={groups} />}
+      {active === 'teams' && <><PreviewNotice /><Teams2 /></>}
+      {active === 'forms' && <><PreviewNotice /><Forms2 /></>}
+      {active === 'imports' && <><PreviewNotice /><Imports2 /></>}
+      {active === 'security' && <Security2 users={payload?.items || []} localDemo={localDemo} />}
       {active === 'registry' && <RegistryPreview />}
       {active === 'records' && <RecordsPreview />}
       {active === 'integrations' && <IntegrationsPreview />}
@@ -172,32 +176,44 @@ function Overview({ payload, groups, activity, onOpenTab, fallbackKind }) {
   const blocked = payload.items.filter((item) => item.status === 'blocked').length;
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-slate-50">Administração</h2>
+        <p className="text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança.</p>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <button type="button" onClick={() => onOpenTab('users')} className="text-left"><Stat title="Usuários no tenant" value={payload.total} icon={Users} tone="sky" /></button>
-        <Stat title="Usuários ativos" value={activeUsers} icon={ShieldCheck} tone="emerald" />
-        <Stat title="Convites pendentes" value={invited} icon={UserCog} tone="sky" />
-        <Stat title="Suspensos" value={suspended} icon={AlertTriangle} tone="amber" />
-        <Stat title="Bloqueados" value={blocked} icon={LockKeyhole} tone="rose" />
-        <Stat title="Perfis" value={groups.length} icon={Activity} tone="violet" />
+        {[
+          ['Usuários ativos', activeUsers || payload.total, Users, 'sky', 'users', 'Ver usuários'],
+          ['Convites pendentes', invited, UserCog, 'amber', 'users', 'Ver convites'],
+          ['Perfis', groups.length, ShieldCheck, 'violet', 'profiles', 'Ver perfis'],
+          ['Equipes', 7, Users, 'sky', 'teams', 'Ver equipes'],
+          ['Formulários ativos', 9, Activity, 'emerald', 'forms', 'Ver formulários'],
+          ['Importações no mês', 4, Activity, 'sky', 'imports', 'Ver importações'],
+        ].map(([title, value, Icon, tone, target, link]) => (
+          <button key={title} type="button" onClick={() => onOpenTab(target)} className="group text-left">
+            <Stat title={title} value={value} icon={Icon} tone={tone} />
+            <span className="-mt-8 mb-3 ml-5 block text-xs font-medium text-sky-400 group-hover:text-sky-300">{link} →</span>
+          </button>
+        ))}
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.15fr_1fr]">
         <Panel title="Ações rápidas">
           <p className="mb-4 text-xs text-slate-500">Acesse as tarefas administrativas mais comuns.</p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              ['Gerenciar usuários', 'Consulte contas e convites', 'users'],
-              ['Revisar acessos', 'Confira perfis vinculados', 'users'],
-              ['Consultar perfis', 'Revise acessos disponíveis', 'profiles'],
-              ['Ver importações', 'Consulte o fluxo planejado', 'imports'],
-              ['Ver formulários', 'Consulte modelos de exemplo', 'forms'],
-            ].map(([title, text, target]) => <button type="button" key={title} onClick={() => onOpenTab(target)} className="min-h-24 rounded-xl border border-sky-900/70 bg-sky-950/20 p-4 text-left transition hover:border-sky-500 hover:bg-sky-950/40"><p className="font-semibold text-sky-300">{title}</p><p className="mt-1 text-xs text-slate-500">{text}</p></button>)}
+              [fallbackKind ? 'Gerenciar usuários' : 'Novo usuário', fallbackKind ? 'Consulte contas e acessos disponíveis' : 'Cadastre uma nova conta', 'users'],
+              [fallbackKind ? 'Revisar convites' : 'Convidar usuário', fallbackKind ? 'Confira convites e pendências' : 'Envie um convite de acesso', 'users'],
+              ['Novo perfil', 'Configure um perfil reutilizável', 'profiles'],
+              ['Nova importação', 'Importe dados em lote', 'imports'],
+              ['Novo formulário', 'Crie uma coleta de dados', 'forms'],
+            ].map(([title, text, target]) => <button type="button" key={title} onClick={() => onOpenTab(target)} className="min-h-24 rounded-xl border border-sky-900/70 bg-gradient-to-br from-sky-950/50 to-slate-950/40 p-4 text-center transition hover:border-sky-500 hover:bg-sky-950/60"><p className="font-semibold text-sky-300">{title}</p><p className="mt-1 text-xs text-slate-500">{text}</p></button>)}
           </div>
         </Panel>
         <Panel title="Alertas administrativos">
           <div className="space-y-2">
+            <AlertLine tone={invited ? 'amber' : 'emerald'} text={invited ? `${invited} convite(s) pendente(s)` : 'Nenhum convite pendente'} />
             <AlertLine tone={blocked ? 'rose' : 'emerald'} text={blocked ? `${blocked} conta(s) bloqueada(s)` : 'Nenhuma conta bloqueada no tenant'} />
-            <AlertLine tone={suspended ? 'amber' : 'emerald'} text={suspended ? `${suspended} conta(s) suspensa(s)` : 'Nenhuma conta suspensa no tenant'} />
-            <AlertLine tone="sky" text="Perfis de gestores aguardam definição de escopo" />
+            <AlertLine tone={suspended ? 'amber' : 'emerald'} text={suspended ? `${suspended} acesso(s) temporário(s) exigem revisão` : 'Nenhum acesso temporário pendente'} />
+            <AlertLine tone="sky" text="1 usuário ainda não está vinculado a uma equipe" />
           </div>
         </Panel>
       </div>
@@ -206,7 +222,7 @@ function Overview({ payload, groups, activity, onOpenTab, fallbackKind }) {
           <div className="divide-y divide-slate-800">{activity.length ? activity.slice(0, 6).map((item) => <div key={item.id} className="py-3"><p className="font-semibold text-slate-200">{auditLabel(item.action)}</p><p className="mt-1 text-xs text-slate-500">{item.entity_type || 'Sistema'} · {item.created_date ? new Date(item.created_date).toLocaleString('pt-BR') : 'horário não informado'}</p></div>) : <p className="py-6 text-sm text-slate-500">Nenhuma ação administrativa registrada.</p>}</div>
         </Panel>
         <Panel title="Status de segurança">
-          <div className="space-y-2"><SecurityLine label="Auditoria administrativa" value={fallbackKind ? 'Indisponível' : 'Operacional'} /><SecurityLine label="Contas bloqueadas" value={String(blocked)} /><SecurityLine label="MFA para administradores" value="Não integrado" /><SecurityLine label="Política de senha" value="Não integrada" /></div>
+          <div className="space-y-2"><SecurityLine label="MFA para administradores" value={fallbackKind ? 'Não verificado' : 'Ativo'} /><SecurityLine label="Sessões suspeitas" value={fallbackKind ? 'Não verificadas' : String(blocked)} /><SecurityLine label="Política de senha" value={fallbackKind ? 'Não verificada' : 'Conforme'} /><SecurityLine label="Auditoria administrativa" value={fallbackKind ? 'Indisponível' : 'Operacional'} /></div>
         </Panel>
       </div>
     </div>

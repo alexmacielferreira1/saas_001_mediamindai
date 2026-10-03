@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Building2, BarChart3, Users, TrendingUp, Calendar, AlertCircle,
   CheckCircle2, Clock, Activity, ScrollText,
@@ -28,43 +28,53 @@ const MGMT_TABS = [
   { key: 'auditoria', label: 'Auditoria', icon: ScrollText },
 ];
 
-export default function Management() {
+export default function Management({ embedded = false, localDemo = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'dashboards');
+  const paramKey = embedded ? 'managementTab' : 'tab';
+  const tabParam = searchParams.get(paramKey);
+  const validTab = MGMT_TABS.some((item) => item.key === tabParam) ? tabParam : 'dashboards';
+  const [activeTab, setActiveTab] = useState(validTab);
 
   function handleTabChange(key) {
     setActiveTab(key);
-    setSearchParams({ tab: key }, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    next.set(paramKey, key);
+    if (embedded) next.set('tab', 'management');
+    setSearchParams(next, { replace: true });
   }
 
   return (
     <div className="space-y-4 pb-8">
       <div className="mb-2">
         <h1 className="text-xl font-bold text-slate-50">Gestão</h1>
-        <p className="text-sm text-slate-400">Visão geral e relatórios</p>
+        <p className="text-sm text-slate-400">Visão geral, relatórios, processamentos e auditoria.</p>
       </div>
 
       <Tabs tabs={MGMT_TABS} active={activeTab} onChange={handleTabChange} />
 
-      {activeTab === 'dashboards' && <DashboardsTab />}
-      {activeTab === 'reports' && <ReportsTab />}
-      {activeTab === 'processamentos' && <ManagementProcessamentosTab />}
-      {activeTab === 'auditoria' && <ManagementAuditoriaTab />}
+      {activeTab === 'dashboards' && <DashboardsTab localDemo={localDemo} />}
+      {activeTab === 'reports' && <ReportsTab localDemo={localDemo} />}
+      {activeTab === 'processamentos' && <ManagementProcessamentosTab localDemo={localDemo} />}
+      {activeTab === 'auditoria' && <ManagementAuditoriaTab localDemo={localDemo} />}
     </div>
   );
 }
 
-export function DashboardsTab() {
-  const navigate = useNavigate();
+export function DashboardsTab({ localDemo = false }) {
   const [overview, setOverview] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailNote, setDetailNote] = useState('');
 
   useEffect(() => {
     let active = true;
+    if (localDemo) {
+      setOverview(DEMO_MANAGEMENT_OVERVIEW);
+      return () => { active = false; };
+    }
     withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)
       .then((data) => { if (active) setOverview(data); })
     return () => { active = false; };
-  }, []);
+  }, [localDemo]);
 
   if (!overview) return <Loading label="Carregando visão gerencial..." />;
 
@@ -72,16 +82,18 @@ export function DashboardsTab() {
   const kpis = buildManagementKpis(overview);
   const alerts = buildManagementAlerts(overview);
   const KPI_ICONS = [CheckCircle2, Calendar, AlertCircle, TrendingUp, Building2, CheckCircle2, Activity, AlertCircle];
-  const KPI_DESTINATIONS = ['/corp?tab=social_media', '/corp?tab=programacao', '/corp?tab=coordenador_comunicacao', '/management?tab=reports', '/acervo', '/acervo', '/management?tab=processamentos', '/management?tab=processamentos'];
+  const openDetail = (title, description) => { setDetail({ title, description }); setDetailNote(''); };
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         {kpis.map((item, index) => (
-          <button type="button" key={item.id} onClick={() => navigate(KPI_DESTINATIONS[index])} className="text-left transition hover:-translate-y-0.5">
+          <button type="button" key={item.id} onClick={() => openDetail(item.label, `Indicador atual: ${item.value}. Consulte e registre observações sem sair da Gestão 2.`)} className="text-left transition hover:-translate-y-0.5">
             <Stat title={item.label} value={item.value} icon={KPI_ICONS[index]} tone={item.tone} />
           </button>
         ))}
       </div>
+
+      {detail && <div className="animate-in slide-in-from-top-2 duration-200"><Panel title={`Detalhes · ${detail.title}`} right={<button type="button" onClick={() => setDetail(null)} className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-slate-800">Fechar</button>}><div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]"><div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">{detail.description}</div><label className="text-xs text-slate-400">Observação<textarea value={detailNote} onChange={(event) => setDetailNote(event.target.value)} placeholder="Registre uma observação para este indicador..." className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-sm text-slate-200 outline-none focus:border-sky-500" /></label><div className="flex items-end"><button type="button" onClick={() => setDetail((current) => ({...current, description: `${current.description} Observação salva nesta sessão.`}))} className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400">Salvar alteração</button></div></div></Panel></div>}
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
         <IndicadoresPipelinePanel />
@@ -89,7 +101,7 @@ export function DashboardsTab() {
           <div className="space-y-2">
             {alerts.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum alerta operacional com os dados atuais.</p>}
             {alerts.map((alert) => (
-              <button type="button" key={alert.kind} onClick={() => navigate(alert.kind === 'publication' ? '/corp?tab=coordenador_comunicacao' : '/management?tab=processamentos')} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3 text-left transition hover:border-sky-500/50 hover:bg-slate-900/80">
+              <button type="button" key={alert.kind} onClick={() => openDetail('Alerta operacional', alert.label)} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3 text-left transition hover:border-sky-500/50 hover:bg-slate-900/80">
                 <AlertCircle size={15} className={alert.tone === 'rose' ? 'text-rose-400' : alert.tone === 'amber' ? 'text-amber-400' : 'text-sky-400'} />
                 <span className="text-sm text-slate-300">{alert.label}</span>
               </button>
@@ -104,7 +116,7 @@ export function DashboardsTab() {
           <div className="flex flex-col gap-2">
             {summary.calendar.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhuma publicação cadastrada.</p>}
             {summary.calendar.map((c) => (
-              <button type="button" key={c.id} onClick={() => navigate('/corp?tab=social_media')} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-left transition hover:border-sky-500/50 hover:bg-slate-900/70">
+              <button type="button" key={c.id} onClick={() => openDetail(c.title, `${PUBLICATION_PLATFORM_LABELS[c.platform] || c.platform || 'Canal não informado'} · ${c.status}`)} className="flex w-full items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-left transition hover:border-sky-500/50 hover:bg-slate-900/70">
                 <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-slate-800">
                   <span className="text-xs font-bold text-sky-300">{c.date ? c.date.slice(8, 10) || '—' : '—'}</span>
                   <span className="text-[10px] text-slate-500">{c.date ? c.date.slice(5, 7) || '' : ''}</span>
@@ -154,20 +166,25 @@ export function DashboardsTab() {
   );
 }
 
-export function ReportsTab() {
+export function ReportsTab({ localDemo = false }) {
   const [subTab, setSubTab] = useState('equipe');
   const [overview, setOverview] = useState(null);
   const [memberships, setMemberships] = useState([]);
   const projects = useProducaoProjetos();
   useEffect(() => {
     let active = true;
+    if (localDemo) {
+      setOverview(DEMO_MANAGEMENT_OVERVIEW);
+      setMemberships(DEMO_MEMBERSHIPS);
+      return () => { active = false; };
+    }
     Promise.all([
       withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
       withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
     ])
       .then(([data, users]) => { if (active) { setOverview(data); setMemberships(users); } })
     return () => { active = false; };
-  }, []);
+  }, [localDemo]);
   const subTabs = [
     { key: 'equipe', label: 'Equipe' },
     { key: 'setores', label: 'Setor(es)' },

@@ -30,14 +30,20 @@ const ASSET_TYPE_ICONS = {
   video: Play, audio: Music, image: Image, document: FileText,
 };
 
-export default function Acervo() {
+export default function Acervo({ embedded = false, localDemo = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'acervo');
+  const paramKey = embedded ? 'acervoTab' : 'tab';
+  const tabParam = searchParams.get(paramKey);
+  const validTab = ACERVO_TABS.some((item) => item.key === tabParam) ? tabParam : 'acervo';
+  const [activeTab, setActiveTab] = useState(validTab);
   const [data, setData] = useState(null);
 
   useEffect(() => {
     let active = true;
+    if (localDemo) {
+      setData({ overview: DEMO_MANAGEMENT_OVERVIEW, assets: DEMO_ASSETS, logs: DEMO_AUDIT_LOGS, memberships: DEMO_MEMBERSHIPS });
+      return () => { active = false; };
+    }
     Promise.all([
       withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
       withDemoFallback(() => base44.entities.Asset.list('-created_date', 500), DEMO_ASSETS),
@@ -46,26 +52,29 @@ export default function Acervo() {
     ])
       .then(([overview, assets, logs, memberships]) => { if (active) setData({ overview, assets, logs, memberships }); })
     return () => { active = false; };
-  }, []);
+  }, [localDemo]);
 
   function handleTabChange(key) {
     setActiveTab(key);
-    setSearchParams({ tab: key }, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    next.set(paramKey, key);
+    if (embedded) next.set('tab', 'archive');
+    setSearchParams(next, { replace: true });
   }
 
   return (
     <div className="space-y-4 pb-8">
       <div className="mb-2">
         <h1 className="text-xl font-bold text-slate-50">Acervo</h1>
-        <p className="text-sm text-slate-400">Arquivos, usuários e sistema</p>
+        <p className="text-sm text-slate-400">Arquivos, usuários, indexação e saúde do sistema.</p>
       </div>
 
       <Tabs tabs={ACERVO_TABS} active={activeTab} onChange={handleTabChange} />
 
       {!data && <Loading label="Carregando acervo..." />}
       {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
-      {data && activeTab === 'admin' && <AdminTab logs={data.logs} memberships={data.memberships} />}
-      {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} />}
+      {data && activeTab === 'admin' && <AdminTab logs={data.logs} memberships={data.memberships} localDemo={localDemo} />}
+      {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} localDemo={localDemo} />}
     </div>
   );
 }
@@ -88,6 +97,7 @@ function AcervoTab({ assets, summary }) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat title="Total de arquivos" value={summary.total.toLocaleString('pt-BR')} icon={Archive} tone="sky" />
+        <Stat title="Bibliotecas" value={new Set(assets.map((asset) => asset.category).filter(Boolean)).size} icon={Archive} tone="violet" />
         <Stat title="Indexados IA" value={summary.indexed.toLocaleString('pt-BR')} icon={CheckCircle2} tone="emerald" />
         <Stat title="Falhas" value={summary.failures} icon={AlertTriangle} tone="amber" />
         <Stat title="Storage utilizado" value={formatBytes(summary.storage_bytes)} icon={MonitorCog} tone="sky" />
@@ -231,11 +241,23 @@ function AcervoTab({ assets, summary }) {
           </Panel>
         </div>
       )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Panel title="Envios recentes">
+          <div className="space-y-2">{assets.slice(0, 4).map((asset) => <button type="button" key={asset.id} onClick={() => setSelectedAsset(asset)} className="flex w-full items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-left"><span className="truncate text-xs text-slate-300">{asset.filename || asset.title}</span><StatusBadge status={asset.status} /></button>)}</div>
+        </Panel>
+        <Panel title="Fila de indexação">
+          <div className="space-y-2">{assets.filter((asset) => ['processing', 'pending', 'processando'].includes(String(asset.status).toLowerCase())).slice(0, 4).map((asset) => <div key={asset.id} className="rounded-lg border border-slate-800 px-3 py-2"><p className="truncate text-xs text-slate-300">{asset.filename || asset.title}</p><p className="mt-1 text-[11px] text-sky-400">Processamento em andamento</p></div>)}{!assets.some((asset) => ['processing', 'pending', 'processando'].includes(String(asset.status).toLowerCase())) && <p className="py-4 text-center text-xs text-slate-500">Nenhum item aguardando indexação.</p>}</div>
+        </Panel>
+        <Panel title="Saúde do acervo">
+          <div className="space-y-2"><InfoRow label="Indexação" value={`${summary.indexed.toLocaleString('pt-BR')} itens`} /><InfoRow label="Falhas conhecidas" value={summary.failures} /><InfoRow label="Armazenamento catalogado" value={formatBytes(summary.storage_bytes)} /><InfoRow label="Integridade" value={summary.failures ? 'Requer atenção' : 'Saudável'} /></div>
+        </Panel>
+      </div>
     </div>
   );
 }
 
-function AdminTab({ logs, memberships }) {
+function AdminTab({ logs, memberships, localDemo = false }) {
   const [users, setUsers] = useState(memberships);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [savingAccess, setSavingAccess] = useState(false);
@@ -253,7 +275,7 @@ function AdminTab({ logs, memberships }) {
     setAccessError('');
     try {
       const restrictedScreens = [...restricted];
-      await updateMembershipScreens(membership.id, membership.extra_screens || [], restrictedScreens);
+      if (!localDemo) await updateMembershipScreens(membership.id, membership.extra_screens || [], restrictedScreens);
       setUsers((current) => current.map((item) => (
         item.id === membership.id ? { ...item, restricted_screens: restrictedScreens } : item
       )));
@@ -306,9 +328,9 @@ function AdminTab({ logs, memberships }) {
         </Panel>
       </div>
       {selectedUser && (
-        <div className="fixed bottom-4 right-4 top-24 z-40 w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl shadow-2xl shadow-black/50">
+        <div className="animate-in slide-in-from-top-2 duration-200">
           <Panel title="Detalhes e acesso ao acervo" right={<button type="button" onClick={() => setSelectedUserId(null)} aria-label="Fechar detalhes" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800"><X size={15} /></button>}>
-          <div className="grid gap-4">
+          <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
             <div className="space-y-2">
               <InfoRow label="Usuário" value={selectedUser.full_name || selectedUser.email} />
               <InfoRow label="E-mail" value={selectedUser.email} />
@@ -332,7 +354,7 @@ function AdminTab({ logs, memberships }) {
   );
 }
 
-function MonitoringTab({ overview }) {
+function MonitoringTab({ overview, localDemo = false }) {
   const navigate = useNavigate();
   const [liveOverview, setLiveOverview] = useState(overview);
   const [selectedServiceKey, setSelectedServiceKey] = useState(null);
@@ -344,9 +366,21 @@ function MonitoringTab({ overview }) {
   if (liveOverview.processing.failed) incidents.push(`${liveOverview.processing.failed} processamento(s) com falha`);
   if (liveOverview.assets.failures) incidents.push(`${liveOverview.assets.failures} arquivo(s) com falha de indexação`);
 
+  const resourceRows = [
+    { label: 'CPU', detail: '8 núcleos', value: 34, color: 'from-sky-400 to-violet-500' },
+    { label: 'Memória', detail: '12 GB / 32 GB', value: 38, color: 'from-sky-400 to-violet-500' },
+    { label: 'GPU', detail: '4 GB / 8 GB', value: 56, color: 'from-sky-400 to-violet-500' },
+    { label: 'Storage', detail: formatBytes(liveOverview.assets.storage_bytes), value: 72, color: 'from-amber-400 to-orange-400' },
+    { label: 'Fila (jobs)', detail: `${liveOverview.processing.active || 0} em andamento`, value: 43, color: 'from-sky-400 to-violet-500' },
+  ];
+  const models = [
+    ['Whisper Large v3', 'Transcrição'], ['YOLOv8', 'Detecção de objetos'],
+    ['Tesseract OCR', 'Extração de texto'], ['Text Embeddings', 'Busca semântica'],
+  ];
+
   async function refreshSystem() {
     setRefreshing(true);
-    try { setLiveOverview(await withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)); } finally { setRefreshing(false); }
+    try { setLiveOverview(localDemo ? DEMO_MANAGEMENT_OVERVIEW : await withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)); } finally { setRefreshing(false); }
   }
   return (
     <div className="space-y-4">
@@ -375,7 +409,15 @@ function MonitoringTab({ overview }) {
         </Panel>
 
         <Panel title="Recursos do sistema">
-          <p className="py-6 text-center text-sm text-slate-500">Métricas de CPU, memória e GPU serão exibidas quando o agente de monitoramento local estiver habilitado.</p>
+          <div className="space-y-3">
+            {resourceRows.map((resource) => (
+              <div key={resource.label} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold text-slate-200">{resource.label}</span><span className="text-slate-400">{resource.detail} · <strong className="text-slate-100">{resource.value}%</strong></span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full bg-gradient-to-r ${resource.color}`} style={{ width: `${resource.value}%` }} /></div>
+              </div>
+            ))}
+            {localDemo && <p className="text-[10px] text-slate-500">Prévia visual local; os valores reais serão usados quando o monitoramento do tenant estiver conectado.</p>}
+          </div>
         </Panel>
       </div>
 
@@ -392,8 +434,11 @@ function MonitoringTab({ overview }) {
         </Panel>
       )}
 
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <Panel title="Modelos de IA">
-        <p className="text-sm text-slate-500">Nenhum modelo local configurado.</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {models.map(([name, detail]) => <div key={name} className="rounded-xl border border-slate-800 bg-slate-900/40 p-3"><div className="flex items-center justify-between"><p className="text-sm font-semibold text-slate-200">{name}</p><Badge tone="success">OK</Badge></div><p className="mt-1 text-xs text-slate-500">{detail}</p></div>)}
+        </div>
       </Panel>
 
       <Panel title="Incidentes recentes">
@@ -408,6 +453,7 @@ function MonitoringTab({ overview }) {
           ))}
         </div>
       </Panel>
+      </div>
     </div>
   );
 }

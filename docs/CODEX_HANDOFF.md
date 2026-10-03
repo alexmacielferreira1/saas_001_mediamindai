@@ -1,5 +1,14 @@
 # Handoff do MediaMind AI
 
+## Atualização 03/10/2026 — Administração, Acervo e Gestão
+
+- Acervo e Gestão foram integrados dentro da Administração 2, mantendo suas rotas independentes e o Workspace 2 preservados.
+- Detalhes e edições locais de Gestão e Acervo abrem no próprio contexto, abaixo do item selecionado, evitando troca desnecessária de página.
+- A tela operacional de usuários foi restaurada como padrão para manter API, detalhe, abas, segurança e suspensão com confirmação; as referências visuais continuam disponíveis nas demais áreas.
+- Acervo, Gestão, Telas e Módulos, Cadastros, Integrações e Configurações passaram ao menu principal sem o sufixo “2”. Para o perfil MVP, Acervo continua apontando para `/acervo`.
+- Verificação: 65 arquivos/272 testes frontend, lint, typecheck e build aprovados; conferência visual local realizada nos fluxos de menu e detalhe inline.
+- Rollback: reverter o commit deste bloco restaura as entradas anteriores do menu e as telas anteriores de Administração 2. Nenhum deploy, Render, Neon ou migration foi executado.
+
 ## Atualização 27/09/2026 — segunda passagem dos anexos e intervalo real de sequência
 
 - Os dois PDFs extensos e os três textos anexados foram novamente confrontados; dois textos eram cópias exatas e foram consolidados sem perder requisito.

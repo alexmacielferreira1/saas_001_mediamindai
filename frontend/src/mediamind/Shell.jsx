@@ -41,9 +41,13 @@ export const NAV_GROUPS = [
   {
     group: 'Administração',
     items: [
-      { to: '/acervo', label: 'Acervo', icon: ShieldCheck },
-      { to: '/management', label: 'Gestão', icon: BarChart3 },
-      { to: '/administration2', label: 'Administração 2', icon: UserCog },
+      { to: '/administration2?tab=archive', label: 'Acervo', icon: ShieldCheck, adminTab: 'archive' },
+      { to: '/administration2?tab=management', label: 'Gestão', icon: BarChart3, adminTab: 'management' },
+      { to: '/administration2?tab=registry', label: 'Telas e Módulos', icon: Layers, adminTab: 'registry' },
+      { to: '/administration2?tab=records', label: 'Cadastros', icon: FileText, adminTab: 'records' },
+      { to: '/administration2?tab=integrations', label: 'Integrações', icon: Send, adminTab: 'integrations' },
+      { to: '/administration2?tab=settings', label: 'Configurações', icon: Settings, adminTab: 'settings' },
+      { to: '/administration2', label: 'Administração', icon: UserCog, adminTab: 'overview' },
     ],
   },
   {
@@ -62,7 +66,12 @@ const MVP_LABELS = new Set([
 export function navigationForRole(role) {
   if (role !== 'mvp') return NAV_GROUPS;
   return NAV_GROUPS
-    .map((group) => ({ ...group, items: group.items.filter((item) => MVP_LABELS.has(item.label)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => MVP_LABELS.has(item.label))
+        .map((item) => item.label === 'Acervo' ? { ...item, to: '/acervo', adminTab: undefined } : item),
+    }))
     .filter((group) => group.items.length > 0);
 }
 
@@ -169,7 +178,9 @@ export default function Shell({ children }) {
                       end={it.end}
                       className={({ isActive }) => {
                         const query = new URLSearchParams(location.search);
-                        const active = it.sub
+                        const active = it.adminTab
+                          ? location.pathname === '/administration2' && (query.get('tab') || 'overview') === it.adminTab
+                          : it.sub
                           ? location.pathname === '/corp' && query.get('sub') === it.sub
                           : it.to === '/corp'
                             ? isActive && !query.get('sub')
