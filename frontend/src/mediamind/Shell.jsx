@@ -41,12 +41,6 @@ export const NAV_GROUPS = [
   {
     group: 'Administração',
     items: [
-      { to: '/administration2?tab=archive', label: 'Acervo', icon: ShieldCheck, adminTab: 'archive' },
-      { to: '/administration2?tab=management', label: 'Gestão', icon: BarChart3, adminTab: 'management' },
-      { to: '/administration2?tab=registry', label: 'Telas e Módulos', icon: Layers, adminTab: 'registry' },
-      { to: '/administration2?tab=records', label: 'Cadastros', icon: FileText, adminTab: 'records' },
-      { to: '/administration2?tab=integrations', label: 'Integrações', icon: Send, adminTab: 'integrations' },
-      { to: '/administration2?tab=settings', label: 'Configurações', icon: Settings, adminTab: 'settings' },
       { to: '/administration2', label: 'Administração', icon: UserCog, adminTab: 'overview' },
     ],
   },
@@ -60,7 +54,7 @@ export const NAV_GROUPS = [
 
 const MVP_LABELS = new Set([
   'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-  'Em revisão', 'Finalizado', 'Acervo',
+  'Em revisão', 'Finalizado',
 ]);
 
 export function navigationForRole(role) {
@@ -68,9 +62,7 @@ export function navigationForRole(role) {
   return NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items
-        .filter((item) => MVP_LABELS.has(item.label))
-        .map((item) => item.label === 'Acervo' ? { ...item, to: '/acervo', adminTab: undefined } : item),
+      items: group.items.filter((item) => MVP_LABELS.has(item.label)),
     }))
     .filter((group) => group.items.length > 0);
 }

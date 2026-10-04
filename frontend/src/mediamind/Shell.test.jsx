@@ -24,25 +24,15 @@ describe('production navigation', () => {
     const labels = navigation.map((item) => item.label);
     expect(labels).toEqual([
       'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-      'Em revisão', 'Finalizado', 'Acervo',
+      'Em revisão', 'Finalizado',
     ]);
-    expect(navigation.find((item) => item.label === 'Acervo')?.to).toBe('/acervo');
+    expect(navigation.some((item) => item.label === 'Acervo')).toBe(false);
   });
 
-  it('promotes the administration areas to the main menu without preview suffixes', () => {
+  it('keeps only Administração in the lateral administration group', () => {
     const administration = NAV_GROUPS.find((group) => group.group === 'Administração').items;
-    expect(administration.map((item) => item.label)).toEqual([
-      'Acervo', 'Gestão', 'Telas e Módulos', 'Cadastros', 'Integrações', 'Configurações', 'Administração',
-    ]);
-    expect(administration.map((item) => item.to)).toEqual([
-      '/administration2?tab=archive',
-      '/administration2?tab=management',
-      '/administration2?tab=registry',
-      '/administration2?tab=records',
-      '/administration2?tab=integrations',
-      '/administration2?tab=settings',
-      '/administration2',
-    ]);
+    expect(administration.map((item) => item.label)).toEqual(['Administração']);
+    expect(administration.map((item) => item.to)).toEqual(['/administration2']);
     expect(administration.some((item) => item.label.endsWith(' 2'))).toBe(false);
   });
 });

@@ -58,7 +58,8 @@ describe('Administration2 preview', () => {
 
   it('shows the parallel preview and loads real tenant users', async () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    expect(screen.getByText('Administração 2')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Administração' })).toBeInTheDocument();
+    expect(screen.queryByText('Administração 2')).not.toBeInTheDocument();
     expect(await screen.findByText('Ações rápidas')).toBeInTheDocument();
     expect(screen.getByText('Alertas administrativos')).toBeInTheDocument();
     expect(screen.getByText('Status de segurança')).toBeInTheDocument();
@@ -173,11 +174,11 @@ describe('Administration2 preview', () => {
 
   it('uses the compact core navigation and keeps contextual areas separate', async () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    expect(await screen.findByLabelText('Navegação principal da Administração 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('Áreas relacionadas')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Navegação principal da Administração')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Áreas relacionadas')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Usuários' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Áreas relacionadas')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Acervo' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Navegação principal da Administração')).toContainElement(screen.getByRole('button', { name: 'Acervo' }));
   });
 
   it.each([

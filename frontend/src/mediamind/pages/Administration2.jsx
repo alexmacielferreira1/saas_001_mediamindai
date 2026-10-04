@@ -134,21 +134,20 @@ export default function Administration2() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-50">Administração 2</h1>
-            <Badge tone="violet">Prévia paralela</Badge>
+            <h1 className="text-xl font-bold text-slate-50">Administração</h1>
+            <Badge tone="success">Área validada</Badge>
           </div>
-          <p className="mt-1 text-sm text-slate-400">Nova área para revisão, sem substituir a Administração atual.</p>
+          <p className="mt-1 text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança.</p>
         </div>
         <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
           {localDemo ? 'Modo local funcional' : error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
         </div>
       </header>
 
-      <AdminTabs label="Navegação principal da Administração 2" tabs={CORE_TABS} active={active} onChange={openTab} />
-      <AdminTabs label="Áreas relacionadas" tabs={RELATED_TABS} active={active} onChange={openTab} compact />
+      <AdminTabs label="Navegação principal da Administração" tabs={ALL_TABS} active={active} onChange={openTab} />
       <div className="contents">
         {error && <div role={fallbackKind === 'offline' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'offline' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
-        {!payload && !error ? <Loading label="Carregando Administração 2..." /> : null}
+        {!payload && !error ? <Loading label="Carregando Administração..." /> : null}
       </div>
       {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} fallbackKind={fallbackKind} />}
       {active === 'users' && <UsersTab initialPayload={payload} onReload={load} fallbackKind={fallbackKind} />}
@@ -387,7 +386,7 @@ function TagList({ items }) {
 }
 
 function EmbeddedArea({ title, children }) {
-  return <section className="rounded-2xl border border-sky-900/50 bg-slate-950/30 p-4"><div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-400">Dentro da Administração 2</p><h2 className="mt-1 text-lg font-bold text-slate-100">{title}</h2></div><Badge tone="violet">Prévia 2</Badge></div>{children}</section>;
+  return <section className="rounded-2xl border border-sky-900/50 bg-slate-950/30 p-4"><div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-400">Dentro da Administração</p><h2 className="mt-1 text-lg font-bold text-slate-100">{title}</h2></div><Badge tone="success">Integrado</Badge></div>{children}</section>;
 }
 
 const DEMO_TEAMS = [
