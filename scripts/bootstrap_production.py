@@ -28,15 +28,11 @@ def main() -> None:
     password = required_env("BOOTSTRAP_ADMIN_PASSWORD")
 
     if len(password) < 12:
-        raise SystemExit(
-            "BOOTSTRAP_ADMIN_PASSWORD deve ter pelo menos 12 caracteres."
-        )
+        raise SystemExit("BOOTSTRAP_ADMIN_PASSWORD deve ter pelo menos 12 caracteres.")
 
     with SessionLocal() as session:
         # 1. Tenant
-        tenant = session.scalar(
-            select(Tenant).where(Tenant.slug == TENANT_SLUG)
-        )
+        tenant = session.scalar(select(Tenant).where(Tenant.slug == TENANT_SLUG))
 
         if tenant is None:
             tenant = Tenant(
@@ -71,9 +67,7 @@ def main() -> None:
         permissions = []
 
         for code, description in permission_definitions:
-            permission = session.scalar(
-                select(Permission).where(Permission.code == code)
-            )
+            permission = session.scalar(select(Permission).where(Permission.code == code))
 
             if permission is None:
                 permission = Permission(
@@ -107,9 +101,7 @@ def main() -> None:
         group.permissions = permissions
 
         # 4. Usuário
-        user = session.scalar(
-            select(User).where(User.email_normalized == email)
-        )
+        user = session.scalar(select(User).where(User.email_normalized == email))
 
         if user is None:
             user = User(

@@ -45,10 +45,16 @@
 ```python
 def test_schedule_rejects_duplicate_check_code(session, tenant, user):
     schedule = make_schedule(session, tenant.id, user.id)
-    session.add_all([
-        PublicationCheckItem(schedule_id=schedule.id, code="official_media", label="Versão oficial"),
-        PublicationCheckItem(schedule_id=schedule.id, code="official_media", label="Versão oficial"),
-    ])
+    session.add_all(
+        [
+            PublicationCheckItem(
+                schedule_id=schedule.id, code="official_media", label="Versão oficial"
+            ),
+            PublicationCheckItem(
+                schedule_id=schedule.id, code="official_media", label="Versão oficial"
+            ),
+        ]
+    )
     with pytest.raises(IntegrityError):
         session.commit()
 ```
@@ -64,7 +70,9 @@ Expected: FAIL because the models and uniqueness constraint do not exist.
 class PublicationSchedule(Base):
     __tablename__ = "publication_schedules"
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
     production_id: Mapped[str] = mapped_column(String(120), index=True)
     media_asset_id: Mapped[str] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(String(40), default="awaiting_review", index=True)
@@ -105,6 +113,7 @@ def test_start_creates_one_publication_per_target_once(session, ready_schedule, 
     second = start_preparation(session, current, ready_schedule.id, "request-123")
     assert first.id == second.id
     assert len(first.publications) == len(ready_schedule.targets)
+
 
 def test_disconnected_account_blocks_start(session, ready_schedule, current):
     ready_schedule.targets[0].account_status = "disconnected"
@@ -166,11 +175,16 @@ git commit -m "feat(publication): enforce review and idempotent start"
 
 ```python
 def test_detail_is_tenant_scoped(client, auth_headers, other_tenant_schedule):
-    response = client.get(f"/api/v1/publication-preparations/{other_tenant_schedule.id}", headers=auth_headers)
+    response = client.get(
+        f"/api/v1/publication-preparations/{other_tenant_schedule.id}", headers=auth_headers
+    )
     assert response.status_code == 404
 
+
 def test_start_requires_idempotency_key(client, ready_schedule, auth_headers):
-    response = client.post(f"/api/v1/publication-preparations/{ready_schedule.id}/start", headers=auth_headers)
+    response = client.post(
+        f"/api/v1/publication-preparations/{ready_schedule.id}/start", headers=auth_headers
+    )
     assert response.status_code == 400
     assert response.json()["error_code"] == "IDEMPOTENCY_KEY_REQUIRED"
 ```
@@ -184,8 +198,12 @@ Expected: FAIL with route not found.
 
 ```python
 @router.post("/{schedule_id}/start", response_model=StartPreparationResponse)
-def start(schedule_id: UUID, current: Authenticated, session: DbSession,
-          idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None):
+def start(
+    schedule_id: UUID,
+    current: Authenticated,
+    session: DbSession,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+):
     if not idempotency_key:
         raise PublicError(400, "IDEMPOTENCY_KEY_REQUIRED", "Informe a chave de idempotência.")
     require_permission(session, current, "publication.start")

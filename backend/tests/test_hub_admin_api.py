@@ -36,11 +36,18 @@ def test_public_manifest_describes_the_product_without_exposing_credentials(hub_
         "display_name": "MediaMind AI",
         "product_version": Path("VERSION").read_text(encoding="utf-8").strip(),
         "admin_api_version": "v1",
-        "capabilities": ["observe.health", "observe.readiness", "observe.version"],
+        "capabilities": [
+            "observe.health",
+            "observe.readiness",
+            "observe.version",
+            "command.system.describe.dry-run",
+            "command.media.count.dry-run",
+        ],
         "endpoints": {
             "health": "/api/hub/v1/health",
             "readiness": "/api/hub/v1/readiness",
             "version": "/api/hub/v1/version",
+            "commands": "/api/hub/v1/commands",
         },
     }
     assert TOKEN not in response.text

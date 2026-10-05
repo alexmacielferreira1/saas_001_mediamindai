@@ -181,6 +181,14 @@ describe('Administration2 preview', () => {
     expect(screen.getByLabelText('Navegação principal da Administração')).toContainElement(screen.getByRole('button', { name: 'Acervo' }));
   });
 
+  it('uses a representative icon in every administration navigation area', async () => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    const navigation = await screen.findByLabelText('Navegação principal da Administração');
+    const buttons = Array.from(navigation.querySelectorAll('button'));
+    expect(buttons.length).toBeGreaterThan(10);
+    buttons.forEach((button) => expect(button.querySelector('svg')).not.toBeNull());
+  });
+
   it.each([
     ['Equipes', 'Equipes / Setores / Unidades', 'Membros da equipe'],
     ['Formulários', 'Formulários', 'Pré-visualização do formulário'],

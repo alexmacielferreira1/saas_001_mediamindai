@@ -129,18 +129,14 @@ def test_domain_mutations_require_the_matching_permission(permission_client):
     client, _ = permission_client
     login(client, "cedoc@mediamind.ai")
 
-    denied = client.post(
-        "/api/v1/records/AgendaEvento", json={"data": {"titulo": "Sem permissão"}}
-    )
+    denied = client.post("/api/v1/records/AgendaEvento", json={"data": {"titulo": "Sem permissão"}})
 
     assert denied.status_code == 403
     assert denied.json()["error_code"] == "PERMISSION_DENIED"
 
     client.post("/api/v1/auth/logout")
     login(client)
-    allowed = client.post(
-        "/api/v1/records/AgendaEvento", json={"data": {"titulo": "Permitido"}}
-    )
+    allowed = client.post("/api/v1/records/AgendaEvento", json={"data": {"titulo": "Permitido"}})
     assert allowed.status_code == 201
 
 

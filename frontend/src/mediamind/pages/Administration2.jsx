@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Activity, AlertTriangle, LayoutDashboard, LockKeyhole, Search, ShieldCheck,
-  UserCog, Users,
+  Activity, AlertTriangle, Archive, Blocks, ClipboardList, ContactRound, Database,
+  FileInput, FileText, FolderKanban, KeyRound, LayoutDashboard, LockKeyhole,
+  PlugZap, Search, Settings, ShieldCheck, SlidersHorizontal, UserCog, Users,
+  UsersRound,
 } from 'lucide-react';
 import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, suspendAdminUser, updateAdminSettings } from '../../api/admin';
 import { ApiError } from '../../api/httpClient';
@@ -23,18 +25,18 @@ const CORE_TABS = [
   { key: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
   { key: 'users', label: 'Usuários', icon: Users },
   { key: 'access', label: 'Acessos por Função', icon: UserCog },
-  { key: 'profiles', label: 'Perfis e Funções' },
-  { key: 'permissions', label: 'Permissões' },
-  { key: 'teams', label: 'Equipes' },
-  { key: 'forms', label: 'Formulários' },
-  { key: 'imports', label: 'Importações' },
+  { key: 'profiles', label: 'Perfis e Funções', icon: ContactRound },
+  { key: 'permissions', label: 'Permissões', icon: KeyRound },
+  { key: 'teams', label: 'Equipes', icon: UsersRound },
+  { key: 'forms', label: 'Formulários', icon: ClipboardList },
+  { key: 'imports', label: 'Importações', icon: FileInput },
   { key: 'security', label: 'Segurança', icon: LockKeyhole },
 ];
 
 const RELATED_TABS = [
-  { key: 'archive', label: 'Acervo' }, { key: 'management', label: 'Gestão' },
-  { key: 'registry', label: 'Telas e Módulos' }, { key: 'records', label: 'Cadastros' },
-  { key: 'integrations', label: 'Integrações' }, { key: 'settings', label: 'Configurações' },
+  { key: 'archive', label: 'Acervo', icon: Archive }, { key: 'management', label: 'Gestão', icon: FolderKanban },
+  { key: 'registry', label: 'Telas e Módulos', icon: Blocks }, { key: 'records', label: 'Cadastros', icon: Database },
+  { key: 'integrations', label: 'Integrações', icon: PlugZap }, { key: 'settings', label: 'Configurações', icon: Settings },
 ];
 const ALL_TABS = [...CORE_TABS, ...RELATED_TABS];
 
@@ -132,12 +134,15 @@ export default function Administration2() {
   return (
     <div className="space-y-5 pb-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-sky-800/70 bg-sky-950/60 text-sky-300 shadow-[0_0_24px_rgba(14,165,233,0.12)]"><SlidersHorizontal size={21} /></span>
+          <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-50">Administração</h1>
             <Badge tone="success">Área validada</Badge>
           </div>
           <p className="mt-1 text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança.</p>
+          </div>
         </div>
         <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
           {localDemo ? 'Modo local funcional' : error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
@@ -249,7 +254,7 @@ function PermissionsTab({ groups }) {
 }
 
 function AdminTabs({ label, tabs, active, onChange, compact = false }) {
-  return <nav aria-label={label} className={`overflow-x-auto border border-slate-800 bg-slate-950/40 ${compact ? '-mt-3 rounded-lg p-1' : 'rounded-xl p-1.5'}`}><div className="flex min-w-max gap-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.key} type="button" onClick={() => onChange(tab.key)} className={`flex shrink-0 items-center gap-2 rounded-lg font-medium transition ${compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} ${active === tab.key ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}>{Icon && <Icon size={15} />}{tab.label}</button>; })}</div></nav>;
+  return <nav aria-label={label} className={`overflow-x-auto border border-slate-800 bg-slate-950/40 shadow-[0_12px_35px_rgba(2,8,23,0.22)] ${compact ? '-mt-3 rounded-lg p-1' : 'rounded-xl p-1.5'}`}><div className="flex min-w-max gap-1">{tabs.map((tab) => { const Icon = tab.icon; return <button key={tab.key} type="button" onClick={() => onChange(tab.key)} className={`group flex shrink-0 items-center gap-2 rounded-lg font-medium transition ${compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} ${active === tab.key ? 'bg-sky-500 text-slate-950 shadow-[0_6px_18px_rgba(14,165,233,0.2)]' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'}`}><Icon aria-hidden="true" size={15} strokeWidth={active === tab.key ? 2.4 : 1.9} className={active === tab.key ? 'text-slate-950' : 'text-sky-400 transition group-hover:text-sky-300'} />{tab.label}</button>; })}</div></nav>;
 }
 
 function AlertLine({ tone, text }) {

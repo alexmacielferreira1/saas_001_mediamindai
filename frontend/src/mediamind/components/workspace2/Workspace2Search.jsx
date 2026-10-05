@@ -38,7 +38,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
 export default function Workspace2Search({
   assets = [], selectedAssets = [], selectedIds = [], previewAsset, onToggle = () => {},
   onPreview = () => {}, onStepChange = () => {}, onClearSelection = () => {},
-  showPreview = true, mediaSearch, onMediaSearchChange,
+  showPreview = true, showSearch = true, mediaSearch, onMediaSearchChange,
 }) {
   const [localMediaSearch, setLocalMediaSearch] = useState(DEFAULT_WORKSPACE_MEDIA_SEARCH);
   const [viewMode, setViewMode] = useState('grid');
@@ -58,8 +58,8 @@ export default function Workspace2Search({
   const countType = (type) => type === 'all' ? assets.length : assets.filter((asset) => asset.asset_type === type).length;
 
   return (
-    <section data-testid="workspace2-search" className={`grid min-h-[760px] ${showPreview ? 'grid-cols-[260px_minmax(440px,1fr)_430px]' : 'grid-cols-[260px_minmax(440px,1fr)]'} gap-2`}>
-      <aside className="w2-panel overflow-hidden">
+    <section data-testid="workspace2-search" className="grid min-h-[760px] gap-2" style={{ gridTemplateColumns: showSearch ? (showPreview ? '260px minmax(440px,1fr) 430px' : '260px minmax(440px,1fr)') : (showPreview ? 'minmax(440px,1fr) 430px' : 'minmax(0,1fr)') }}>
+      {showSearch && <aside className="w2-panel overflow-hidden">
         <div className="grid grid-cols-2 border-b border-slate-800 p-2 text-xs font-semibold">
           <button type="button" className="flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2"><Search size={14} /> Pesquisa</button>
           <button type="button" disabled title="Disponível quando o serviço de IA estiver configurado" className="flex items-center justify-center gap-2 text-slate-600"><Sparkles size={14} /> Prompt IA</button>
@@ -75,7 +75,7 @@ export default function Workspace2Search({
           <div className="border-t border-slate-800 pt-4 text-xs text-slate-400">Filtros adicionais</div>
           {['Categoria', 'Formato', 'Status', 'Duração', 'Origem'].map((label) => <select aria-label={label} key={label} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300"><option>{label === 'Duração' ? 'Qualquer duração' : 'Todas'}</option></select>)}
         </div>
-      </aside>
+      </aside>}
 
       <main className="flex min-w-0 flex-col gap-2">
         <div className="w2-panel flex-1 overflow-hidden">
@@ -124,7 +124,7 @@ export default function Workspace2Search({
         </div>
       </aside>}
 
-      <footer className={`${showPreview ? 'col-span-3' : 'col-span-2'} grid grid-cols-6 gap-2`}>
+      <footer className="grid grid-cols-6 gap-2" style={{ gridColumn: '1 / -1' }}>
         <button type="button" onClick={() => onStepChange('script')} className="w2-button justify-center"><Film size={14} /> Adicionar ao roteiro</button>
         <button type="button" onClick={() => onStepChange('timeline')} className="w2-button justify-center"><ChevronRight size={14} /> Adicionar à timeline</button>
         <button type="button" onClick={() => onStepChange('timeline')} disabled={!selectedAssets.length} className="w2-button justify-center disabled:opacity-40"><Film size={14} /> Gerar corte</button>

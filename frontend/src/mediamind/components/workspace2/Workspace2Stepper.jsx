@@ -1,11 +1,11 @@
-import { Download, Eye, Film, LayoutTemplate, RotateCcw, Save, Search } from 'lucide-react';
+import { Download, FilePlus2, Film, LayoutTemplate, RotateCcw, Save, Search } from 'lucide-react';
 
 const STEPS = [
   { id: 'search', number: 1, label: 'Pesquisa', Icon: Search },
-  { id: 'script', number: 2, label: 'Roteiro', Icon: Film },
-  { id: 'preview', number: 3, label: 'Prévia', Icon: Eye },
+  { id: 'create', number: 2, label: 'Criar', Icon: FilePlus2 },
+  { id: 'script', number: 3, label: 'Roteiro', Icon: Film },
   { id: 'timeline', number: 4, label: 'Timeline', Icon: Film },
-  { id: 'export', number: 5, label: 'Exportação', Icon: Download },
+  { id: 'export', number: 5, label: 'Exportar', Icon: Download },
 ];
 
 export default function Workspace2Stepper({ activeStep, onStepChange, selectedCount, onSave = () => {}, onReset = () => {} }) {

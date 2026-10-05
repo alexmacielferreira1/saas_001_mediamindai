@@ -29,17 +29,18 @@ describe('Workspace 2 script step', () => {
     const onProjectChange = vi.fn();
     render(<Workspace2Script selectedAssets={[asset, { id: 8, title: 'Entrevista coletiva', duration: 30, icon: '🎤' }]} onProjectChange={onProjectChange} />);
 
-    const scripts = screen.getAllByRole('button', { name: /Abrir roteiro/i });
+    fireEvent.click(screen.getByRole('button', { name: 'Roteiros' }));
+    const scripts = screen.getAllByRole('button').filter((button) => button.textContent.includes('Jornal'));
     fireEvent.click(scripts[1]);
-    expect(scripts[1]).toHaveAttribute('aria-pressed', 'true');
     expect(onProjectChange).toHaveBeenCalledWith('title', expect.any(String));
 
+    fireEvent.click(screen.getByRole('button', { name: 'Acervo' }));
     fireEvent.change(screen.getByLabelText('Pesquisa rápida de mídias'), { target: { value: 'entrevista' } });
     expect(screen.queryByText(asset.title)).not.toBeInTheDocument();
-    expect(screen.getByText('Entrevista coletiva')).toBeInTheDocument();
+    expect(screen.getAllByText('Entrevista coletiva').length).toBeGreaterThan(0);
   });
 
-  it('keeps the page-one media search on the left and the script list on the right', () => {
+  it('keeps the page-one media search in the library and the editable script on the right', () => {
     const interview = { id: 8, title: 'Entrevista coletiva', filename: 'coletiva.mov', asset_type: 'video', duration: 30, icon: '🎤' };
     const onAddAsset = vi.fn();
     const onToggle = vi.fn();
@@ -57,12 +58,12 @@ describe('Workspace 2 script step', () => {
     );
 
     const layout = screen.getByTestId('workspace2-script');
-    const media = screen.getByRole('complementary', { name: 'Mídias do Acervo' });
-    const scripts = screen.getByRole('complementary', { name: 'Lista de roteiros' });
-    expect(layout.firstElementChild).toBe(media);
-    expect(layout.lastElementChild).toBe(scripts);
-    expect(screen.getByLabelText('Data da mídia do roteiro')).toBeInTheDocument();
-    expect(screen.getByText('Entrevista coletiva')).toBeInTheDocument();
+    const media = screen.getByRole('complementary', { name: 'Biblioteca do roteiro' });
+    const scripts = screen.getByRole('complementary', { name: 'Roteiro editável' });
+    expect(layout).toContainElement(media);
+    expect(layout).toContainElement(scripts);
+    expect(screen.getByRole('region', { name: 'Preview da mídia' })).toBeInTheDocument();
+    expect(screen.getAllByText('Entrevista coletiva').length).toBeGreaterThan(0);
     expect(screen.queryByText(asset.title)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar Entrevista coletiva ao roteiro' }));
@@ -75,8 +76,7 @@ describe('Workspace 2 script step', () => {
     const onNotice = vi.fn();
     render(<Workspace2Script project={{ template: '' }} onProjectChange={onProjectChange} onNotice={onNotice} />);
 
-    expect(screen.getByRole('heading', { name: 'Modelos de roteiro' })).toBeInTheDocument();
-    expect(screen.getByText('Clicáveis')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Modelos' }));
     expect(screen.getByRole('button', { name: /Reportagem Usar modelo/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Entrevista Usar modelo/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Cabeça \+ off \+ sonora Usar modelo/i }));

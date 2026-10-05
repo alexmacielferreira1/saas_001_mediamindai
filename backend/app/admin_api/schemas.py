@@ -15,6 +15,7 @@ class HubManifestEndpoints(BaseModel):
     health: str
     readiness: str
     version: str
+    commands: str
 
 
 class HubManifest(BaseModel):

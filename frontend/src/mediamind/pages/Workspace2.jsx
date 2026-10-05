@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, LayoutTemplate, Lock, PanelLeft, PanelRight, Unlock, Upload } from 'lucide-react';
+import { Download, Eye, LayoutTemplate, Lock, PanelLeft, PanelRight, Search, Unlock, Upload } from 'lucide-react';
 import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import Workspace2Stepper from '../components/workspace2/Workspace2Stepper';
 import Workspace2Search from '../components/workspace2/Workspace2Search';
 import Workspace2Script from '../components/workspace2/Workspace2Script';
-import Workspace2Timeline from '../components/workspace2/Workspace2Timeline';
 import Workspace2Export from '../components/workspace2/Workspace2Export';
+import Workspace2Create from '../components/workspace2/Workspace2Create';
 import Timeline2 from './Timeline2';
 import UploadReceiptPanel from '../components/UploadReceiptPanel';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
+import { MOCK_ASSETS } from '../data';
 
 export default function Workspace2() {
   const initialProject = {
@@ -26,6 +27,7 @@ export default function Workspace2() {
   const [project, setProject] = useState(initialProject);
   const [notice, setNotice] = useState('Projeto ativo · Não salvo');
   const [showPreview, setShowPreview] = useState(true);
+  const [showSearch, setShowSearch] = useState(true);
   const [locked, setLocked] = useState(false);
   const [uploadReceipts, setUploadReceipts] = useState([]);
   const importRef = useRef(null);
@@ -43,7 +45,17 @@ export default function Workspace2() {
       const normalized = items.map((asset) => ({ ...asset, title: asset.title || asset.filename, stream_url: mediaStreamUrl(asset), icon: asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'image' ? '🖼️' : '🎬' }));
       setAssets(normalized);
       setPreviewAssetId((current) => current || normalized[0]?.id || null);
-    }).catch((error) => { if (active) setNotice(error?.message || 'Não foi possível carregar o Acervo.'); });
+    }).catch(() => {
+      if (!active) return;
+      const demo = MOCK_ASSETS.slice(0, 6).map((asset) => ({ ...asset, stream_url: mediaStreamUrl(asset) }));
+      const demoBlocks = [
+        { id: 'demo-open', title: 'Abertura — Apresentador', text: 'Boa noite! Você confere agora as principais notícias.', type: 'text', duration: 15 },
+        ...demo.slice(0, 3).map((asset, index) => ({ id: `demo-${asset.id}`, assetId: asset.id, title: asset.title, type: 'media', duration: [27, 32, 18][index] })),
+        { id: 'demo-close', title: 'Encerramento', text: 'Essas são as informações de hoje. Continue com a gente.', type: 'text', duration: 15 },
+      ];
+      setAssets(demo); setSelectedIds(demo.slice(0, 3).map((asset) => asset.id)); setPreviewAssetId(demo[0]?.id || null); setBlocks(demoBlocks);
+      setNotice('Acervo indisponível · exibindo dados demonstrativos para validar o roteiro');
+    });
     return () => { active = false; };
   }, []);
 
@@ -125,6 +137,18 @@ export default function Workspace2() {
     onExport: exportProject,
     onNotice: setNotice,
     showPreview,
+    showSearch,
+  };
+  const openScript = (script) => {
+    if (script) setProject((current) => ({ ...current, title: script.title, program: script.project_name || current.program }));
+    setNotice(script ? `Roteiro “${script.title}” aberto` : 'Editor de roteiro aberto');
+    setActiveStep('script');
+  };
+  const createScript = (source) => {
+    if (source === 'media') setBlocks((current) => current.length ? current : selectedAssets.reduce((items, asset) => appendScriptBlock(items, asset), []));
+    if (typeof source === 'string' && !['blank', 'media', 'brief', 'template'].includes(source)) setProject((current) => ({ ...current, template: source }));
+    setNotice('Novo roteiro preparado');
+    setActiveStep('script');
   };
 
   return (
@@ -139,7 +163,7 @@ export default function Workspace2() {
       <div role="status" className="mb-3 min-h-5 text-right text-xs text-sky-300">{notice}</div>
       <UploadReceiptPanel assets={uploadReceipts} />
       <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
-        <button type="button" onClick={() => setActiveStep('search')} className={`w2-button ${activeStep === 'search' ? 'border-sky-500 bg-sky-500 text-slate-950' : ''}`}><PanelLeft size={14} /> Pesquisa</button>
+        <button type="button" onClick={() => setShowSearch((value) => !value)} aria-pressed={showSearch} className={`w2-button ${showSearch ? 'border-sky-500 bg-sky-500 text-slate-950' : ''}`}><PanelLeft size={14} /> {showSearch ? 'Ocultar pesquisa' : 'Mostrar pesquisa'}</button>
         <button type="button" onClick={() => setShowPreview((value) => !value)} className={`w2-button ${showPreview ? 'border-sky-500 bg-sky-500 text-slate-950' : ''}`}><PanelRight size={14} /> Prévia</button>
         <button type="button" onClick={() => importRef.current?.click()} className="w2-button"><Upload size={14} /> Importar mídias</button><input ref={importRef} aria-label="Importar mídias" type="file" multiple accept="video/*,audio/*,image/*" onChange={importMedia} className="hidden" />
         <button type="button" onClick={() => projectImportRef.current?.click()} className="w2-button">Importar projeto</button><input ref={projectImportRef} aria-label="Arquivo do projeto" type="file" accept="application/json,.json" onChange={importProject} className="hidden" />
@@ -148,10 +172,20 @@ export default function Workspace2() {
         <button type="button" onClick={() => { setLocked((value) => !value); setNotice(locked ? 'Projeto destravado' : 'Projeto travado para evitar alterações'); }} className={`w2-button ${locked ? 'border-amber-500 text-amber-300' : ''}`}>{locked ? <Lock size={14} /> : <Unlock size={14} />} Travar</button>
       </div>
       {activeStep === 'search' && <Workspace2Search {...shared} />}
+      {activeStep === 'create' && <Workspace2Create {...shared} onOpenScript={openScript} onCreate={createScript} />}
       {activeStep === 'script' && <Workspace2Script {...shared} />}
-      {activeStep === 'preview' && <Workspace2Timeline {...shared} compact onOpenTimeline={openTimeline2} />}
-      {activeStep === 'timeline' && <Timeline2 embedded />}
-      {activeStep === 'export' && <Workspace2Export project={project} timeline={latestTimeline} onSave={saveProject} onNotice={setNotice} />}
+      {activeStep === 'timeline' && <WorkspaceStageShell {...shared}><Timeline2 embedded /></WorkspaceStageShell>}
+      {activeStep === 'export' && <WorkspaceStageShell {...shared}><Workspace2Export project={project} timeline={latestTimeline} onSave={saveProject} onNotice={setNotice} /></WorkspaceStageShell>}
     </div>
   );
+}
+
+function WorkspaceStageShell({ children, assets = [], selectedAssets = [], previewAsset, mediaSearch, onMediaSearchChange, onPreview, onToggle, showSearch, showPreview }) {
+  const query = mediaSearch?.filters?.filename || '';
+  const visible = assets.filter((asset) => !query || `${asset.title} ${asset.filename || ''}`.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
+  return <div className="grid gap-2" style={{ gridTemplateColumns: showSearch ? (showPreview ? '280px minmax(0,1fr) 300px' : '280px minmax(0,1fr)') : (showPreview ? 'minmax(0,1fr) 300px' : 'minmax(0,1fr)') }}>
+    {showSearch && <aside className="w2-panel overflow-hidden" aria-label="Pesquisa persistente do Workspace"><div className="border-b border-slate-800 p-3"><label className="flex items-center gap-2 text-xs font-bold text-sky-300"><Search size={14}/> Pesquisa de mídias</label><input aria-label="Pesquisa de mídias persistente" value={query} onChange={(event) => onMediaSearchChange({ ...mediaSearch, filters: { ...mediaSearch.filters, filename: event.target.value } })} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs" placeholder="Buscar no acervo…"/></div><div className="max-h-[720px] space-y-2 overflow-y-auto p-3">{visible.map((asset) => <button type="button" key={asset.id} onClick={() => onPreview(asset)} className="flex w-full items-center gap-2 rounded-lg border border-slate-800 p-2 text-left hover:border-sky-600"><span className="text-xl">{asset.icon || '🎬'}</span><span className="min-w-0 flex-1 truncate text-xs">{asset.title}</span><span onClick={(event) => { event.stopPropagation(); onToggle(asset.id); }} className="text-sky-300">+</span></button>)}</div></aside>}
+    <main className="min-w-0">{children}</main>
+    {showPreview && <aside className="w2-panel p-3" aria-label="Prévia persistente do Workspace"><h3 className="flex items-center gap-2 border-b border-slate-800 pb-3 text-sm font-bold"><Eye size={15} className="text-sky-400"/> Prévia</h3><div className="mt-3 grid aspect-video place-items-center rounded-xl bg-gradient-to-br from-sky-950 via-blue-800 to-amber-300 text-5xl">{previewAsset?.icon || '🎬'}</div><h4 className="mt-3 font-bold">{previewAsset?.title || 'Selecione uma mídia'}</h4><p className="text-xs text-slate-500">{selectedAssets.length} mídia(s) selecionada(s)</p></aside>}
+  </div>;
 }

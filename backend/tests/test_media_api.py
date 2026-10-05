@@ -172,10 +172,21 @@ def test_export_timeline_respects_sequence_in_and_out(permission_client, monkeyp
             "name": "Trecho",
             "in_point": 3,
             "out_point": 8,
-            "tracks": [{"id": "v1", "kind": "video", "clips": [{
-                "assetId": uploaded["id"], "start": 2, "sourceIn": 3,
-                "duration": 10, "properties": {"speed": 1},
-            }]}],
+            "tracks": [
+                {
+                    "id": "v1",
+                    "kind": "video",
+                    "clips": [
+                        {
+                            "assetId": uploaded["id"],
+                            "start": 2,
+                            "sourceIn": 3,
+                            "duration": 10,
+                            "properties": {"speed": 1},
+                        }
+                    ],
+                }
+            ],
         },
     )
 

@@ -114,7 +114,9 @@ it('lets an individual deny override inherited allow', () => {
 
 ```python
 def test_user_detail_does_not_cross_tenant(client, auth_headers, other_membership):
-    response = client.get(f"/api/v1/memberships/{other_membership.id}/administration-detail", headers=auth_headers)
+    response = client.get(
+        f"/api/v1/memberships/{other_membership.id}/administration-detail", headers=auth_headers
+    )
     assert response.status_code == 404
 ```
 
@@ -161,6 +163,7 @@ def test_xlsx_formula_is_not_evaluated(xlsx_with_formula):
     book = parse_tabular_file(xlsx_with_formula, "users.xlsx", {})
     assert book.sheets[0].rows[0]["total"].kind == "formula"
     assert book.warnings == ["FORMULAS_NOT_EXECUTED"]
+
 
 def test_duplicate_headers_are_reported(csv_bytes):
     with pytest.raises(TabularParseError) as error:
@@ -214,7 +217,9 @@ git commit -m "feat(import): add safe tabular sessions"
 ```python
 def test_steps_replay_without_mutating_source():
     source = [{" Nome ": "  ANA  "}]
-    result = apply_steps(source, [Rename(" Nome ", "nome"), Trim("nome"), ChangeCase("nome", "title")])
+    result = apply_steps(
+        source, [Rename(" Nome ", "nome"), Trim("nome"), ChangeCase("nome", "title")]
+    )
     assert result == [{"nome": "Ana"}]
     assert source == [{" Nome ": "  ANA  "}]
 ```
@@ -233,9 +238,17 @@ Run backend and frontend tests above. Expected: FAIL for missing operations.
 - [ ] **Step 3: Implement operation registry and reducer**
 
 ```python
-TRANSFORMS = {"rename": apply_rename, "remove": apply_remove, "cast": apply_cast,
-              "replace": apply_replace, "split": apply_split, "combine": apply_combine,
-              "trim": apply_trim, "case": apply_case, "ignore_row": apply_ignore}
+TRANSFORMS = {
+    "rename": apply_rename,
+    "remove": apply_remove,
+    "cast": apply_cast,
+    "replace": apply_replace,
+    "split": apply_split,
+    "combine": apply_combine,
+    "trim": apply_trim,
+    "case": apply_case,
+    "ignore_row": apply_ignore,
+}
 ```
 
 Reject unknown operations and invalid parameters with stable codes. Frontend operations generate the same JSON contract; backend is authoritative.
@@ -267,8 +280,14 @@ git commit -m "feat(import): add replayable transformations"
 
 ```python
 def test_user_schema_rejects_password_and_superadmin_elevation():
-    report = validate_rows("users.v1", [{"email": "a@x.test", "password": "secret", "role": "superadmin"}])
-    assert {issue.code for issue in report.issues} == {"FIELD_NOT_IMPORTABLE", "ROLE_NOT_ASSIGNABLE"}
+    report = validate_rows(
+        "users.v1", [{"email": "a@x.test", "password": "secret", "role": "superadmin"}]
+    )
+    assert {issue.code for issue in report.issues} == {
+        "FIELD_NOT_IMPORTABLE",
+        "ROLE_NOT_ASSIGNABLE",
+    }
+
 
 def test_dry_run_classifies_create_update_unchanged_and_rejected(session, tenant):
     report = dry_run(session, tenant.id, "users.v1", prepared_rows())
@@ -311,7 +330,9 @@ git commit -m "feat(import): validate and simulate bulk changes"
 
 ```python
 def test_expired_session_cannot_dry_run(client, auth_headers, expired_session):
-    response = client.post(f"/api/v1/bulk-data/sessions/{expired_session.id}/dry-run", headers=auth_headers)
+    response = client.post(
+        f"/api/v1/bulk-data/sessions/{expired_session.id}/dry-run", headers=auth_headers
+    )
     assert response.status_code == 410
     assert response.json()["error_code"] == "IMPORT_SESSION_EXPIRED"
 ```
@@ -407,6 +428,7 @@ def test_same_commit_key_returns_same_job(session, validated_user_session, curre
     first = commit_import(session, current, validated_user_session.id, "commit-1")
     second = commit_import(session, current, validated_user_session.id, "commit-1")
     assert first.id == second.id
+
 
 def test_user_import_never_sets_password_or_superadmin(session, prepared_user_rows, current):
     job = run_import(session, current, prepared_user_rows)
