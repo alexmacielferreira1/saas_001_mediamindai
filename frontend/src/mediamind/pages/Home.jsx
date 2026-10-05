@@ -12,9 +12,19 @@ import { Panel, Stat, Badge, StatusBadge, Button } from '../ui';
 import { formatDuration } from '../data';
 import { useMamData } from '../lib/mamData';
 import { useAuth } from '../auth';
+import { readLocalDemoSession } from '../lib/demoAccess';
+import { DATA_SOURCE } from '../lib/dataOrigin';
 
 export function canViewProfiles(user) {
   return user?.role === 'superadmin';
+}
+
+export function resolveDashboardState(dashboard, error, localDemo, demoKpis = []) {
+  if (localDemo) return { source: DATA_SOURCE.DEMO, kpis: demoKpis };
+  if (error) return { source: DATA_SOURCE.UNAVAILABLE, kpis: [] };
+  if (!dashboard) return { source: null, kpis: [] };
+  const kpis = Array.isArray(dashboard.kpis) ? dashboard.kpis : [];
+  return { source: kpis.length ? DATA_SOURCE.REAL : DATA_SOURCE.EMPTY, kpis };
 }
 
 function getGreeting() {
@@ -27,6 +37,8 @@ function getGreeting() {
 export default function Home() {
   const { user } = useAuth();
   const [dashboard, setDashboard] = useState(null);
+  const [dashboardError, setDashboardError] = useState(null);
+  const [localDemo] = useState(() => Boolean(readLocalDemoSession()));
   const { projects, assets, tasks, scripts, savedSearches, recentActivity, loading } = useMamData();
   const today = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
@@ -38,9 +50,12 @@ export default function Home() {
   const completedAssets = assets.filter((a) => a.ai_status === 'complete').length;
   useEffect(() => {
     let active = true;
-    getMyDashboard().then((data) => { if (active) setDashboard(data); }).catch(() => {});
+    if (localDemo) return () => { active = false; };
+    getMyDashboard()
+      .then((data) => { if (active) { setDashboard(data); setDashboardError(null); } })
+      .catch((reason) => { if (active) { setDashboard(null); setDashboardError(reason); } });
     return () => { active = false; };
-  }, []);
+  }, [localDemo]);
 
   const fallbackKpis = [
     { id: 'projects', label: 'Projetos ativos', value: activeProjects.length },
@@ -52,7 +67,8 @@ export default function Home() {
     { id: 'publications', label: 'Publicações', value: 0 },
     { id: 'pending', label: 'Pendências', value: tasks.filter((t) => t.status !== 'approved').length },
   ];
-  const kpis = dashboard?.kpis || fallbackKpis;
+  const dashboardState = resolveDashboardState(dashboard, dashboardError, localDemo, fallbackKpis);
+  const kpis = dashboardState.kpis;
   const kpiIcons = [FolderKanban, Archive, Sparkles, CheckCircle2, Film, CalendarClock, Send, AlertTriangle];
   const kpiTones = ['sky', 'violet', 'emerald', 'amber', 'sky', 'violet', 'emerald', 'amber'];
 
@@ -83,12 +99,14 @@ export default function Home() {
             </Link>
           )}
           <span className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-            Dados de demonstração
+            {dashboardState.source === DATA_SOURCE.DEMO ? 'Demonstração explícita' : dashboardState.source === DATA_SOURCE.REAL ? 'Dados reais' : dashboardState.source === DATA_SOURCE.EMPTY ? 'Sem indicadores registrados' : dashboardState.source === DATA_SOURCE.UNAVAILABLE ? 'Indicadores indisponíveis' : 'Carregando indicadores'}
           </span>
         </div>
       </header>
 
       {/* Top stats */}
+      {dashboardState.source === DATA_SOURCE.UNAVAILABLE && <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">Não foi possível carregar os indicadores reais. Nenhum valor demonstrativo foi usado.</div>}
+      {dashboardState.source === DATA_SOURCE.EMPTY && <div role="status" className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400">Ainda não há indicadores registrados para esta empresa.</div>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         {kpis.map((item, index) => (
           <Stat key={item.id} title={item.label} value={item.value} icon={kpiIcons[index]} tone={kpiTones[index]} />

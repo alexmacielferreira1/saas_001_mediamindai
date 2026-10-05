@@ -33,7 +33,7 @@ const formsSeed = [
 ];
 
 export function Users2({ payload }) {
-  const source = userRows(payload?.items?.length ? payload.items : getDemoUsers());
+  const source = userRows(Array.isArray(payload?.items) ? payload.items : getDemoUsers());
   const [selected,setSelected]=useState(null); const [drawer,setDrawer]=useState(null); const [query,setQuery]=useState('');
   const rows=useMemo(()=>source.filter(row=>row.slice(0,3).join(' ').toLowerCase().includes(query.toLowerCase())),[source,query]);
   if(selected) return <UserDetail user={selected} back={()=>setSelected(null)} open={setDrawer} drawer={drawer} close={()=>setDrawer(null)}/>;

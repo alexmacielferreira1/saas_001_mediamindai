@@ -68,19 +68,17 @@ describe('Administration2 preview', () => {
     expect(listAdminUsersMock).toHaveBeenCalledWith({ page: 1, pageSize: 100, search: '', status: '' });
   });
 
-  it('keeps the administration preview navigable when the API is unavailable', async () => {
+  it('shows an unavailable state without substituting demonstration users', async () => {
     listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    expect(await screen.findByText(/exibindo dados de demonstração/i)).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
+    expect(await screen.findByText(/dados administrativos indisponíveis/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
-    expect(await screen.findByText('Administrador Demo')).toBeInTheDocument();
+    expect(screen.queryByText('Administrador Demo')).not.toBeInTheDocument();
   });
 
-  it('opens demonstration user details locally without calling the unavailable API again', async () => {
-    listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
+  it('opens demonstration user details only in the explicit local demo session', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
     render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/API indisponível/i);
     fireEvent.click(await screen.findByRole('button', { name: 'Ver Administrador Demo' }));
     expect(await screen.findByRole('heading', { name: 'Administrador Demo' })).toBeInTheDocument();
     expect(getAdminUserMock).not.toHaveBeenCalled();
@@ -94,6 +92,20 @@ describe('Administration2 preview', () => {
     expect(await screen.findByRole('button', { name: /Gerenciar usuários/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Novo usuário/i })).not.toBeInTheDocument();
     expect(screen.getByText('Indisponível')).toBeInTheDocument();
+  });
+
+  it('keeps a successful empty user response empty', async () => {
+    listAdminUsersMock.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 25 });
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/nenhum usuário encontrado/i)).toBeInTheDocument();
+    expect(screen.queryByText('Administrador Demo')).not.toBeInTheDocument();
+  });
+
+  it('shows forbidden state for a 403 without demo data', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 403, code: 'FORBIDDEN', message: 'Sem acesso.' }));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/sem permissão/i)).toBeInTheDocument();
+    expect(screen.queryByText('Administrador Demo')).not.toBeInTheDocument();
   });
 
   it('changes the selected demonstration form preview', async () => {
@@ -114,7 +126,7 @@ describe('Administration2 preview', () => {
   it('uses the official local demo session without calling unavailable administrative endpoints', async () => {
     readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
-    expect(await screen.findByText('Modo local funcional')).toBeInTheDocument();
+    expect(await screen.findByText(/Modo local funcional/)).toBeInTheDocument();
     expect(screen.queryByText(/API indisponível/i)).not.toBeInTheDocument();
     expect(listAdminUsersMock).not.toHaveBeenCalled();
     expect(listAdminActivityMock).not.toHaveBeenCalled();

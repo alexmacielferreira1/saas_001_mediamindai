@@ -100,12 +100,18 @@ export default function Administration2() {
         setActivity([]);
         setFallbackKind('authentication');
         setError('Sua sessão expirou. Redirecionando para entrar novamente.');
-      } else {
-        setPayload(getAdminDemoPayload());
-        setGroups(getDemoPermissionGroups());
+      } else if (reason instanceof ApiError && reason.status === 403) {
+        setPayload({ items: [], total: 0, page: 1, page_size: 25 });
+        setGroups([]);
         setActivity([]);
-        setFallbackKind('offline');
-        setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');
+        setFallbackKind('forbidden');
+        setError('Sem permissão para consultar os dados administrativos deste tenant.');
+      } else {
+        setPayload({ items: [], total: 0, page: 1, page_size: 25 });
+        setGroups([]);
+        setActivity([]);
+        setFallbackKind('unavailable');
+        setError('Dados administrativos indisponíveis. Nenhum dado de demonstração foi usado.');
       }
     }
   }
@@ -134,13 +140,13 @@ export default function Administration2() {
           </div>
         </div>
         <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
-          {localDemo ? 'Modo local funcional' : error ? 'Prévia navegável com dados de demonstração' : 'Dados de usuários conectados ao tenant selecionado'}
+          {localDemo ? 'Modo local funcional · demonstração explícita' : fallbackKind === 'unavailable' ? 'Dados reais indisponíveis' : fallbackKind === 'forbidden' ? 'Acesso restrito' : error ? 'Sessão real indisponível' : 'Dados reais do tenant selecionado'}
         </div>
       </header>
 
       <AdminTabs label="Navegação principal da Administração" tabs={ALL_TABS} active={active} onChange={openTab} />
       <div className="contents">
-        {error && <div role={fallbackKind === 'offline' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'offline' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
+        {error && <div role={fallbackKind === 'unavailable' ? 'alert' : 'status'} className={`rounded-xl border p-3 text-sm ${fallbackKind === 'unavailable' ? 'border-rose-800 bg-rose-950/30 text-rose-300' : 'border-amber-800 bg-amber-950/20 text-amber-300'}`}>{error}</div>}
         {!payload && !error ? <Loading label="Carregando Administração..." /> : null}
       </div>
       {payload && active === 'overview' && <Overview payload={payload} groups={groups} activity={activity} onOpenTab={openTab} fallbackKind={fallbackKind} />}
