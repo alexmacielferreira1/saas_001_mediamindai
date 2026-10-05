@@ -17,6 +17,7 @@ import { Permissions2, Profiles2, Teams2 } from '../components/admin2/AccessStru
 import { Forms2 } from '../components/admin2/UsersForms2';
 import Security2 from '../components/admin2/Security2';
 import { readLocalDemoSession } from '../lib/demoAccess';
+import { getDemoPermissionGroups, getDemoUsers } from '../lib/demoCatalog';
 import Acervo from './Acervo';
 import Management from './Management';
 import { Badge, Button, EmptyState, Loading, Panel, SearchInput, Stat, Tabs } from '../ui';
@@ -45,22 +46,10 @@ const STATUS = {
   blocked: ['Bloqueado', 'error'], disabled: ['Desativado', 'error'], expired: ['Expirado', 'pending'],
 };
 
-const ADMIN_DEMO_PAYLOAD = {
-  items: [
-    { id: 'demo-1', full_name: 'Alex Maciel Ferreira', email: 'alex@mediamind.ai', tenant_role: 'Administrador', profile_name: 'Administrador', profile_id: 'demo-admin', status: 'active' },
-    { id: 'demo-2', full_name: 'Marina Alves', email: 'marina@mediamind.ai', tenant_role: 'Produtora', profile_name: 'Editor', profile_id: 'demo-editor', status: 'active' },
-    { id: 'demo-3', full_name: 'João Ribeiro', email: 'joao@mediamind.ai', tenant_role: 'Revisor', profile_name: 'Revisor', profile_id: 'demo-reviewer', status: 'invited' },
-    { id: 'demo-4', full_name: 'Beatriz Santos', email: 'beatriz@mediamind.ai', tenant_role: 'Social Media', profile_name: 'Visualizador', profile_id: 'demo-viewer', status: 'suspended' },
-  ],
-  total: 4, page: 1, page_size: 25,
-};
-
-const ADMIN_DEMO_GROUPS = [
-  { id: 'demo-admin', name: 'Administrador', description: 'Acesso total ao sistema.', is_active: true, permission_codes: ['admin.manage', 'users.manage', 'archive.manage', 'production.approve'] },
-  { id: 'demo-editor', name: 'Editor Broadcast', description: 'Edição e finalização de conteúdos.', is_active: true, permission_codes: ['production.view', 'production.edit', 'archive.view'] },
-  { id: 'demo-reviewer', name: 'Revisor', description: 'Revisão e aprovação de conteúdo.', is_active: true, permission_codes: ['production.view', 'production.approve'] },
-  { id: 'demo-viewer', name: 'Visualizador', description: 'Acesso somente para consulta.', is_active: true, permission_codes: ['production.view', 'archive.view'] },
-];
+function getAdminDemoPayload() {
+  const items = getDemoUsers();
+  return { items, total: items.length, page: 1, page_size: 25 };
+}
 
 const ADMIN_DEMO_SETTINGS_KEY = 'mediamind_admin_demo_settings_v1';
 const ADMIN_DEMO_SETTINGS = { organization_name: 'MediaMind AI', locale: 'pt-BR', timezone: 'America/Sao_Paulo', date_format: 'DD/MM/YYYY' };
@@ -91,8 +80,8 @@ export default function Administration2() {
     setError('');
     setFallbackKind('');
     if (localDemo) {
-      setPayload(ADMIN_DEMO_PAYLOAD);
-      setGroups(ADMIN_DEMO_GROUPS);
+      setPayload(getAdminDemoPayload());
+      setGroups(getDemoPermissionGroups());
       setActivity([]);
       setFallbackKind('local-demo');
       return;
@@ -112,8 +101,8 @@ export default function Administration2() {
         setFallbackKind('authentication');
         setError('Sua sessão expirou. Redirecionando para entrar novamente.');
       } else {
-        setPayload(ADMIN_DEMO_PAYLOAD);
-        setGroups(ADMIN_DEMO_GROUPS);
+        setPayload(getAdminDemoPayload());
+        setGroups(getDemoPermissionGroups());
         setActivity([]);
         setFallbackKind('offline');
         setError('API indisponível: exibindo dados de demonstração para manter a prévia navegável.');

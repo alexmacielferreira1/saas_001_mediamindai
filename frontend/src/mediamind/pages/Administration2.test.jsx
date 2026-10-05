@@ -74,15 +74,15 @@ describe('Administration2 preview', () => {
     expect(await screen.findByText(/exibindo dados de demonstração/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
-    expect(await screen.findByText('Alex Maciel Ferreira')).toBeInTheDocument();
+    expect(await screen.findByText('Administrador Demo')).toBeInTheDocument();
   });
 
   it('opens demonstration user details locally without calling the unavailable API again', async () => {
     listAdminUsersMock.mockRejectedValueOnce(new Error('offline'));
     render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toHaveTextContent(/API indisponível/i);
-    fireEvent.click(await screen.findByRole('button', { name: 'Ver Alex Maciel Ferreira' }));
-    expect(await screen.findByRole('heading', { name: 'Alex Maciel Ferreira' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver Administrador Demo' }));
+    expect(await screen.findByRole('heading', { name: 'Administrador Demo' })).toBeInTheDocument();
     expect(getAdminUserMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Suspender usuário' })).not.toBeInTheDocument();
     expect(screen.getByText(/detalhe de demonstração/i)).toBeInTheDocument();

@@ -5,22 +5,23 @@ import {
   Globe2, History, KeyRound, Layers3, Link2, LockKeyhole, Mail, MoreVertical,
   Plus, Search, Settings, ShieldCheck, Sparkles, Upload, UserPlus, Users, X,
 } from 'lucide-react';
+import { getDemoUsers } from '../../lib/demoCatalog';
 
 const panel = 'rounded-xl border border-sky-900/70 bg-[#031225]/90 shadow-[0_12px_32px_rgba(0,0,0,.2)]';
 const outline = 'rounded-lg border border-sky-600 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950';
 
-const demoUsers = [
-  ['Alex Maciel Ferreira','alexmaciel.ferreira@empresa.com','Administrador','Administrador','Diretoria','Global','Ativo','Há 12 minutos'],
-  ['Bianca Silva','bianca.silva@empresa.com','Analista de Marketing','Marketing','Marketing','Nacional','Ativo','Há 2 horas'],
-  ['Rafael Souza','rafael.souza@empresa.com','Repórter','Produção','Conteúdo','Nacional','Ativo','Há 4 horas'],
-  ['Marina Costa','marina.costa@empresa.com','Editora','Editorial','Redação','Nacional','Convite pendente','Nunca acessou'],
-  ['João Pedro','joao.pedro@empresa.com','Videomaker','Produção','Audiovisual','Nacional','Ativo','Há 1 dia'],
-  ['Lucas Almeida','lucas.almeida@empresa.com','Designer','Design','Criação','Nacional','Ativo','Há 2 dias'],
-  ['Carla Mendes','carla.mendes@empresa.com','Gestora de Projetos','Gestão','Operações','Regional - SP','Ativo','Há 3 dias'],
-  ['Thiago Lima','thiago.lima@empresa.com','Analista de Dados','Dados','BI','Global','Suspenso','Há 7 dias'],
-  ['Patrícia Ribeiro','patricia.ribeiro@empresa.com','Social Media','Marketing','Social Media','Nacional','Ativo','Há 3 horas'],
-  ['Fernanda Alves','fernanda.alves@empresa.com','Revisora','Editorial','Revisão','Nacional','Convite pendente','Nunca acessou'],
-];
+function userRows(users) {
+  return users.map((user, index) => [
+    user.full_name || user.email,
+    user.email,
+    user.tenant_role || 'Usuário',
+    user.profile_name || 'Usuário',
+    index % 2 ? 'Produção' : 'Diretoria',
+    'Nacional',
+    statusLabel(user.status),
+    index ? 'Há 2 horas' : 'Há 12 minutos',
+  ]);
+}
 
 const formsSeed = [
   { name:'Cadastro de convidado', description:'Cadastro de convidados para eventos e gravações.', status:'Ativo', visibility:'Público', entity:'Person', responses:243, fields:['Nome completo','E-mail','Telefone','Empresa','CPF','Observações'] },
@@ -32,7 +33,7 @@ const formsSeed = [
 ];
 
 export function Users2({ payload }) {
-  const source = payload?.items?.length ? payload.items.map((u,index)=>[u.full_name||u.email,u.email,u.tenant_role||'Usuário',u.profile_name||'Usuário',index%2?'Produção':'Diretoria','Nacional',statusLabel(u.status),index?'Há 2 horas':'Há 12 minutos']) : demoUsers;
+  const source = userRows(payload?.items?.length ? payload.items : getDemoUsers());
   const [selected,setSelected]=useState(null); const [drawer,setDrawer]=useState(null); const [query,setQuery]=useState('');
   const rows=useMemo(()=>source.filter(row=>row.slice(0,3).join(' ').toLowerCase().includes(query.toLowerCase())),[source,query]);
   if(selected) return <UserDetail user={selected} back={()=>setSelected(null)} open={setDrawer} drawer={drawer} close={()=>setDrawer(null)}/>;
