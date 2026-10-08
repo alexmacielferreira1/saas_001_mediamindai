@@ -1,36 +1,29 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { createThumbnailDraft } from '../../lib/thumbnailStudio';
+vi.mock('../../lib/thumbnailRenderer', () => ({
+  renderThumbnail: vi.fn().mockResolvedValue([]),
+  thumbnailLayers: () => [{ id: 'headline', x: 5, y: 30, w: 50, h: 30, order: 3, hidden: false, locked: false, rotation: 0 }],
+}));
 import ThumbnailCanvas from './ThumbnailCanvas';
-
-describe('SIMERS thumbnail composition', () => {
-  it('renders the approved institutional structure instead of a generic badge layout', () => {
-    const draft = createThumbnailDraft({
-      id: 50,
-      programa: 'Prontuário Jurídico',
-      episodio: '50',
-      titulo: 'Novas escolas e a qualidade',
-      headline: 'NOVAS ESCOLAS: E A QUALIDADE?',
-      convidado_nome: 'Gabriel Larré',
-    });
-    draft.people[0].photo = '/gabriel.png';
-
+import { renderThumbnail } from '../../lib/thumbnailRenderer';
+describe('thumbnail preview', () => {
+  it('uses the shared render and marks completion before export', async () => {
+    const draft = createThumbnailDraft({ programa: 'Prontuário Jurídico', headline: 'NOVAS ESCOLAS' });
     render(<ThumbnailCanvas draft={draft} format="horizontal" />);
-
-    expect(screen.getByRole('img', { name: 'Canal Simers' })).toHaveAttribute('src', '/brand/canal-simers-white.png');
-    expect(screen.getByText('Prontuário Jurídico')).toBeInTheDocument();
-    expect(screen.getByText('PRONTUÁRIO JURÍDICO • EP. 050')).toBeInTheDocument();
-    expect(screen.getByTestId('simers-wave-pattern')).toBeInTheDocument();
-    expect(screen.getByAltText('Gabriel Larré').style.filter).toContain('grayscale(1)');
-    expect(screen.getByAltText('Gabriel Larré')).toHaveAttribute('data-cutout-style', 'white-outline');
+    await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('data-render-status', 'ready'));
+    expect(renderThumbnail).toHaveBeenCalledWith(expect.anything(), draft, 'horizontal', expect.objectContaining({ simers: true }));
   });
-
-  it('uses the approved lime portrait outline for Ética na Mesa', () => {
-    const draft = createThumbnailDraft({ programa: 'Ética na Mesa', convidado_nome: 'Convidada' });
-    draft.people[0].photo = '/pessoa.png';
-    render(<ThumbnailCanvas draft={draft} format="horizontal" />);
-    expect(screen.getByAltText('Convidada')).toHaveAttribute('data-cutout-style', 'lime-outline');
-    expect(screen.getByAltText('Convidada').style.filter).toContain('#C8E65B');
+  it('reports image failures instead of silently showing a completed preview', async () => {
+    renderThumbnail.mockRejectedValueOnce(new Error('Imagem inválida'));
+    render(<ThumbnailCanvas draft={createThumbnailDraft()} format="vertical" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Imagem inválida');
+  });
+  it('selects a layer on pointer interaction', () => {
+    const select = vi.fn(); render(<ThumbnailCanvas draft={createThumbnailDraft()} format="horizontal" onSelectLayer={select} />);
+    const element = screen.getByTestId('thumbnail-canvas-horizontal');
+    element.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600 }); element.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(element, { clientX: 100, clientY: 250, pointerId: 1 });
+    expect(select).toHaveBeenCalledWith('headline', 'horizontal');
   });
 });

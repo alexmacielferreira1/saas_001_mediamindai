@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     media_root: Path = ROOT / ".runtime" / "media"
     media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
     ffmpeg_path: Path | None = None
+    thumbnail_secret_key: SecretStr | None = None
 
     @model_validator(mode="after")
     def validate_production_auth(self) -> "Settings":

@@ -60,3 +60,7 @@ typing_extensions==4.16.0
 tzdata==2026.4
 urllib3==2.8.0
 uvicorn==0.53.0
+
+cryptography==50.0.1
+cffi==2.1.1
+pycparser==3.0

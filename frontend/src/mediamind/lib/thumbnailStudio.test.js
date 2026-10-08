@@ -19,11 +19,11 @@ describe('thumbnail studio model', () => {
     expect(SIMERS_PRESETS['Solidariza+']).not.toHaveProperty('accent');
   });
 
-  it('exposes the ten approved SIMERS presets', () => {
+  it('exposes the SIMERS presets plus Em Debate awaiting an approved palette', () => {
     expect(SIMERS_PROGRAMS).toEqual([
       'Prontuário Jurídico', 'Fronteiras da Saúde', 'Sala de Prescrição', 'Pediatrando',
       'Plantão do Rock', 'Ética na Mesa', 'Anamnese', 'Solidariza+',
-      'Corações e Mentes', 'No Front',
+      'Corações e Mentes', 'No Front', 'Em Debate',
     ]);
     expect(SIMERS_PRESETS).not.toHaveProperty('Pediatricos');
     expect(SIMERS_PRESETS).not.toHaveProperty('Minuto Simers');
@@ -75,7 +75,7 @@ describe('thumbnail studio model', () => {
       .toBe('TELEMEDICINA: O FUTURO CHEGOU?');
     expect(validateSimersDraft({ program: '', title: '', people: [] })).toEqual([
       'Selecione ou informe um programa.',
-      'Informe o título principal.',
+      'Informe a chamada da thumb.',
     ]);
   });
 

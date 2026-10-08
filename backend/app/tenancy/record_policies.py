@@ -28,6 +28,7 @@ RECORD_WRITE_PERMISSIONS = {
     "PendenciaCorp": "production.write",
     "ProcessamentoJob": "assets.write",
     "ProducaoProjeto": "production.write",
+    "Person": "production.write",
     "Publicacao": "publishing.write",
     "Release": "publishing.write",
     "Script": "production.write",

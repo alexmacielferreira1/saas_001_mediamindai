@@ -44,6 +44,7 @@ ALLOWED_TYPES = {
     "PendenciaCorp",
     "ProcessamentoJob",
     "ProducaoProjeto",
+    "Person",
     "Publicacao",
     "Release",
     "Script",

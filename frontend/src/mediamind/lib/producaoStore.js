@@ -53,6 +53,11 @@ export function getProjetos() {
   return projetos;
 }
 
+export function mergePersistedProject(projectId, patch) {
+  projetos = projetos.map((p) => String(p._entityId || p.id) === String(projectId) ? { ...p, ...patch } : p);
+  emit();
+}
+
 export function useProducaoProjetos() {
   return useSyncExternalStore(subscribe, getProjetos);
 }
@@ -76,6 +81,9 @@ function fromEntity(r) {
     pauta: r.pauta || '',
     convidado_nome: r.convidado_nome || '',
     convidado_cg: r.convidado_cg || '',
+    convidados: r.convidados || [], entrevistados: r.entrevistados || [], participantes: r.participantes || [],
+    thumbnail_style: r.thumbnail_style || null, thumbnail_channel_logo: r.thumbnail_channel_logo || '',
+    thumbnail_url: r.thumbnail_url || '', thumbnail_document_id: r.thumbnail_document_id || '', thumbnail_assets: r.thumbnail_assets || [],
     gravacao: r.gravacao_data ? { data: r.gravacao_data, horario: r.gravacao_horario || '', estudio: r.gravacao_estudio || '' } : null,
     equipe: r.equipe || [],
     apresentadores: r.apresentadores || [],
@@ -103,6 +111,9 @@ function toEntityData(p) {
     pauta: p.pauta,
     convidado_nome: p.convidado_nome,
     convidado_cg: p.convidado_cg,
+    convidados: p.convidados || [], entrevistados: p.entrevistados || [], participantes: p.participantes || [],
+    thumbnail_style: p.thumbnail_style || null, thumbnail_channel_logo: p.thumbnail_channel_logo || '',
+    thumbnail_url: p.thumbnail_url || '', thumbnail_document_id: p.thumbnail_document_id || '', thumbnail_assets: p.thumbnail_assets || [],
     gravacao_data: p.gravacao?.data || '',
     gravacao_horario: p.gravacao?.horario || '',
     gravacao_estudio: p.gravacao?.estudio || '',

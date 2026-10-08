@@ -9,16 +9,19 @@ const projects = [{
   apresentadores: [{ nome: 'Dra. Ana Ribeiro', cg: 'Apresentadora' }],
 }];
 
-vi.mock('../lib/producaoStore', () => ({ useProducaoProjetos: () => projects }));
+vi.mock('../lib/producaoStore', () => ({ useProducaoProjetos: () => projects, mergePersistedProject: vi.fn() }));
 vi.mock('@/api/media', () => ({
+  resolveMediaUrl: (url) => url, uploadMediaAsset: vi.fn().mockResolvedValue({ id: 'asset-new', stream_url: '/asset.png' }),
   listMediaAssets: vi.fn().mockResolvedValue([
     { id: 'img-1', title: 'Foto do episódio', asset_type: 'image', stream_url: '/foto.jpg', project_id: '54' },
   ]),
 }));
 vi.mock('@/api/base44Client', () => ({
-  base44: { entities: { Project: { list: vi.fn().mockResolvedValue([]) }, Script: { list: vi.fn().mockResolvedValue([]) } } },
+  base44: { entities: { ProducaoProjeto: { list: vi.fn().mockResolvedValue([]), update: vi.fn().mockResolvedValue({}) }, Person: { list: vi.fn().mockResolvedValue([{ id: 'guest-2', name: 'Outra convidada' }]), create: vi.fn().mockResolvedValue({ id: 'person-new' }) }, CreativeDocument: { list: vi.fn().mockResolvedValue([]), create: vi.fn().mockImplementation(async (data) => ({ ...data, id: 'saved-thumb' })) }, Script: { list: vi.fn().mockResolvedValue([]) } } },
 }));
-vi.mock('../lib/thumbnailExport', () => ({ exportThumbnailElement: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../lib/thumbnailExport', () => ({ exportThumbnailElement: vi.fn().mockResolvedValue(undefined), thumbnailBlob: vi.fn().mockResolvedValue(new Blob(['png'], { type: 'image/png' })) }));
+vi.mock('../lib/thumbnailRenderer', () => ({ renderThumbnail: vi.fn().mockResolvedValue([]), thumbnailLayers: () => [] }));
+vi.mock('../components/thumbnails/ThumbnailAISettings', () => ({ default: () => null }));
 vi.mock('../lib/thumbnailImage', () => ({ createLocalCutout: vi.fn().mockResolvedValue('blob:foto-recortada') }));
 
 import { exportThumbnailElement } from '../lib/thumbnailExport';
@@ -46,7 +49,7 @@ describe('Criar Thumbs', () => {
 
   it('loads production data into editable local fields and does not mutate the project', async () => {
     renderPage();
-    const title = await screen.findByLabelText('Título principal');
+    const title = await screen.findByLabelText('Chamada da thumb');
     expect(title).toHaveValue('A trajetória do Preto na medicina');
     fireEvent.change(title, { target: { value: 'Chamada alterada na thumb' } });
     expect(title).toHaveValue('Chamada alterada na thumb');
@@ -88,25 +91,25 @@ describe('Criar Thumbs', () => {
 
     expect(screen.getByLabelText('Programa')).toHaveValue('Sala de Prescrição');
     expect(screen.getByLabelText('Projeto')).toHaveValue('');
-    expect(screen.getByLabelText('Título principal')).toHaveValue('');
+    expect(screen.getByLabelText('Chamada da thumb')).toHaveValue('');
     expect(screen.getByText('Criação nova')).toBeInTheDocument();
     expect(screen.getByTestId('thumbnail-canvas-horizontal')).toHaveStyle({ background: '#B4CC00' });
   });
 
   it('keeps several independent thumbs that can be collapsed and resumed', async () => {
     renderPage();
-    const title = await screen.findByLabelText('Título principal');
+    const title = await screen.findByLabelText('Chamada da thumb');
     fireEvent.change(title, { target: { value: 'Primeira capa editada' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Nova thumb' }));
     fireEvent.click(screen.getByRole('button', { name: 'Anamnese' }));
 
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Thumbs em criação' })).toHaveTextContent('2');
     expect(screen.getByLabelText('Programa')).toHaveValue('Anamnese');
     expect(screen.getByRole('button', { name: 'Expandir Primeira capa editada' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Expandir Primeira capa editada' }));
-    expect(screen.getByLabelText('Título principal')).toHaveValue('Primeira capa editada');
+    expect(screen.getByLabelText('Chamada da thumb')).toHaveValue('Primeira capa editada');
     expect(screen.getByLabelText('Programa')).toHaveValue('Sala de Prescrição');
 
     fireEvent.click(screen.getByRole('button', { name: 'Recolher Primeira capa editada' }));
@@ -120,6 +123,21 @@ describe('Criar Thumbs', () => {
     fireEvent.change(screen.getByLabelText('Adicionar pessoa com foto'), { target: { files: [file] } });
 
     expect(screen.getByDisplayValue('Convidada')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByAltText('Convidada')[0]).toHaveAttribute('src', 'blob:foto-recortada'));
+    await waitFor(() => expect(screen.getByText('Comparar com foto original')).toBeInTheDocument());
   });
+  it('adds another registered interviewee and keeps the single title field', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Selecionar entrevistado')).toHaveTextContent('Outra convidada'));
+    fireEvent.change(screen.getByLabelText('Selecionar entrevistado'), { target: { value: 'guest-2' } });
+    expect(screen.getByLabelText('Nome de Outra convidada')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Título principal')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sugerir a partir do título' })).not.toBeInTheDocument();
+  });
+  it('restores visuals without deleting interviewees or the edited headline', async () => {
+    renderPage(); fireEvent.change(screen.getByLabelText('Chamada da thumb'), { target: { value: 'Minha chamada' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Restaurar ambos' }));
+    expect(screen.getByLabelText('Chamada da thumb')).toHaveValue('Minha chamada');
+    expect(screen.getByLabelText('Nome de Dr. Paulo Souza')).toBeInTheDocument();
+  });
+
 });

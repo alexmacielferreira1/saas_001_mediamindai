@@ -1,0 +1,227 @@
+[
+  {
+    "path": ".env.example",
+    "action": "Substituir",
+    "sha256": "3812e8fc43d82b553943bb8da0b720a5e4ec72daa0f6fbd331dca3f15b593819"
+  },
+  {
+    "path": "backend/app/api/v1/__init__.py",
+    "action": "Substituir",
+    "sha256": "e2d00013fe58ffcd2d7ee1133938dff28057bd4b779512b64486c506508e0029"
+  },
+  {
+    "path": "backend/app/api/v1/media.py",
+    "action": "Substituir",
+    "sha256": "ef9d62da8be447b0c1012c8164750f85d1e1ed9912e401fe321dec52071108db"
+  },
+  {
+    "path": "backend/app/api/v1/records.py",
+    "action": "Substituir",
+    "sha256": "2ae8f9bb8113c6f9dadf5935e2afa66fd802b47775b8562289ae3cc9a856a611"
+  },
+  {
+    "path": "backend/app/api/v1/thumbnail_settings.py",
+    "action": "Criar",
+    "sha256": "486892f13e7dd2f98514f279cba58c0a6732db8c75f7562322e99e53ce4bf53d"
+  },
+  {
+    "path": "backend/app/core/config.py",
+    "action": "Substituir",
+    "sha256": "aff8e6e347959d09dcf335b5a8ec143728b2215d592c2f8250864759e63a44c8"
+  },
+  {
+    "path": "backend/app/services/background_removal.py",
+    "action": "Substituir",
+    "sha256": "c7040e526628e68d9ed6ef829139496786d7dd9a5bc0449af7cdb58d4fb2a01d"
+  },
+  {
+    "path": "backend/app/tenancy/record_policies.py",
+    "action": "Substituir",
+    "sha256": "62e8525c8cfaefb4867a883824c267bab449ecfa51f9d0acf592dc282a83a9c6"
+  },
+  {
+    "path": "backend/tests/test_thumbnail_settings_api.py",
+    "action": "Criar",
+    "sha256": "d7cdb31094b612feb3ad21d49c56ddf19baf99aae59ef00e64c96bb6327ba6c2"
+  },
+  {
+    "path": "frontend/public/brand/programs/Anamnese.png",
+    "action": "Criar",
+    "sha256": "1e50ac2dfde632928977e0eefe80fc46cfdb370bcf5fb41ff69fc3ced2fa49e7"
+  },
+  {
+    "path": "frontend/public/brand/programs/Coracoes_e_Mentes.png",
+    "action": "Criar",
+    "sha256": "8cfe32f4a20627cc22994f79deaaf1023f1186102afbbfef355fee205fc4604e"
+  },
+  {
+    "path": "frontend/public/brand/programs/Em_Debate.png",
+    "action": "Criar",
+    "sha256": "898fce3e3ec48b7345268b5e13ac041e3b5b1b962011b4e49b427ad2b1118e8a"
+  },
+  {
+    "path": "frontend/public/brand/programs/Fronteiras_da_Saude.png",
+    "action": "Criar",
+    "sha256": "2feea2a1b0d927cfd4c5fb17a986425fa972722aecbaeb4336e23b45438bd986"
+  },
+  {
+    "path": "frontend/public/brand/programs/No_Front.png",
+    "action": "Criar",
+    "sha256": "0fc4c438fbdf2c1c48c8194bf3480fe8414e0332286d70040627cc3d693ef0e4"
+  },
+  {
+    "path": "frontend/public/brand/programs/Plantao_do_Rock.png",
+    "action": "Criar",
+    "sha256": "36f882522cfc03fdba4e1ab96671d58e2ea3143e6f3be4a700e7aa312c6c0d3f"
+  },
+  {
+    "path": "frontend/public/brand/programs/Prontuario_Juridico.png",
+    "action": "Criar",
+    "sha256": "0ae9b3db329da5369f556f03676c30c6a8c3df8bc8d1bcbd724a76edc5647629"
+  },
+  {
+    "path": "frontend/public/brand/programs/SOLIDARIZA.png",
+    "action": "Criar",
+    "sha256": "009bb1e381acf334db2e8d983718245781c71af54944b004d4f911046f9ddde2"
+  },
+  {
+    "path": "frontend/public/brand/programs/Sala_de_Prescricao.png",
+    "action": "Criar",
+    "sha256": "45f79a49bfbe74c1afbcef978516822201f1672c00b8089b4b6df3a2eb7759f3"
+  },
+  {
+    "path": "frontend/public/fonts/Anton-LICENSE.txt",
+    "action": "Criar",
+    "sha256": "ee67e6ee22790b7929f1a3769ca2801d565c64b5a9096942c1adf5596de9c9e4"
+  },
+  {
+    "path": "frontend/public/fonts/Anton.ttf",
+    "action": "Criar",
+    "sha256": "a4ba3a92350ebb031da0cb47630ac49eb265082ca1bc0450442f4a83ab947cab"
+  },
+  {
+    "path": "frontend/public/fonts/ArchivoBlack-LICENSE.txt",
+    "action": "Criar",
+    "sha256": "3173acd82f8c6159b5b1037b539fcbd4edff68e65c2ea8b9412b5a5ca97b08ff"
+  },
+  {
+    "path": "frontend/public/fonts/ArchivoBlack.ttf",
+    "action": "Criar",
+    "sha256": "dd9a89a019b4849f66ab75455fe7bdf931311042cbb0f0f97acc061539703180"
+  },
+  {
+    "path": "frontend/public/fonts/Montserrat-LICENSE.txt",
+    "action": "Criar",
+    "sha256": "1326128ea94d4c0940b13ca6c9ad2888fe395ee02d4b0beb4d628f50e84aa427"
+  },
+  {
+    "path": "frontend/public/fonts/Montserrat.ttf",
+    "action": "Criar",
+    "sha256": "4a4c00749402363be3d03ae4affd890d1a2688f7a6f7f72e5f749428bd9b9b88"
+  },
+  {
+    "path": "frontend/src/api/media.js",
+    "action": "Substituir",
+    "sha256": "918d60f9963ce333a82dd73fb8912c1115e1c564f729482fb2dbb2c0b600dfff"
+  },
+  {
+    "path": "frontend/src/mediamind/components/corp/CorpProductionDetail.jsx",
+    "action": "Substituir",
+    "sha256": "d7e54a3da721e98c65af6a94ff99bc84002f30435b5dfc2e151848184f62c442"
+  },
+  {
+    "path": "frontend/src/mediamind/components/corp/CorpPublications.jsx",
+    "action": "Substituir",
+    "sha256": "0f32a8ad1f3cb98ed6106b2ebc5e0fbffed68331791d5f30548c9338c520f612"
+  },
+  {
+    "path": "frontend/src/mediamind/components/corp/roles/AgendamentoDetail.jsx",
+    "action": "Substituir",
+    "sha256": "9ce2354fcba13b07979ff0871352e651520934448b5ff635fd0debc46da93a27"
+  },
+  {
+    "path": "frontend/src/mediamind/components/thumbnails/ProjectThumbnails.jsx",
+    "action": "Criar",
+    "sha256": "509ed6434570888370487d4610c26e79a7df284daa76e2740a3734871036e64e"
+  },
+  {
+    "path": "frontend/src/mediamind/components/thumbnails/ThumbnailAISettings.jsx",
+    "action": "Criar",
+    "sha256": "f34de816ae7fa335a20e34a29d50f6765587ac4e311320096ddcf0b554fe6bd4"
+  },
+  {
+    "path": "frontend/src/mediamind/components/thumbnails/ThumbnailCanvas.jsx",
+    "action": "Substituir",
+    "sha256": "6cfd61ca87ffa7215091454285773be17b32a5d9ab165cb48d7e706f8e23e9e7"
+  },
+  {
+    "path": "frontend/src/mediamind/components/thumbnails/ThumbnailCanvas.test.jsx",
+    "action": "Substituir",
+    "sha256": "ccc5aab3268483494aac539da52664599ab65db2d4d53969003696559969c9d7"
+  },
+  {
+    "path": "frontend/src/mediamind/components/thumbnails/ThumbnailTools.jsx",
+    "action": "Criar",
+    "sha256": "d1e3fa776ebd40de638f3ffdb8a7b09fbadf4fadff7e920c3fe170fa03fe113c"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/producaoStore.js",
+    "action": "Substituir",
+    "sha256": "f471c5fa6f1f1a814825644d0683073b74e6d98f5a04fe388a9402e1910b3f32"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailExport.js",
+    "action": "Substituir",
+    "sha256": "88b55ab0fd5631562ae95765500402b9b3aed17c2c8aaffdf2419e75524f718b"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailExport.test.js",
+    "action": "Substituir",
+    "sha256": "24331f91e293989351d0d26e9ca3b45c7d432d7405a97281fe6bccb87a256b45"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailPersistence.js",
+    "action": "Criar",
+    "sha256": "25b1b40a19c9a24cbe04180d98050e73ddf7f4f3f27a14b8bd650e57a4e3b289"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailPersistence.test.js",
+    "action": "Criar",
+    "sha256": "bcf9da1bef6e9c5a0f440f62e0b578166e3807bbcbbf0112be852c1c1a7dac78"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailRenderer.js",
+    "action": "Criar",
+    "sha256": "2bf2c6c9b54fef38a1adfb5214d79dd552d06f12561a5290c7f36a2a8fc80ace"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailStudio.js",
+    "action": "Substituir",
+    "sha256": "bb92565f8c9efd90de5509568eb8d4056ce7dc044eb55b946a608b16743b8fba"
+  },
+  {
+    "path": "frontend/src/mediamind/lib/thumbnailStudio.test.js",
+    "action": "Substituir",
+    "sha256": "15520e45f7a7411228db32863989ea97675a17340892ea7fc618076cae1c4c68"
+  },
+  {
+    "path": "frontend/src/mediamind/pages/ThumbnailStudio.jsx",
+    "action": "Substituir",
+    "sha256": "bd3d622f68f47e83805fbef7b16e8b65ab2e7186395964efc273ee7e8fa8d056"
+  },
+  {
+    "path": "frontend/src/mediamind/pages/ThumbnailStudio.test.jsx",
+    "action": "Substituir",
+    "sha256": "2f30608f15dd88bb346887cf706365a70b265d0af97680f5ae5422ed09c2f953"
+  },
+  {
+    "path": "pyproject.toml",
+    "action": "Substituir",
+    "sha256": "b53662d3e29c38045c35c594f2d43a189dc9d814aa1bbcf11656d9f57fd173b1"
+  },
+  {
+    "path": "requirements.lock",
+    "action": "Substituir",
+    "sha256": "a03f446dc8e9e3fdaaf845206fa2d484e5cb4670e003003095a175e1a64cdc32"
+  }
+]

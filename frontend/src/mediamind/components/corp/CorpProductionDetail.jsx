@@ -6,6 +6,8 @@ import {
   MOCK_CORP_TIMELINE, MOCK_CORP_MEDIA, MOCK_CORP_PUBLICATIONS,
   MOCK_CORP_RECORTES, MOCK_CORP_EDIT_APPROVALS, MOCK_CORP_ANALYTICS,
 } from '../../data';
+import ProjectThumbnails from '../thumbnails/ProjectThumbnails';
+import { useProducaoProjetos } from '../../lib/producaoStore';
 import { StatusBadge } from '../../ui';
 
 const TABS = ['Geral', 'Timeline', 'Tarefas', 'Mídias', 'Publicações', 'Recortes', 'Aprovações', 'Analytics'];
@@ -24,7 +26,9 @@ const TAREFAS = [
 
 export default function CorpProductionDetail({ productionId }) {
   const [tab, setTab] = useState('Geral');
-  const production = MOCK_CORP_PRODUCTIONS.find((p) => p.id === productionId) || MOCK_CORP_PRODUCTIONS[0];
+  const projects = useProducaoProjetos();
+  const actualProject = projects.find((p) => String(p.id) === String(productionId) || String(p._entityId) === String(productionId));
+  const production = actualProject || MOCK_CORP_PRODUCTIONS.find((p) => p.id === productionId) || MOCK_CORP_PRODUCTIONS[0];
   const currentStepIndex = 2;
   const a = MOCK_CORP_ANALYTICS;
   const chartData = a.serie_visualizacoes.map((v, i) => ({ x: i, v }));
@@ -60,6 +64,7 @@ export default function CorpProductionDetail({ productionId }) {
 
       {/* Conteúdo por aba */}
       <div className="flex-1 overflow-y-auto p-4">
+        <ProjectThumbnails projectId={String(production._entityId || production.id)} />
         {tab === 'Geral' && (
           <div className="space-y-4">
             <div>

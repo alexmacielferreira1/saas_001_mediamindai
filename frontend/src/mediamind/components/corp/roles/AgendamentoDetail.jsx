@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Check, Save } from 'lucide-react';
 import { MOCK_CORP_PRECHECKLIST } from '../../../data';
 import { transicionar, updateProjeto } from '../../../lib/producaoStore';
+import ProjectThumbnails from '../../thumbnails/ProjectThumbnails';
 import { isScheduleReady } from '../../../lib/productionWorkflow';
 
 const VIDEOMAKERS = ['Bianca', 'Rafael', 'Ana', 'Carlos Lima', 'Marina Alves'];
@@ -56,6 +57,7 @@ export default function AgendamentoDetail({ rec }) {
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <ProjectThumbnails projectId={String(rec._entityId || rec.id)} />
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="block">
             <span className="mb-0.5 block text-[9px] uppercase text-slate-500">Data</span>

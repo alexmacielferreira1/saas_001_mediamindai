@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.api.v1.thumbnail_settings import configured_cutout
 from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session
@@ -359,7 +360,12 @@ async def remove_local_thumbnail_background(file: Annotated[UploadFile, File()])
 
 
 @router.post("/local/assets", status_code=201)
-async def upload_local_asset(file: Annotated[UploadFile, File()]):
+async def upload_local_asset(
+    file: Annotated[UploadFile, File()],
+    origin: Annotated[str | None, Form(max_length=64)] = None,
+    project_id: Annotated[str | None, Form(max_length=180)] = None,
+    recording_id: Annotated[str | None, Form(max_length=180)] = None,
+):
     require_local_media()
     suffix, asset_type = classify_upload(file)
     asset_id = uuid4()
@@ -379,6 +385,9 @@ async def upload_local_asset(file: Annotated[UploadFile, File()]):
         "sha256": stored.sha256,
         "storage_key": stored.relative_key,
         "media_status": "uploaded",
+        **({"origin": origin} if origin else {}),
+        **({"project_id": project_id} if project_id else {}),
+        **({"recording_id": recording_id} if recording_id else {}),
         "stream_url": f"/api/v1/media/local/assets/{asset_id}/stream",
         "created_date": now,
         "updated_date": now,
@@ -556,7 +565,7 @@ async def remove_thumbnail_background(
     require_membership(current)
     require_permission(session, current, "assets.write")
     content = await read_thumbnail_image(file)
-    result = await run_in_threadpool(remove_image_background, content)
+    result = await configured_cutout(content, current, session)
     return Response(content=result, media_type="image/png")
 
 

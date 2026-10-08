@@ -22,7 +22,7 @@ export function uploadMediaAsset(file, metadata = {}) {
 }
 
 export function mediaStreamUrl(asset) {
-  return asset?.stream_url || '';
+  return resolveMediaUrl(asset?.stream_url || asset?.file_url || '');
 }
 
 export async function removeThumbnailBackground(file) {
@@ -62,4 +62,9 @@ export function exportMediaClip(payload) {
 
 export function exportTimeline(payload) {
   return requestMediaExport('timeline', payload);
+}
+
+export function resolveMediaUrl(url = '') {
+  if (!url || /^(blob:|data:|https?:)/i.test(url)) return url;
+  return url.startsWith('/api/') ? `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${url}` : url;
 }

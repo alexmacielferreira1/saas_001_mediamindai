@@ -12,6 +12,7 @@ from app.api.v1.memberships import router as memberships_router
 from app.api.v1.permission_groups import router as permission_groups_router
 from app.api.v1.records import router as records_router
 from app.api.v1.tenants import router as tenants_router
+from app.api.v1.thumbnail_settings import router as thumbnail_settings_router
 from app.api.v1.uploads import router as uploads_router
 
 router = APIRouter(prefix="/api/v1")
@@ -28,3 +29,5 @@ router.include_router(management_router)
 router.include_router(media_router)
 router.include_router(records_router)
 router.include_router(uploads_router)
+
+router.include_router(thumbnail_settings_router)
