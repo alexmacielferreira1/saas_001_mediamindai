@@ -20,6 +20,8 @@ RECORD_WRITE_PERMISSIONS = {
     "ClipVersion": "clips.write",
     "Clipping": "publishing.write",
     "ComentarioRevisao": "review.write",
+    "CreativeDocument": "production.write",
+    "CreativeExport": "production.write",
     "DireitoAsset": "assets.write",
     "Jornalista": "publishing.write",
     "Mencao": "publishing.write",

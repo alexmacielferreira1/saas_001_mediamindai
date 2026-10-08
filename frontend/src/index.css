@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,6 +6,10 @@
 
 @layer components {
   .w2-panel { @apply rounded-xl border border-slate-700/80 bg-slate-950/55 shadow-[0_12px_40px_rgba(0,0,0,0.22)]; }
+  .w2-timeline-shell > main { grid-column: 3; }
+  .w2-timeline-shell > aside:last-child { grid-column: 2; grid-row: 1; }
+  .w2-search-preview-first > main { grid-column: 3; }
+  .w2-search-preview-first > aside:last-of-type { grid-column: 2; grid-row: 1; }
   .w2-create-grid { grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 1280px) {
     .w2-create-grid { grid-template-columns: 310px minmax(480px, 1fr) 320px; }

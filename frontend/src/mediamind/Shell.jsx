@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Bell, Settings,
   LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
-  Home, Layers, Film, Calendar, Send, ShieldCheck, UserCog, BarChart3, LayoutDashboard, FileText, Clapperboard, Scissors, CheckCircle2, Flag, Share2, PanelsTopLeft,
+  Home, Layers, Calendar, Send, UserCog, BarChart3, LayoutDashboard, FileText, Clapperboard, Scissors, CheckCircle2, Flag, Share2, PanelsTopLeft, ImagePlus, WandSparkles,
 } from 'lucide-react';
 import { useAuth } from './auth';
 import { useEmpresa } from './lib/empresaContext';
@@ -24,7 +24,8 @@ export const NAV_GROUPS = [
     items: [
       { to: '/corp?tab=producao&sub=overview', label: 'Visão geral', icon: LayoutDashboard, sub: 'overview' },
       { to: '/corp?tab=producao&sub=ingest', label: 'Ingest', icon: Layers, sub: 'ingest' },
-      { to: '/corp?tab=producao&sub=workspace2', label: 'Workspace 2', icon: PanelsTopLeft, sub: 'workspace2' },
+      { to: '/corp?tab=producao&sub=pesquisa', label: 'Pesquisa', icon: Search, sub: 'pesquisa' },
+      { to: '/corp?tab=producao&sub=workspace', label: 'Workspace', icon: PanelsTopLeft, sub: 'workspace' },
       { to: '/corp?tab=producao&sub=rascunhos', label: 'Rascunhos', icon: FileText, sub: 'rascunhos' },
       { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
       { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
@@ -36,6 +37,7 @@ export const NAV_GROUPS = [
       { to: '/corp?tab=producao&sub=para_publicar', label: 'Para publicação', icon: Send, sub: 'para_publicar' },
       { to: '/corp?tab=producao&sub=publicado', label: 'Publicado', icon: Send, sub: 'publicado' },
       { to: '/corp?tab=producao&sub=analytics', label: 'Analytics', icon: BarChart3, sub: 'analytics' },
+      { to: '/thumbnails', label: 'Criar Thumbs', icon: ImagePlus },
     ],
   },
   {
@@ -47,13 +49,14 @@ export const NAV_GROUPS = [
   {
     group: 'IA',
     items: [
+      { to: '/ferramentas-ia', label: 'Ferramentas IA', icon: WandSparkles },
       { to: '/assistente', label: 'Assistente IA', icon: Sparkles },
     ],
   },
 ];
 
 const MVP_LABELS = new Set([
-  'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
+  'Início', 'Pesquisa', 'Workspace', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
   'Em revisão', 'Finalizado',
 ]);
 

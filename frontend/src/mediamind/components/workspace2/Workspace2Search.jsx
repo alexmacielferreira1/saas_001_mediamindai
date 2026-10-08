@@ -58,13 +58,13 @@ export default function Workspace2Search({
   const countType = (type) => type === 'all' ? assets.length : assets.filter((asset) => asset.asset_type === type).length;
 
   return (
-    <section data-testid="workspace2-search" className="grid min-h-[760px] gap-2" style={{ gridTemplateColumns: showSearch ? (showPreview ? '260px minmax(440px,1fr) 430px' : '260px minmax(440px,1fr)') : (showPreview ? 'minmax(440px,1fr) 430px' : 'minmax(0,1fr)') }}>
+    <section data-testid="workspace2-search" className="grid min-h-[760px] gap-2" style={{ gridTemplateColumns: showSearch ? (showPreview ? '220px minmax(0, 1fr) minmax(320px, 33.333%)' : '220px minmax(0,1fr)') : (showPreview ? 'minmax(0, 2fr) minmax(320px, 1fr)' : 'minmax(0,1fr)') }}>
       {showSearch && <aside className="w2-panel overflow-hidden">
         <div className="grid grid-cols-2 border-b border-slate-800 p-2 text-xs font-semibold">
           <button type="button" className="flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-3 py-2"><Search size={14} /> Pesquisa</button>
           <button type="button" disabled title="Disponível quando o serviço de IA estiver configurado" className="flex items-center justify-center gap-2 text-slate-600"><Sparkles size={14} /> Prompt IA</button>
         </div>
-        <div className="space-y-4 p-3">
+        <div className="space-y-3 p-2.5">
           <Field label="Nome do arquivo" value={filters.filename} onChange={update('filename')} placeholder="Digite o nome do arquivo..." />
           <Field label="Fala / Transcrição" value={filters.transcription} onChange={update('transcription')} placeholder="Palavras-chave na fala..." />
           <Field label="Pessoa / Apresentador" value={filters.person} onChange={update('person')} placeholder="Nome da pessoa..." />
@@ -104,11 +104,11 @@ export default function Workspace2Search({
         </div>
         <div className="w2-panel p-3">
           <div className="mb-2 flex items-center justify-between"><div><h3 className="text-sm font-bold">Mídias selecionadas para Roteiro e Timeline ({selectedAssets.length})</h3><p className="text-[11px] text-slate-400">Essas mídias estarão disponíveis nas próximas etapas.</p></div><button type="button" onClick={onClearSelection} className="w2-button">Limpar seleção</button></div>
-          <div className="flex gap-2 overflow-x-auto">{selectedAssets.map((asset) => <div key={asset.id} className="flex min-w-40 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 p-2"><span className="text-xl">{asset.icon}</span><span className="min-w-0 text-[10px]"><strong className="block truncate">{asset.title}</strong>{formatDuration(asset.duration || 0)}</span></div>)}</div>
+          <div className="flex gap-2 overflow-x-auto">{selectedAssets.map((asset) => <button type="button" key={asset.id} onClick={() => onPreview(asset)} className="flex min-w-40 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 p-2 text-left hover:border-sky-600"><span className="text-xl">{asset.icon}</span><span className="min-w-0 text-[10px]"><strong className="block truncate">{asset.title}</strong>{formatDuration(asset.duration || 0)}</span></button>)}</div>
         </div>
       </main>
 
-      {showPreview && <aside className="w2-panel flex flex-col overflow-hidden">
+      {showPreview && <aside aria-label="Preview da mídia" className="w2-panel flex flex-col overflow-hidden">
         <header className="border-b border-slate-800 px-3 py-2 text-sm font-bold">Preview da mídia</header>
         <div className="space-y-3 p-3">
           {previewAsset && <><MediaVisual asset={previewAsset} large /><div className="flex items-center justify-between"><div><h3 className="font-bold">{previewAsset.title}</h3><p className="text-xs text-slate-400">ASSET-00{previewAsset.id}</p></div><button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-sky-500 text-slate-950"><Play size={17} fill="currentColor" /></button></div></>}

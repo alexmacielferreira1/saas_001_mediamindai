@@ -55,13 +55,14 @@ const SUBTABS = PRODUCTION_SUBTABS;
 export function normalizeProductionSubtab(subtab) {
   if (subtab === 'publicacoes') return 'para_publicar';
   if (subtab === 'para_editar') return 'em_edicao';
+  if (subtab === 'workspace2') return 'workspace';
   return subtab;
 }
 
 export default function ProdutoraPage() {
   const { user } = useAuth();
   const role = user?.role === 'mvp' ? 'mvp' : 'producer';
-  const [sub, setSub] = useState(role === 'mvp' ? 'workspace2' : 'overview');
+  const [sub, setSub] = useState(role === 'mvp' ? 'workspace' : 'overview');
   const [newDraftSignal, setNewDraftSignal] = useState(0);
   const [mediaHandoff, setMediaHandoff] = useState(null);
   const [params, setParams] = useSearchParams();

@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.core.errors import PublicError
@@ -20,6 +21,7 @@ from app.db.session import get_session
 from app.media.assets import serialize_asset
 from app.media.storage import LocalMediaStorage
 from app.models.identity import TenantRecord
+from app.services.background_removal import remove_image_background
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
 
@@ -43,11 +45,24 @@ ALLOWED_MEDIA = {
     ".webp": ("image", {"image/webp"}),
 }
 LOCAL_DEMO_TENANT = UUID("00000000-0000-4000-8000-000000000001")
+THUMBNAIL_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+THUMBNAIL_IMAGE_LIMIT = 20 * 1024 * 1024
 
 
 def require_local_media() -> None:
     if get_settings().environment == "production":
         raise PublicError(404, "NOT_FOUND", "Recurso não encontrado.")
+
+
+async def read_thumbnail_image(file: UploadFile) -> bytes:
+    if file.content_type not in THUMBNAIL_IMAGE_TYPES:
+        raise PublicError(422, "IMAGE_REQUIRED", "Envie uma imagem PNG, JPG ou WebP.")
+    content = await file.read(THUMBNAIL_IMAGE_LIMIT + 1)
+    if not content:
+        raise PublicError(422, "EMPTY_IMAGE", "A imagem enviada está vazia.")
+    if len(content) > THUMBNAIL_IMAGE_LIMIT:
+        raise PublicError(413, "FILE_TOO_LARGE", "A foto deve ter no máximo 20 MB.")
+    return content
 
 
 def local_catalog_path() -> Path:
@@ -335,6 +350,14 @@ def classify_upload(file: UploadFile) -> tuple[str, str]:
     return suffix, config[0]
 
 
+@router.post("/local/thumbnails/remove-background")
+async def remove_local_thumbnail_background(file: Annotated[UploadFile, File()]):
+    require_local_media()
+    content = await read_thumbnail_image(file)
+    result = await run_in_threadpool(remove_image_background, content)
+    return Response(content=result, media_type="image/png")
+
+
 @router.post("/local/assets", status_code=201)
 async def upload_local_asset(file: Annotated[UploadFile, File()]):
     require_local_media()
@@ -522,6 +545,19 @@ async def upload_asset(
         storage.delete_asset(membership.tenant_id, asset_id)
         raise
     return serialize_asset(record)
+
+
+@router.post("/thumbnails/remove-background")
+async def remove_thumbnail_background(
+    current: Authenticated,
+    session: DbSession,
+    file: Annotated[UploadFile, File()],
+):
+    require_membership(current)
+    require_permission(session, current, "assets.write")
+    content = await read_thumbnail_image(file)
+    result = await run_in_threadpool(remove_image_background, content)
+    return Response(content=result, media_type="image/png")
 
 
 @router.get("/assets")

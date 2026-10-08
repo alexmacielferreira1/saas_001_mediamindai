@@ -56,6 +56,12 @@ Implementado localmente, sem publicação e sem avanço de marco: manifesto púb
 
 Também foi implementado o inbox local idempotente da ponte, restrito aos comandos de leitura `system.describe` e `media.count` em simulação. A migration `0007_hub_commands` foi aplicada ao PostgreSQL local; nenhuma variável ou migration foi aplicada no Render/Neon.
 
+## Ferramentas IA — primeira entrega incremental — 07/10/2026
+
+Implementada localmente a central **Ferramentas IA** com as 11 guias previstas. Thumbnails reutiliza o fluxo existente e Carrossel IA ganhou um primeiro fluxo real: documento versionado por empresa, vínculo opcional ao projeto, editor/importação JSON, aprovação auditada e exportação imutável em ZIP com PNGs individuais e o documento-fonte JSON. As outras nove guias estão identificadas como planejadas e não simulam funcionalidades ainda inexistentes.
+
+Validação: 14 testes frontend direcionados e 7 testes backend aprovados; build frontend aprovado. No navegador, com o perfil superadmin, foi criado e salvo o documento **Carrossel de validação MediaMind** (revisão 1), aprovada a mesma revisão e registrada a exportação ZIP. Permanecem pendentes os fluxos reais das nove guias planejadas e as integrações específicas delas com player, roteiro e timeline. Nenhuma alteração foi feita em `000_central`, Render, Neon ou GitHub; não houve publicação em produção. O marco M0 permanece `failed` pelos gates gerais preexistentes.
+
 ## Administração, Acervo e Gestão — 03/10/2026
 
 O recorte local da Administração foi consolidado sem substituir a rota técnica `/administration2` nem alterar Render/Neon. Acervo e Gestão permanecem embutidos na Administração, com detalhes expansíveis no próprio contexto; a tela operacional de usuários voltou a ser a implementação padrão para preservar consulta real, detalhe, módulos, segurança e suspensão confirmada. A lateral exibe somente Administração. Acervo, Gestão, Telas e Módulos, Cadastros, Integrações e Configurações ficam na mesma navegação superior de Visão Geral, Usuários, Acessos e demais áreas administrativas, todos sem o sufixo “2”.

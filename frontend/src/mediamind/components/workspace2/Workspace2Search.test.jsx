@@ -60,4 +60,28 @@ describe('Workspace 2 search step', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar direitos' }));
     expect(screen.getByText(/Direitos registrados/i)).toBeInTheDocument();
   });
+
+  it('places selected media below the search results', () => {
+    render(
+      <Workspace2Search
+        assets={assets}
+        selectedAssets={[assets[0]]}
+        selectedIds={[1]}
+        previewAsset={assets[0]}
+      />,
+    );
+
+    const selected = screen.getByText(/Mídias selecionadas para Roteiro e Timeline/);
+    const results = screen.getByText(/Mídias encontradas/);
+    expect(results.compareDocumentPosition(selected) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps search and media results wide while the preview occupies the right third', () => {
+    render(<Workspace2Search assets={assets} previewAsset={assets[0]} />);
+
+    const layout = screen.getByTestId('workspace2-search');
+    const preview = screen.getByRole('complementary', { name: 'Preview da mídia' });
+    expect(layout.style.gridTemplateColumns).toBe('220px minmax(0, 1fr) minmax(320px, 33.333%)');
+    expect(layout.lastElementChild?.previousElementSibling).toBe(preview);
+  });
 });

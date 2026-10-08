@@ -18,7 +18,6 @@ export const ALL_SUBTABS = [
   { id: 'pesquisa', name: 'Pesquisa' },
   { id: 'ingest', name: 'Ingest' },
   { id: 'workspace', name: 'Workspace' },
-  { id: 'workspace2', name: 'Workspace 2' },
   { id: 'roteiro', name: 'Modo Roteiro' },
   { id: 'rascunhos', name: 'Rascunhos' },
   { id: 'agendamentos', name: 'Agendamentos' },
@@ -61,11 +60,11 @@ export const ALL_SUBTABS = [
 ];
 
 // Conjunto DEFAULT aceso por cargo (ids). null = acesso total (admin).
-const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'workspace2', 'roteiro'];
+const COMMON_IDS = ['pesquisa', 'ingest', 'workspace', 'roteiro'];
 const OV = ['overview'];
 const VG = ['visao_geral'];
 export const MVP_SUBTABS = [
-  'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+  'workspace', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
   'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
 ];
 
@@ -121,13 +120,11 @@ export function getActiveSubtabs(cargoId) {
   if (isTotalAccess(cargoId)) return null;
   const stored = readJSON(KEY, {})[cargoId];
   if (stored) {
-    const migrated = [...new Set(stored.map((id) => (id === 'para_editar' ? 'em_edicao' : id)))];
-    const hasOriginalWorkspace = stored.includes('workspace');
-    const supportsWorkspace2 = (ROLE_SUBTABS[cargoId] || []).includes('workspace2');
-    if (hasOriginalWorkspace && supportsWorkspace2 && !migrated.includes('workspace2')) {
-      return [...migrated, 'workspace2'];
-    }
-    return migrated;
+    return [...new Set(stored.map((id) => {
+      if (id === 'para_editar') return 'em_edicao';
+      if (id === 'workspace2') return 'workspace';
+      return id;
+    }))];
   }
   return ROLE_SUBTABS[cargoId] || [];
 }

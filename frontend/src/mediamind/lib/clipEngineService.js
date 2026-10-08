@@ -26,7 +26,7 @@ export async function getAsset(assetId) {
 export async function ensureTranscription(asset, { empresaId = '', durationSeconds = 0 } = {}) {
   const existing = await base44.entities.TranscricaoSegmento.filter({ asset_id: String(asset.id) }, 'start_ms', 500);
   if (existing.length > 0) return { segments: existing, reused: true };
-  const audioUrl = asset.path || asset.source_url || '';
+  const audioUrl = asset.stream_url || asset.source_url || asset.path || '';
   if (!audioUrl) {
     throw new Error('Asset sem mídia (path) para transcrever. Anexe um arquivo de áudio/vídeo ao asset no Acervo.');
   }
@@ -72,7 +72,7 @@ export async function promoteCandidate(candidate, asset, { empresaId = '', aspec
     description: candidate.summary || '',
     status: 'draft',
     source_asset_id: String(asset.id),
-    source_url: asset.path || asset.source_url || '',
+    source_url: asset.stream_url || asset.source_url || asset.path || '',
     in_ms: candidate.start_ms,
     out_ms: candidate.end_ms,
     duration: candidate.end_ms - candidate.start_ms,

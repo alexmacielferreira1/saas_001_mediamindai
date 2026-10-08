@@ -1,0 +1,1 @@
+"""Creative document storage helpers."""

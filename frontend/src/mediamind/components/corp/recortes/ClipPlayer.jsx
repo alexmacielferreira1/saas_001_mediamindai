@@ -48,6 +48,11 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
   function seekTo(ms) { if (vref.current) vref.current.currentTime = Math.max(0, (ms || 0) / 1000); }
 
   const total = dur || 1;
+  function seekFromPointer(event) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(bounds.width, 1)));
+    seekTo(ratio * total);
+  }
   const pct = (t) => `${(t / total) * 100}%`;
 
   return (
@@ -58,7 +63,7 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
       </div>
 
       <div className="mt-3">
-        <div className="relative h-14 select-none rounded-lg border border-slate-800 bg-slate-950/60">
+        <div aria-label="Timeline do corte" role="slider" aria-valuemin={0} aria-valuemax={Math.round(total)} aria-valuenow={Math.round(time)} onClick={seekFromPointer} className="relative h-14 cursor-pointer select-none rounded-lg border border-slate-800 bg-slate-950/60">
           {segments.map((s, i) => (
             <div key={i} className={`absolute top-1 h-3 rounded ${s.color || 'bg-sky-500/40'}`} style={{ left: pct(s.start_ms), width: `calc(${((s.end_ms - s.start_ms) / total) * 100}%)` }} title={s.title} />
           ))}
@@ -74,8 +79,8 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
           <button onClick={togglePlay} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">{playing ? <Pause size={12} /> : <Play size={12} />} {playing ? 'Pausar' : 'Reproduzir'}</button>
           <button onClick={() => seekTo(in_ms)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800"><SkipBack size={12} /> IN</button>
           <button onClick={() => seekTo(out_ms)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800">OUT <SkipForward size={12} /></button>
-          <button onClick={() => onSetIn?.(Math.round(time))} className="flex items-center gap-1 rounded-md border border-emerald-700 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-950/40"><Flag size={12} /> Marcar IN</button>
-          <button onClick={() => onSetOut?.(Math.round(time))} className="flex items-center gap-1 rounded-md border border-emerald-700 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-950/40"><Flag size={12} /> Marcar OUT</button>
+          <button onClick={() => onSetIn?.(Math.min(Math.round(time), out_ms || Math.round(dur)))} className="flex items-center gap-1 rounded-md border border-emerald-700 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-950/40"><Flag size={12} /> Marcar IN</button>
+          <button onClick={() => onSetOut?.(Math.max(Math.round(time), in_ms || 0))} className="flex items-center gap-1 rounded-md border border-emerald-700 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-950/40"><Flag size={12} /> Marcar OUT</button>
           <span className="ml-auto text-[11px] text-slate-400">{fmt(time)} / {fmt(dur)}</span>
         </div>
       </div>

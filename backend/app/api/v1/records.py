@@ -35,6 +35,8 @@ ALLOWED_TYPES = {
     "ClipVersion",
     "Clipping",
     "ComentarioRevisao",
+    "CreativeDocument",
+    "CreativeExport",
     "DireitoAsset",
     "Jornalista",
     "LogAuditoria",

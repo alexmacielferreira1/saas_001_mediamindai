@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import Workspace2Script from './Workspace2Script';
 
@@ -36,7 +36,7 @@ describe('Workspace 2 script step', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Acervo' }));
     fireEvent.change(screen.getByLabelText('Pesquisa rápida de mídias'), { target: { value: 'entrevista' } });
-    expect(screen.queryByText(asset.title)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('complementary', { name: 'Biblioteca do roteiro' })).queryByText(asset.title)).not.toBeInTheDocument();
     expect(screen.getAllByText('Entrevista coletiva').length).toBeGreaterThan(0);
   });
 
@@ -64,7 +64,7 @@ describe('Workspace 2 script step', () => {
     expect(layout).toContainElement(scripts);
     expect(screen.getByRole('region', { name: 'Preview da mídia' })).toBeInTheDocument();
     expect(screen.getAllByText('Entrevista coletiva').length).toBeGreaterThan(0);
-    expect(screen.queryByText(asset.title)).not.toBeInTheDocument();
+    expect(within(media).queryByText(asset.title)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar Entrevista coletiva ao roteiro' }));
     expect(onToggle).toHaveBeenCalledWith(8);
@@ -102,5 +102,32 @@ describe('Workspace 2 script step', () => {
 
     expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-workspace2-block', 'b2');
     expect(onReorderBlocks).toHaveBeenCalledWith('b2', 'b1');
+  });
+
+  it('shows selected media below the preview and lets users preview or drag it into the script', () => {
+    const onPreview = vi.fn();
+    const onAddAsset = vi.fn();
+    render(<Workspace2Script selectedAssets={[asset]} selectedIds={[asset.id]} onPreview={onPreview} onAddAsset={onAddAsset} />);
+
+    const tray = screen.getByRole('region', { name: 'Mídias selecionadas abaixo do preview' });
+    const media = within(tray).getByRole('button', { name: `Visualizar ${asset.title}` });
+    fireEvent.click(media);
+    expect(onPreview).toHaveBeenCalledWith(asset);
+
+    const dataTransfer = {
+      effectAllowed: '',
+      setData: vi.fn(),
+      getData: vi.fn((type) => type === 'application/x-workspace2-asset' ? String(asset.id) : ''),
+    };
+    fireEvent.dragStart(media, { dataTransfer });
+    fireEvent.drop(screen.getByRole('complementary', { name: 'Roteiro editável' }), { dataTransfer });
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-workspace2-asset', String(asset.id));
+    expect(onAddAsset).toHaveBeenCalledWith(asset);
+  });
+
+  it('uses half of the page for preview and half for the editable script', () => {
+    render(<Workspace2Script selectedAssets={[asset]} selectedIds={[asset.id]} showSearch={false} showPreview />);
+    expect(screen.getByTestId('workspace2-script-layout').style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 1fr)');
   });
 });

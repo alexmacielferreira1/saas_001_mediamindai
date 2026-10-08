@@ -75,6 +75,40 @@ def test_local_demo_media_works_without_database(monkeypatch, tmp_path):
     get_settings.cache_clear()
 
 
+def test_local_thumbnail_background_removal_returns_transparent_png(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "app.api.v1.media.remove_image_background", lambda content: b"png-cutout-" + content
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/media/local/thumbnails/remove-background",
+        files={"file": ("pessoa.jpg", b"portrait", "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert response.content == b"png-cutout-portrait"
+    get_settings.cache_clear()
+
+
+def test_local_thumbnail_background_removal_rejects_non_image(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/media/local/thumbnails/remove-background",
+        files={"file": ("pessoa.txt", b"portrait", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "IMAGE_REQUIRED"
+    get_settings.cache_clear()
+
+
 def test_media_upload_rejects_oversize_without_orphan(permission_client, monkeypatch, tmp_path):
     client, _ = permission_client
     login(client)

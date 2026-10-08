@@ -22,22 +22,17 @@ describe('Workspace 2 flow', () => {
   it('goes from media selection to the simplified creation screen and then the editor', () => {
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
-    fireEvent.change(screen.getByLabelText('Nome do arquivo'), { target: { value: 'enchente' } });
-    fireEvent.click(screen.getByRole('button', { name: /2\s*Criar/i }));
-    expect(screen.getByRole('heading', { name: 'Como você quer criar seu roteiro?' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Pesquisa de mídias persistente')).toHaveValue('enchente');
+    expect(screen.getByRole('region', { name: 'Tipos de criação' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Nome do arquivo')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abrir pesquisa lateral' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Últimos rascunhos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Modelos sugeridos' })).not.toBeInTheDocument();
-    expect(screen.getByText('Informações iniciais')).toBeInTheDocument();
-    expect(screen.getByText('Montar roteiro')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Abrir roteiro existente/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Abrir rascunho existente/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /A partir de mídia/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Continuar para montar/i }));
+    expect(screen.getByRole('button', { name: 'Roteiro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Roteiros existentes' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Criar roteiro/i }));
 
     expect(screen.getByTestId('workspace2-script')).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: 'Biblioteca do roteiro' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Preview da mídia' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Pesquisa persistente do Workspace' })).not.toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Roteiro editável' })).toBeInTheDocument();
   }, 10000);
 
@@ -45,48 +40,72 @@ describe('Workspace 2 flow', () => {
     mediaApi.listMediaAssets.mockRejectedValueOnce(new Error('offline'));
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: /3\s*Roteiro/i }));
+    fireEvent.click(screen.getByRole('button', { name: /2\s*Montar roteiro/i }));
 
     expect((await screen.findAllByText('Entrevista Prefeito')).length).toBeGreaterThan(0);
     expect(screen.getByRole('article', { name: /Bloco 1:/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Detalhes do bloco 1/i })).toBeInTheDocument();
   });
-  it('keeps the media search while navigating to scripts, creation and the editor', () => {
+  it('keeps the media search in a sliding left drawer across Roteiro and Timeline', () => {
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
-    expect(screen.getByRole('heading', { name: 'Workspace 2' })).toBeInTheDocument();
-    expect(screen.getByTestId('workspace2-search')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument();
+    expect(screen.queryByTestId('workspace2-search')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Importar mídias' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Travar' })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /2\s*montar roteiro/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));
     fireEvent.change(screen.getByLabelText('Nome do arquivo'), { target: { value: 'enchente' } });
-    fireEvent.click(screen.getByRole('button', { name: /2\s*criar/i }));
-    expect(screen.getByLabelText('Pesquisa de mídias persistente')).toHaveValue('enchente');
+    expect(screen.getByLabelText('Nome do arquivo')).toHaveValue('enchente');
+    expect(screen.getByTestId('workspace-stage-shell').style.gridTemplateColumns).toContain('300px');
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher pesquisa lateral' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /3\s*roteiro/i }));
     expect(screen.getByTestId('workspace2-script')).toBeInTheDocument();
-    expect(screen.getByLabelText('Pesquisa rápida de mídias')).toHaveValue('enchente');
-    expect(screen.getByRole('region', { name: 'Preview da mídia' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));
+    expect(screen.getByLabelText('Nome do arquivo')).toHaveValue('enchente');
 
-    fireEvent.click(screen.getByRole('button', { name: /4\s*timeline/i }));
+    fireEvent.click(screen.getByRole('button', { name: /3\s*timeline/i }));
     expect(localStorage.getItem('mm_workspace2_timeline2_draft')).toContain('tracks');
+    expect(screen.getByLabelText('Nome do arquivo')).toHaveValue('enchente');
+  }, 15000);
+
+  it('keeps search outside the steps and opens it as a drawer that pushes content', () => {
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+    expect(screen.queryByRole('button', { name: 'Pesquisa' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Nome do arquivo')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /2\s*Montar roteiro/i }));
+    expect(screen.getByRole('button', { name: 'Abrir pesquisa lateral' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));
+    expect(screen.getByRole('complementary', { name: 'Pesquisa persistente do Workspace' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('uses the global toolbar to show and hide search and preview across Workspace steps', () => {
+  it('starts in Criar because Pesquisa is now an exclusive menu page', () => {
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
-    expect(screen.getByRole('button', { name: 'Ocultar pesquisa' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Prévia' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Ocultar pesquisa' }));
-    expect(screen.getByRole('button', { name: 'Mostrar pesquisa' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Nome do arquivo')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /2\s*Criar/i }));
-    expect(screen.queryByRole('complementary', { name: 'Pesquisa e seleção de mídias' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Prévia' }));
-    expect(screen.queryByRole('complementary', { name: 'Contexto da criação' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /3\s*Roteiro/i }));
-    expect(screen.queryByRole('complementary', { name: 'Biblioteca do roteiro' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Preview da mídia' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('workspace2-create')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1\s*Informações iniciais/i })).toBeInTheDocument();
   });
+
+  it('makes search results draggable to the active Workspace area', async () => {
+    mediaApi.listMediaAssets.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /2\s*Montar roteiro/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));
+    const result = (await screen.findAllByRole('button', { name: /^Visualizar /i }))[0];
+    expect(result.closest('[draggable="true"]')).toBeTruthy();
+  });
+
+  it('does not duplicate a selected-media strip outside the side drawer', () => {
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+
+    for (const step of [/1\s*Informações iniciais/i, /2\s*Montar roteiro/i, /3\s*Timeline/i, /4\s*Exportar/i]) {
+      fireEvent.click(screen.getByRole('button', { name: step }));
+      expect(screen.queryByRole('region', { name: 'Mídias selecionadas persistentes' })).not.toBeInTheDocument();
+    }
+
+    expect(screen.queryByText(/Mídias selecionadas para Roteiro e Timeline/)).not.toBeInTheDocument();
+  }, 10000);
 
   it('saves and resets the local Workspace 2 draft', () => {
     localStorage.clear();
@@ -102,12 +121,26 @@ describe('Workspace 2 flow', () => {
     localStorage.clear();
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: /4\s*timeline/i }));
+    fireEvent.click(screen.getByRole('button', { name: /3\s*timeline/i }));
 
     const saved = JSON.parse(localStorage.getItem('mm_workspace2_timeline2_draft'));
     expect(saved.name).toBe('Jornal 12h - 15/05/2026');
     expect(saved.tracks).toHaveLength(5);
   });
+
+  it('switches between Timeline and final preview using the local guide', () => {
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /3\s*Timeline/i }));
+
+    expect(screen.getByRole('button', { name: 'Timeline', pressed: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Prévia final' }));
+    expect(screen.getByRole('button', { name: 'Prévia final', pressed: true })).toBeInTheDocument();
+    expect(screen.getByTestId('workspace2-export')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    expect(screen.getByRole('button', { name: 'Timeline', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Timeline 2' })).toBeInTheDocument();
+  }, 10000);
 
   it('shows an expandable upload receipt with file, storage, protocol and SHA-256', async () => {
     mediaApi.uploadMediaAsset.mockResolvedValue({

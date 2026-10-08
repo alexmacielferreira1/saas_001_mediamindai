@@ -4,11 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { COMMON_IDS, CommonScreen } from './CommonScreens';
 
 describe('common role screens', () => {
-  it('exposes Workspace 2 without replacing the original Workspace', () => {
-    render(<MemoryRouter><CommonScreen active="workspace2" /></MemoryRouter>);
+  it('exposes only the advanced Workspace under the canonical identifier', () => {
+    render(<MemoryRouter><CommonScreen active="workspace" /></MemoryRouter>);
 
     expect(COMMON_IDS).toContain('workspace');
-    expect(COMMON_IDS).toContain('workspace2');
-    expect(screen.getByRole('heading', { name: 'Workspace 2' })).toBeInTheDocument();
+    expect(COMMON_IDS).not.toContain('workspace2');
+    expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument();
+  });
+
+  it('keeps the former workspace2 identifier as an alias of the advanced Workspace', () => {
+    render(<MemoryRouter><CommonScreen active="workspace2" /></MemoryRouter>);
+
+    expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument();
   });
 });

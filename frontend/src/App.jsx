@@ -19,12 +19,13 @@ import Roteiro2 from './mediamind/pages/Roteiro2';
 import Corp from './mediamind/pages/Corp';
 import ViralClips from './mediamind/pages/ViralClips';
 import Ingest from './mediamind/pages/Ingest';
-import Workspace from './mediamind/pages/Workspace';
 import Workspace2 from './mediamind/pages/Workspace2';
 import Timeline from './mediamind/pages/Timeline';
 import Timeline2 from './mediamind/pages/Timeline2';
 import SearchPage from './mediamind/pages/Search';
 import AssistenteIA from './mediamind/pages/AssistenteIA';
+import ThumbnailStudio from './mediamind/pages/ThumbnailStudio';
+import AITools from './mediamind/pages/AITools';
 import { canAccessModule } from './mediamind/lib/moduleAccess';
 
 const AuthenticatedApp = () => {
@@ -47,9 +48,9 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Shell><Home /></Shell>} />
         <Route path="/search" element={<Shell><SearchPage /></Shell>} />
         <Route path="/ingest" element={<ModuleRoute moduleId="ingest"><Shell><Ingest /></Shell></ModuleRoute>} />
-        <Route path="/workspace" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
-        <Route path="/workspace2" element={<ModuleRoute moduleId="workspace2"><Shell><Workspace2 /></Shell></ModuleRoute>} />
-        <Route path="/workspace/timeline" element={<ModuleRoute moduleId="workspace"><Shell><Workspace /></Shell></ModuleRoute>} />
+        <Route path="/workspace" element={<ModuleRoute moduleId="workspace"><Shell><Workspace2 /></Shell></ModuleRoute>} />
+        <Route path="/workspace2" element={<Navigate to="/workspace" replace />} />
+        <Route path="/workspace/timeline" element={<ModuleRoute moduleId="workspace"><Shell><Workspace2 /></Shell></ModuleRoute>} />
         <Route path="/timeline" element={<ModuleRoute moduleId="timeline"><Shell><Timeline /></Shell></ModuleRoute>} />
         <Route path="/timeline2" element={<ModuleRoute moduleId="timeline2"><Shell><Timeline2 /></Shell></ModuleRoute>} />
         <Route path="/social" element={<ModuleRoute moduleId="social"><Shell><ViralClips /></Shell></ModuleRoute>} />
@@ -62,6 +63,8 @@ const AuthenticatedApp = () => {
         <Route path="/reports" element={<Navigate to="/management?tab=reports" replace />} />
         <Route path="/corp" element={<ModuleRoute moduleId="corp"><Shell><Corp /></Shell></ModuleRoute>} />
         <Route path="/assistente" element={<ModuleRoute moduleId="assistente"><Shell><AssistenteIA /></Shell></ModuleRoute>} />
+        <Route path="/thumbnails" element={<ModuleRoute moduleId="thumbnails"><Shell><ThumbnailStudio /></Shell></ModuleRoute>} />
+        <Route path="/ferramentas-ia" element={<ModuleRoute moduleId="ai_tools"><Shell><AITools /></Shell></ModuleRoute>} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

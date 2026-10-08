@@ -40,7 +40,7 @@ const assetToMedia = (asset) => ({
   origin: 'acervo',
 });
 
-export default function Timeline2({ embedded = false }) {
+export default function Timeline2({ embedded = false, projectAssets = [] }) {
   const initial = useMemo(() => {
     try {
       const workspaceDraft = JSON.parse(localStorage.getItem('mm_workspace2_timeline2_draft'));
@@ -76,9 +76,10 @@ export default function Timeline2({ embedded = false }) {
   const timelineGeometry = useMemo(() => getTimelineGeometry(scaleDuration, document.zoom), [scaleDuration, document.zoom]);
   const projectMedia = useMemo(() => {
     const clips = document.tracks.flatMap((track) => track.clips).filter((clip) => clip.kind !== 'text');
-    return clips.map((clip) => ({ id: clip.assetId || clip.id, name: clip.name, kind: clip.kind, duration: clip.sourceOut || clip.duration, src: clip.src, origin: clip.origin }))
+    const selectedProjectMedia = projectAssets.filter((asset) => ['video', 'audio'].includes(asset.asset_type)).map(assetToMedia);
+    return [...selectedProjectMedia, ...clips.map((clip) => ({ id: clip.assetId || clip.id, name: clip.name, kind: clip.kind, duration: clip.sourceOut || clip.duration, src: clip.src, origin: clip.origin }))]
       .filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id && candidate.src === item.src) === index);
-  }, [document.tracks]);
+  }, [document.tracks, projectAssets]);
   const acervoMedia = useMemo(
     () => assets.filter((asset) => ['video', 'audio'].includes(asset.asset_type)).map(assetToMedia),
     [assets],

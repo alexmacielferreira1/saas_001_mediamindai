@@ -25,6 +25,20 @@ export function mediaStreamUrl(asset) {
   return asset?.stream_url || '';
 }
 
+export async function removeThumbnailBackground(file) {
+  const body = new FormData();
+  body.append('file', file);
+  const origin = import.meta.env.VITE_API_URL || '';
+  const response = await fetch(`${origin}/api/v1${mediaPrefix()}/thumbnails/remove-background`, {
+    method: 'POST', credentials: 'include', headers: { Accept: 'image/png' }, body,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Não foi possível recortar a pessoa.');
+  }
+  return response.blob();
+}
+
 async function requestMediaExport(path, payload) {
   const origin = import.meta.env.VITE_API_URL || '';
   const response = await fetch(`${origin}/api/v1${mediaPrefix()}/exports/${path}`, {

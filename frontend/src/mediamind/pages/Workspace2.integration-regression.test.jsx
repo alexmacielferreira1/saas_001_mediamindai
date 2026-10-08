@@ -19,24 +19,24 @@ function CurrentPath() {
 describe('Workspace 2 integrated editing flow', () => {
   beforeEach(() => localStorage.clear());
 
-  it('opens Timeline as step 5 without leaving Workspace 2', () => {
+  it('opens Timeline as step 3 without leaving Workspace', () => {
     render(<MemoryRouter initialEntries={['/corp?tab=producao&sub=workspace2']}><Workspace2 /><CurrentPath /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: /5\s*timeline/i }));
+    fireEvent.click(screen.getByRole('button', { name: /3\s*timeline/i }));
 
     expect(screen.getByRole('heading', { name: 'Timeline 2' })).toBeInTheDocument();
     expect(screen.getByLabelText('Rota atual')).toHaveTextContent('/corp');
     expect(localStorage.getItem('mm_workspace2_timeline2_draft')).toContain('tracks');
   });
 
-  it('opens the centralized export surface as step 6', () => {
+  it('opens the centralized export surface as step 4', () => {
     localStorage.setItem('mm_timeline2_project:workspace2-draft', JSON.stringify({
       id: 'workspace2-draft', name: 'Persistido', duration: 4, fps: 30, markers: [],
       tracks: [{ id: 'v1', kind: 'video', name: 'Vídeo', clips: [{ id: 'persisted-clip', kind: 'video', name: 'Corte persistido', duration: 4, start: 0 }] }],
     }));
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
-    fireEvent.click(screen.getByRole('button', { name: /6\s*exportar/i }));
+    fireEvent.click(screen.getByRole('button', { name: /4\s*exportar/i }));
 
     expect(screen.getByRole('heading', { name: 'Central de exportação' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Salvar projeto no MediaMind' })).toBeInTheDocument();

@@ -17,6 +17,6 @@ describe('producer workflow tabs', () => {
   it('keeps legacy publication handoffs working', () => {
     expect(normalizeProductionSubtab('publicacoes')).toBe('para_publicar');
     expect(normalizeProductionSubtab('para_editar')).toBe('em_edicao');
-    expect(normalizeProductionSubtab('workspace2')).toBe('workspace2');
+    expect(normalizeProductionSubtab('workspace2')).toBe('workspace');
   });
 });

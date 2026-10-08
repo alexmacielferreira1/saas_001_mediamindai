@@ -86,7 +86,7 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
       id: `clip-${Date.now()}`,
       titulo: prompt ? `Corte — ${prompt.slice(0, 40)}` : `Corte — ${asset.title || asset.filename || 'asset'}`,
       source_asset_id: String(asset.id),
-      source_url: asset.path || '',
+      source_url: asset.stream_url || asset.source_url || asset.path || '',
       duration_ms: durationMs || asset.duration || 0,
       stage: mode === 'ia' ? 'ia' : 'selecao',
       in_ms: inMs || 0,

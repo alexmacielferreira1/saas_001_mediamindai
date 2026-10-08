@@ -7,23 +7,24 @@ describe('production navigation', () => {
     const labels = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.label));
     expect(labels).not.toContain('IAcervo Corp');
     expect(labels).not.toContain('Roteiro 2');
-    expect(labels).not.toContain('Pesquisa');
-    expect(labels).not.toContain('Workspace');
+    expect(labels).toContain('Pesquisa');
+    expect(labels).toContain('Workspace');
     expect(labels).not.toContain('Modo roteiro');
-    expect(labels).toContain('Workspace 2');
+    expect(labels).not.toContain('Workspace 2');
     expect(labels).not.toContain('Timeline 2');
     expect(labels).not.toContain('Material para editar');
     expect(labels).toContain('Edição');
     expect(labels).toContain('Alteração');
     expect(labels).toContain('Para publicação');
     expect(labels).toContain('Publicado');
+    expect(labels).toContain('Criar Thumbs');
   });
 
   it('shows the MVP profile its selected workflow, including recording prerequisites', () => {
     const navigation = navigationForRole('mvp').flatMap((group) => group.items);
     const labels = navigation.map((item) => item.label);
     expect(labels).toEqual([
-      'Início', 'Workspace 2', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
+      'Início', 'Pesquisa', 'Workspace', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
       'Em revisão', 'Finalizado',
     ]);
     expect(navigation.some((item) => item.label === 'Acervo')).toBe(false);

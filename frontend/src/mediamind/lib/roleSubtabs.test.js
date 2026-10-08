@@ -24,10 +24,18 @@ describe('producer role workflow access', () => {
 
   it('selects only the existing MVP workflow screens', () => {
     expect(MVP_SUBTABS).toEqual([
-      'workspace2', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
+      'workspace', 'rascunhos', 'agendamentos', 'gravacoes', 'em_edicao',
       'aguardando_aprovacao', 'em_aprovacao', 'finalizado',
     ]);
     expect(ROLE_SUBTABS.mvp).toEqual(MVP_SUBTABS);
     expect(getActiveSubtabs('mvp')).toEqual(MVP_SUBTABS);
+  });
+
+  it('migrates a saved Workspace 2 permission to the canonical Workspace', () => {
+    localStorage.setItem('mm_role_subtabs_v1', JSON.stringify({
+      producer: ['overview', 'workspace2', 'rascunhos'],
+    }));
+
+    expect(getActiveSubtabs('producer')).toEqual(['overview', 'workspace', 'rascunhos']);
   });
 });
