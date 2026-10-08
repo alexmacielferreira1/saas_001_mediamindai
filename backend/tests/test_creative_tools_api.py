@@ -55,9 +55,7 @@ def test_creative_document_create_list_update_and_approve(permission_client):
     assert [item["id"] for item in listed.json()["documents"]] == [created["id"]]
 
     changed = carousel_content("Título revisado")
-    updated = client.patch(
-        f"/api/v1/creative-documents/{created['id']}", json={"content": changed}
-    )
+    updated = client.patch(f"/api/v1/creative-documents/{created['id']}", json={"content": changed})
     assert updated.status_code == 200
     assert updated.json()["revision"] == 2
     assert updated.json()["content"]["title"] == "Título revisado"
@@ -107,9 +105,7 @@ def test_creative_document_write_and_approval_require_matching_permissions(permi
     created = create_document(client)
     client.post("/api/v1/auth/logout")
     login(client, "cedoc@mediamind.ai")
-    no_review_permission = client.post(
-        f"/api/v1/creative-documents/{created['id']}/approve"
-    )
+    no_review_permission = client.post(f"/api/v1/creative-documents/{created['id']}/approve")
     assert no_review_permission.status_code == 403
 
 
@@ -158,22 +154,22 @@ def test_creative_export_is_immutable_downloadable_and_tenant_scoped(
     client, _ = permission_client
     login(client)
     created = create_document(client)
-    monkeypatch.setattr('app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT', tmp_path)
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
 
     exported = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
-        data={'revision': '1', 'preset': '4:5'},
-        files={'file': ('carrossel.zip', b'PK\x03\x04conteudo', 'application/zip')},
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("carrossel.zip", b"PK\x03\x04conteudo", "application/zip")},
     )
 
     assert exported.status_code == 201
     payload = exported.json()
-    assert payload['revision'] == 1
-    assert payload['status'] == 'ready'
-    assert payload['sha256'] == '7b6b0a2d5d390ef5562217b1de2dd6597311f0cc35ce55a1841b351a3e5bf320'
+    assert payload["revision"] == 1
+    assert payload["status"] == "ready"
+    assert payload["sha256"] == "7b6b0a2d5d390ef5562217b1de2dd6597311f0cc35ce55a1841b351a3e5bf320"
     downloaded = client.get(f"/api/v1/creative-exports/{payload['id']}/download")
     assert downloaded.status_code == 200
-    assert downloaded.content == b'PK\x03\x04conteudo'
+    assert downloaded.content == b"PK\x03\x04conteudo"
     assert client.get(f"/api/v1/creative-exports/{uuid4()}/download").status_code == 404
 
 
@@ -183,30 +179,28 @@ def test_creative_export_rejects_stale_revision_and_storage_failure(
     client, _ = permission_client
     login(client)
     created = create_document(client)
-    changed = carousel_content('Revisão 2')
-    client.patch(f"/api/v1/creative-documents/{created['id']}", json={'content': changed})
-    monkeypatch.setattr('app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT', tmp_path)
+    changed = carousel_content("Revisão 2")
+    client.patch(f"/api/v1/creative-documents/{created['id']}", json={"content": changed})
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
 
     stale = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
-        data={'revision': '1', 'preset': '4:5'},
-        files={'file': ('stale.zip', b'PK\x03\x04stale', 'application/zip')},
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("stale.zip", b"PK\x03\x04stale", "application/zip")},
     )
     assert stale.status_code == 409
-    assert list(tmp_path.rglob('*')) == []
+    assert list(tmp_path.rglob("*")) == []
 
     def fail_store(*_args, **_kwargs):
-        raise OSError('disk full')
+        raise OSError("disk full")
 
-    monkeypatch.setattr('app.api.v1.creative_tools.store_creative_export', fail_store)
+    monkeypatch.setattr("app.api.v1.creative_tools.store_creative_export", fail_store)
     failed = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
-        data={'revision': '2', 'preset': '4:5'},
-        files={'file': ('failed.zip', b'PK\x03\x04failed', 'application/zip')},
+        data={"revision": "2", "preset": "4:5"},
+        files={"file": ("failed.zip", b"PK\x03\x04failed", "application/zip")},
     )
     assert failed.status_code == 500
-    with permission_client[1]['session_factory']() as session:
-        exports = list(
-            session.query(TenantRecord).filter_by(entity_type='CreativeExport').all()
-        )
+    with permission_client[1]["session_factory"]() as session:
+        exports = list(session.query(TenantRecord).filter_by(entity_type="CreativeExport").all())
     assert exports == []
