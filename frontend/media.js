@@ -1,0 +1,70 @@
+import { request } from './httpClient';
+
+function mediaPrefix() {
+  try {
+    return import.meta.env.DEV && localStorage.getItem('mm_demo_session_v1') ? '/media/local' : '/media';
+  } catch { return '/media'; }
+}
+
+export async function listMediaAssets() {
+  return (await request(`${mediaPrefix()}/assets`)).assets;
+}
+
+export function uploadMediaAsset(file, metadata = {}) {
+  const body = new FormData();
+  body.append('file', file);
+  for (const key of ['origin', 'project_id', 'recording_id']) {
+    if (metadata[key] !== undefined && metadata[key] !== null && metadata[key] !== '') {
+      body.append(key, String(metadata[key]));
+    }
+  }
+  return request(`${mediaPrefix()}/assets`, { method: 'POST', body });
+}
+
+export function mediaStreamUrl(asset) {
+  return resolveMediaUrl(asset?.stream_url || asset?.file_url || '');
+}
+
+export async function removeThumbnailBackground(file) {
+  const body = new FormData();
+  body.append('file', file);
+  const origin = import.meta.env.VITE_API_URL || '';
+  const response = await fetch(`${origin}/api/v1${mediaPrefix()}/thumbnails/remove-background`, {
+    method: 'POST', credentials: 'include', headers: { Accept: 'image/png' }, body,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Não foi possível recortar a pessoa.');
+  }
+  return response.blob();
+}
+
+async function requestMediaExport(path, payload) {
+  const origin = import.meta.env.VITE_API_URL || '';
+  const response = await fetch(`${origin}/api/v1${mediaPrefix()}/exports/${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'video/mp4', 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Não foi possível exportar o clipe.');
+  }
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'mediamind-editado.mp4';
+  return { blob: await response.blob(), filename };
+}
+
+export function exportMediaClip(payload) {
+  return requestMediaExport('clip', payload);
+}
+
+export function exportTimeline(payload) {
+  return requestMediaExport('timeline', payload);
+}
+
+export function resolveMediaUrl(url = '') {
+  if (!url || /^(blob:|data:|https?:)/i.test(url)) return url;
+  return url.startsWith('/api/') ? `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}${url}` : url;
+}
