@@ -39,3 +39,4 @@ export async function createLocalCutout(file) {
   return URL.createObjectURL(blob);
 }
 import { removePersonBackground } from './personSegmentation';
+

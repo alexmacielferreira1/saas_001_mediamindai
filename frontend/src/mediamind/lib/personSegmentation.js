@@ -91,3 +91,4 @@ export async function removePersonBackground(file) {
   queue = result.catch(() => {});
   return result;
 }
+

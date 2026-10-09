@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import AIThumbnailStudio from "../components/ai-tools/AIThumbnailStudio";
+import ThumbnailStudio from "./ThumbnailStudio";
 import AnimatedStudio from "../components/ai-tools/AnimatedStudio";
 import VoiceStudio from "../components/ai-tools/VoiceStudio";
 import ChannelStudio from "../components/ai-tools/ChannelStudio";
@@ -11,7 +12,7 @@ import { AI_TOOLS, getAITool } from "../lib/aiToolsRegistry";
 
 export default function AITools() {
   const [params, setParams] = useSearchParams();
-  const selected = getAITool(params.get("tool") || "carousel");
+  const selected = getAITool(params.get("tool") || "thumbnails");
   const projectId = params.get("project_id");
   return (
     <div className="space-y-5">
@@ -57,7 +58,8 @@ export default function AITools() {
         {selected.id === "carousel" && (
           <CarouselStudio key={projectId || "local"} projectId={projectId} />
         )}
-        {selected.id === "thumbnails" && <AIThumbnailStudio />}
+        {selected.id === "thumbnails" && <ThumbnailStudio />}
+        {selected.id === "thumbnail-variants" && <AIThumbnailStudio />}
         {selected.id === "animated-videos" && <AnimatedStudio />}
         {selected.id === "voice-studio" && <VoiceStudio />}
         {selected.id === "channel-studio" && <ChannelStudio />}
@@ -83,3 +85,4 @@ export default function AITools() {
     </div>
   );
 }
+

@@ -138,7 +138,7 @@ export default function ThumbnailStudio() {
 
   useEffect(() => {
     if (!manualCreation && projects[0] && (!draft.projectId || !projects.some((project) => String(project.id) === draft.projectId))) {
-      const requestedProject = projects.find((p) => String(p.id) === searchParams.get('project'));
+      const requestedProject = projects.find((p) => String(p.id) === (searchParams.get('project') || searchParams.get('project_id')));
       const sameTitle = projects.find((project) => (project.titulo || project.title) === draft.title);
       selectProject(String((requestedProject || sameTitle || projects[0]).id));
     }
@@ -368,7 +368,7 @@ export default function ThumbnailStudio() {
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-[.2em] text-sky-400">Thumbnail Studio</p><h1 className="mt-1 text-3xl font-extrabold text-white">Criar Thumbs</h1><p className="mt-1 text-sm text-slate-400">Crie capas conectadas ao planejamento e ao acervo do MediaMind.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[.2em] text-sky-400">Thumbnail Studio</p><h1 className="mt-1 text-3xl font-extrabold text-white">Criar Thumbs</h1><p className="mt-1 text-sm text-slate-400">Crie capas conectadas ao planejamento e ao acervo do MediaMind.</p><p className="mt-1 text-xs text-emerald-300">Editor integrado · recorte local no navegador · versão 09/10</p><Link to={`/ferramentas-ia?tool=thumbnail-variants${searchParams.get('project') || searchParams.get('project_id') ? `&project_id=${encodeURIComponent(searchParams.get('project') || searchParams.get('project_id'))}` : ''}`} className="mt-2 inline-flex text-xs font-bold text-sky-300">Abrir gerador de 3 variações</Link></div>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setProgramPickerOpen(true)} className="w2-button bg-sky-500 text-slate-950 hover:bg-sky-400" aria-label="Nova thumb"><Plus size={16} /> Nova thumb</button><button type="button" onClick={() => setGuideOpen(true)} className="w2-button"><BookOpen size={16} /> Ver guia do padrão</button></div>
       </header>
 
@@ -451,3 +451,4 @@ export default function ThumbnailStudio() {
     </div>
   );
 }
+
