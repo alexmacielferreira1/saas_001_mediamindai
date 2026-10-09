@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+
 vi.mock('../lib/producaoStore', () => ({ useProducaoProjetos: () => [] }));
 vi.mock('../lib/creativeToolsApi', () => ({
   listCreativeDocuments: vi.fn().mockResolvedValue([]),
@@ -13,10 +15,10 @@ vi.mock('../lib/creativeToolsApi', () => ({
 import AITools from './AITools';
 
 describe('AITools', () => {
-  it('renders all eleven tools and opens the carousel editor', async () => {
+  it('renders all thirteen tools and opens the carousel editor', async () => {
     render(<MemoryRouter initialEntries={['/ferramentas-ia?tool=carousel']}><AITools /></MemoryRouter>);
     expect(screen.getByRole('heading', { name: 'Ferramentas IA' })).toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(11);
+    expect(screen.getAllByRole('tab')).toHaveLength(13);
     expect(await screen.findByRole('heading', { name: 'Carrossel IA' })).toBeInTheDocument();
     expect(screen.getByLabelText('Título do carrossel')).toBeInTheDocument();
   });
@@ -28,8 +30,9 @@ describe('AITools', () => {
     expect(screen.queryByRole('button', { name: /executar/i })).not.toBeInTheDocument();
   });
 
-  it('links thumbnails to the existing real editor', async () => {
+  it('opens a separate thumbnail studio while preserving the original editor link', async () => {
     render(<MemoryRouter initialEntries={['/ferramentas-ia?tool=thumbnails']}><AITools /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: /Remover fundo com IA/ })).toBeDisabled();
     expect(await screen.findByRole('link', { name: 'Abrir editor de Thumbnails' })).toHaveAttribute('href', '/thumbnails');
   });
 });

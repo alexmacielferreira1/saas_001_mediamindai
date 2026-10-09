@@ -35,7 +35,7 @@ export function removeConnectedBackground(data, width, height, tolerance = 48) {
 }
 
 export async function createLocalCutout(file) {
-  const blob = await removeThumbnailBackground(file);
+  const blob = await removePersonBackground(file);
   return URL.createObjectURL(blob);
 }
-import { removeThumbnailBackground } from '@/api/media';
+import { removePersonBackground } from './personSegmentation';
