@@ -1,0 +1,11 @@
+import { cp, mkdir, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
+const require = createRequire(import.meta.url);
+const source = resolve(dirname(require.resolve('@mediapipe/tasks-vision')), 'wasm');
+const destination = new URL('../public/vision/wasm/', import.meta.url);
+await mkdir(destination, { recursive: true });
+await cp(source, destination, { recursive: true });
+const model = await readFile(new URL('../public/models/selfie_segmenter.tflite', import.meta.url));
+if (model.length < 100000 || model.toString('ascii', 4, 8) !== 'TFL3') throw new Error('Modelo de recorte ausente ou inválido.');
+console.log('Recorte: motor WASM e modelo disponíveis no próprio frontend.');

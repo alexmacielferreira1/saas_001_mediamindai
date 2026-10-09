@@ -1,10 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render as renderComponent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PromoVideoStudio from "./PromoVideoStudio";
 import ExistingWorkflowTool from "./ExistingWorkflowTool";
 import AnimatedStudio from "./AnimatedStudio";
 import CarouselStudio from "../carousel/CarouselStudio";
 vi.mock("../../lib/producaoStore", () => ({ useProducaoProjetos: () => [] }));
+
+const render = (ui) => renderComponent(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe("creative studios without a backend", () => {
   beforeEach(() => {

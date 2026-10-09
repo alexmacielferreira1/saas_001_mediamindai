@@ -7,12 +7,12 @@ async function getSegmenter() {
         "@mediapipe/tasks-vision"
       );
       const files = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm",
+        `${import.meta.env.BASE_URL}vision/wasm`,
       );
       return ImageSegmenter.createFromOptions(files, {
         baseOptions: {
           modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
+            `${import.meta.env.BASE_URL}models/selfie_segmenter.tflite`,
         },
         runningMode: "IMAGE",
         outputConfidenceMasks: true,
@@ -46,10 +46,11 @@ export async function removePersonBackground(file) {
       canvas.width = Math.max(1, Math.round(img.naturalWidth * ratio));
       canvas.height = Math.max(1, Math.round(img.naturalHeight * ratio));
       const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Seu navegador não disponibilizou o processamento de imagem.");
       context.drawImage(img, 0, 0, canvas.width, canvas.height);
       const model = await getSegmenter();
       model.segment(canvas, (result) => {
-        const masks = result.confidenceMasks;
+        const masks = result.confidenceMasks || [];
         // Selfie model has one mask: probability of a person (rather than two category masks).
         const mask = masks[masks.length === 1 ? 0 : 1];
         if (!mask) throw new Error("Não foi possível identificar a pessoa.");
@@ -58,6 +59,7 @@ export async function removePersonBackground(file) {
         mc.width = mask.width;
         mc.height = mask.height;
         const cx = mc.getContext("2d");
+        if (!cx) throw new Error("Falha ao preparar a máscara de recorte.");
         const data = cx.createImageData(mc.width, mc.height);
         for (let i = 0; i < values.length; i++) data.data[i * 4 + 3] = 255;
         applyPersonMask(data.data, values);

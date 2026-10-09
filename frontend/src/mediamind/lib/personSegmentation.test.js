@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyPersonMask } from "./personSegmentation";
 describe("person mask alpha", () => {
   it("removes background and preserves both RGB and source transparency", () => {
@@ -17,5 +17,71 @@ describe("person mask alpha", () => {
         [-1, 2],
       ),
     ]).toEqual([1, 2, 3, 0, 4, 5, 6, 255]);
+  });
+});
+
+
+// Exercises the entire cutout pipeline, including the model adapter and canvas
+// composition. The WASM model itself is replaced, so these are regression tests,
+// not a claim about segmentation quality for an arbitrary photograph.
+const adapter = vi.hoisted(() => ({ resolve: vi.fn(), create: vi.fn() }));
+vi.mock('@mediapipe/tasks-vision', () => ({
+  FilesetResolver: { forVisionTasks: adapter.resolve },
+  ImageSegmenter: { createFromOptions: adapter.create },
+}));
+
+describe('local background removal pipeline', () => {
+  let contexts;
+  let model;
+  beforeEach(() => {
+    vi.resetModules();
+    contexts = [];
+    model = { segment: vi.fn((_image, callback) => callback({ confidenceMasks: [{ width: 2, height: 1, getAsFloat32Array: () => new Float32Array([0, 1]) }] })) };
+    adapter.resolve.mockReset().mockResolvedValue({});
+    adapter.create.mockReset().mockResolvedValue(model);
+    vi.stubGlobal('Image', class {
+      naturalWidth = 800; naturalHeight = 600;
+      decode() { return Promise.resolve(); }
+    });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:source');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      const context = { drawImage: vi.fn(), putImageData: vi.fn(), createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) };
+      contexts.push(context); return context;
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['cutout'], { type: 'image/png' })));
+    vi.stubGlobal('fetch', vi.fn(() => { throw new Error('No backend requests allowed'); }));
+  });
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it('loads local model assets, composes transparent PNG and never calls the API', async () => {
+    const { removePersonBackground } = await import('./personSegmentation');
+    const output = await removePersonBackground(new Blob(['photo'], { type: 'image/jpeg' }));
+    expect(output.type).toBe('image/png');
+    expect(adapter.resolve).toHaveBeenCalledWith('/vision/wasm');
+    expect(adapter.create.mock.calls[0][1].baseOptions.modelAssetPath).toBe('/models/selfie_segmenter.tflite');
+    expect([...contexts[1].putImageData.mock.calls[0][0].data]).toEqual([0, 0, 0, 0, 0, 0, 0, 255]);
+    expect(contexts[0].drawImage).toHaveBeenCalledTimes(2);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:source');
+  });
+  it('rejects a missing person instead of returning the original as a successful cutout', async () => {
+    model.segment.mockImplementation((_image, cb) => cb({ confidenceMasks: [] }));
+    const { removePersonBackground } = await import('./personSegmentation');
+    await expect(removePersonBackground(new Blob(['photo']))).rejects.toThrow('identificar a pessoa');
+    expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled();
+  });
+  it('allows another attempt after the model fails to initialize', async () => {
+    adapter.create.mockRejectedValueOnce(new Error('model unavailable'));
+    const { removePersonBackground } = await import('./personSegmentation');
+    await expect(removePersonBackground(new Blob(['photo']))).rejects.toThrow('model unavailable');
+    await expect(removePersonBackground(new Blob(['photo']))).resolves.toBeInstanceOf(Blob);
+    expect(adapter.create).toHaveBeenCalledTimes(2);
+  });
+  it('reports failed PNG encoding and releases the original URL', async () => {
+    HTMLCanvasElement.prototype.toBlob.mockImplementation(cb => cb(null));
+    const { removePersonBackground } = await import('./personSegmentation');
+    await expect(removePersonBackground(new Blob(['photo']))).rejects.toThrow('Falha ao criar PNG');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:source');
   });
 });

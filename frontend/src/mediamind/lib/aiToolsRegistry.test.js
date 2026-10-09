@@ -4,11 +4,11 @@ import { AI_TOOLS, getAITool } from './aiToolsRegistry';
 describe('aiToolsRegistry', () => {
   it('exposes the tools including narration and channels with stable unique ids', () => {
     expect(AI_TOOLS.map((tool) => tool.id)).toEqual([
-      'thumbnails', 'carousel', 'frames', 'auto-clips', 'video-studio',
+      'thumbnails', 'thumbnail-variants', 'carousel', 'frames', 'auto-clips', 'video-studio',
       'speech-montage', 'sales-videos', 'affiliate-videos', 'trend-radar',
       'animated-videos', 'voice-studio', 'channel-studio', 'ai-dubbing',
     ]);
-    expect(new Set(AI_TOOLS.map((tool) => tool.id))).toHaveLength(13);
+    expect(new Set(AI_TOOLS.map((tool) => tool.id))).toHaveLength(14);
   });
 
   it('distinguishes native, integrated and planned entry points', () => {
@@ -17,6 +17,6 @@ describe('aiToolsRegistry', () => {
     expect(AI_TOOLS.filter((tool) => tool.status === 'integrated').map((tool) => tool.id)).toEqual([
       'auto-clips', 'video-studio', 'speech-montage',
     ]);
-    expect(AI_TOOLS.filter((tool) => tool.status === 'planned')).toHaveLength(3);
+    expect(AI_TOOLS.filter((tool) => tool.status === 'workspace')).toHaveLength(3);
   });
 });

@@ -1,0 +1,9 @@
+{
+  "release": "2026-10-09-frontend-completo-recorte-local",
+  "source_zip_commit": "192289e4df3b405ba8978983315e84bab90f5520",
+  "features": [
+    "simers-thumbnails",
+    "local-person-cutout",
+    "creative-tools-ui"
+  ]
+}

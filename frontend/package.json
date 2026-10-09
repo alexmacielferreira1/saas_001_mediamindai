@@ -12,7 +12,9 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prebuild": "node scripts/prepare-person-segmentation.mjs",
+    "predev": "node scripts/prepare-person-segmentation.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
