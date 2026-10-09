@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { safeSourceUrl } from "../../lib/creativeToolDocuments";
+import StudioProjectBar from "./StudioProjectBar";
+import { useEffect, useRef, useState } from "react";
 import { Scissors, Film, ListPlus, Upload } from "lucide-react";
 import VideoWorkspace, { makeScenes } from "./VideoWorkspace";
 import {
@@ -22,19 +24,17 @@ export default function ExistingWorkflowTool({ toolId }) {
     [message, setMessage] = useState(""),
     [source, setSource] = useState(null),
     [marked, setMarked] = useState([]);
+  const [sourceLink, setSourceLink] = useState(""), [duration, setDuration] = useState(30), [captions, setCaptions] = useState(true), [sourceFiles, setSourceFiles] = useState([]);
+  const sourceUrls = useRef(new Set());
+  useEffect(() => () => sourceUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
   const lines = text.split(/\n+/).filter((s) => s.trim());
-  useEffect(
-    () => () => {
-      if (source) URL.revokeObjectURL(source);
-    },
-    [source],
-  );
+
   function build() {
     if (!text.trim()) {
       setMessage("Cole sua transcrição ou carregue um exemplo para começar.");
       return;
     }
-    setScenes(makeScenes(text).slice(0, clips ? Number(count) : 100));
+    setScenes(makeScenes(text).slice(0, clips ? Number(count) : 100).map((scene, i) => ({ ...scene, duration: clips ? duration : scene.duration, ...(sourceFiles[i] ? { media: sourceFiles[i].url, mediaType: "video", mediaName: sourceFiles[i].name } : {}) })));
     setMessage(
       clips
         ? "Seleção inicial criada por ordem da transcrição. Revise os trechos: não há análise automática de relevância ou timestamps nesta prévia."
@@ -71,6 +71,7 @@ export default function ExistingWorkflowTool({ toolId }) {
           }}
         />
       </StudioHeader>
+      <StudioProjectBar tool={toolId} value={{ text, scenes, format, count, source, marked, sourceLink, duration, captions, sourceFiles }} onLoad={(v) => { setText(v.text || ""); setScenes(Array.isArray(v.scenes) ? v.scenes : []); setFormat(v.format || "9:16"); setCount(v.count || "3"); setSource(v.source || null); setMarked(Array.isArray(v.marked) ? v.marked : []); setSourceLink(v.sourceLink || ""); setDuration(Number(v.duration) || 30); setCaptions(v.captions !== false); setSourceFiles(Array.isArray(v.sourceFiles) ? v.sourceFiles : []); }} />
       <Notice>{message}</Notice>
       <div className="grid items-start gap-5 xl:grid-cols-[310px_minmax(0,1fr)]">
         <aside className="space-y-4">
@@ -86,8 +87,13 @@ export default function ExistingWorkflowTool({ toolId }) {
               >
                 <option>9:16</option>
                 <option>16:9</option>
+                <option>1:1</option>
               </select>
             </Field>
+            <Field label="Link da fonte (opcional)"><input className={inputClass} value={sourceLink} onChange={(e) => setSourceLink(e.target.value)} placeholder="https://youtube.com/..." />{safeSourceUrl(sourceLink) && <a className="block text-xs text-sky-300" href={safeSourceUrl(sourceLink)} target="_blank" rel="noreferrer">Abrir fonte para consulta ↗</a>}<p className="text-xs text-slate-500">O link fica como referência; o vídeo precisa ser enviado como arquivo. Não há download automático nesta tela.</p></Field>
+            <Field label="Vídeos de origem em lote"><input type="file" multiple accept="video/*" onChange={(e) => { const files = [...e.target.files].filter((file) => file.type.startsWith('video/')).map((file) => { const url = URL.createObjectURL(file); sourceUrls.current.add(url); return { id: crypto.randomUUID(), name: file.name, url }; }); setSourceFiles((list) => [...list,...files]); e.target.value = ''; }} />{sourceFiles.map((file) => <div key={file.id} className="flex items-center gap-2 text-xs text-slate-300"><span className="flex-1 truncate">{file.name}</span><Button onClick={() => setSource(file.url)}>Ver</Button><Button onClick={() => setSourceFiles((list) => list.filter((f) => f.id !== file.id))}>Remover</Button></div>)}</Field>
+            {clips && <Field label="Duração inicial de cada trecho (s)"><input type="number" min="5" max="300" className={inputClass} value={duration} onChange={(e) => setDuration(Math.max(5,Math.min(300,Number(e.target.value)||5)))} /></Field>}
+            <label className="flex gap-2 text-xs text-slate-300"><input type="checkbox" checked={captions} onChange={(e) => setCaptions(e.target.checked)} />Mostrar legendas na prévia</label>
             <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-600 p-4 text-xs text-sky-300">
               <Upload size={16} />
               Carregar vídeo de referência
@@ -98,8 +104,9 @@ export default function ExistingWorkflowTool({ toolId }) {
                 onChange={(e) => {
                   const f = e.target.files[0];
                   if (f) {
-                    if (source) URL.revokeObjectURL(source);
-                    setSource(URL.createObjectURL(f));
+                    const url = URL.createObjectURL(f);
+                    sourceUrls.current.add(url);
+                    setSource(url);
                   }
                 }}
               />
@@ -196,6 +203,7 @@ export default function ExistingWorkflowTool({ toolId }) {
             scenes={scenes}
             setScenes={setScenes}
             format={format}
+            showText={captions}
           />
           {clips && scenes.length > 0 && (
             <Panel title="Revisão dos trechos">
@@ -226,3 +234,4 @@ export default function ExistingWorkflowTool({ toolId }) {
     </section>
   );
 }
+

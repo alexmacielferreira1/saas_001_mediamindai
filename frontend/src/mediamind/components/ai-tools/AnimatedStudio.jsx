@@ -1,3 +1,5 @@
+import { parseSceneLines } from "../../lib/creativeToolDocuments";
+import StudioProjectBar from "./StudioProjectBar";
 import { useEffect, useState } from "react";
 import { Play, Pause } from "lucide-react";
 import {
@@ -9,14 +11,7 @@ import {
   ExportDraft,
   inputClass,
 } from "./StudioUI";
-const tags = [
-  "Apresentação",
-  "Ideia",
-  "Conquista",
-  "Dúvida",
-  "Trabalho",
-  "Conexão",
-];
+const tags = ["Apresentação", "Ideia", "Conquista", "Dúvida", "Trabalho", "Conexão", "celular", "comida", "crescimento", "desânimo", "dinheiro", "escada", "escalada", "escritório", "fuga", "montanha", "pensando", "porta", "queda", "tempo"];
 export default function AnimatedStudio() {
   const [text, setText] = useState(
       "Uma ideia pode mudar o seu próximo passo.\nComece pequeno e avance todos os dias.\nCompartilhe o que você aprendeu.",
@@ -57,10 +52,11 @@ export default function AnimatedStudio() {
           name="mediamind-animacao.json"
         />
       </StudioHeader>
+      <StudioProjectBar tool="animated-videos" value={{ text, scenes, format, color, fps }} onLoad={(v) => { setText(v.text || ""); setScenes(Array.isArray(v.scenes) ? v.scenes : []); setFormat(v.format || "9:16"); setColor(v.color || "#38bdf8"); setFps(v.fps || "24"); setSelected(0); setPlaying(false); }} />
       <div className="grid items-start gap-5 xl:grid-cols-[310px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <Panel title="Roteiro por cenas" number="01">
-            <Field label="Uma frase por linha">
+            <Field label="Uma frase por linha · [cena] opcional">
               <textarea
                 className={inputClass}
                 rows={8}
@@ -68,18 +64,13 @@ export default function AnimatedStudio() {
                 onChange={(e) => setText(e.target.value)}
               />
             </Field>
+            <p className="text-xs text-slate-500">Ex.: [ideia] Comece pequeno. As etiquetas definem a direção visual; a ilustração da prévia ainda usa o personagem-base.</p>
             <Button
+              disabled={!text.trim()}
               primary
               onClick={() => {
                 setScenes(
-                  text
-                    .split("\n")
-                    .filter((t) => t.trim())
-                    .map((text, i) => ({
-                      id: crypto.randomUUID(),
-                      text,
-                      tag: tags[i % tags.length],
-                    })),
+                  parseSceneLines(text).map((scene) => ({ id: crypto.randomUUID(), ...scene })),
                 );
                 setSelected(0);
                 setPlaying(false);
@@ -231,3 +222,4 @@ export default function AnimatedStudio() {
     </section>
   );
 }
+

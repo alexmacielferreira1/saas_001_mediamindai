@@ -103,3 +103,4 @@ export function readImage(file) {
     r.readAsDataURL(file);
   });
 }
+

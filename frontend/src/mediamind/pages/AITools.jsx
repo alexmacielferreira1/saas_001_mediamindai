@@ -8,6 +8,9 @@ import ChannelStudio from "../components/ai-tools/ChannelStudio";
 import CarouselStudio from "../components/carousel/CarouselStudio";
 import ExistingWorkflowTool from "../components/ai-tools/ExistingWorkflowTool";
 import PromoVideoStudio from "../components/ai-tools/PromoVideoStudio";
+import FramesStudio from "../components/ai-tools/FramesStudio";
+import TrendStudio from "../components/ai-tools/TrendStudio";
+import DubbingStudio from "../components/ai-tools/DubbingStudio";
 import { AI_TOOLS, getAITool } from "../lib/aiToolsRegistry";
 
 export default function AITools() {
@@ -50,7 +53,7 @@ export default function AITools() {
             className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold ${selected.id === tool.id ? "border-sky-400 bg-sky-500 text-slate-950" : "border-slate-800 bg-slate-900 text-slate-300"}`}
           >
             {tool.label}
-            {tool.status === "planned" ? " · em breve" : ""}
+            {tool.status === "planned" ? " · em breve" : tool.status === "workspace" ? " · preparação" : ""}
           </button>
         ))}
       </div>
@@ -63,6 +66,9 @@ export default function AITools() {
         {selected.id === "animated-videos" && <AnimatedStudio />}
         {selected.id === "voice-studio" && <VoiceStudio />}
         {selected.id === "channel-studio" && <ChannelStudio />}
+        {selected.id === "frames" && <FramesStudio />}
+        {selected.id === "trend-radar" && <TrendStudio />}
+        {selected.id === "ai-dubbing" && <DubbingStudio />}
         {selected.status === "integrated" && (
           <ExistingWorkflowTool key={selected.id} toolId={selected.id} />
         )}
@@ -85,4 +91,5 @@ export default function AITools() {
     </div>
   );
 }
+
 

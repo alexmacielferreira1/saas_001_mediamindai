@@ -38,6 +38,9 @@ export default function VideoWorkspace({
     [elapsed, setElapsed] = useState(0);
   const mediaUrls = useRef(new Set());
   const stageVideo = useRef(null);
+  const narrationRef = useRef(null), musicRef = useRef(null);
+  const [uploadNotice, setUploadNotice] = useState('');
+  const audio = scenes[0]?.audioTrack || {};
   const current = scenes[Math.min(selected, Math.max(0, scenes.length - 1))];
   const total = scenes.reduce((s, c) => s + Number(c.duration), 0);
   useEffect(() => {
@@ -71,6 +74,26 @@ export default function VideoWorkspace({
     () => () => mediaUrls.current.forEach((url) => URL.revokeObjectURL(url)),
     [],
   );
+  useEffect(() => {
+    for (const [node, volume] of [[narrationRef.current, 1], [musicRef.current, (audio.volume ?? 20) / 100]]) {
+      if (!node) continue;
+      node.volume = volume;
+      if (playing) node.play().catch(() => {}); else node.pause();
+    }
+  }, [playing, audio.narration, audio.music, audio.volume]);
+  function patchAudio(key, value) { setScenes((list) => list.map((scene, i) => i === 0 ? { ...scene, audioTrack: { ...scene.audioTrack, [key]: value } } : scene)); }
+  function attachAudio(file, key) { if (!file?.type.startsWith('audio/')) return; const url = URL.createObjectURL(file); mediaUrls.current.add(url); patchAudio(key, url); }
+  function uploadMany(files) {
+    const valid = [...files].filter((file) => /^(image|video)\//.test(file.type));
+    if (!valid.length) { setUploadNotice('Escolha imagens ou vídeos.'); return; }
+    const media = valid.map((file) => { const url = URL.createObjectURL(file); mediaUrls.current.add(url); return { media: url, mediaType: file.type.startsWith('video') ? 'video' : 'image', mediaName: file.name }; });
+    setScenes((list) => {
+      const result = [...list];
+      media.forEach((item, index) => { const i = selected + index; if (result[i]) result[i] = { ...result[i], ...item }; else result.push({ ...makeScenes(item.mediaName)[0], ...item }); });
+      return result;
+    });
+    setUploadNotice(`${media.length} mídias distribuídas nas cenas a partir da seleção atual.`);
+  }
   function patch(key, value) {
     setScenes((list) =>
       list.map((s, i) => (i === selected ? { ...s, [key]: value } : s)),
@@ -104,6 +127,13 @@ export default function VideoWorkspace({
   }
   return (
     <div className="space-y-4">
+      <Panel title="Mídias, narração e música">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-dashed border-slate-600 p-4" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); uploadMany(event.dataTransfer.files); }}><label className="text-sm text-sky-300">Enviar imagens / vídeos em lote<input aria-label="Mídias em lote" className="mt-2 block w-full text-xs" type="file" multiple accept="image/*,video/*" onChange={(event) => { uploadMany(event.target.files); event.target.value = ''; }} /></label><p className="mt-2 text-xs text-slate-500">Arquivos são distribuídos a partir da cena selecionada. Você pode reordenar depois.</p></div>
+          <Field label="Arquivo de narração"><input type="file" accept="audio/*" disabled={!scenes.length} onChange={(event) => attachAudio(event.target.files[0], 'narration')} />{audio.narration && <><audio ref={narrationRef} controls src={audio.narration} className="w-full" /><Button onClick={() => patchAudio('narration', null)}>Remover narração</Button></>}</Field>
+          <Field label="Música de fundo"><input type="file" accept="audio/*" disabled={!scenes.length} onChange={(event) => attachAudio(event.target.files[0], 'music')} />{audio.music && <><audio ref={musicRef} controls loop src={audio.music} className="w-full" /><label className="block text-xs">Volume · {audio.volume ?? 20}%<input aria-label="Volume da música" className="w-full" type="range" min="0" max="100" value={audio.volume ?? 20} onChange={(event) => patchAudio('volume', +event.target.value)} /></label><Button onClick={() => patchAudio('music', null)}>Remover música</Button></>}</Field>
+        </div>{uploadNotice && <p role="status" className="text-xs text-sky-300">{uploadNotice}</p>}
+      </Panel>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_250px]">
         <div className="rounded-2xl border border-slate-800 bg-black/40 p-4">
           <div className="mb-4 flex justify-between text-[10px] font-bold tracking-widest text-slate-500">
@@ -113,7 +143,7 @@ export default function VideoWorkspace({
             </span>
           </div>
           <div
-            className={`relative mx-auto flex w-full items-center justify-center overflow-hidden rounded-xl ${format === "9:16" ? "aspect-[9/16] max-w-[280px]" : "aspect-video"}`}
+            className={`relative mx-auto flex w-full items-center justify-center overflow-hidden rounded-xl ${format === "9:16" ? "aspect-[9/16] max-w-[280px]" : format === "1:1" ? "aspect-square max-w-[480px]" : "aspect-video"}`}
             style={{
               background: `radial-gradient(ellipse at top right,${accent}44,${current?.color || "#0f172a"} 70%)`,
             }}
@@ -126,13 +156,13 @@ export default function VideoWorkspace({
                 muted
                 playsInline
                 loop
-                className="absolute inset-0 h-full w-full object-cover"
+                className={`absolute inset-0 h-full w-full ${current?.fit === 'contain' ? 'object-contain' : 'object-cover'}`}
               />
             ) : current?.media ? (
               <img
                 src={current.media}
                 alt="Mídia da cena"
-                className="absolute inset-0 h-full w-full object-cover"
+                className={`absolute inset-0 h-full w-full ${current?.fit === 'contain' ? 'object-contain' : 'object-cover'}`}
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center opacity-10">
@@ -143,12 +173,12 @@ export default function VideoWorkspace({
             <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-black/30 px-3 py-1 text-[9px] font-bold tracking-widest text-white">
               MEDIAMIND
             </div>
-            <div className="relative mt-auto w-full p-6 pb-12">
+            <div className={`relative w-full p-6 ${current?.captionPosition === 'top' ? 'self-start pt-12' : current?.captionPosition === 'center' ? 'self-center' : 'mt-auto pb-12'}`}>
               <div
                 className="mb-4 h-1 w-10 rounded"
                 style={{ background: accent }}
               />
-              <p className="whitespace-pre-wrap break-words text-xl font-black leading-tight text-white">
+              <p className={`whitespace-pre-wrap break-words font-black leading-tight ${current?.captionStyle === 'Impacto' ? 'text-yellow-300' : 'text-white'} ${current?.captionStyle === 'Caixa' ? 'rounded-lg bg-black/70 p-3' : ''}`} style={{ fontSize: `${current?.captionSize || 20}px` }}>
                 {showText
                   ? current?.text || "Crie suas cenas para começar"
                   : ""}
@@ -214,6 +244,10 @@ export default function VideoWorkspace({
                   }
                 />
               </Field>
+              <Field label="Enquadramento da mídia"><select className={inputClass} value={current.fit || 'cover'} onChange={(e) => patch('fit', e.target.value)}><option value="cover">Preencher e cortar sobras</option><option value="contain">Mostrar mídia inteira</option></select></Field>
+              <Field label="Estilo da legenda"><select className={inputClass} value={current.captionStyle || 'Clássica'} onChange={(e) => patch('captionStyle', e.target.value)}>{['Clássica', 'Impacto', 'Caixa'].map((style) => <option key={style}>{style}</option>)}</select></Field>
+              <Field label="Posição da legenda"><select className={inputClass} value={current.captionPosition || 'bottom'} onChange={(e) => patch('captionPosition', e.target.value)}><option value="bottom">Inferior</option><option value="center">Centro</option><option value="top">Superior</option></select></Field>
+              <Field label="Tamanho da legenda na prévia"><input type="range" min="12" max="42" value={current.captionSize || 20} onChange={(e) => patch('captionSize', +e.target.value)} /></Field>
               <Field label="Cor de fundo">
                 <input
                   type="color"
@@ -325,3 +359,4 @@ export default function VideoWorkspace({
     </div>
   );
 }
+

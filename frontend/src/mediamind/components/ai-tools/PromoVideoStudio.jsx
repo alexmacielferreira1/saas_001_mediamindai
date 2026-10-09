@@ -1,3 +1,4 @@
+import StudioProjectBar from "./StudioProjectBar";
 import { useEffect, useState } from "react";
 import { Film, Wand2 } from "lucide-react";
 import {
@@ -107,6 +108,7 @@ export default function PromoVideoStudio({ affiliate = false }) {
           name="mediamind-video-promocional.json"
         />
       </StudioHeader>
+      <StudioProjectBar tool={affiliate ? "affiliate-videos" : "sales-videos"} value={{ brief, script, scenes, audio, music, volume }} onLoad={(v) => { setBrief((b) => ({ ...b, ...v.brief })); setScript(v.script || ""); setScenes(Array.isArray(v.scenes) ? v.scenes : []); setAudio(v.audio || null); setMusic(v.music || null); setVolume(v.volume ?? 25); }} />
       <Notice>{message}</Notice>
       <div className="grid items-start gap-5 xl:grid-cols-[310px_minmax(0,1fr)]">
         <aside className="space-y-4">
@@ -302,3 +304,4 @@ export default function PromoVideoStudio({ affiliate = false }) {
     </section>
   );
 }
+

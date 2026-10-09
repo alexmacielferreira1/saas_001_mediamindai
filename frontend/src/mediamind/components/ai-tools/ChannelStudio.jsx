@@ -1,3 +1,4 @@
+import StudioProjectBar from "./StudioProjectBar";
 import { useState } from "react";
 import {
   Button,
@@ -38,6 +39,7 @@ export default function ChannelStudio() {
           name="mediamind-canal.json"
         />
       </StudioHeader>
+      <StudioProjectBar tool="channel-studio" value={{ brief, script, scenes }} onLoad={(v) => { setBrief((b) => ({ ...b, ...v.brief })); setScript(v.script || ""); setScenes(Array.isArray(v.scenes) ? v.scenes : []); }} />
       <Notice>{message}</Notice>
       <div className="grid gap-5 xl:grid-cols-[310px_minmax(0,1fr)]">
         <Panel title="Briefing do vídeo">
@@ -142,3 +144,4 @@ export default function ChannelStudio() {
     </section>
   );
 }
+

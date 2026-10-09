@@ -1,3 +1,4 @@
+import StudioProjectBar from "./StudioProjectBar";
 import { useEffect, useState } from "react";
 import { Play, Square } from "lucide-react";
 import {
@@ -20,15 +21,18 @@ export default function VoiceStudio() {
     [speaking, setSpeaking] = useState(false),
     [message, setMessage] = useState("");
   useEffect(() => {
-    if (!window.speechSynthesis) return;
-    const update = () => setVoices(window.speechSynthesis.getVoices());
+    const synthesis = window.speechSynthesis;
+    if (!synthesis) return;
+    const update = () => setVoices(synthesis.getVoices());
     update();
-    window.speechSynthesis.addEventListener("voiceschanged", update);
+    synthesis.addEventListener("voiceschanged", update);
     return () => {
-      window.speechSynthesis.removeEventListener("voiceschanged", update);
-      window.speechSynthesis.cancel();
+      synthesis.removeEventListener("voiceschanged", update);
+      synthesis.cancel();
     };
   }, []);
+  const [tab, setTab] = useState("texto"), [favorites, setFavorites] = useState([]), [history, setHistory] = useState([]), [sample, setSample] = useState(null), [consent, setConsent] = useState(false);
+  useEffect(() => () => { if (sample?.url?.startsWith("blob:")) URL.revokeObjectURL(sample.url); }, [sample]);
   const available = voices.filter((v) => v.lang.startsWith("pt"));
   const list = available.length ? available : voices;
   function preview() {
@@ -49,6 +53,7 @@ export default function VoiceStudio() {
         "Não foi possível reproduzir esta voz. Tente outra voz do navegador.",
       );
     };
+    setHistory((items) => [{ id: crypto.randomUUID(), text, voice: speech.voice?.name || "Padrão", date: new Date().toLocaleString("pt-BR"), speed, pitch }, ...items].slice(0,30));
     setSpeaking(true);
     window.speechSynthesis.speak(speech);
   }
@@ -63,7 +68,13 @@ export default function VoiceStudio() {
           name="mediamind-narracao.json"
         />
       </StudioHeader>
+      <StudioProjectBar tool="voice-studio" value={{ text, voice, speed, pitch, favorites, history, sample }} onLoad={(v) => { setText(v.text || ""); setVoice(v.voice || ""); setSpeed(Number(v.speed) || 1); setPitch(Number(v.pitch) || 1); setFavorites(Array.isArray(v.favorites) ? v.favorites : []); setHistory(Array.isArray(v.history) ? v.history : []); setSample(v.sample || null); }} />
       <Notice>{message}</Notice>
+      <div role="tablist" aria-label="Estúdio de voz" className="flex flex-wrap gap-2">{[['texto','Texto e voz'],['vozes','Vozes favoritas'],['historico','Histórico de prévias'],['referencia','Referência de voz']].map(([id,label]) => <button role="tab" aria-selected={tab === id} key={id} onClick={() => setTab(id)} className={`rounded-xl border px-4 py-2 text-sm ${tab === id ? 'border-sky-400 bg-sky-500/10 text-sky-300' : 'border-slate-700 text-slate-400'}`}>{label}</button>)}</div>
+      {tab === 'vozes' && <Panel title="Catálogo do dispositivo"><div className="grid gap-3 md:grid-cols-3">{list.map((v) => <div key={v.voiceURI} className="space-y-2 rounded-xl border border-slate-700 p-4"><strong className="text-sm text-white">{v.name}</strong><p className="text-xs text-slate-500">{v.lang} · {v.localService ? 'Voz do dispositivo' : 'Serviço do navegador'}</p><Button primary={voice === v.voiceURI} onClick={() => { setVoice(v.voiceURI); setTab('texto'); }}>Selecionar voz</Button><Button onClick={() => setFavorites((items) => items.includes(v.voiceURI) ? items.filter((i) => i !== v.voiceURI) : [...items,v.voiceURI])}>{favorites.includes(v.voiceURI) ? '★ Favorita' : '☆ Favoritar'}</Button></div>)}</div>{!list.length && <p className="text-sm text-slate-500">Nenhuma voz foi disponibilizada por este navegador.</p>}</Panel>}
+      {tab === 'historico' && <Panel title="Histórico de prévias">{history.map((item) => <div key={item.id} className="mb-3 rounded-xl border border-slate-700 p-4"><p className="text-xs text-sky-300">{item.voice} · {item.date}</p><p className="my-2 line-clamp-3 text-sm text-slate-300">{item.text}</p><Button onClick={() => { setText(item.text); setSpeed(item.speed); setPitch(item.pitch); setTab('texto'); }}>Reutilizar texto e parâmetros</Button></div>)}{!history.length && <p className="text-sm text-slate-500">As prévias ouvidas aparecem aqui. São registros de texto e parâmetros, não arquivos de áudio.</p>}</Panel>}
+      {tab === 'referencia' && <Panel title="Amostra para direção de voz"><input aria-label="Amostra de voz" type="file" accept="audio/*" onChange={(e) => { const f = e.target.files[0]; if (f?.type.startsWith('audio/')) setSample({name:f.name,url:URL.createObjectURL(f)}); }} />{sample && <audio className="w-full" controls src={sample.url} />}<label className="flex gap-2 text-sm text-slate-300"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />Tenho autorização para usar esta amostra de voz.</label><p className="text-sm text-slate-400">A amostra pode ser ouvida e salva no projeto como referência. Clonagem e síntese com a amostra dependem de um provedor integrado.</p><Button disabled>Clonar voz · motor não conectado</Button></Panel>}
+      {tab === 'texto' && <>
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Panel title="Texto da narração">
           <textarea
@@ -78,6 +89,7 @@ export default function VoiceStudio() {
               ~{Math.ceil(text.trim().split(/\s+/).length / 2.5)}s de leitura
             </span>
           </div>
+          <Button onClick={() => setText((t) => t.replace(/[ \t]+/g, " ").replace(/ +\n/g, "\n").trim())}>Normalizar espaços do texto</Button>
           <div className="flex gap-3">
             <Button primary disabled={!text.trim()} onClick={preview}>
               <Play size={16} />
@@ -151,7 +163,8 @@ export default function VoiceStudio() {
           </p>
           <Button disabled>Baixar MP3 / WAV</Button>
         </Panel>
-      </div>
+      </div></>}
     </section>
   );
 }
+
