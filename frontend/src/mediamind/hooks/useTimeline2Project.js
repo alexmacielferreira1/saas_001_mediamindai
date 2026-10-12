@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWorkDraftState, useWorkStorageKey } from '../lib/workProtection';
 
 const HISTORY_LIMIT = 100;
 
@@ -12,7 +13,8 @@ function readSaved(storageKey, fallback) {
 }
 
 export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_project') {
-  const [state, setState] = useState(() => ({ past: [], present: readSaved(storageKey, initialDocument), future: [] }));
+  storageKey = useWorkStorageKey(storageKey);
+  const [state, setState] = useWorkDraftState(`timeline:${storageKey}`, () => ({ past: [], present: readSaved(storageKey, initialDocument), future: [] }));
   const gestureStartRef = useRef(null);
 
   useEffect(() => {

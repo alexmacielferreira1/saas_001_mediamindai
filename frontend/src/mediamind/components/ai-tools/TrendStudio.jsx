@@ -1,10 +1,11 @@
+import { useWorkDraftState } from "../../lib/workProtection";
 import { useState } from 'react';
 import { Button, Field, Panel, StudioHeader, Notice, inputClass } from './StudioUI';
 import StudioProjectBar from './StudioProjectBar';
 import { safeSourceUrl } from '../../lib/creativeToolDocuments';
 const blank = { niche: '', channel: '', platform: 'YouTube', url: '', views: '', observed: '', why: '', difficulty: 'Intermediário' };
 export default function TrendStudio() {
-  const [items, setItems] = useState([]), [draft, setDraft] = useState(blank), [search, setSearch] = useState(''), [platform, setPlatform] = useState('Todas'), [savedOnly, setSavedOnly] = useState(false), [message, setMessage] = useState('');
+  const [items, setItems] = useWorkDraftState("components/ai-tools/TrendStudio.jsx:items", []), [draft, setDraft] = useWorkDraftState("components/ai-tools/TrendStudio.jsx:draft", blank), [search, setSearch] = useState(''), [platform, setPlatform] = useState('Todas'), [savedOnly, setSavedOnly] = useState(false), [message, setMessage] = useState('');
   const patch = (key, value) => setDraft((d) => ({ ...d, [key]: value }));
   function add() { if (!draft.niche.trim() || !safeSourceUrl(draft.url) || !draft.observed) { setMessage('Informe nicho, link válido da fonte e data da observação.'); return; } setItems((list) => [{ ...draft, url: safeSourceUrl(draft.url), id: crypto.randomUUID(), saved: false }, ...list]); setDraft(blank); setMessage('Referência adicionada. Os números são os que você informou; não foram consultados automaticamente.'); }
   const visible = items.filter((item) => (!savedOnly || item.saved) && (platform === 'Todas' || item.platform === platform) && `${item.niche} ${item.channel} ${item.why}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));

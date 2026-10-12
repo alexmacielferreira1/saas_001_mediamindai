@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useWorkDraftState, useWorkDraftExists } from '../../lib/workProtection';
 import { X, ArrowRight, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MOCK_CORP_PRODUCTIONS } from '../../data';
 
@@ -57,10 +58,11 @@ const FIELD_KEYS = Object.keys(fieldsOf({}));
 // poder adicionar mais. Edits vão pro Rascunho; Salvar commita. ‹ Atual | Rascunho ›.
 export default function AgendaEventDetail({ event, onClose, onNavigate, onUpdate }) {
   const [mode, setMode] = useState('rascunho');
-  const [draft, setDraft] = useState(() => fieldsOf(event));
+  const hasRecoveredDraft = useWorkDraftExists(`agenda:${event.id}:draft`);
+  const [draft, setDraft] = useWorkDraftState(`agenda:${event.id}:draft`, () => fieldsOf(event));
 
   useEffect(() => {
-    setDraft(fieldsOf(event));
+    if (!hasRecoveredDraft) setDraft(fieldsOf(event));
     setMode('rascunho');
   }, [event.id]);
 

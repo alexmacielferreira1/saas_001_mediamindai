@@ -57,17 +57,20 @@ async def upload_file(
     tenant_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{uuid4()}{suffix}"
     destination = tenant_dir / stored_name
+    temporary = tenant_dir / f".{stored_name}.part"
     size = 0
     digest = sha256()
     try:
-        with destination.open("wb") as output:
+        with temporary.open("wb") as output:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
                 if size > MAX_UPLOAD_BYTES:
                     raise PublicError(413, "FILE_TOO_LARGE", "Arquivo excede o limite permitido.")
                 digest.update(chunk)
                 output.write(chunk)
+        temporary.replace(destination)
     except Exception:
+        temporary.unlink(missing_ok=True)
         destination.unlink(missing_ok=True)
         raise
     finally:

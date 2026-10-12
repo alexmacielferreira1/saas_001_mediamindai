@@ -1,22 +1,41 @@
+import { useWorkDraftState } from "../lib/workProtection";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  BookOpen, CheckCircle2, ChevronDown, ChevronUp, Download, ImagePlus, Info, Layers3, Plus, Upload, UserPlus, X,
+  BookOpen, CheckCircle2, Download, ImagePlus, Info, Layers3, Plus, Save, Upload, UserPlus, X,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { listMediaAssets, uploadMediaAsset, resolveMediaUrl } from '@/api/media';
 import { useProducaoProjetos, mergePersistedProject } from '../lib/producaoStore';
 import {
-  DEFAULT_COLORS, SIMERS_PRESETS, SIMERS_PROGRAMS, createThumbnailDraft, presetFor, validateSimersDraft, normalizePerson, projectPeople, PROGRAM_LOGOS, restoreThumbnailStyle,
+  DEFAULT_COLORS, SIMERS_PRESETS, SIMERS_PROGRAMS, createThumbnailDraft, presetFor, validateSimersDraft, normalizePerson, projectPeople, PROGRAM_LOGOS, restoreThumbnailStyle, personNameFromFilename,
 } from '../lib/thumbnailStudio';
 import { exportThumbnailElement, thumbnailBlob } from '../lib/thumbnailExport';
 import { createLocalCutout } from '../lib/thumbnailImage';
+import { thumbnailLayers } from '../lib/thumbnailRenderer';
 import ThumbnailCanvas from '../components/thumbnails/ThumbnailCanvas';
 import ThumbnailTools from '../components/thumbnails/ThumbnailTools';
 import ThumbnailAISettings from '../components/thumbnails/ThumbnailAISettings';
+import CarouselStudio from '../components/carousel/CarouselStudio';
 import { listSavedThumbnails, saveThumbnailVersion, markProjectThumbnail } from '../lib/thumbnailPersistence';
 
-const TABS = ['Padrão SIMERS', 'Usar Referência', 'Criação Livre', 'Outros Templates'];
+const TABS = ['Padrão SIMERS', 'Criação Livre', 'Usar Referência', 'Meus modelos', 'Outros'];
+const SIMERS_MODEL_CATEGORIES = [
+  { id: 'thumbs', label: 'Thumbs' },
+  { id: 'single', label: 'Artes individuais' },
+  { id: 'carousel', label: 'Carrosséis' },
+];
+const SINGLE_ART_MODELS = [
+  { name: 'Lima institucional', image: 1, title: 'Médicos aprovam Convenção Coletiva de Trabalho com o Sindiberf', description: '', colors: { background: '#E3FF91', text: '#073B3B', accent: '#073B3B' } },
+  { name: 'Turquesa institucional', image: 2, title: 'Simers se reúne com diretoria do Hospital Estrela para tratar do atendimento psiquiátrico', description: '', colors: { background: '#62D7C4', text: '#071B45', accent: '#071B45' } },
+  { name: 'Lima escuro', image: 3, title: 'Nova Santa Rita: equipe do Simers faz visita a unidades de saúde', description: '', colors: { background: '#063B36', text: '#E3FF91', accent: '#E3FF91' } },
+  { name: 'Verde profundo', image: 5, title: 'Canoas: Simers visita HNSG e se atualiza sobre avanço das reformas', description: '', colors: { background: '#00483F', text: '#00BD78', accent: '#00BD78' } },
+  { name: 'Verde notícia', image: 6, title: 'Eleição tem 20 médicos candidatos à Câmara dos Deputados e à Assembleia Legislativa', description: '', colors: { background: '#063B36', text: '#DDFF86', accent: '#DDFF86' } },
+];
+const CAROUSEL_MODELS = [
+  { name: 'Giro da Semana', image: '/reference/giro-semana-capa.png', source: '/reference/giro-semana-capa.png', title: 'Giro de notícias da semana', description: '03 a 09 de outubro', colors: { background: '#003B3B', text: '#FFFBEA', accent: '#00BD78' } },
+  { name: 'Saúde em ondas', image: '/reference/carousel-saude-capa.png', source: '/reference/carousel-saude-capa.png', title: 'Saúde mental merece atenção', description: 'Cuidar da mente também é cuidar da sua vida.', colors: { background: '#F7F3E8', text: '#073B3D', accent: '#008B8B' } },
+];
 
 function Field({ label, children }) {
   return <div className="block text-xs font-bold text-slate-300"><span className="mb-1.5 block">{label}</span>{children}</div>;
@@ -29,9 +48,11 @@ function fileUrl(file) {
 }
 
 function createThumbSession(project, program) {
+  const draft = createThumbnailDraft(program ? { programa: program } : (project || {}));
+  draft.pieceType = (project || program) ? 'thumb' : 'blank';
   return {
     id: `thumb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    draft: createThumbnailDraft(program ? { programa: program } : project),
+    draft,
     tab: TABS[0],
     formats: { horizontal: true, vertical: true },
     manualCreation: Boolean(program),
@@ -48,12 +69,13 @@ export default function ThumbnailStudio() {
   const [personSearch, setPersonSearch] = useState('');
   const [savedThumbs, setSavedThumbs] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [editFormat, setEditFormat] = useState('horizontal');
-  const [selectedLayer, setSelectedLayer] = useState('');
+  const [editFormat, setEditFormat] = useWorkDraftState("pages/ThumbnailStudio.jsx:editFormat", 'horizontal');
+  const [showGuides, setShowGuides] = useWorkDraftState("pages/ThumbnailStudio.jsx:showGuides", true);
+  const [selectedLayer, setSelectedLayer] = useWorkDraftState("pages/ThumbnailStudio.jsx:selectedLayer", '');
   const history = useRef(new Map());
   const redoHistory = useRef(new Map());
   const photoVersions = useRef(new Map());
-  const [targetPerson, setTargetPerson] = useState('');
+  const [targetPerson, setTargetPerson] = useWorkDraftState("pages/ThumbnailStudio.jsx:targetPerson", '');
   const [catalogProjects, setCatalogProjects] = useState([]);
   const [scripts, setScripts] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -69,10 +91,16 @@ export default function ThumbnailStudio() {
     }).map((p) => ({ ...p, id: p._entityId || p.id }));
   }, [productionProjects, catalogProjects]);
   const projectKey = useMemo(() => projects.map((project) => String(project.id)).join('|'), [projects]);
-  const [thumbs, setThumbs] = useState(() => [createThumbSession(productionProjects[0])]);
-  const [activeId, setActiveId] = useState(() => null);
+  const [thumbs, setThumbs] = useWorkDraftState("pages/ThumbnailStudio.jsx:thumbs", () => [createThumbSession(productionProjects[0])]);
+  const [activeId, setActiveId] = useWorkDraftState("pages/ThumbnailStudio.jsx:activeId", () => null);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [programPickerOpen, setProgramPickerOpen] = useState(false);
+  const [modesOpen, setModesOpen] = useState(true);
+  const [modelCategory, setModelCategory] = useState('thumbs');
+  const [customCategories, setCustomCategories] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mm-simers-art-categories') || '[]'); } catch { return []; }
+  });
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState('');
   const horizontalRef = useRef(null);
@@ -112,6 +140,60 @@ export default function ThumbnailStudio() {
   function setManualCreation(value) { updateActive({ manualCreation: value }); }
   function setReferenceUrl(value) { updateActive({ referenceUrl: value }); }
   function setOrientation(value) { updateActive({ orientation: value }); }
+
+  function applyCreativeModel(model, category) {
+    const targetType = category === 'Carrossel' ? 'carousel' : 'single';
+    if (targetType === 'carousel') {
+      const template = model.name === 'Giro da Semana' ? 'giro' : 'health';
+      updateActive({ artTemplate: template });
+      setDraft((current) => ({
+        ...current,
+        pieceType: 'carousel',
+        modelName: model.name,
+        modelCategory: category,
+        title: model.title,
+        highlight: model.title,
+      }));
+      setNotice(`${model.name} aberto neste trabalho.`);
+      return;
+    }
+    updateActive({ artTemplate: '' });
+    setDraft((current) => ({
+      ...(current.pieceType === targetType ? current : createThumbnailDraft()),
+      pieceType: targetType,
+      program: '',
+      programLogo: '',
+      modelName: model.name,
+      modelCategory: category,
+      modelColors: { ...model.colors },
+      colors: { ...DEFAULT_COLORS, ...model.colors },
+      title: model.title || '',
+      highlight: model.title || '',
+      description: model.description || '',
+      artReferenceUrl: targetType === 'single' ? `/reference/arte-unica-${model.image}.png` : model.source || model.image || '',
+      layouts: {},
+    }));
+    setFormats(category === 'Carrossel' ? { horizontal: false, vertical: true } : { horizontal: false, vertical: true });
+    setEditFormat('vertical');
+    setNotice(`${model.name} aplicado. Todos os elementos continuam editáveis.`);
+  }
+
+  function addModelCategory() {
+    const name = categoryName.trim();
+    if (!name) return;
+    const item = { id: `custom-${Date.now()}`, label: name };
+    const next = [...customCategories, item];
+    setCustomCategories(next);
+    localStorage.setItem('mm-simers-art-categories', JSON.stringify(next));
+    setModelCategory(item.id); setCategoryName(''); setAddingCategory(false);
+  }
+
+  function restoreCurrentPattern() {
+    setDraft((current) => current.modelColors
+      ? { ...restoreThumbnailStyle(current), colors: { ...current.colors, ...current.modelColors }, layouts: {} }
+      : restoreThumbnailStyle(current));
+    setNotice('Padrão original restaurado.');
+  }
 
   useEffect(() => {
     let live = true;
@@ -154,7 +236,15 @@ export default function ThumbnailStudio() {
     return !assetProject || assetProject === draft.projectId;
   });
   const preset = presetFor(draft.program);
-  const validation = validateSimersDraft(draft);
+  const validation = draft.pieceType === 'thumb' || draft.program
+    ? validateSimersDraft(draft)
+    : draft.pieceType !== 'blank' && !(draft.highlight || draft.title || '').trim()
+      ? ['Informe a chamada da arte.']
+      : [];
+  const modelDrafts = useMemo(() => Object.fromEntries(SIMERS_PROGRAMS.map((name) => {
+    const item = createThumbnailDraft({ programa: name, titulo: name === 'Anamnese' ? 'CIÊNCIA, ENSINO E INOVAÇÃO' : 'NOVA CHAMADA DO PROGRAMA', episodio: 'EP. 000' });
+    return [name, { ...item, highlight: item.title || 'NOVA CHAMADA DO PROGRAMA' }];
+  })), []);
 
   function selectProject(projectId) {
     if (!projectId) {
@@ -191,8 +281,7 @@ export default function ThumbnailStudio() {
     if (targetPerson) { await replacePersonPhoto(targetPerson, file); return; }
     if (!file) return;
     const id = `manual-photo-${Date.now()}`;
-    const fallbackName = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim() || 'Nova pessoa';
-    const name = fallbackName.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+    const name = personNameFromFilename(file.name);
     const originalPhoto = fileUrl(file);
     setDraft((current) => ({
       ...current,
@@ -235,21 +324,23 @@ export default function ThumbnailStudio() {
 
   function applyProgram(program) {
     const colors = presetFor(program);
-    setDraft((current) => ({ ...current, program, programLogo: PROGRAM_LOGOS[program] || '', colors: colors?.defined ? { ...DEFAULT_COLORS, ...colors } : { ...DEFAULT_COLORS } }));
+    updateActive({ artTemplate: '' });
+    setDraft((current) => ({ ...(current.pieceType === 'thumb' ? current : createThumbnailDraft()), pieceType: 'thumb', program, modelName: '', modelCategory: 'Thumb', modelColors: null, programLogo: PROGRAM_LOGOS[program] || '', colors: colors?.defined ? { ...DEFAULT_COLORS, ...colors } : { ...DEFAULT_COLORS } }));
+    setFormats({ horizontal: true, vertical: true });
+    setEditFormat('horizontal');
+    setSelectedLayer('');
   }
 
-  function startNewThumb(program) {
+  function startNewThumb(program, creationTab = TABS[0]) {
     const next = createThumbSession(null, program);
+    next.tab = creationTab;
     setThumbs((items) => [...items.map((item) => ({ ...item, expanded: false })), next]);
     setActiveId(next.id);
     setNotice('');
-    setProgramPickerOpen(false);
   }
 
   function toggleThumb(id) {
-    setThumbs((items) => items.map((item) => item.id === id
-      ? { ...item, expanded: !item.expanded }
-      : { ...item, expanded: false }));
+    setThumbs((items) => items.map((item) => ({ ...item, expanded: item.id === id })));
     setActiveId(id);
     setNotice('');
   }
@@ -367,43 +458,58 @@ export default function ThumbnailStudio() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-[.2em] text-sky-400">Thumbnail Studio</p><h1 className="mt-1 text-3xl font-extrabold text-white">Criar Thumbs</h1><p className="mt-1 text-sm text-slate-400">Crie capas conectadas ao planejamento e ao acervo do MediaMind.</p><p className="mt-1 text-xs text-emerald-300">Editor integrado · recorte local no navegador · versão 09/10</p><Link to={`/ferramentas-ia?tool=thumbnail-variants${searchParams.get('project') || searchParams.get('project_id') ? `&project_id=${encodeURIComponent(searchParams.get('project') || searchParams.get('project_id'))}` : ''}`} className="mt-2 inline-flex text-xs font-bold text-sky-300">Abrir gerador de 3 variações</Link></div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setProgramPickerOpen(true)} className="w2-button bg-sky-500 text-slate-950 hover:bg-sky-400" aria-label="Nova thumb"><Plus size={16} /> Nova thumb</button><button type="button" onClick={() => setGuideOpen(true)} className="w2-button"><BookOpen size={16} /> Ver guia do padrão</button></div>
+      <header className="space-y-3 border-b border-slate-800 bg-slate-950/30 px-1 pb-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div role="tablist" aria-label="Artes abertas" className="flex min-w-[260px] flex-1 items-center gap-2 overflow-x-auto">
+            {thumbs.map((item, index) => { const typeLabel = item.draft.pieceType === 'thumb' || item.draft.program ? 'Thumb' : 'Arte'; const fallback = `${typeLabel} ${index + 1}`; return <button key={item.id} type="button" role="tab" aria-selected={item.id === activeThumb?.id} aria-label={`Abrir ${item.draft.highlight || item.draft.title || fallback}`} onClick={() => toggleThumb(item.id)} className={`flex min-w-[130px] max-w-[210px] items-center gap-2 rounded-lg border px-3 py-2 text-left ${item.id === activeThumb?.id ? 'border-sky-400 bg-sky-950/50 text-white' : 'border-slate-800 bg-slate-900/60 text-slate-400'}`}><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[10px] font-black" style={{ background: item.draft.colors?.background, color: item.draft.colors?.text }}>{String(index + 1).padStart(2, '0')}</span><span className="min-w-0"><strong className="block truncate text-xs">{fallback}</strong><small className="block truncate text-[10px] opacity-70">{item.draft.program || item.draft.modelName || 'Sem modelo'}</small></span></button>; })}
+            <button type="button" onClick={() => startNewThumb('', 'Padrão SIMERS')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-dashed border-slate-700 text-sky-300" aria-label="Adicionar outra arte"><Plus size={16} /></button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-end justify-end gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button type="button" disabled={saving || exporting} onClick={() => saveThumb(true)} className="w2-button disabled:opacity-40"><Save size={16} /> {saving ? 'Salvando…' : 'Salvar versão'}</button>
+          </div>
+        </div>
       </header>
 
-      <section aria-label="Thumbs em criação" className="space-y-2">
-        <div className="flex items-center justify-between"><h2 className="text-sm font-extrabold text-white">Thumbs em criação</h2><span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-300">{thumbs.length}</span></div>
-        {thumbs.map((item, index) => {
-          const label = item.draft.highlight || item.draft.title || `Thumb ${String(index + 1).padStart(2, '0')}`;
-          return <article key={item.id} className={`overflow-hidden rounded-2xl border transition ${item.expanded ? 'border-sky-500 bg-sky-950/20' : 'border-slate-800 bg-slate-900/60'}`}>
-            <button type="button" onClick={() => toggleThumb(item.id)} aria-expanded={item.expanded} aria-label={`${item.expanded ? 'Recolher' : 'Expandir'} ${label}`} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-black" style={{ background: item.draft.colors?.background, color: item.draft.colors?.text }}>{String(index + 1).padStart(2, '0')}</span>
-              <span className="min-w-0 flex-1"><strong className="block truncate text-sm text-white">{label}</strong><small className="block truncate text-slate-400">{item.draft.program || 'Programa não escolhido'} · {item.formats.horizontal && item.formats.vertical ? '2 formatos' : '1 formato'}</small></span>
-              {item.expanded ? <ChevronUp size={18} className="text-sky-300" /> : <ChevronDown size={18} className="text-slate-400" />}
-            </button>
-          </article>;
-        })}
-      </section>
+      {activeThumb?.expanded && <><div className="border-b border-slate-800 bg-[#081421]"><button type="button" aria-expanded={modesOpen} onClick={() => setModesOpen((value) => !value)} className="flex w-full items-center justify-between px-5 py-2 text-xs font-bold text-slate-300"><span>Modo: {tab}</span><span>{modesOpen ? 'Recolher ▴' : 'Expandir ▾'}</span></button>{modesOpen && <div role="tablist" aria-label="Modos de criação" className="grid border-t border-slate-800 sm:grid-cols-5">
+        {TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`px-4 py-3 text-sm font-bold transition ${tab === item ? 'border-b-2 border-cyan-400 bg-cyan-950/40 text-cyan-200' : 'border-b-2 border-transparent text-slate-400 hover:bg-slate-900 hover:text-white'}`}>{item}</button>)}
+      </div>}</div>
 
-      {activeThumb?.expanded && <><div role="tablist" aria-label="Modos de criação" className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-1.5">
-        {TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition ${tab === item ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{item}</button>)}
-      </div>
+      {modesOpen && tab === 'Padrão SIMERS' && <section aria-label="Modelos SIMERS para thumbs" className="mm-panel">
+        <div className="flex items-end justify-between gap-3"><div><h2 className="text-sm font-extrabold text-white">Modelos SIMERS</h2><p className="mt-1 text-xs text-slate-400">Primeiro escolha o tipo de peça; depois escolha o modelo. Nada é substituído fora da arte ativa.</p></div><button type="button" onClick={() => setGuideOpen(true)} className="text-xs font-bold text-sky-300">Ver guia</button></div>
+        <div role="tablist" aria-label="Categorias de modelos SIMERS" className="mt-3 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+          {[...SIMERS_MODEL_CATEGORIES, ...customCategories].map((category) => <button key={category.id} type="button" role="tab" aria-selected={modelCategory === category.id} onClick={() => setModelCategory(category.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${modelCategory === category.id ? 'border-cyan-400 bg-cyan-950/50 text-cyan-200' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}>{category.label}</button>)}
+          <button type="button" onClick={() => setAddingCategory(true)} className="rounded-lg border border-dashed border-slate-600 px-3 py-2 text-xs font-bold text-slate-300">+ Categoria</button>
+        </div>
+        {addingCategory && <div className="mt-3 flex max-w-xl gap-2"><input aria-label="Nome da nova categoria" autoFocus className={control} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addModelCategory(); if (event.key === 'Escape') setAddingCategory(false); }} placeholder="Nome da categoria" /><button type="button" onClick={addModelCategory} className="w2-button bg-cyan-500 text-slate-950">Adicionar</button><button type="button" onClick={() => setAddingCategory(false)} className="w2-button">Cancelar</button></div>}
+        {modelCategory === 'thumbs' && <div className="mt-3 flex flex-wrap gap-3 pb-2">{SIMERS_PROGRAMS.map((name) => { const selected = draft.program === name; return <button type="button" key={name} aria-label={`Aplicar modelo ${name}`} onClick={() => applyProgram(name)} className={`w-44 shrink-0 overflow-hidden rounded-xl border bg-slate-950 p-1 text-left transition ${selected ? 'border-sky-400 ring-2 ring-sky-400/20' : 'border-slate-700 hover:border-slate-500'}`}><ThumbnailCanvas draft={modelDrafts[name]} format="horizontal" simers /><span className="block truncate px-2 py-2 text-[10px] font-bold text-slate-200">{name}</span></button>; })}</div>}
+        {modelCategory === 'single' && <div className="mt-3 flex flex-wrap gap-3 pb-2">{SINGLE_ART_MODELS.map((model) => <button type="button" key={model.name} aria-label={`Aplicar modelo ${model.name}`} onClick={() => applyCreativeModel(model, 'Arte individual')} className={`w-28 shrink-0 overflow-hidden rounded-xl border bg-slate-950 p-1 text-left transition ${draft.modelName === model.name ? 'border-cyan-400 ring-2 ring-cyan-400/20' : 'border-slate-700 hover:border-slate-500'}`}><img src={`/reference/arte-unica-${model.image}.png`} alt="" className="aspect-[4/5] w-full rounded-lg object-cover object-top" /><span className="block truncate px-2 py-2 text-[10px] font-bold text-slate-200">{model.name}</span></button>)}</div>}
+        {modelCategory === 'carousel' && <div className="mt-3 flex flex-wrap gap-3 pb-2">{CAROUSEL_MODELS.map((model) => <button type="button" key={model.name} aria-label={`Aplicar modelo ${model.name}`} onClick={() => applyCreativeModel(model, 'Carrossel')} className={`w-28 shrink-0 overflow-hidden rounded-xl border bg-slate-950 p-1 text-left transition ${draft.modelName === model.name ? 'border-cyan-400 ring-2 ring-cyan-400/20' : 'border-slate-700 hover:border-slate-500'}`}><img src={model.image} alt="" className="aspect-[4/5] w-full rounded-lg object-cover object-top" /><span className="block truncate px-2 py-2 text-[10px] font-bold text-slate-200">{model.name}</span></button>)}</div>}
+        {modelCategory.startsWith('custom-') && <div className="mt-3 grid min-h-36 place-items-center rounded-xl border border-dashed border-slate-700 text-center"><div><Layers3 className="mx-auto text-slate-600" size={32} /><p className="mt-2 text-sm font-bold text-slate-300">Categoria pronta para receber modelos</p><p className="mt-1 text-xs text-slate-500">Os modelos cadastrados nesta categoria aparecerão aqui.</p></div></div>}
+      </section>}
 
-      {tab === 'Outros Templates' ? (
+      {activeThumb?.artTemplate ? (
+        <CarouselStudio
+          key={`${activeThumb.id}-${activeThumb.artTemplate}`}
+          projectId={draft.projectId || null}
+          initialMode="single"
+          initialTemplate={activeThumb.artTemplate}
+          embedded
+        />
+      ) : modesOpen && tab === 'Meus modelos' ? (
         <section className="mm-panel grid min-h-[420px] place-items-center text-center"><div><Layers3 className="mx-auto text-slate-600" size={48} /><h2 className="mt-4 text-xl font-bold">Nenhum outro template funcional cadastrado</h2><p className="mx-auto mt-2 max-w-lg text-sm text-slate-400">Quando novos canais ou clientes tiverem presets aprovados, eles aparecerão aqui. Use Criação Livre ou Usar Referência agora.</p></div></section>
-      ) : (
+      ) : modesOpen && tab === 'Outros' ? <section className="mm-panel grid min-h-[280px] place-items-center text-center"><div><Layers3 className="mx-auto text-slate-600" size={42} /><h2 className="mt-3 text-lg font-bold">Outras identidades</h2><p className="mt-2 max-w-lg text-sm text-slate-400">Modelos de outros canais e clientes aparecerão aqui quando forem cadastrados. Para criar agora, use Criação Livre.</p></div></section> : (
         <div className="grid gap-4 xl:grid-cols-[minmax(280px,330px)_minmax(480px,1fr)_minmax(260px,310px)]">
           <aside className="space-y-4">
             <section className="mm-panel space-y-3">
-              <div className="flex items-center justify-between"><h2 className="font-bold">Dados da thumb</h2>{loading && <span className="text-[10px] text-sky-300">Carregando…</span>}</div>
-              <Field label="Programa"><select aria-label="Programa" className={control} value={draft.program} onChange={(event) => applyProgram(event.target.value)}><option value="">Selecione</option>{[...new Set([draft.program, ...SIMERS_PROGRAMS].filter(Boolean))].map((program) => <option key={program}>{program}</option>)}</select></Field>
-              <Field label={manualCreation ? 'Conteúdo fonte (opcional)' : 'Projeto'}><select aria-label="Projeto" className={control} value={draft.projectId} onChange={(event) => selectProject(event.target.value)}><option value="">Preencher manualmente</option>{sourceProjects.map((project) => <option key={project.id} value={String(project.id)}>{project.titulo || project.title || `Projeto ${project.id}`}</option>)}</select></Field>
+              <div className="flex items-center justify-between"><h2 className="font-bold">Dados da arte</h2>{loading && <span className="text-[10px] text-sky-300">Carregando…</span>}</div>
+              {draft.modelName ? <Field label="Modelo"><div className="flex gap-2"><input aria-label="Modelo" className={control} value={draft.modelName} onChange={(event) => setDraft((current) => ({ ...current, modelName: event.target.value }))} /><button type="button" onClick={restoreCurrentPattern} className="w2-button shrink-0">Restaurar padrão</button></div><small className="mt-1 block font-normal text-slate-500">{draft.modelCategory}</small></Field> : draft.pieceType === 'blank' ? <div className="rounded-xl border border-dashed border-cyan-800 bg-cyan-950/20 p-3 text-xs text-slate-300"><strong className="block text-cyan-200">Arte sem modelo</strong><span className="mt-1 block text-slate-500">Escolha uma categoria e um modelo acima, ou use Criação Livre.</span></div> : <Field label="Programa / modelo"><select aria-label="Programa" className={control} value={draft.program} onChange={(event) => applyProgram(event.target.value)}><option value="">Selecione</option>{[...new Set([draft.program, ...SIMERS_PROGRAMS].filter(Boolean))].map((program) => <option key={program}>{program}</option>)}</select></Field>}
               {tab === 'Padrão SIMERS' && preset?.defined && <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><div className="flex items-center justify-between"><strong className="text-xs">Padrão aplicado</strong><span className="text-[10px] text-emerald-300">SIMERS</span></div><div className="mt-3 grid grid-cols-3 gap-2">{[['Fundo', draft.colors.background], ['Texto', draft.colors.text], ['Destaque', draft.colors.accent]].map(([name, color]) => <div key={name}><span className="block h-7 rounded-lg border border-white/10" style={{ background: color }} /><small className="mt-1 block text-[9px] text-slate-500">{name}<br/>{color}</small></div>)}</div><p className="mt-3 text-[10px] text-slate-500">Chamada: {draft.style?.headlineFont || 'Anton'} · nomes: {draft.style?.bodyFont || 'Montserrat'}</p></div>}
               {draft.program && !preset?.defined && <p className="rounded-xl border border-amber-700/60 bg-amber-950/30 p-3 text-xs text-amber-200">{draft.program === 'No Front' ? 'O padrão de No Front ainda não está definido. Use Criação Livre ou uma referência aprovada.' : `${draft.program} não possui preset SIMERS aprovado nesta tela. Nenhuma paleta de outro programa será aplicada.`}</p>}
-              {!draft.programLogo && <p className="text-xs text-amber-200">Logo oficial deste programa não fornecido. Envie-o em Fontes, cores e efeitos.</p>}
+              {(draft.pieceType === 'thumb' || draft.program) && !draft.programLogo && <p className="text-xs text-amber-200">Logo oficial deste programa não fornecido. Envie-o em Fontes, cores e efeitos.</p>}
               <Field label="Episódio"><input aria-label="Episódio" className={control} value={draft.episode} onChange={(event) => update('episode', event.target.value)} /></Field>
-              <Field label="Chamada da thumb"><textarea aria-label="Chamada da thumb" rows={3} className={control} value={draft.highlight ?? draft.title} onChange={(event) => update('highlight', event.target.value)} /></Field>
+              <Field label={draft.pieceType === 'thumb' ? 'Chamada da thumb' : 'Chamada da arte'}><textarea aria-label={draft.pieceType === 'thumb' ? 'Chamada da thumb' : 'Chamada da arte'} rows={3} className={control} value={draft.highlight ?? draft.title} onChange={(event) => update('highlight', event.target.value)} /></Field>
               <Field label="Descrição / contexto"><textarea aria-label="Descrição / contexto" rows={3} className={control} value={draft.description} onChange={(event) => update('description', event.target.value)} /></Field>
               {tab === 'Usar Referência' && <Field label="Imagem de referência"><input aria-label="Imagem de referência" type="file" accept="image/*" className={control} onChange={(event) => setReferenceUrl(fileUrl(event.target.files?.[0]))} /></Field>}
               {tab === 'Criação Livre' && <Field label="Orientação da composição"><textarea aria-label="Orientação da composição" rows={3} className={control} value={orientation} onChange={(event) => setOrientation(event.target.value)} placeholder="Ex.: pessoa à direita, chamada curta e alto contraste" /></Field>}
@@ -417,38 +523,45 @@ export default function ThumbnailStudio() {
               {draft.people.map((person) => <div key={person.id} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3"><div className="flex gap-3"><label className="grid h-12 w-12 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-full bg-slate-800 text-xs font-bold text-slate-400">{person.photo ? <img src={person.photo} alt="" className="h-full w-full object-cover grayscale" /> : <Upload size={16} />}<input type="file" accept="image/*" className="hidden" aria-label={`Trocar foto de ${person.name}`} onChange={(event) => { replacePersonPhoto(person.id, event.target.files?.[0]); event.target.value = ''; }} /></label><div className="min-w-0 flex-1"><input aria-label={`Nome de ${person.name}`} className="w-full bg-transparent text-sm font-bold outline-none" value={person.name} onChange={(event) => updatePerson(person.id, { name: event.target.value })} /><input aria-label={`Papel de ${person.name}`} className="mt-1 w-full bg-transparent text-xs text-slate-500 outline-none" value={person.role} onChange={(event) => updatePerson(person.id, { role: event.target.value })} />{person.cutoutStatus === 'processing' && <small className="mt-1 block text-sky-300">Recortando fundo…</small>}{person.cutoutStatus === 'failed' && <small className="mt-1 block text-amber-300">{person.cutoutError || 'Recorte indisponível; foto original preservada.'}</small>}{person.cutoutPhoto && person.originalPhoto && <button type="button" className="mt-1 text-[10px] font-bold text-sky-300" onClick={() => updatePerson(person.id, person.useOriginal ? { photo: person.cutoutPhoto, useOriginal: false } : { photo: person.originalPhoto, useOriginal: true })}>{person.useOriginal ? 'Usar recorte automático' : 'Comparar com foto original'}</button>}</div></div><div className="mt-2 flex flex-wrap gap-2"><button type="button" className="text-xs text-sky-300" onClick={() => registerPerson(person)}>Cadastrar pessoa</button>{person.originalPhoto && <button type="button" disabled={person.cutoutStatus === 'processing'} className="text-xs text-sky-300 disabled:opacity-40" onClick={() => retryPhoto(person)}>{person.cutoutStatus === 'failed' ? 'Tentar recorte novamente' : 'Remover fundo com IA'}</button>}<button type="button" className="text-xs text-slate-400" onClick={() => setDraft((d) => { const list = [...d.people]; const i = list.findIndex((p) => p.id === person.id); if (i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]]; return { ...d, people: list }; })}>Mover antes</button><button type="button" className="text-xs text-rose-300" onClick={() => { photoVersions.current.delete(person.id); setDraft((d) => ({ ...d, people: d.people.filter((p) => p.id !== person.id) })); }}>Remover da capa</button></div><div className="mt-3 flex gap-4 text-xs"><label><input type="checkbox" checked={person.visible} onChange={(event) => updatePerson(person.id, { visible: event.target.checked })} /> <span className="ml-1">Aparecer</span></label><label><input type="checkbox" checked={person.showName} onChange={(event) => updatePerson(person.id, { showName: event.target.checked })} /> <span className="ml-1">Mostrar nome</span></label></div></div>)}
               {!draft.people.length && <p className="text-xs text-slate-500">Nenhuma pessoa associada. Adicione manualmente se necessário.</p>}
             </section>
-            <ThumbnailTools draft={draft} format={editFormat} setFormat={setEditFormat} selectedLayer={selectedLayer} onSelect={setSelectedLayer} onLayoutChange={changeLayout} onPersonChange={updatePerson} onStyleChange={(patch) => setDraft((d) => ({ ...d, style: { ...d.style, ...patch } }))} onColorsChange={(patch) => setDraft((d) => ({ ...d, colors: { ...d.colors, ...patch } }))} onRestore={(format) => setDraft((d) => restoreThumbnailStyle(d, format))} onUndo={() => undo()} onRedo={() => undo(true)} onSaveProjectStyle={saveProjectStyle} onLogoUpload={(field, file) => { if (file) update(field, fileUrl(file)); }} />
+            <section className="mm-panel"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">Fotos dos participantes</h2><label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-sky-800 px-2.5 py-1.5 text-[11px] font-bold text-sky-300"><ImagePlus size={14} /> Enviar foto<input type="file" accept="image/*" className="hidden" aria-label="Adicionar foto local" onChange={(event) => { addPhoto(event.target.files?.[0]); event.target.value = ''; }} /></label></div><div className="mt-3 grid grid-cols-2 gap-2">{[...draft.photos, ...relatedAssets.filter((asset) => !draft.photos.some((photo) => photo.id === String(asset.id))).map((asset) => ({ id: String(asset.id), name: asset.title || asset.filename || 'Imagem', url: resolveMediaUrl(asset.stream_url || asset.file_url || ''), selected: false, source: 'Acervo' }))].map((photo) => <button type="button" key={photo.id} onClick={() => useAssetPhoto(photo)} className={`overflow-hidden rounded-xl border text-left ${photo.selected ? 'border-sky-400' : 'border-slate-800'}`}><div className="aspect-video bg-slate-950">{photo.url && <img src={photo.url} alt="" className="h-full w-full object-cover" />}</div><span className="block truncate p-2 text-[10px]">{photo.name}</span></button>)}</div>{!relatedAssets.length && !draft.photos.length && <p className="mt-3 text-xs text-slate-500">Nenhuma imagem relacionada encontrada.</p>}</section>
           </aside>
 
           <main className="space-y-4">
+            <section className="mm-panel flex flex-wrap items-end gap-3">
+              <div className="min-w-[240px] flex-1"><span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">Projeto / episódio</span><select aria-label="Projeto" className={control} value={draft.projectId} onChange={(event) => selectProject(event.target.value)}><option value="">Preencher manualmente</option>{sourceProjects.map((project) => <option key={project.id} value={String(project.id)}>{project.titulo || project.title || `Projeto ${project.id}`}</option>)}</select></div>
+              <div className="flex flex-wrap items-center gap-2 pb-0.5">{['single', 'carousel'].includes(draft.pieceType) ? <span className="rounded-lg border border-cyan-400 bg-cyan-950/50 px-3 py-2 text-xs font-bold text-cyan-200">Instagram / Facebook · 1080 × 1350 (4:5)</span> : <><button type="button" aria-pressed={formats.horizontal} onClick={() => { setFormats((value) => ({ ...value, horizontal: !value.horizontal })); setEditFormat('horizontal'); }} className={`rounded-lg border px-3 py-2 text-xs font-bold ${formats.horizontal ? 'border-cyan-400 bg-cyan-950/50 text-cyan-200' : 'border-slate-700 text-slate-400'}`}>Horizontal</button><button type="button" aria-pressed={formats.vertical} onClick={() => { setFormats((value) => ({ ...value, vertical: !value.vertical })); setEditFormat('vertical'); }} className={`rounded-lg border px-3 py-2 text-xs font-bold ${formats.vertical ? 'border-cyan-400 bg-cyan-950/50 text-cyan-200' : 'border-slate-700 text-slate-400'}`}>Vertical</button></>}<button type="button" disabled={exporting || (!formats.horizontal && !formats.vertical)} onClick={exportSelected} className="w2-button bg-sky-500 text-slate-950 disabled:opacity-40"><Download size={15} /> {exporting ? 'Gerando…' : `Baixar (${Number(formats.horizontal) + Number(formats.vertical)})`}</button></div>
+            </section>
             <section className="mm-panel">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Preview</h2><p className="text-xs text-slate-500">Arraste as camadas ou use os controles. Preview e PNG usam a mesma composição.</p></div><div className="flex gap-3 text-xs"><label><input type="checkbox" checked={formats.horizontal} onChange={(event) => setFormats((value) => ({ ...value, horizontal: event.target.checked }))} /> <span className="ml-1">Horizontal</span></label><label><input type="checkbox" checked={formats.vertical} onChange={(event) => setFormats((value) => ({ ...value, vertical: event.target.checked }))} /> <span className="ml-1">Vertical</span></label></div></div>
-              {formats.horizontal && <div className="mb-4"><div className="mb-2 flex items-center justify-between text-xs"><strong>Horizontal 1920×1080</strong><button type="button" disabled={exporting || saving} onClick={() => downloadOne('horizontal')} className="text-sky-300">Baixar PNG</button></div><ThumbnailCanvas ref={horizontalRef} draft={draft} format="horizontal" simers={tab === 'Padrão SIMERS'} referenceUrl={referenceUrl} selectedLayer={editFormat === 'horizontal' ? selectedLayer : ''} onSelectLayer={(id, format) => { setSelectedLayer(id); setEditFormat(format); }} onLayoutChange={changeLayout} /></div>}
-              {formats.vertical && <div className="mx-auto max-w-[360px]"><div className="mb-2 flex items-center justify-between text-xs"><strong>Vertical 1080×1920</strong><button type="button" disabled={exporting || saving} onClick={() => downloadOne('vertical')} className="text-sky-300">Baixar PNG</button></div><ThumbnailCanvas ref={verticalRef} draft={draft} format="vertical" simers={tab === 'Padrão SIMERS'} referenceUrl={referenceUrl} selectedLayer={editFormat === 'vertical' ? selectedLayer : ''} onSelectLayer={(id, format) => { setSelectedLayer(id); setEditFormat(format); }} onLayoutChange={changeLayout} /></div>}
-              <button type="button" disabled={exporting || (!formats.horizontal && !formats.vertical)} onClick={exportSelected} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-extrabold text-slate-950 disabled:opacity-40"><Download size={17} /> {exporting ? 'Gerando…' : 'Baixar imagens selecionadas'}</button>
+              <div className="mb-3 flex flex-wrap items-center gap-2"><button type="button" className="w2-button" onClick={() => undo()}>↶</button><button type="button" className="w2-button" onClick={() => undo(true)}>↷</button><span className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold">80%</span><label className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300">Guias <input type="checkbox" checked={showGuides} onChange={(event) => setShowGuides(event.target.checked)} /></label></div>
+              {['single', 'carousel'].includes(draft.pieceType) && <div role="region" aria-label="Arte em edição" className="mx-auto w-full max-w-[620px]"><div className="mb-2 flex items-center justify-between text-xs"><strong>{draft.pieceType === 'carousel' ? 'Página de carrossel 1080×1350' : 'Retrato 1080×1350'}</strong><button type="button" disabled={exporting || saving} onClick={() => downloadOne('vertical')} className="text-sky-300">Baixar PNG</button></div><ThumbnailCanvas ref={verticalRef} draft={draft} format="vertical" simers={tab === 'Padrão SIMERS'} referenceUrl={referenceUrl} selectedLayer={selectedLayer} onSelectLayer={(id, format) => { setSelectedLayer(id); setEditFormat(format); }} onLayoutChange={changeLayout} showGuides={showGuides} /></div>}
+              {formats.horizontal && <div className="mb-4"><div className="mb-2 flex items-center justify-between text-xs"><strong>Horizontal 1920×1080</strong><button type="button" disabled={exporting || saving} onClick={() => downloadOne('horizontal')} className="text-sky-300">Baixar PNG</button></div><ThumbnailCanvas ref={horizontalRef} draft={draft} format="horizontal" simers={tab === 'Padrão SIMERS'} referenceUrl={referenceUrl} selectedLayer={editFormat === 'horizontal' ? selectedLayer : ''} onSelectLayer={(id, format) => { setSelectedLayer(id); setEditFormat(format); }} onLayoutChange={changeLayout} showGuides={showGuides} /></div>}
               <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="w2-button" disabled={saving || exporting} onClick={() => saveThumb()}>Salvar rascunho</button><button type="button" className="w2-button" disabled={saving || exporting} onClick={() => saveThumb(true)}>Salvar imagens no projeto</button><button type="button" className="w2-button disabled:opacity-40" disabled={saving || exporting || !draft.projectId} onClick={() => saveThumb(true, true)}>Salvar e definir capa do projeto</button></div>
               {saving && <p className="mt-2 text-xs">Salvando versão e arquivos…</p>}
               {notice && <p className="mt-2 text-center text-xs text-sky-300">{notice}</p>}
             </section>
+            <section className="mm-panel grid gap-4 md:grid-cols-[180px_1fr]" aria-label="Formatos e camadas">
+              {formats.vertical && !['single', 'carousel'].includes(draft.pieceType) && <div><div className="mb-2 flex items-center justify-between text-[10px]"><strong>Vertical</strong><button type="button" disabled={exporting || saving} onClick={() => downloadOne('vertical')} className="text-sky-300">PNG</button></div><ThumbnailCanvas ref={verticalRef} draft={draft} format="vertical" simers={tab === 'Padrão SIMERS'} referenceUrl={referenceUrl} selectedLayer={editFormat === 'vertical' ? selectedLayer : ''} onSelectLayer={(id, format) => { setSelectedLayer(id); setEditFormat(format); }} onLayoutChange={changeLayout} showGuides={showGuides} /></div>}
+              <div className="space-y-4"><div><h2 className="font-bold">Formatos de saída</h2>{['single', 'carousel'].includes(draft.pieceType) ? <div className="mt-3 rounded-xl border border-sky-400 bg-sky-950/40 p-3 text-left text-xs text-sky-200"><strong className="block text-sm">Retrato 4:5</strong>1080 × 1350</div> : <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => { setFormats((value) => ({ ...value, horizontal: true })); setEditFormat('horizontal'); }} className={`rounded-xl border p-3 text-left text-xs ${editFormat === 'horizontal' ? 'border-sky-400 bg-sky-950/40 text-sky-200' : 'border-slate-800 text-slate-400'}`}><strong className="block text-sm">Horizontal</strong>1920 × 1080</button><button type="button" onClick={() => { setFormats((value) => ({ ...value, vertical: true })); setEditFormat('vertical'); }} className={`rounded-xl border p-3 text-left text-xs ${editFormat === 'vertical' ? 'border-sky-400 bg-sky-950/40 text-sky-200' : 'border-slate-800 text-slate-400'}`}><strong className="block text-sm">Vertical</strong>1080 × 1920</button></div>}</div><div><h2 className="font-bold">Camadas (ordem de exibição)</h2><div className="mt-3 flex flex-wrap gap-2">{thumbnailLayers(draft, editFormat).map((layer) => <button type="button" key={layer.id} onClick={() => setSelectedLayer(layer.id)} className={`rounded-lg border px-2.5 py-2 text-xs ${selectedLayer === layer.id ? 'border-sky-400 bg-sky-950/40 text-sky-200' : 'border-slate-800 text-slate-400'}`}>{layer.label}</button>)}</div></div></div>
+            </section>
+            <section className="mm-panel"><div className="flex items-start justify-between gap-3"><div><h2 className="font-bold">Versões do projeto</h2><p className="mt-1 text-xs text-slate-400">Composições editáveis e PNGs reutilizáveis.</p></div><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-300">{savedThumbs.filter((r) => !draft.projectId || String(r.project_id) === draft.projectId).length}</span></div><div className="mt-3 space-y-2">{savedThumbs.filter((r) => !draft.projectId || String(r.project_id) === draft.projectId).map((r) => <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 p-2 text-xs"><span className="min-w-0 flex-1">{r.title} · v{r.revision} · {r.program}</span><button type="button" className="text-sky-300" onClick={() => openSaved(r)}>Reabrir</button><button type="button" className="text-sky-300" onClick={() => openSaved(r, true)}>Duplicar</button>{r.exports?.map((e) => <a key={e.assetId} href={resolveMediaUrl(e.url)} target="_blank" rel="noreferrer" className="text-emerald-300">PNG {e.format}</a>)}</div>)}</div>{!savedThumbs.filter((r) => !draft.projectId || String(r.project_id) === draft.projectId).length && <p className="mt-3 text-xs text-slate-500">Nenhuma versão salva para este projeto.</p>}</section>
           </main>
 
           <aside className="space-y-4">
+            <ThumbnailTools draft={draft} format={editFormat} setFormat={setEditFormat} selectedLayer={selectedLayer} onSelect={setSelectedLayer} onLayoutChange={changeLayout} onPersonChange={updatePerson} onStyleChange={(patch) => setDraft((d) => ({ ...d, style: { ...d.style, ...patch } }))} onColorsChange={(patch) => setDraft((d) => ({ ...d, colors: { ...d.colors, ...patch } }))} onRestore={(format) => format ? setDraft((d) => ({ ...restoreThumbnailStyle(d, format), colors: d.modelColors ? { ...d.colors, ...d.modelColors } : restoreThumbnailStyle(d, format).colors })) : restoreCurrentPattern()} onUndo={() => undo()} onRedo={() => undo(true)} onSaveProjectStyle={saveProjectStyle} onLogoUpload={(field, file) => { if (file) update(field, fileUrl(file)); }} />
+            <button type="button" onClick={() => setGuideOpen(true)} className="mm-panel flex w-full items-center gap-3 text-left transition hover:border-emerald-400/60 hover:bg-emerald-400/5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-400/10 text-emerald-300"><BookOpen size={18} /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm">Guia Padrão SIMERS</strong><small className="mt-0.5 block text-slate-400">Paletas, tipografia e regras oficiais.</small></span>
+              <span className="text-xs font-bold text-emerald-300">Abrir quadro →</span>
+            </button>
             <ThumbnailAISettings />
             <section className="mm-panel"><h2 className="font-bold">Dados do sistema</h2>{selectedProject ? <><p className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-300"><CheckCircle2 size={14} /> Dados carregados do MediaMind</p><dl className="mt-3 grid grid-cols-[82px_1fr] gap-y-2 text-xs"><dt className="text-slate-500">Projeto</dt><dd>{selectedProject.titulo || selectedProject.title}</dd><dt className="text-slate-500">Programa</dt><dd>{selectedProject.programa || 'Não informado'}</dd><dt className="text-slate-500">Episódio</dt><dd>{selectedProject.episodio || 'Não informado'}</dd><dt className="text-slate-500">Roteiro</dt><dd>{matchingScript ? 'Encontrado' : (selectedProject.pauta ? 'Planejamento do projeto' : 'Não integrado')}</dd><dt className="text-slate-500">Pessoas</dt><dd>{draft.people.length}</dd><dt className="text-slate-500">Fotos</dt><dd>{relatedAssets.length}</dd></dl><Link to={`/corp?tab=producao&sub=${selectedProject.etapa || 'overview'}`} className="mt-4 block rounded-xl border border-slate-700 py-2 text-center text-xs font-bold text-sky-300">Abrir episódio</Link></> : <><p className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-sky-300"><CheckCircle2 size={14} /> Criação nova</p><p className="mt-2 text-xs text-slate-500">Escolha tudo manualmente ou carregue um conteúdo do MediaMind. O registro original não será alterado.</p></>}{dataError && <p className="mt-3 rounded-lg bg-rose-950/30 p-2 text-xs text-rose-300">{dataError}</p>}</section>
-
-            <section className="mm-panel"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">Fotos / mídias</h2><label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-sky-800 px-2.5 py-1.5 text-[11px] font-bold text-sky-300"><ImagePlus size={14} /> Enviar foto<input type="file" accept="image/*" className="hidden" aria-label="Adicionar foto local" onChange={(event) => { addPhoto(event.target.files?.[0]); event.target.value = ''; }} /></label></div><div className="mt-3 grid grid-cols-2 gap-2">{[...draft.photos, ...relatedAssets.filter((asset) => !draft.photos.some((photo) => photo.id === String(asset.id))).map((asset) => ({ id: String(asset.id), name: asset.title || asset.filename || 'Imagem', url: resolveMediaUrl(asset.stream_url || asset.file_url || ''), selected: false, source: 'Acervo' }))].map((photo) => <button type="button" key={photo.id} onClick={() => useAssetPhoto(photo)} className={`overflow-hidden rounded-xl border text-left ${photo.selected ? 'border-sky-400' : 'border-slate-800'}`}><div className="aspect-video bg-slate-950">{photo.url && <img src={photo.url} alt="" className="h-full w-full object-cover" />}</div><span className="block truncate p-2 text-[10px]">{photo.name}</span></button>)}</div>{!relatedAssets.length && !draft.photos.length && <p className="mt-3 text-xs text-slate-500">Nenhuma imagem relacionada encontrada.</p>}</section>
 
             <section className="mm-panel"><h2 className="font-bold">Validação SIMERS</h2><ul className="mt-3 space-y-2 text-xs">{validation.length ? validation.map((issue) => <li key={issue} className="flex gap-2 text-amber-300"><Info size={14} className="shrink-0" />{issue}</li>) : <li className="flex gap-2 text-emerald-300"><CheckCircle2 size={14} />Campos essenciais preenchidos</li>}<li className="flex gap-2 text-slate-400"><CheckCircle2 size={14} className="shrink-0" />Fundo contínuo, sem barra ou caixa de texto</li><li className="flex gap-2 text-slate-400"><CheckCircle2 size={14} className="shrink-0" />Horizontal e vertical têm composições próprias</li>{preset && !preset.defined && <li className="flex gap-2 text-amber-300"><Info size={14} />Padrão do programa ainda não definido</li>}</ul></section>
           </aside>
         </div>
       )}</>}
 
-      <section className="mm-panel"><h2 className="font-bold">Thumbs salvas / versões do projeto</h2><p className="mt-1 text-xs text-slate-400">Composições editáveis e arquivos reutilizáveis. Cópias mantêm referência à origem.</p><div className="mt-3 space-y-2">{savedThumbs.filter((r) => !draft.projectId || String(r.project_id) === draft.projectId).map((r) => <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 p-2 text-xs"><span className="min-w-0 flex-1">{r.title} · v{r.revision} · {r.program}</span><button type="button" className="text-sky-300" onClick={() => openSaved(r)}>Reabrir</button><button type="button" className="text-sky-300" onClick={() => openSaved(r, true)}>Duplicar para reutilizar</button>{r.exports?.map((e) => <a key={e.assetId} href={resolveMediaUrl(e.url)} target="_blank" rel="noreferrer" className="text-emerald-300">PNG {e.format}</a>)}</div>)}</div>{!savedThumbs.length && <p className="mt-3 text-xs text-slate-500">Nenhuma thumb salva ainda.</p>}</section>
-
-      {programPickerOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label="Escolher programa"><section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl"><header className="flex items-start justify-between"><div><h2 className="text-xl font-extrabold">Nova thumb</h2><p className="mt-1 text-sm text-slate-400">Padrões SIMERS disponíveis. Confira os assets oficiais de cada programa. As cores abaixo são aplicadas sem substituições.</p></div><button type="button" aria-label="Fechar escolha de programa" onClick={() => setProgramPickerOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"><X size={20} /></button></header><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{SIMERS_PROGRAMS.map((name) => { const colors = presetFor(name); return <button type="button" key={name} aria-label={name} onClick={() => startNewThumb(name)} className="overflow-hidden rounded-xl border border-slate-800 text-left transition hover:-translate-y-0.5 hover:border-sky-400"><span className="block h-20 p-3" style={{ background: colors.background, color: colors.text }}><strong className="text-sm">{name}</strong><small className="mt-1 block opacity-70">{colors.background} · {colors.text}</small></span></button>; })}</div></section></div>}
-
       {guideOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label="Guia do padrão SIMERS"><section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl"><header className="flex items-start justify-between"><div><h2 className="text-xl font-extrabold">Guia do padrão SIMERS</h2><p className="text-sm text-slate-400">Paletas e regras aplicadas pelo Thumbnail Studio.</p></div><button type="button" aria-label="Fechar guia" onClick={() => setGuideOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"><X size={20} /></button></header><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(SIMERS_PRESETS).map(([name, colors]) => <article key={name} className="rounded-xl border border-slate-800 p-3"><div className="mb-2 flex h-16 overflow-hidden rounded-lg">{colors.defined ? <><span className="flex-1" style={{ background: colors.background }} /><span className="w-1/3" style={{ background: colors.accent || colors.text }} /></> : <span className="grid flex-1 place-items-center bg-slate-900 text-xs text-slate-500">Não definido</span>}</div><strong className="text-sm">{name}</strong>{colors.defined && <p className="mt-1 font-mono text-[10px] text-slate-500">{[colors.background, colors.text, colors.accent].filter(Boolean).join(' · ')}</p>}</article>)}</div><div className="mt-5 grid gap-4 md:grid-cols-2"><div className="rounded-xl bg-slate-900 p-4"><h3 className="font-bold">Hierarquia e formatos</h3><p className="mt-2 text-sm leading-6 text-slate-400">Chamada principal &gt; nomes &gt; programa • episódio. Horizontal 1920×1080 e vertical 1080×1920 com composição própria.</p></div><div className="rounded-xl bg-slate-900 p-4"><h3 className="font-bold">Não fazer</h3><p className="mt-2 text-sm leading-6 text-slate-400">Não usar barras brancas, rodapés, tarjas ou caixas atrás do texto. Não repetir episódio, não excluir pessoas automaticamente e não alterar rostos.</p></div></div></section></div>}
     </div>
   );
 }
-

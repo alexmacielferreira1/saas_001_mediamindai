@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../../lib/workProtection";
 import { parseSceneLines } from "../../lib/creativeToolDocuments";
 import StudioProjectBar from "./StudioProjectBar";
 import { useEffect, useState } from "react";
@@ -13,14 +14,14 @@ import {
 } from "./StudioUI";
 const tags = ["Apresentação", "Ideia", "Conquista", "Dúvida", "Trabalho", "Conexão", "celular", "comida", "crescimento", "desânimo", "dinheiro", "escada", "escalada", "escritório", "fuga", "montanha", "pensando", "porta", "queda", "tempo"];
 export default function AnimatedStudio() {
-  const [text, setText] = useState(
+  const [text, setText] = useWorkDraftState("components/ai-tools/AnimatedStudio.jsx:text",
       "Uma ideia pode mudar o seu próximo passo.\nComece pequeno e avance todos os dias.\nCompartilhe o que você aprendeu.",
     ),
-    [scenes, setScenes] = useState([]),
-    [selected, setSelected] = useState(0),
+    [scenes, setScenes] = useWorkDraftState("components/ai-tools/AnimatedStudio.jsx:scenes", []),
+    [selected, setSelected] = useWorkDraftState("components/ai-tools/AnimatedStudio.jsx:selected", 0),
     [playing, setPlaying] = useState(false),
     [tick, setTick] = useState(0),
-    [format, setFormat] = useState("9:16"),
+    [format, setFormat] = useWorkDraftState("components/ai-tools/AnimatedStudio.jsx:format", "9:16"),
     [color, setColor] = useState("#38bdf8"),
     [fps, setFps] = useState("24");
   const current = scenes[selected];

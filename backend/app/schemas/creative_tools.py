@@ -44,7 +44,7 @@ class CarouselContent(BaseModel):
     tool_type: Literal["carousel"]
     project_id: str | None = None
     title: str = Field(min_length=1, max_length=300)
-    format: Literal["4:5", "1:1"]
+    format: str = Field(min_length=3, max_length=160)
     template_id: str = Field(min_length=1, max_length=120)
     requested_slide_count: int = Field(ge=1, le=30)
     briefing: CarouselBriefing
@@ -59,6 +59,16 @@ class CarouselContent(BaseModel):
         if any(not value.startswith("#") for value in values):
             raise ValueError("hashtags must start with #")
         return values
+
+    @field_validator("format")
+    @classmethod
+    def validate_format(cls, value: str) -> str:
+        standard = {"4:5", "1:1", "9:16", "16:9", "1.91:1", "3:2"}
+        if value in standard:
+            return value
+        if value.startswith("custom:") and "x" in value.rsplit(":", 1)[-1]:
+            return value
+        raise ValueError("unsupported carousel format")
 
 
 class CreativeDocumentCreate(BaseModel):

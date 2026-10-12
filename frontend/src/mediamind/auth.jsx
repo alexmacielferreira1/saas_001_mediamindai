@@ -7,7 +7,6 @@ import { hasCorpAccess } from './lib/permissions';
 
 const AuthContext = createContext(null);
 const DEMO_SESSION_KEY = 'mm_demo_session_v1';
-const DEMO_TENANT_ID = 'mediamind-demo';
 
 function localDemoAvailable() {
   return isLocalDemoAvailable({ dev: import.meta.env.DEV, hostname: window.location.hostname });
@@ -21,22 +20,6 @@ function readDemoUser() {
     localStorage.removeItem(DEMO_SESSION_KEY);
     return null;
   }
-}
-
-function createDemoUser(email) {
-  const normalized = email.trim().toLowerCase();
-  const account = normalized.split('@')[0];
-  const role = normalized === 'alexmacielferreira@gmail.com' ? 'superadmin' : account;
-  return {
-    id: `demo-${role}`,
-    email: normalized,
-    name: normalized === 'alexmacielferreira@gmail.com'
-      ? 'Alex Maciel Ferreira'
-      : account.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
-    role,
-    empresa_ids: [DEMO_TENANT_ID],
-    selected_tenant_id: DEMO_TENANT_ID,
-  };
 }
 
 export function mapSessionUser(session) {
@@ -72,14 +55,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let active = true;
     const restoredDemoUser = readDemoUser();
-    if (restoredDemoUser) {
-      setUser(restoredDemoUser);
-      setLoading(false);
-      return () => {
-        active = false;
-      };
-    }
-    request('/auth/session')
+    const restore = restoredDemoUser
+      ? request('/auth/demo', { method: 'POST', body: { email: restoredDemoUser.email } })
+      : request('/auth/session');
+    restore
       .then((session) => {
         if (active) {
           localStorage.removeItem(DEMO_SESSION_KEY);
@@ -117,8 +96,9 @@ export function AuthProvider({ children }) {
     if (typeof email !== 'string' || !email.trim()) {
       throw new Error('Informe um e-mail para o acesso demo.');
     }
-    const demoUser = createDemoUser(email);
-    localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(demoUser));
+    const session = await request('/auth/demo', { method: 'POST', body: { email } });
+    const demoUser = mapSessionUser(session);
+    localStorage.removeItem(DEMO_SESSION_KEY);
     setError('');
     setUser(demoUser);
     return demoUser;

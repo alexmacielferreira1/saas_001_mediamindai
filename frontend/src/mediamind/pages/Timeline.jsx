@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../lib/workProtection";
 import React, { useState, useMemo } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { DragDropContext } from '@hello-pangea/dnd';
@@ -41,7 +42,7 @@ function computeDurationSeconds(durStr) {
 
 export default function Timeline({ embedded = false }) {
   const [selectedId, setSelectedId] = useState(1);
-  const [items, setItems] = useState(SCRIPT_ITEMS[1]);
+  const [items, setItems] = useWorkDraftState("pages/Timeline.jsx:items", SCRIPT_ITEMS[1]);
   const [status, setStatus] = useState('reviewing');
   const [mediaToSelect, setMediaToSelect] = useState(null);
 

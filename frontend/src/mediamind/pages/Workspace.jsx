@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../lib/workProtection";
 import React, { useState, useEffect, useRef } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { DragDropContext } from '@hello-pangea/dnd';
@@ -39,7 +40,7 @@ export default function Workspace() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
-  const [items, setItems] = useState([
+  const [items, setItems] = useWorkDraftState("pages/Workspace.jsx:items", [
     {
       id: 1, assetId: 2, title: 'B-roll — Cidade ao amanhecer', icon: '🏙️',
       in: '00:01:12', out: '00:01:48', duration: 36, type: 'video', track: 'v1',
@@ -49,7 +50,7 @@ export default function Workspace() {
   const [search, setSearch] = useState({ filename: '', transcription: '', person: '', gc: '', local: '', date: '' });
   const [savedLayouts, setSavedLayouts] = useState([]);
   const [showLayoutMenu, setShowLayoutMenu] = useState(false);
-  const [project, setProject] = useState({
+  const [project, setProject] = useWorkDraftState("pages/Workspace.jsx:project", {
     title: 'Jornal 12h - 15/05/2026',
     segment: 'Jornalismo',
     program: 'Jornal do Meio Dia',

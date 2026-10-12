@@ -1,9 +1,9 @@
 import { Download, Sparkles } from "lucide-react";
 export const inputClass =
-  "w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-sky-400";
+  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400";
 export function Field({ label, children, hint }) {
   return (
-    <label className="block space-y-2 text-xs font-semibold text-slate-400">
+    <label className="block space-y-1.5 text-xs font-semibold text-slate-400">
       <span>{label}</span>
       {children}
       {hint && <span className="block font-normal text-slate-500">{hint}</span>}
@@ -12,7 +12,7 @@ export function Field({ label, children, hint }) {
 }
 export function Panel({ title, children, number }) {
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+    <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
       <h3 className="flex items-center gap-2 text-sm font-bold text-white">
         {number && (
           <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-500/15 text-xs text-sky-300">
@@ -103,4 +103,3 @@ export function readImage(file) {
     r.readAsDataURL(file);
   });
 }
-

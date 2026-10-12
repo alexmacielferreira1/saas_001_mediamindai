@@ -1,73 +1,189 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  Search, Bell, Settings,
-  LogOut, ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
-  Home, Layers, Calendar, Send, UserCog, BarChart3, LayoutDashboard, FileText, Clapperboard, Scissors, CheckCircle2, Flag, Share2, PanelsTopLeft, ImagePlus, WandSparkles,
-} from 'lucide-react';
-import { useAuth } from './auth';
-import { useEmpresa } from './lib/empresaContext';
-import EmpresaSwitcher from './components/EmpresaSwitcher';
-import CommandPalette from './components/CommandPalette';
-import QuickActionsButton from './components/QuickActionsButton';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+  Search,
+  Bell,
+  Settings,
+  LogOut,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sparkles,
+  Home,
+  Layers,
+  Layers3,
+  Calendar,
+  Send,
+  UserCog,
+  BarChart3,
+  LayoutDashboard,
+  FileText,
+  Clapperboard,
+  Scissors,
+  CheckCircle2,
+  Flag,
+  Share2,
+  PanelsTopLeft,
+  Palette,
+  WandSparkles,
+  AudioLines,
+  Files,
+} from "lucide-react";
+import { useAuth } from "./auth";
+import { useEmpresa } from "./lib/empresaContext";
+import WorkProtection from "./lib/workProtection";
+import EmpresaSwitcher from "./components/EmpresaSwitcher";
+import CommandPalette from "./components/CommandPalette";
+import QuickActionsButton from "./components/QuickActionsButton";
+import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 
 export const NAV_GROUPS = [
   {
-    group: 'Principal',
+    group: "Principal",
+    items: [{ to: "/", label: "Início", icon: Home, end: true }],
+  },
+  {
+    group: "Produção",
     items: [
-      { to: '/', label: 'Início', icon: Home, end: true },
+      {
+        to: "/corp?tab=producao&sub=overview",
+        label: "Visão geral",
+        icon: LayoutDashboard,
+        sub: "overview",
+      },
+      {
+        to: "/corp?tab=producao&sub=ingest",
+        label: "Ingest",
+        icon: Layers,
+        sub: "ingest",
+      },
+      {
+        to: "/corp?tab=producao&sub=pesquisa",
+        label: "Pesquisa",
+        icon: Search,
+        sub: "pesquisa",
+      },
+      {
+        to: "/corp?tab=producao&sub=workspace",
+        label: "Workspace",
+        icon: PanelsTopLeft,
+        sub: "workspace",
+      },
+      {
+        to: "/corp?tab=producao&sub=rascunhos",
+        label: "Rascunhos",
+        icon: FileText,
+        sub: "rascunhos",
+      },
+      {
+        to: "/corp?tab=producao&sub=agendamentos",
+        label: "Agendamentos",
+        icon: Calendar,
+        sub: "agendamentos",
+      },
+      {
+        to: "/corp?tab=producao&sub=gravacoes",
+        label: "Gravações",
+        icon: Clapperboard,
+        sub: "gravacoes",
+      },
+      {
+        to: "/corp?tab=producao&sub=em_edicao",
+        label: "Edição",
+        icon: Scissors,
+        sub: "em_edicao",
+      },
+      {
+        to: "/corp?tab=producao&sub=aguardando_aprovacao",
+        label: "Alteração",
+        icon: Calendar,
+        sub: "aguardando_aprovacao",
+      },
+      {
+        to: "/corp?tab=producao&sub=em_aprovacao",
+        label: "Em revisão",
+        icon: CheckCircle2,
+        sub: "em_aprovacao",
+      },
+      {
+        to: "/corp?tab=producao&sub=finalizado",
+        label: "Finalizado",
+        icon: Flag,
+        sub: "finalizado",
+      },
+      {
+        to: "/corp?tab=producao&sub=redes_sociais",
+        label: "Redes sociais",
+        icon: Share2,
+        sub: "redes_sociais",
+      },
+      {
+        to: "/corp?tab=producao&sub=para_publicar",
+        label: "Para publicação",
+        icon: Send,
+        sub: "para_publicar",
+      },
+      {
+        to: "/corp?tab=producao&sub=publicado",
+        label: "Publicado",
+        icon: Send,
+        sub: "publicado",
+      },
+      {
+        to: "/corp?tab=producao&sub=analytics",
+        label: "Analytics",
+        icon: BarChart3,
+        sub: "analytics",
+      },
     ],
   },
   {
-    group: 'Produção',
+    group: "Administração",
     items: [
-      { to: '/corp?tab=producao&sub=overview', label: 'Visão geral', icon: LayoutDashboard, sub: 'overview' },
-      { to: '/corp?tab=producao&sub=ingest', label: 'Ingest', icon: Layers, sub: 'ingest' },
-      { to: '/corp?tab=producao&sub=pesquisa', label: 'Pesquisa', icon: Search, sub: 'pesquisa' },
-      { to: '/corp?tab=producao&sub=workspace', label: 'Workspace', icon: PanelsTopLeft, sub: 'workspace' },
-      { to: '/corp?tab=producao&sub=rascunhos', label: 'Rascunhos', icon: FileText, sub: 'rascunhos' },
-      { to: '/corp?tab=producao&sub=agendamentos', label: 'Agendamentos', icon: Calendar, sub: 'agendamentos' },
-      { to: '/corp?tab=producao&sub=gravacoes', label: 'Gravações', icon: Clapperboard, sub: 'gravacoes' },
-      { to: '/corp?tab=producao&sub=em_edicao', label: 'Edição', icon: Scissors, sub: 'em_edicao' },
-      { to: '/corp?tab=producao&sub=aguardando_aprovacao', label: 'Alteração', icon: Calendar, sub: 'aguardando_aprovacao' },
-      { to: '/corp?tab=producao&sub=em_aprovacao', label: 'Em revisão', icon: CheckCircle2, sub: 'em_aprovacao' },
-      { to: '/corp?tab=producao&sub=finalizado', label: 'Finalizado', icon: Flag, sub: 'finalizado' },
-      { to: '/corp?tab=producao&sub=redes_sociais', label: 'Redes sociais', icon: Share2, sub: 'redes_sociais' },
-      { to: '/corp?tab=producao&sub=para_publicar', label: 'Para publicação', icon: Send, sub: 'para_publicar' },
-      { to: '/corp?tab=producao&sub=publicado', label: 'Publicado', icon: Send, sub: 'publicado' },
-      { to: '/corp?tab=producao&sub=analytics', label: 'Analytics', icon: BarChart3, sub: 'analytics' },
-      { to: '/thumbnails', label: 'Criar Thumbs', icon: ImagePlus },
+      {
+        to: "/administration2",
+        label: "Administração",
+        icon: UserCog,
+        adminTab: "overview",
+      },
     ],
   },
   {
-    group: 'Administração',
+    group: "IA",
     items: [
-      { to: '/administration2', label: 'Administração', icon: UserCog, adminTab: 'overview' },
-    ],
-  },
-  {
-    group: 'IA',
-    items: [
-      { to: '/ferramentas-ia', label: 'Ferramentas IA', icon: WandSparkles },
-      { to: '/assistente', label: 'Assistente IA', icon: Sparkles },
+      { to: "/estudio-de-arte", label: "Estúdio de Arte", icon: Palette },
+      { to: "/ferramentas-ia", label: "Ferramentas IA", icon: WandSparkles },
+      {
+        to: "/ferramentas-graficas",
+        label: "Ferramentas Gráficas",
+        icon: Layers3,
+      },
+      { to: "/soundcraft", label: "SoundCraft", icon: AudioLines },
+      { to: "/ferramentas-office", label: "Ferramentas Office", icon: Files },
+      { to: "/configuracoes/ia", label: "Configuração de IA", icon: Settings },
+      { to: "/assistente", label: "Assistente IA", icon: Sparkles },
     ],
   },
 ];
 
 const MVP_LABELS = new Set([
-  'Início', 'Pesquisa', 'Workspace', 'Rascunhos', 'Agendamentos', 'Gravações', 'Edição',
-  'Em revisão', 'Finalizado',
+  "Início",
+  "Pesquisa",
+  "Workspace",
+  "Rascunhos",
+  "Agendamentos",
+  "Gravações",
+  "Edição",
+  "Em revisão",
+  "Finalizado",
 ]);
 
 export function navigationForRole(role) {
-  if (role !== 'mvp') return NAV_GROUPS;
-  return NAV_GROUPS
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => MVP_LABELS.has(item.label)),
-    }))
-    .filter((group) => group.items.length > 0);
+  if (role !== "mvp") return NAV_GROUPS;
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => MVP_LABELS.has(item.label)),
+  })).filter((group) => group.items.length > 0);
 }
 
 export default function Shell({ children }) {
@@ -76,27 +192,48 @@ export default function Shell({ children }) {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const role = user?.role || 'default';
+  const role = user?.role || "default";
   const navGroups = navigationForRole(role);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    try { return Number(localStorage.getItem(`mm_sidebar_width__${role}`)) || 240; } catch { return 240; }
+    try {
+      return Number(localStorage.getItem(`mm_sidebar_width__${role}`)) || 240;
+    } catch {
+      return 240;
+    }
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem(`mm_sidebar_collapsed__${role}`) === '1'; } catch { return false; }
+    try {
+      return localStorage.getItem(`mm_sidebar_collapsed__${role}`) === "1";
+    } catch {
+      return false;
+    }
   });
 
-  useEffect(() => { localStorage.setItem(`mm_sidebar_width__${role}`, String(sidebarWidth)); }, [sidebarWidth, role]);
-  useEffect(() => { localStorage.setItem(`mm_sidebar_collapsed__${role}`, sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed, role]);
+  useEffect(() => {
+    localStorage.setItem(`mm_sidebar_width__${role}`, String(sidebarWidth));
+  }, [sidebarWidth, role]);
+  useEffect(() => {
+    localStorage.setItem(
+      `mm_sidebar_collapsed__${role}`,
+      sidebarCollapsed ? "1" : "0",
+    );
+  }, [sidebarCollapsed, role]);
 
   // Largura da lateral arrastável (desktop). Persiste por perfil de usuário.
   function startResize(e) {
     e.preventDefault();
     const startX = e.clientX;
     const startW = sidebarWidth;
-    const onMove = (ev) => setSidebarWidth(Math.max(200, Math.min(480, startW + (ev.clientX - startX))));
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    const onMove = (ev) =>
+      setSidebarWidth(
+        Math.max(200, Math.min(480, startW + (ev.clientX - startX))),
+      );
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   // Fecha sidebar mobile ao navegar
@@ -106,7 +243,7 @@ export default function Shell({ children }) {
 
   function handleLogout() {
     logout();
-    navigate('/login');
+    navigate("/login");
   }
 
   useGlobalShortcuts({ openPalette: () => setPaletteOpen(true), navigate });
@@ -119,13 +256,13 @@ export default function Shell({ children }) {
   // Atalho global: ⌘K / Ctrl+K abre o palette de busca universal.
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (
@@ -141,8 +278,8 @@ export default function Shell({ children }) {
       {/* Sidebar — largura arrastável e recolível (persiste por perfil) */}
       <aside
         style={{ width: sidebarWidth }}
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-800 bg-slate-950/95 transition-transform duration-200 lg:static lg:translate-x-0 ${sidebarCollapsed ? 'lg:hidden' : ''} ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-800 bg-slate-950/95 transition-transform duration-200 lg:static lg:translate-x-0 ${sidebarCollapsed ? "hidden" : ""} ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand */}
@@ -151,7 +288,9 @@ export default function Shell({ children }) {
             MM
           </div>
           <div>
-            <strong className="block text-sm font-semibold text-slate-100">MediaMind AI</strong>
+            <strong className="block text-sm font-semibold text-slate-100">
+              MediaMind AI
+            </strong>
             <small className="text-xs text-slate-500">Acervo inteligente</small>
           </div>
         </div>
@@ -174,16 +313,18 @@ export default function Shell({ children }) {
                       className={({ isActive }) => {
                         const query = new URLSearchParams(location.search);
                         const active = it.adminTab
-                          ? location.pathname === '/administration2' && (query.get('tab') || 'overview') === it.adminTab
+                          ? location.pathname === "/administration2" &&
+                            (query.get("tab") || "overview") === it.adminTab
                           : it.sub
-                          ? location.pathname === '/corp' && query.get('sub') === it.sub
-                          : it.to === '/corp'
-                            ? isActive && !query.get('sub')
-                            : isActive;
+                            ? location.pathname === "/corp" &&
+                              query.get("sub") === it.sub
+                            : it.to === "/corp"
+                              ? isActive && !query.get("sub")
+                              : isActive;
                         return `flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition ${
                           active
-                            ? 'bg-sky-500 font-bold text-slate-950'
-                            : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
+                            ? "bg-sky-500 font-bold text-slate-950"
+                            : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-100"
                         }`;
                       }}
                     >
@@ -201,11 +342,15 @@ export default function Shell({ children }) {
         <div className="border-t border-slate-800 p-3">
           <div className="mb-2 flex items-center gap-2.5 rounded-xl bg-slate-900/60 px-3 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-violet-500 text-sm font-bold text-slate-950">
-              {user?.email?.[0]?.toUpperCase() ?? '?'}
+              {user?.email?.[0]?.toUpperCase() ?? "?"}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-slate-200">{user?.name ?? user?.email}</p>
-              <p className="text-[11px] text-slate-500">{roleLabels[user?.role] ?? user?.role}</p>
+              <p className="truncate text-xs font-semibold text-slate-200">
+                {user?.name ?? user?.email}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {roleLabels[user?.role] ?? user?.role}
+              </p>
             </div>
           </div>
           <button
@@ -245,21 +390,32 @@ export default function Shell({ children }) {
           <button
             className="hidden rounded-lg p-2 text-slate-400 hover:bg-slate-800 lg:inline-flex"
             onClick={() => setSidebarCollapsed((c) => !c)}
-            title={sidebarCollapsed ? 'Expandir lateral' : 'Recolher lateral'}
+            title={sidebarCollapsed ? "Expandir lateral" : "Recolher lateral"}
           >
-            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={18} />
+            ) : (
+              <PanelLeftClose size={18} />
+            )}
           </button>
 
           {/* Search — gatilho do palette universal (⌘K) */}
           <form onSubmit={handleSearch} className="relative max-w-md flex-1">
-            <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            />
             <button
               type="submit"
               className="flex w-full items-center rounded-xl border border-slate-700 bg-slate-900/60 py-2 pl-9 pr-3 text-sm text-slate-500 hover:border-sky-500"
               onClick={() => setPaletteOpen(true)}
             >
-              <span className="truncate text-left">Pesquisar tudo — clientes, tarefas, funções, caminhos…</span>
-              <kbd className="ml-auto hidden rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">⌘K /</kbd>
+              <span className="truncate text-left">
+                Pesquisar tudo — clientes, tarefas, funções, caminhos…
+              </span>
+              <kbd className="ml-auto hidden rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400 sm:inline">
+                ⌘K /
+              </kbd>
             </button>
           </form>
 
@@ -278,11 +434,14 @@ export default function Shell({ children }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-x-hidden p-4 lg:p-6">
-          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px]"><WorkProtection>{children}</WorkProtection></div>
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }

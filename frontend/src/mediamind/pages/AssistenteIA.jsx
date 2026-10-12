@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useWorkDraftState } from '../lib/workProtection';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Send, Loader2, ArrowRight, Mic, MessageSquare, Bot, User as UserIcon } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
@@ -14,7 +15,7 @@ import AudioPromptInput from '../components/corp/roles/AudioPromptInput';
 export default function AssistenteIA() {
   const { user, roleLabels } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useWorkDraftState('assistant:messages', [
     {
       role: 'assistant',
       content: `Olá${user?.name ? `, ${user.name}` : ''}! Sou o assistente do MediaMind. Diga o que você quer fazer (por texto ou voz) e eu te ajudo a encontrar e executar mais rápido.`,
@@ -22,7 +23,7 @@ export default function AssistenteIA() {
       confirmacao: null,
     },
   ]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useWorkDraftState('assistant:input', '');
   const [audioUrl, setAudioUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef(null);

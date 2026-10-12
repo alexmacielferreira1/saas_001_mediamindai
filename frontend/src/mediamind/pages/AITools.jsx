@@ -1,7 +1,24 @@
 import { useSearchParams } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import {
+  BadgeDollarSign,
+  Clapperboard,
+  Frame,
+  Images,
+  Languages,
+  Link2,
+  MessageSquareText,
+  Mic2,
+  PanelsTopLeft,
+  Radar,
+  Scissors,
+  Tv,
+  Video,
+  Box,
+  Globe2,
+  ImagePlus,
+  WandSparkles,
+} from "lucide-react";
 import AIThumbnailStudio from "../components/ai-tools/AIThumbnailStudio";
-import ThumbnailStudio from "./ThumbnailStudio";
 import AnimatedStudio from "../components/ai-tools/AnimatedStudio";
 import VoiceStudio from "../components/ai-tools/VoiceStudio";
 import ChannelStudio from "../components/ai-tools/ChannelStudio";
@@ -12,57 +29,76 @@ import FramesStudio from "../components/ai-tools/FramesStudio";
 import TrendStudio from "../components/ai-tools/TrendStudio";
 import DubbingStudio from "../components/ai-tools/DubbingStudio";
 import { AI_TOOLS, getAITool } from "../lib/aiToolsRegistry";
+import GenerativeStudio from "../components/ai-tools/GenerativeStudio";
+
+const TOOL_PRESENTATION = {
+  "image-generator": { icon: ImagePlus, label: "Imagem IA" },
+  "video-generator": { icon: WandSparkles, label: "Vídeo IA" },
+  "object-generator": { icon: Box, label: "Objeto 3D" },
+  "world-generator": { icon: Globe2, label: "Mundo 3D" },
+  thumbnails: { icon: Images, label: "Thumbs IA" },
+  carousel: { icon: PanelsTopLeft, label: "Carrossel" },
+  "video-studio": { icon: Video, label: "Vídeo" },
+  "voice-studio": { icon: Mic2, label: "Voz" },
+  frames: { icon: Frame, label: "Molduras" },
+  "ai-dubbing": { icon: Languages, label: "Dublagem" },
+  "trend-radar": { icon: Radar, label: "Radar" },
+  "auto-clips": { icon: Scissors, label: "Cortes" },
+  "speech-montage": { icon: MessageSquareText, label: "Falas" },
+  "sales-videos": { icon: BadgeDollarSign, label: "Vendas" },
+  "affiliate-videos": { icon: Link2, label: "Afiliados" },
+  "animated-videos": { icon: Clapperboard, label: "Animados" },
+  "channel-studio": { icon: Tv, label: "Canais" },
+};
 
 export default function AITools() {
   const [params, setParams] = useSearchParams();
   const selected = getAITool(params.get("tool") || "thumbnails");
   const projectId = params.get("project_id");
+  const changeTool = (toolId) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("tool", toolId);
+      return next;
+    });
   return (
-    <div className="space-y-5">
-      <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/60 p-6">
-        <div className="flex items-center gap-3">
-          <span className="rounded-xl bg-sky-500/15 p-3 text-sky-300">
-            <Sparkles />
-          </span>
-          <div>
-            <h1 className="text-3xl font-black text-white">Ferramentas IA</h1>
-            <p className="text-sm text-slate-400">
-              Criação assistida conectada aos projetos, acervo e fluxo
-              editorial.
-            </p>
-          </div>
-        </div>
+    <div className="space-y-3">
+      <header className="border-b border-slate-800 px-1 pb-3">
+        <h1 className="text-2xl font-black text-white">Ferramentas IA e Editoração</h1>
+        <p className="mt-1 text-sm text-slate-400">
+          Visão geral das principais ferramentas, fluxos e integração com projetos do sistema.
+        </p>
       </header>
       <div
         role="tablist"
         aria-label="Ferramentas IA"
-        className="flex gap-2 overflow-x-auto pb-2"
+        className="flex overflow-x-auto rounded-xl border border-sky-900/80 bg-slate-950"
       >
-        {AI_TOOLS.map((tool) => (
-          <button
-            role="tab"
-            aria-selected={selected.id === tool.id}
-            key={tool.id}
-            onClick={() =>
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set("tool", tool.id);
-                return next;
-              })
-            }
-            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold ${selected.id === tool.id ? "border-sky-400 bg-sky-500 text-slate-950" : "border-slate-800 bg-slate-900 text-slate-300"}`}
-          >
-            {tool.label}
-            {tool.status === "planned" ? " · em breve" : tool.status === "workspace" ? " · preparação" : ""}
-          </button>
-        ))}
+        {AI_TOOLS.map((tool) => {
+          const presentation = TOOL_PRESENTATION[tool.id] || {
+            icon: Images,
+            label: tool.label,
+          };
+          const ToolIcon = presentation.icon;
+          return (
+            <button
+              role="tab"
+              aria-label={tool.label}
+              aria-selected={selected.id === tool.id}
+              key={tool.id}
+              onClick={() => changeTool(tool.id)}
+              className={`flex min-w-20 shrink-0 flex-1 flex-col items-center gap-1 border-r border-sky-900/70 px-3 py-2 text-[11px] font-semibold transition last:border-r-0 ${selected.id === tool.id ? "bg-sky-500 text-slate-950" : "bg-slate-950 text-slate-300 hover:bg-sky-950/50 hover:text-white"}`}
+            >
+              <ToolIcon aria-hidden="true" size={17} strokeWidth={1.8} />
+              <span>{presentation.label}</span>
+            </button>
+          );
+        })}
       </div>
       <main className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-        {selected.id === "carousel" && (
-          <CarouselStudio key={projectId || "local"} projectId={projectId} />
-        )}
-        {selected.id === "thumbnails" && <ThumbnailStudio />}
-        {selected.id === "thumbnail-variants" && <AIThumbnailStudio />}
+        {["image-generator", "video-generator", "object-generator", "world-generator"].includes(selected.id) && <GenerativeStudio type={selected.id} />}
+        {selected.id === "thumbnails" && <AIThumbnailStudio />}
+        {selected.id === "carousel" && <CarouselStudio key={projectId || "local"} projectId={projectId} />}
         {selected.id === "animated-videos" && <AnimatedStudio />}
         {selected.id === "voice-studio" && <VoiceStudio />}
         {selected.id === "channel-studio" && <ChannelStudio />}
@@ -91,5 +127,3 @@ export default function AITools() {
     </div>
   );
 }
-
-

@@ -1,6 +1,8 @@
+import { SOCIAL_FORMATS } from './socialFormats';
+
 export const CAROUSEL_SCHEMA_VERSION = 1;
 
-const FORMATS = new Set(['4:5', '1:1']);
+const FORMATS = new Set(SOCIAL_FORMATS.map((item) => item.id));
 const TYPES = new Set(['cover', 'content', 'cta']);
 const TYPE_ALIASES = { capa: 'cover', conteudo: 'content', conteúdo: 'content', cta: 'cta' };
 const ROOT_FIELDS = new Set(['tema', 'title', 'slides', 'legenda', 'caption', 'hashtags']);
@@ -109,7 +111,7 @@ export function parseCarouselImport(raw, current) {
 
 export function validateCarouselDocument(document) {
   const errors = [];
-  if (!FORMATS.has(document?.format)) errors.push({ path: 'format', message: 'Formato deve ser 4:5 ou 1:1.' });
+  if (!FORMATS.has(document?.format) && !/^custom:[^:]+:\d+x\d+$/.test(document?.format || '')) errors.push({ path: 'format', message: 'Formato de rede social não reconhecido.' });
   for (const [index, slide] of (document?.slides || []).entries()) {
     if (!TYPES.has(slide.type)) errors.push({ path: `slides[${index}].type`, message: 'Tipo de slide inválido.' });
     if (!String(slide.title || '').trim()) errors.push({ path: `slides[${index}].title`, message: 'Título do slide é obrigatório.' });

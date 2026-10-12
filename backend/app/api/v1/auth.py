@@ -5,11 +5,13 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, Cookie, Depends, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import error_response
 from app.db.session import get_session
+from app.demo_accounts import DEMO_ACCOUNTS
 from app.models.identity import User
 from app.repositories.identity import (
     get_auth_session,
@@ -80,6 +82,29 @@ def login(body: LoginBody, request: Request, response: Response, session: DbSess
         return error_response(request, 401, "INVALID_CREDENTIALS", "E-mail ou senha inválidos.")
     set_session_cookie(response, result.token, settings)
     return session_payload(session, result.auth_session)
+
+
+class DemoLoginBody(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+@router.post("/demo", response_model=SessionResponse)
+def demo_login(body: DemoLoginBody, request: Request, response: Response, session: DbSession):
+    settings = get_settings()
+    if settings.environment not in {"local", "test"}:
+        return error_response(request, 404, "NOT_FOUND", "Recurso não encontrado.")
+    if body.email.strip().lower() not in {account[0] for account in DEMO_ACCOUNTS}:
+        return error_response(request, 403, "DEMO_ACCOUNT_DENIED", "Conta demo não autorizada.")
+    if not settings.demo_password:
+        return error_response(
+            request, 503, "DEMO_NOT_CONFIGURED", "Configure o acesso demo local no servidor."
+        )
+    return login(
+        LoginBody(email=body.email, password=settings.demo_password.get_secret_value()),
+        request,
+        response,
+        session,
+    )
 
 
 @router.get("/google/start")

@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../../lib/workProtection";
 import StudioProjectBar from "./StudioProjectBar";
 import { useState } from "react";
 import {
@@ -11,7 +12,7 @@ import {
 } from "./StudioUI";
 import VideoWorkspace, { makeScenes } from "./VideoWorkspace";
 export default function ChannelStudio() {
-  const [brief, setBrief] = useState({
+  const [brief, setBrief] = useWorkDraftState("components/ai-tools/ChannelStudio.jsx:brief", {
       niche: "Educação e conhecimento",
       theme: "",
       language: "Português (Brasil)",
@@ -20,8 +21,8 @@ export default function ChannelStudio() {
       strategy: "Mídia própria",
       tone: "Explicativo",
     }),
-    [script, setScript] = useState(""),
-    [scenes, setScenes] = useState([]),
+    [script, setScript] = useWorkDraftState("components/ai-tools/ChannelStudio.jsx:script", ""),
+    [scenes, setScenes] = useWorkDraftState("components/ai-tools/ChannelStudio.jsx:scenes", []),
     [message, setMessage] = useState("");
   return (
     <section className="space-y-5">

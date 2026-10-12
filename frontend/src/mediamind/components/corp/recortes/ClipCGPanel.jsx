@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useWorkDraftState } from '../../../lib/workProtection';
 import { Plus, Play, Trash2 } from 'lucide-react';
 import { fmt } from './clipModel';
 
@@ -11,7 +12,7 @@ const TIPOS = [
 
 // CGs / lower-thirds: adicionar, editar e posicionar sobre o trecho.
 export default function ClipCGPanel({ clip, onChange, seekTo, onAvancar }) {
-  const [draft, setDraft] = useState({ titulo: '', tipo: 'lower_third', start_ms: clip.in_ms || 0, end_ms: (clip.in_ms || 0) + 4000 });
+  const [draft, setDraft] = useWorkDraftState(`clip:${clip.id}:cg`, { titulo: '', tipo: 'lower_third', start_ms: clip.in_ms || 0, end_ms: (clip.in_ms || 0) + 4000 });
 
   function add() {
     if (!draft.titulo) return;

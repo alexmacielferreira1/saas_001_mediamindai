@@ -1,0 +1,17 @@
+# Configuração de IA por empresa — 12/10/2026
+
+Origem: pedidos de Alex nesta conversa em 12/10/2026. A configuração é administrativa para todo o MediaMind, com múltiplas conexões por empresa, nomes personalizados, presets e aplicação geral ou por recurso. Cada IA aparece em seu próprio card, dados à esquerda e checkboxes horizontais à direita, separados em ferramentas de criação e IA do sistema.
+
+Contrato local: `GET /api/v1/ai/companies`, `GET /api/v1/ai/connections` e `PUT /api/v1/ai/connections`. O parâmetro opcional `tenant_id` exige vínculo ativo ou papel superadmin comprovado no servidor. O superadmin pode configurar todas as empresas ativas sem depender de grupo de permissões; outros usuários exigem `permissions.manage` para editar. Ler configurações nunca retorna chaves. Chaves são criptografadas no servidor, preservadas ao salvar campos sem chave e exigidas novamente ao trocar provedor/endereço. Auditoria registra ator e empresa de destino sem credenciais.
+
+Persistência: registro `AISettings` da empresa existente, sem nova tabela ou migration. Conexões antigas são exibidas como “IA principal” e continuam operacionais. A gravação nova conserva a chave criptografada da configuração antiga e passa a armazenar a lista, conexão padrão e exceções por recurso. Uma exceção explícita nula desativa API naquele recurso; uma escolha específica precede a padrão. Não há herança de chave entre empresas.
+
+O acesso rápido local agora autentica contas do catálogo demo usando a senha demo configurada no servidor e cria sessão HttpOnly real. Só funciona em local/test; staging/produção recusam a rota. Contas não cadastradas e senha/configuração inválida não recebem sessão. Identidades demo antigas do navegador são atualizadas para sessão real ao recarregar.
+
+Presets: GPT/OpenAI (`gpt-4.1`), GPT Imagens (`gpt-image-1`), Claude (`claude-sonnet-5-5`) e API compatível personalizada. Endereço/modelo são editáveis; escolha de preset não altera o nome personalizado e limpa a entrada de chave. Fontes oficiais consultadas em 12/10/2026: [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1), [GPT Image](https://developers.openai.com/api/docs/models/gpt-image-1), [modelos Claude](https://platform.claude.com/docs/en/models/overview). A disponibilidade do modelo depende da conta do provedor.
+
+Integração comprovada: geração de imagens resolve a conexão da empresa selecionada, aplica exceção por ferramenta e rejeita protocolos/modelos conhecidos sem saída de imagem. O restante do catálogo permite persistir escolhas administrativas, mas não comprova integração de todas as ferramentas: adaptadores de texto/Claude, vídeo, 3D, áudio, OCR e busca continuam sendo trabalho específico de cada recurso. Recursos locais continuam disponíveis sem API.
+
+Verificação: testes específicos de API, autenticação demo, isolamento, superadmin sem grupo, preservação de chave, seleção por ferramenta e presets. Lint frontend/backend e build frontend verificados. M0 permanece com seus gates gerais pendentes; sem publicação.
+
+Rollback local: restaurar os arquivos desta fatia de um snapshot revisado e preservar o registro `AISettings`; o formato antigo permanece legível pela implementação nova. Para voltar ao código antigo depois de salvar múltiplas conexões, converter primeiro a conexão padrão para os campos legados usando ferramenta administrativa autorizada, mantendo a chave criptografada. Não excluir registros ou o arquivo local de criptografia.

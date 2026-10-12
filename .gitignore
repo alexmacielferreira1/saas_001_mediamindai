@@ -16,6 +16,8 @@ build/
 test-results/
 playwright-report/
 frontend/coverage/
+frontend/coverage-*/
+/relatorio-testes.txt
 uploads/
 *.db
 *.log

@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../lib/workProtection";
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Clock3, FileText, Film, Folder, Import, Library, Plus, Search } from 'lucide-react';
 import { listMediaAssets } from '../../api/media';
@@ -11,7 +12,7 @@ export default function Roteiro2() {
   const [assets, setAssets] = useState([]); const [scripts, setScripts] = useState([]);
   const [loading, setLoading] = useState(true); const [error, setError] = useState('');
   const [query, setQuery] = useState(''); const [selected, setSelected] = useState(null);
-  const [draft, setDraft] = useState(null); const [saving, setSaving] = useState(false); const [notice, setNotice] = useState('');
+  const [draft, setDraft] = useWorkDraftState("pages/Roteiro2.jsx:draft", null); const [saving, setSaving] = useState(false); const [notice, setNotice] = useState('');
   const importRef = useRef(null);
   useEffect(() => { let live = true; Promise.all([listMediaAssets(), listScripts().catch(() => [])]).then(([media, rows]) => { if (live) { setAssets(Array.isArray(media) ? media : []); setScripts(Array.isArray(rows) ? rows : []); } }).catch(() => { if (live) setError('Não foi possível carregar o acervo.'); }).finally(() => { if (live) setLoading(false); }); return () => { live = false; }; }, []);
   const visible = useMemo(() => { const term = query.trim().toLowerCase(); return term ? assets.filter((a) => [a.title, a.filename, a.program_name, a.category, a.subjects].some((v) => String(v || '').toLowerCase().includes(term))) : assets; }, [assets, query]);

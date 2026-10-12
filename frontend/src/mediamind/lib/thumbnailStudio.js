@@ -58,6 +58,16 @@ export function normalizePerson(item, presenter = false) {
   };
 }
 
+export function personNameFromFilename(filename = '') {
+  const stem = String(filename).replace(/\.[^.]+$/, '').trim();
+  const technical = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stem)
+    || /^(img|dsc|pxl|photo|image)[-_ ]?\d/i.test(stem)
+    || /^\d{8,}$/.test(stem);
+  if (!stem || technical) return 'Nova pessoa';
+  return stem.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
+}
+
 export function projectPeople(project = {}) {
   const guests = [ ...(project.convidados || []), ...(project.entrevistados || []), ...(project.participantes || []) ];
   if (project.convidado_nome) guests.push({ nome: project.convidado_nome, cg: project.convidado_cg });

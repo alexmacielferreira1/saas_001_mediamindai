@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+    <title>SoundCraft</title>
+    <link rel="icon" href="./ai.storyteller.soundcraft-4f86cc0f1d19c49f.png" />
+    <style>
+      html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#1e1f22}
+      #soundcraft_canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+      #soundcraft_loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#b8b8b8;font:14px system-ui,sans-serif;pointer-events:none}
+    </style>
+    <script>
+      (function(){var Orig=window.AudioContext||window.webkitAudioContext;if(!Orig)return;var contexts=[];function Wrapped(options){var context=new Orig(options);contexts.push(context);return context}Wrapped.prototype=Orig.prototype;window.AudioContext=Wrapped;if(window.webkitAudioContext)window.webkitAudioContext=Wrapped;function resume(){contexts.forEach(function(context){if(context.state==='suspended')context.resume().catch(function(){})})}['pointerdown','mousedown','touchstart','keydown'].forEach(function(event){window.addEventListener(event,resume,{capture:true})})})();
+    </script>
+    <script type="module">
+      import init, * as bindings from './soundcraft-web-a3a602141ad2cd74.js';
+      const wasm = await init({ module_or_path: './soundcraft-web-a3a602141ad2cd74_bg.wasm' });
+      window.wasmBindings = bindings;
+      dispatchEvent(new CustomEvent('TrunkApplicationStarted', { detail: { wasm } }));
+    </script>
+  </head>
+  <body>
+    <canvas id="soundcraft_canvas"></canvas>
+    <div id="soundcraft_loading">Carregando SoundCraft completo…</div>
+  </body>
+</html>

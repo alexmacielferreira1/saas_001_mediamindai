@@ -51,7 +51,7 @@ THUMBNAIL_IMAGE_LIMIT = 20 * 1024 * 1024
 
 
 def require_local_media() -> None:
-    if get_settings().environment == "production":
+    if get_settings().environment not in {"local", "test"}:
         raise PublicError(404, "NOT_FOUND", "Recurso não encontrado.")
 
 
@@ -178,8 +178,11 @@ def probe_media(source: Path) -> dict:
         )
         numerator, _, denominator = str(video.get("r_frame_rate") or "0/1").partition("/")
         fps = float(numerator) / max(1, float(denominator or 1))
+        raw_duration = payload.get("format", {}).get("duration")
+        if isinstance(raw_duration, (list, dict)):
+            return {}
         return {
-            "duration": round(float(payload.get("format", {}).get("duration") or 0), 3),
+            "duration": round(float(raw_duration or 0), 3),
             **({"width": int(video["width"])} if video.get("width") else {}),
             **({"height": int(video["height"])} if video.get("height") else {}),
             **({"fps": round(fps, 3)} if fps else {}),

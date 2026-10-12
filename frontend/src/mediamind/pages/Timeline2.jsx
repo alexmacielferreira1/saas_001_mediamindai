@@ -1,3 +1,4 @@
+import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, BookmarkPlus, Captions, ChevronLeft, ChevronRight, Copy, Crop, Download, Eye, EyeOff,
@@ -41,19 +42,20 @@ const assetToMedia = (asset) => ({
 });
 
 export default function Timeline2({ embedded = false, projectAssets = [] }) {
+  const storagePrefix = useWorkStorageKey("");
   const initial = useMemo(() => {
     try {
-      const workspaceDraft = JSON.parse(localStorage.getItem('mm_workspace2_timeline2_draft'));
+      const workspaceDraft = JSON.parse(localStorage.getItem(storagePrefix + 'mm_workspace2_timeline2_draft'));
       return workspaceDraft?.tracks ? workspaceDraft : INITIAL_DOCUMENT;
     } catch { return INITIAL_DOCUMENT; }
-  }, []);
+  }, [storagePrefix]);
   const { document, commit, updateTransient, beginGesture, finishGesture, undo, redo, canUndo, canRedo } = useTimeline2Project(initial, `mm_timeline2_project:${initial.id}`);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [libraryTab, setLibraryTab] = useState('project');
   const [activePanel, setActivePanel] = useState('media');
   const [activeTool, setActiveTool] = useState('select');
-  const [textValue, setTextValue] = useState('');
+  const [textValue, setTextValue] = useWorkDraftState("pages/Timeline2.jsx:textValue", '');
   const [captionPresetId, setCaptionPresetId] = useState(CAPTION_PRESETS[0].id);
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -357,7 +359,7 @@ export default function Timeline2({ embedded = false, projectAssets = [] }) {
         <div className="ml-auto flex flex-wrap gap-2">
           <button type="button" onClick={undo} disabled={!canUndo} aria-label="Desfazer" className="w2-button disabled:opacity-40"><Undo2 size={14} /> Desfazer</button>
           <button type="button" onClick={redo} disabled={!canRedo} aria-label="Refazer" className="w2-button disabled:opacity-40"><Redo2 size={14} /> Refazer</button>
-          <button type="button" onClick={() => localStorage.setItem('mm_timeline2_project', JSON.stringify(document))} className="w2-button"><Save size={14} /> Salvar projeto</button>
+          <button type="button" onClick={() => localStorage.setItem(storagePrefix + 'mm_timeline2_project', JSON.stringify(document))} className="w2-button"><Save size={14} /> Salvar projeto</button>
           <button type="button" onClick={exportSelected} disabled={exporting || selected?.kind !== 'video' || !selected?.assetId} title="Renderiza os cortes do clipe selecionado em MP4" className="w2-button border-emerald-600 text-emerald-300 disabled:opacity-40"><Download size={14} /> {exporting ? 'Renderizando…' : 'Exportar clipe'}</button>
           <button type="button" onClick={exportSequence} disabled={exporting || !document.tracks.find((track) => track.id === 'v1')?.clips.some((clip) => clip.assetId)} title="Renderiza todos os cortes da trilha principal em um MP4" className="w2-button border-violet-600 text-violet-300 disabled:opacity-40"><Download size={14} /> Exportar sequência</button>
         </div>

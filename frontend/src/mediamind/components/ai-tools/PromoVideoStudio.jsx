@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../../lib/workProtection";
 import StudioProjectBar from "./StudioProjectBar";
 import { useEffect, useState } from "react";
 import { Film, Wand2 } from "lucide-react";
@@ -12,7 +13,7 @@ import {
 } from "./StudioUI";
 import VideoWorkspace, { makeScenes } from "./VideoWorkspace";
 export default function PromoVideoStudio({ affiliate = false }) {
-  const [brief, setBrief] = useState({
+  const [brief, setBrief] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:brief", {
     name: "",
     link: "",
     price: "",
@@ -25,13 +26,13 @@ export default function PromoVideoStudio({ affiliate = false }) {
     voice: "Natural",
     captions: true,
   });
-  const [script, setScript] = useState(""),
-    [variant, setVariant] = useState(0),
-    [scenes, setScenes] = useState([]),
+  const [script, setScript] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:script", ""),
+    [variant, setVariant] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:variant", 0),
+    [scenes, setScenes] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:scenes", []),
     [message, setMessage] = useState(""),
-    [audio, setAudio] = useState(null),
-    [music, setMusic] = useState(null),
-    [volume, setVolume] = useState(25);
+    [audio, setAudio] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:audio", null),
+    [music, setMusic] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:music", null),
+    [volume, setVolume] = useWorkDraftState("components/ai-tools/PromoVideoStudio.jsx:volume", 25);
   useEffect(
     () => () => {
       if (audio) URL.revokeObjectURL(audio);

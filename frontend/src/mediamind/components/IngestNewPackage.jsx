@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../lib/workProtection";
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -16,12 +17,12 @@ const STEPS = ['Criar pacote', 'Adicionar arquivos', 'Revisar e iniciar'];
 const FILE_ICONS = { video: FileVideo, audio: FileAudio, image: FileImage, document: FileText };
 
 export default function IngestNewPackage() {
-  const [step, setStep] = useState(1);
-  const [name, setName] = useState('');
-  const [folder, setFolder] = useState('');
-  const [program, setProgram] = useState('');
-  const [files, setFiles] = useState([]);
-  const [audioFile, setAudioFile] = useState(null);
+  const [step, setStep] = useWorkDraftState("ingest:step", 1);
+  const [name, setName] = useWorkDraftState("ingest:name", '');
+  const [folder, setFolder] = useWorkDraftState("ingest:folder", '');
+  const [program, setProgram] = useWorkDraftState("ingest:program", '');
+  const [files, setFiles] = useWorkDraftState("ingest:files", []);
+  const [audioFile, setAudioFile] = useWorkDraftState("ingest:audioFile", null);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [audioDragOver, setAudioDragOver] = useState(false);

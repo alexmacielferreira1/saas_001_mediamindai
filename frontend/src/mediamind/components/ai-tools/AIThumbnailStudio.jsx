@@ -1,3 +1,4 @@
+import { useWorkDraftState } from "../../lib/workProtection";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Download, ImagePlus, Wand2, RotateCcw, Layers } from "lucide-react";
@@ -244,7 +245,7 @@ export default function AIThumbnailStudio() {
     flip: false,
     background: null,
   });
-  const [original, setOriginal] = useState(null),
+  const [original, setOriginal] = useWorkDraftState("components/ai-tools/AIThumbnailStudio.jsx:original", null),
     [cutout, setCutout] = useState(null),
     [compare, setCompare] = useState(false),
     [selected, setSelected] = useState(0),
@@ -349,7 +350,7 @@ export default function AIThumbnailStudio() {
       <Notice>{message}</Notice>
       <div className="grid items-start gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <Panel title="Foto principal" number="01">
+          <Panel title="Sua foto" number="01">
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -404,7 +405,7 @@ export default function AIThumbnailStudio() {
               dispositivo.
             </p>
           </Panel>
-          <Panel title="Texto da capa" number="02">
+          <Panel title="Sua mensagem" number="02">
             {[
               ["title", "Título"],
               ["highlight", "Destaque"],
@@ -432,6 +433,17 @@ export default function AIThumbnailStudio() {
           </Panel>
         </aside>
         <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-sky-400">03</p>
+              <h2 className="text-xl font-black text-white">Suas 3 ideias</h2>
+              <p className="mt-1 text-xs text-slate-400">Escolha uma ideia para editar. Os ajustes afetam somente a composição selecionada.</p>
+            </div>
+            <Button primary onClick={() => { setSelected(0); patch("layout", (settings.layout + 1) % layouts.length); setMessage("Três novas direções visuais foram preparadas."); }}>
+              <Wand2 size={16} />
+              Gerar 3 novas ideias
+            </Button>
+          </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">
               {["16:9", "9:16"].map((f) => (

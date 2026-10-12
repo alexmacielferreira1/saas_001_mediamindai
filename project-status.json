@@ -2,6 +2,11 @@
   "product": "mediamind",
   "current_milestone": "M0",
   "manual_checks": {
+    "company_ai_configuration": {
+      "status": "partial",
+      "updated_at": "2026-10-12T10:10:00-03:00",
+      "notes": "Configuração por empresa com múltiplas conexões, cards individuais, nome personalizado, presets GPT/Claude, atribuição por ferramenta e IA do sistema. Superadmin administra todas as empresas ativas. API local/banco responderam; login demo real, catálogo e leitura de conexões verificados. 35 testes backend de IA/auth/lockout e 25 frontend focados passaram; lint e build aprovados. Navegador exibiu card e superadmin sem erro. Integrações além de geração de imagem ainda não comprovadas; detalhes em docs/ai/05_COMPANY_AI_CONFIGURATION.md. Não altera os gates gerais M0."
+    },
     "frontend_functional_validation": {
       "status": "partial",
       "updated_at": "2026-09-29T20:55:00-03:00",
@@ -14,77 +19,77 @@
       "status": "failed",
       "checks": {
         "backend_lint": {
-          "status": "failed",
-          "updated_at": "2026-09-24T00:20:15.271056+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/backend_lint.log"
+          "status": "passed",
+          "updated_at": "2026-10-11T14:49:57.303966+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/backend_lint.log"
         },
         "backend_format": {
-          "status": "failed",
-          "updated_at": "2026-09-24T00:20:15.841010+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/backend_format.log"
+          "status": "passed",
+          "updated_at": "2026-10-11T14:49:57.698819+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/backend_format.log"
         },
         "unit_tests": {
-          "status": "passed",
-          "updated_at": "2026-09-24T00:20:17.365015+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/unit_tests.log"
+          "status": "failed",
+          "updated_at": "2026-10-11T14:49:57.991238+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/unit_tests.log"
         },
         "migration": {
-          "status": "failed",
-          "updated_at": "2026-09-24T00:21:16.095512+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/migration.log"
+          "status": "passed",
+          "updated_at": "2026-10-11T14:51:34.554533+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/migration.log"
         },
         "database_integration": {
-          "status": "failed",
-          "updated_at": "2026-09-24T00:21:22.491083+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/database_integration.log"
+          "status": "passed",
+          "updated_at": "2026-10-11T14:51:36.540673+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/database_integration.log"
         },
         "dependency_consistency": {
           "status": "passed",
-          "updated_at": "2026-09-24T00:21:33.099425+00:00",
+          "updated_at": "2026-10-11T14:51:39.058105+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/dependency_consistency.log"
         },
         "frontend_build": {
           "status": "passed",
-          "updated_at": "2026-09-24T00:21:37.155978+00:00",
+          "updated_at": "2026-10-11T14:51:42.676481+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_build.log"
         },
         "frontend_lint": {
           "status": "passed",
-          "updated_at": "2026-09-24T00:21:43.184726+00:00",
+          "updated_at": "2026-10-11T14:51:49.830007+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_lint.log"
         },
         "frontend_typecheck": {
           "status": "passed",
-          "updated_at": "2026-09-24T00:21:50.741832+00:00",
+          "updated_at": "2026-10-11T14:52:03.236261+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_typecheck.log"
         },
         "frontend_unit_tests": {
           "status": "failed",
-          "updated_at": "2026-09-24T00:21:54.326370+00:00",
+          "updated_at": "2026-10-11T14:52:07.922121+00:00",
           "notes": "Exit 1; evidence: .runtime/checks/frontend_unit_tests.log"
         },
         "http_smoke": {
-          "status": "failed",
-          "updated_at": "2026-09-24T00:22:11.088318+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/http_smoke.log"
+          "status": "passed",
+          "updated_at": "2026-10-11T14:53:23.722644+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/http_smoke.log"
         },
         "original_frontend_integrity": {
           "status": "failed",
-          "updated_at": "2026-09-24T00:22:14.471020+00:00",
-          "notes": "288 original files; 7 approved typed corrections; 62 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js"
+          "updated_at": "2026-10-11T14:53:24.707081+00:00",
+          "notes": "288 original files; 7 approved typed corrections; 67 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/CorpProductionDetail.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/NewClipDialog.jsx, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/components/management/ManagementAuditoriaTab.jsx, src/mediamind/components/management/ManagementProcessamentosTab.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/clipEngineService.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js"
         },
         "frontend_functional_validation": {
-          "status": "blocked",
-          "updated_at": "2026-09-24T00:22:14.471020+00:00",
-          "notes": "Original export requires Base44 configuration; frontend not validated in browser. See docs/BASE44_MIGRATION_MAP.md. HTTP/build alone is insufficient."
+          "status": "partial",
+          "updated_at": "2026-09-29T20:55:00-03:00",
+          "notes": "Workspace 2 exercitado localmente até o Passo 5, incluindo Timeline e player final. 195 testes frontend em 56 arquivos, lint e build aprovados; 158 testes backend aprovados e 2 de integração ignorados pelo ambiente. Preview, player final e render MP4 preservam lacunas em preto/silêncio; a Timeline continua o relógio mesmo se a fonte do clipe estiver temporariamente indisponível. Keyframes distinguem visualmente estado vazio/ativo. Biblioteca local: 32 presets AI Edita Legendas Pro v2 + 4 MediaMind aplicáveis e visíveis no preview; sincronização palavra a palavra e render final permanecem pendentes. A Timeline exibe textos no topo, camadas de vídeo maiores acima das menores e áudios abaixo, sem regravar a ordem dos projetos persistidos. No Passo 2, a pesquisa do Acervo permanece à esquerda, conserva os filtros do Passo 1 e adiciona ou arrasta novas mídias diretamente para o roteiro; a lista de roteiros fica à direita. Gravações agora envia pela mesma API funcional de mídia do Acervo/Workspace, aceita stream_url, preserva mediaAssetId/checksum e suporta o limite configurado de 4 GB; upload real foi criado, catalogado e reproduzido por stream 206. A navegação de produção foi consolidada em uma única página Edição e as superfícies solicitadas receberam o padrão arredondado. Restante da esteira, fila durável e persistência PostgreSQL ponta a ponta ainda pendentes."
         },
         "git_clean_at_check": {
           "status": "pending",
-          "updated_at": "2026-09-24T00:22:14.471020+00:00",
+          "updated_at": "2026-10-11T14:53:24.707081+00:00",
           "notes": "Snapshot before writing this report. Verify and commit reviewed work separately."
         }
       },
-      "updated_at": "2026-09-24T00:22:14.471020+00:00",
+      "updated_at": "2026-10-11T14:53:24.707081+00:00",
       "notes": "Partial M0; unresolved gates. Do not advance to M1."
     },
     "M1": {

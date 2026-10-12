@@ -4,6 +4,8 @@ Esta área concentra a arquitetura e o plano de implementação das capacidades 
 
 ## Documentos ativos
 
+- [Configuração de IA por empresa](05_COMPANY_AI_CONFIGURATION.md)
+
 - [Plano mestre de RAG, Knowledge, MCP e aprendizado](00_RAG_MCP_FINETUNING_MASTER.md)
 - [Plano incremental de implementação](01_IMPLEMENTATION_PLAN.md)
 - [Registro das fontes e decisões](02_SOURCE_ASSESSMENT.md)

@@ -14,6 +14,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Canvas/editor DOM suites compete heavily for CPU under V8 instrumentation.
+    maxWorkers: 1,
+    testTimeout: 20000,
+    reporters: ['./scripts/pytest-style-reporter.mjs'],
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     setupFiles: './src/test/setup.js',
     coverage: {

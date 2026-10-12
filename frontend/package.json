@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:all": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/test-report.ps1",
     "test:watch": "vitest",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",

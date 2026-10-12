@@ -1,3 +1,4 @@
+import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, Eye, LayoutTemplate, Lock, Search, Unlock, Upload } from 'lucide-react';
 import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
@@ -12,18 +13,19 @@ import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 import { MOCK_ASSETS } from '../data';
 
 export default function Workspace2() {
+  const storagePrefix = useWorkStorageKey("");
   const initialProject = {
     title: 'Jornal 12h - 15/05/2026', segment: 'Jornalismo', program: 'Jornal do Meio Dia',
     status: 'Rascunho', version: 'v1.0', estimatedDuration: '02:48:10', reporter: 'João Silva',
     producer: 'Maria Oliveira', editor: 'Alex',
   };
-  const [activeStep, setActiveStep] = useState('create');
+  const [activeStep, setActiveStep] = useWorkDraftState("pages/Workspace2.jsx:activeStep", 'create');
   const [assets, setAssets] = useState([]);
-  const [selectedIds, setSelectedIds] = useState(() => { try { return JSON.parse(localStorage.getItem('mm_workspace_media_selection')) || []; } catch { return []; } });
-  const [mediaSearch, setMediaSearch] = useState(() => { try { return JSON.parse(localStorage.getItem('mm_workspace_media_search')) || DEFAULT_WORKSPACE_MEDIA_SEARCH; } catch { return DEFAULT_WORKSPACE_MEDIA_SEARCH; } });
-  const [previewAssetId, setPreviewAssetId] = useState(null);
-  const [blocks, setBlocks] = useState([]);
-  const [project, setProject] = useState(initialProject);
+  const [selectedIds, setSelectedIds] = useWorkDraftState("pages/Workspace2.jsx:selectedIds", () => { try { return JSON.parse(localStorage.getItem(storagePrefix + 'mm_workspace_media_selection')) || []; } catch { return []; } });
+  const [mediaSearch, setMediaSearch] = useWorkDraftState("pages/Workspace2.jsx:mediaSearch", () => { try { return JSON.parse(localStorage.getItem(storagePrefix + 'mm_workspace_media_search')) || DEFAULT_WORKSPACE_MEDIA_SEARCH; } catch { return DEFAULT_WORKSPACE_MEDIA_SEARCH; } });
+  const [previewAssetId, setPreviewAssetId] = useWorkDraftState("pages/Workspace2.jsx:previewAssetId", null);
+  const [blocks, setBlocks] = useWorkDraftState("pages/Workspace2.jsx:blocks", []);
+  const [project, setProject] = useWorkDraftState("pages/Workspace2.jsx:project", initialProject);
   const [notice, setNotice] = useState('Projeto ativo · Não salvo');
   const [showPreview] = useState(true);
   const [showSearch] = useState(true);
@@ -53,22 +55,22 @@ export default function Workspace2() {
         ...demo.slice(0, 3).map((asset, index) => ({ id: `demo-${asset.id}`, assetId: asset.id, title: asset.title, type: 'media', duration: [27, 32, 18][index] })),
         { id: 'demo-close', title: 'Encerramento', text: 'Essas são as informações de hoje. Continue com a gente.', type: 'text', duration: 15 },
       ];
-      setAssets(demo); setSelectedIds((current) => current.length ? current : demo.slice(0, 3).map((asset) => asset.id)); setPreviewAssetId(demo[0]?.id || null); setBlocks(demoBlocks);
+      setAssets(demo); setSelectedIds((current) => current.length ? current : demo.slice(0, 3).map((asset) => asset.id)); setPreviewAssetId(demo[0]?.id || null); setBlocks(current => current.length ? current : demoBlocks);
       setNotice('Acervo indisponível · exibindo dados demonstrativos para validar o roteiro');
     });
     return () => { active = false; };
   }, []);
-  useEffect(() => { localStorage.setItem('mm_workspace_media_selection', JSON.stringify(selectedIds)); }, [selectedIds]);
-  useEffect(() => { localStorage.setItem('mm_workspace_media_search', JSON.stringify(mediaSearch)); }, [mediaSearch]);
+  useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_selection', JSON.stringify(selectedIds)); }, [selectedIds, storagePrefix]);
+  useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_search', JSON.stringify(mediaSearch)); }, [mediaSearch, storagePrefix]);
 
   const saveProject = () => {
-    localStorage.setItem('mm_workspace2_draft', JSON.stringify({ activeStep, selectedIds, previewAssetId, blocks, project }));
+    localStorage.setItem(storagePrefix + 'mm_workspace2_draft', JSON.stringify({ activeStep, selectedIds, previewAssetId, blocks, project }));
     setNotice('Projeto salvo localmente · Última alteração: agora');
   };
   const resetProject = () => {
     setActiveStep('create'); setSelectedIds([]);
     setPreviewAssetId(assets[0]?.id || null); setBlocks([]); setProject(initialProject);
-    localStorage.removeItem('mm_workspace2_draft'); setNotice('Projeto restaurado ao padrão');
+    localStorage.removeItem(storagePrefix + 'mm_workspace2_draft'); setNotice('Projeto restaurado ao padrão');
   };
   const exportProject = () => {
     const blob = new Blob([JSON.stringify({ project, blocks, selectedIds }, null, 2)], { type: 'application/json' });
@@ -104,7 +106,7 @@ export default function Workspace2() {
   };
   const openTimeline2 = () => {
     const document = workspace2ToTimeline2({ project, blocks, selectedAssets });
-    localStorage.setItem('mm_workspace2_timeline2_draft', JSON.stringify(document));
+    localStorage.setItem(storagePrefix + 'mm_workspace2_timeline2_draft', JSON.stringify(document));
     setNotice('Projeto preparado para a Timeline 2');
     setActiveStep('timeline');
   };
@@ -114,7 +116,7 @@ export default function Workspace2() {
   const preparedTimeline = workspace2ToTimeline2({ project, blocks, selectedAssets });
   const latestTimeline = (() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(`mm_timeline2_project:${preparedTimeline.id}`));
+      const saved = JSON.parse(localStorage.getItem(storagePrefix + `mm_timeline2_project:${preparedTimeline.id}`));
       return saved?.tracks ? saved : preparedTimeline;
     } catch { return preparedTimeline; }
   })();
