@@ -41,14 +41,15 @@ const assetToMedia = (asset) => ({
   origin: 'acervo',
 });
 
-export default function Timeline2({ embedded = false, projectAssets = [] }) {
+export default function Timeline2({ embedded = false, projectAssets = [], editingProjectId = null }) {
   const storagePrefix = useWorkStorageKey("");
   const initial = useMemo(() => {
+    if (editingProjectId) return { ...INITIAL_DOCUMENT, id: `editing-${editingProjectId}`, tracks: INITIAL_DOCUMENT.tracks.map(track => ({ ...track, clips: [] })) };
     try {
       const workspaceDraft = JSON.parse(localStorage.getItem(storagePrefix + 'mm_workspace2_timeline2_draft'));
       return workspaceDraft?.tracks ? workspaceDraft : INITIAL_DOCUMENT;
     } catch { return INITIAL_DOCUMENT; }
-  }, [storagePrefix]);
+  }, [storagePrefix, editingProjectId]);
   const { document, commit, updateTransient, beginGesture, finishGesture, undo, redo, canUndo, canRedo } = useTimeline2Project(initial, `mm_timeline2_project:${initial.id}`);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -367,7 +368,7 @@ export default function Timeline2({ embedded = false, projectAssets = [] }) {
 
       <UploadReceiptPanel assets={uploadReceipts} />
 
-      <div className="grid flex-1 grid-cols-[260px_minmax(500px,1fr)_280px] grid-rows-[minmax(300px,42vh)_1fr] gap-2 overflow-hidden">
+      <div className={`grid flex-1 ${editingProjectId ? 'grid-cols-[150px_minmax(0,1fr)_180px] grid-rows-[minmax(260px,34vh)_1fr]' : 'grid-cols-[260px_minmax(500px,1fr)_280px] grid-rows-[minmax(300px,42vh)_1fr]'} gap-2 overflow-hidden`}>
         <aside className="w2-panel grid min-h-0 grid-cols-[48px_1fr] overflow-hidden">
           <nav aria-label="Módulos do editor" className="flex flex-col items-center gap-1 border-r border-slate-800 bg-slate-950/80 py-2">
             {moduleItems.map(([id, Icon, label]) => <button key={id} type="button" onClick={() => setActivePanel(id)} aria-label={label} title={label} className={`grid size-10 place-items-center rounded-lg ${activePanel === id ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><Icon size={18} /></button>)}

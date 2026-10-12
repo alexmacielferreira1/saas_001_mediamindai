@@ -24,6 +24,12 @@ vi.mock('@/components/ui/use-toast', () => ({ useToast: () => ({ toast: vi.fn() 
 describe('central de edição e aprovação', () => {
   beforeEach(() => { transicionar.mockClear(); setEtapa.mockClear(); });
 
+  it('does not present invented versions as real deliveries', () => {
+    render(<EdicaoPage initialLane="em_edicao" />);
+    expect(screen.queryByText('Primeira versão completa.')).not.toBeInTheDocument();
+    expect(screen.getByText('Nenhuma versão enviada.')).toBeInTheDocument();
+  });
+
   it('opens the requested waiting-approval lane and advances through the tracked transition', () => {
     render(<EdicaoPage initialLane="aguardando" />);
 

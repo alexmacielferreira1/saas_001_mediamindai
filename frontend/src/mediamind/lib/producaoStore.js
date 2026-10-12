@@ -93,6 +93,10 @@ function fromEntity(r) {
     videomaker_confirmado: !!r.videomaker_confirmado,
     editor: r.editor || r.responsavel || '',
     pasta_midias: r.pasta_midias || '',
+    materiais: r.materiais || [],
+    edicao_status: r.edicao_status || '',
+    edicao_obs: r.edicao_obs || '',
+    prazo_edicao: r.prazo_edicao || '',
     historico: r.historico || [],
     _entityId: r.id,
   };
@@ -125,6 +129,10 @@ function toEntityData(p) {
     videomaker_confirmado: !!p.videomaker_confirmado,
     editor: p.editor || '',
     pasta_midias: p.pasta_midias || '',
+    materiais: p.materiais || [],
+    edicao_status: p.edicao_status || '',
+    edicao_obs: p.edicao_obs || '',
+    prazo_edicao: p.prazo_edicao || '',
     historico: p.historico || [],
   };
 }

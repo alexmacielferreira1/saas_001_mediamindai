@@ -4,7 +4,7 @@ import { fmt } from './clipModel';
 
 // Player de seleção IN/OUT com timeline + overlay de trechos virais/CGs.
 // seekRef permite que os painéis chamem seekRef.current(ms).
-export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], onSetIn, onSetOut, onReady, seekRef }) {
+export default function ClipPlayer({ source_url, in_ms = 0, out_ms = 0, segments = [], onSetIn, onSetOut, onReady, seekRef }) {
   const vref = useRef(null);
   const [time, setTime] = useState(0);
   const [dur, setDur] = useState(0);
@@ -37,13 +37,13 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
   useEffect(() => {
     const v = vref.current;
     if (!v || !out_ms) return;
-    if (time >= out_ms && playing && time <= out_ms + 400) v.pause();
+    if (time >= out_ms && playing) v.pause();
   }, [time, out_ms, playing]);
 
   function togglePlay() {
     const v = vref.current;
     if (!v) return;
-    if (v.paused) v.play(); else v.pause();
+    if (v.paused) v.play().catch(() => setPlaying(false)); else v.pause();
   }
   function seekTo(ms) { if (vref.current) vref.current.currentTime = Math.max(0, (ms || 0) / 1000); }
 
@@ -58,8 +58,7 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
   return (
     <div className="flex h-full flex-col">
       <div className="relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-black">
-        {source_url ? <video ref={vref} src={source_url} className="h-full w-full object-contain" controls={false} playsInline preload="metadata" /> : <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_55%_35%,#315475,#15283d_38%,#07111f_75%)]"><div className="text-center"><div className="mx-auto mb-3 grid size-24 place-items-center rounded-full border border-sky-400/30 bg-slate-950/40 text-5xl">🎙️</div><p className="text-sm font-bold text-slate-100">Prefeito fala sobre obras</p><p className="text-[10px] text-slate-400">Jornal da Cidade · prévia do corte</p></div></div>}
-        <div className="absolute bottom-5 left-[8%] right-[18%] border-l-4 border-sky-400 bg-white/95 px-3 py-2 text-left shadow-xl"><p className="text-[10px] font-black uppercase text-blue-900">Prefeito fala sobre obras</p><p className="text-[8px] font-semibold text-slate-700">Novas intervenções devem melhorar a mobilidade na região</p></div>
+        {source_url ? <video ref={vref} src={source_url} className="h-full w-full object-contain" controls={false} playsInline preload="metadata" /> : <p className="p-6 text-center text-xs text-slate-400">Nenhuma mídia vinculada ao corte.</p>}
       </div>
 
       <div className="mt-3">
@@ -76,7 +75,7 @@ export default function ClipPlayer({ source_url, in_ms, out_ms, segments = [], o
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <button onClick={togglePlay} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">{playing ? <Pause size={12} /> : <Play size={12} />} {playing ? 'Pausar' : 'Reproduzir'}</button>
+          <button disabled={!source_url} onClick={togglePlay} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">{playing ? <Pause size={12} /> : <Play size={12} />} {playing ? 'Pausar' : 'Reproduzir'}</button>
           <button onClick={() => seekTo(in_ms)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800"><SkipBack size={12} /> IN</button>
           <button onClick={() => seekTo(out_ms)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800">OUT <SkipForward size={12} /></button>
           <button onClick={() => onSetIn?.(Math.min(Math.round(time), out_ms || Math.round(dur)))} className="flex items-center gap-1 rounded-md border border-emerald-700 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-950/40"><Flag size={12} /> Marcar IN</button>

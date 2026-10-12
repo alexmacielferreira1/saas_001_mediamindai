@@ -15,6 +15,16 @@ function draw(tool, start = [100, 100], end = [220, 180]) {
 }
 
 describe('AprovacaoReviewPanel annotations', () => {
+  it('uses the delivered video instead of a simulated playback clock', () => {
+    render(<AprovacaoReviewPanel project={{ ...project, materiais: [{ nome: 'master.mp4', url: '/master.mp4', tipo: 'video' }] }} />);
+    const video = screen.getByLabelText('Vídeo da revisão');
+    expect(video).toHaveAttribute('src', '/master.mp4');
+    Object.defineProperty(video, 'duration', { value: 90, configurable: true });
+    fireEvent.loadedMetadata(video);
+    video.currentTime = 15;
+    fireEvent.timeUpdate(video);
+    expect(screen.getAllByText(/00:15/).length).toBeGreaterThan(0);
+  });
   beforeEach(() => localStorage.clear());
   it('shows a pen annotation on video, timeline and review list', () => {
     render(<AprovacaoReviewPanel project={project} />);

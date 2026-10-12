@@ -4,7 +4,6 @@ import {
   LogIn, LogOut, MessageSquare, Eraser, ArrowUpRight, Square, Circle, Type, Download, FileVideo, FileText, History, XCircle, RotateCcw,
 } from 'lucide-react';
 
-const DURATION = 180000; // mock 3min
 const VW = 1000, VH = 562;
 const reviewStorageKey = (projectId) => `mediamind:review:${projectId}`;
 
@@ -111,6 +110,10 @@ const DEMO_COMMENTS = [
 // Caneta/marca-texto desenham sobre o vídeo (não alteram o arquivo);
 // IN/OUT e texto marcam frames. Tudo é salvo pro editor ver.
 export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprovar }) {
+  const videoRef = useRef(null);
+  const media = (project.materiais || []).find(item => (item.url || item.stream_url) && /video|\.(mp4|mov|webm)$/i.test(`${item.tipo || ''} ${item.nome || ''}`));
+  const videoSource = project.edited_url || project.video_url || media?.url || media?.stream_url;
+  const [DURATION, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [tool, setTool] = useState('play');
@@ -119,7 +122,6 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
   const [loading, setLoading] = useState(false);
   const [newText, setNewText] = useState('');
   const [generalComment, setGeneralComment] = useState('');
-  const timerRef = useRef(null);
   const erasingRef = useRef(false);
 
   useEffect(() => {
@@ -134,12 +136,14 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
   }, [project.id]);
 
   useEffect(() => {
-    if (!playing) return;
-    timerRef.current = setInterval(() => {
-      setTime((t) => { if (t >= DURATION) { setPlaying(false); return DURATION; } return t + 1000; });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [playing]);
+    if (videoRef.current && Math.abs(videoRef.current.currentTime * 1000 - time) > 200) videoRef.current.currentTime = time / 1000;
+  }, [time]);
+
+  async function togglePlayback() {
+    if (!videoRef.current || !videoSource) return;
+    if (playing) videoRef.current.pause();
+    else try { await videoRef.current.play(); } catch { setPlaying(false); }
+  }
 
   // --- drawing / borracha ---
   function eraseAt(x, y) {
@@ -233,7 +237,7 @@ export default function AprovacaoReviewPanel({ project, onEnviarEditor, onAprova
         <main className="min-h-0 overflow-y-auto p-2">
           <div className="flex flex-wrap items-center gap-1 border border-slate-800 bg-slate-950/45 p-1">{TOOLS.map((t)=>{const Icon=t.Icon;return <button key={t.id} onClick={()=>setTool(t.id)} aria-pressed={tool===t.id} className={`flex items-center gap-1 rounded px-2 py-1 text-[9px] ${tool===t.id?'bg-sky-500 text-slate-950':'text-slate-400 hover:bg-slate-800'}`}><Icon size={11}/>{t.name}</button>;})}</div>
 
-          <div className="relative mt-2 aspect-video overflow-hidden rounded-xl border border-slate-700 bg-[radial-gradient(circle_at_50%_35%,_#315070,_#132238_48%,_#060a12_80%)]"><div className="absolute inset-x-[22%] bottom-0 top-[14%] rounded-t-[45%] bg-gradient-to-b from-slate-600 via-slate-800 to-slate-950"/><div className="absolute left-[8%] top-[26%] rounded border-2 border-amber-400 bg-amber-950/75 px-3 py-2 text-xs font-bold text-amber-300">Ajustar<br/>enquadramento</div><div className="absolute right-[7%] top-[30%] rounded border-2 border-rose-400 bg-rose-950/80 px-3 py-2 text-xs font-bold text-rose-200">Reduzir tempo<br/>desta fala</div><div className="absolute bottom-[12%] left-[30%] rounded bg-white px-3 py-2 text-xs font-semibold text-slate-900">Verificar grafismo<br/>e ortografia</div><button onClick={()=>setPlaying((p)=>!p)} className="absolute inset-0 flex items-center justify-center text-white/80">{playing?<Pause size={36}/>:<Play size={42}/>}</button><svg aria-label="Área de marcação do vídeo" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none" style={{touchAction:'none'}} className={`absolute inset-0 h-full w-full ${tool==='play'?'pointer-events-none':tool==='eraser'?'cursor-cell':'cursor-crosshair'}`} onPointerDown={pDown} onPointerMove={pMove} onPointerUp={pUp}><defs><marker id="approval-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#fb7185"/></marker></defs>{draws.map((d,i)=>renderDrawing(d,`draw-${i}`))}{drawing&&renderDrawing(drawing,'drawing')}</svg><span className="absolute bottom-2 left-3 font-mono text-[9px] text-white">{fmt(time)} / 28:40</span></div>
+          <div className="relative mt-2 aspect-video overflow-hidden rounded-xl border border-slate-700 bg-[radial-gradient(circle_at_50%_35%,_#315070,_#132238_48%,_#060a12_80%)]">{videoSource ? <video ref={videoRef} aria-label="Vídeo da revisão" src={videoSource} preload="metadata" className="h-full w-full object-contain" onLoadedMetadata={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration * 1000 : 0)} onTimeUpdate={event => setTime(event.currentTarget.currentTime * 1000)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} /> : <p className="p-6 text-center text-xs text-slate-400">Nenhum vídeo vinculado à revisão.</p>}<button aria-label={playing ? "Pausar revisão" : "Reproduzir revisão"} disabled={!videoSource} onClick={togglePlayback} className="absolute inset-0 flex items-center justify-center text-white/80 disabled:opacity-20">{playing ? <Pause size={36}/> : <Play size={42}/>}</button><svg aria-label="Área de marcação do vídeo" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="none" style={{touchAction:'none'}} className={`absolute inset-0 h-full w-full ${tool==='play'?'pointer-events-none':tool==='eraser'?'cursor-cell':'cursor-crosshair'}`} onPointerDown={pDown} onPointerMove={pMove} onPointerUp={pUp}><defs><marker id="approval-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#fb7185"/></marker></defs>{draws.map((d,i)=>renderDrawing(d,`draw-${i}`))}{drawing&&renderDrawing(drawing,'drawing')}</svg><span className="absolute bottom-2 left-3 font-mono text-[9px] text-white">{fmt(time)} / {fmt(DURATION)}</span></div>
 
           <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/45 p-2"><div onClick={seek} className="relative h-9 cursor-pointer overflow-hidden bg-slate-900"><div className="absolute inset-x-0 bottom-1 h-2 bg-[repeating-linear-gradient(90deg,#29445c_0,#29445c_5px,#17202d_5px,#17202d_8px)]"/>{[18,36,52,68,84].map((x,i)=><span key={x} className={`absolute bottom-0 top-0 w-0.5 ${['bg-amber-400','bg-rose-400','bg-sky-400','bg-emerald-400','bg-rose-400'][i]}`} style={{left:`${x}%`}}/>)}{annotations.map((a,i)=><button key={`marker-${i}`} aria-label={`Marcação ${a.timecode_label}`} onClick={(e)=>{e.stopPropagation();setTime(a.timecode_ms);}} className="absolute top-0 size-2 -translate-x-1/2 rounded-full bg-violet-300 ring-2 ring-slate-950" style={{left:`${(a.timecode_ms/DURATION)*100}%`}}/>)}<div className="absolute bottom-0 top-0 w-0.5 bg-sky-300" style={{left:`${(time/DURATION)*100}%`}}/></div><div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2"><button onClick={markIn} className="rounded border border-slate-700 px-2 py-1 text-[9px] text-emerald-300">IN · {fmt(time)}</button><button onClick={markOut} className="rounded border border-slate-700 px-2 py-1 text-[9px] text-rose-300">OUT · 28:40</button><button className="rounded border border-sky-700 px-3 py-1 text-[9px] text-sky-300">Ir para timecode</button></div></div>
 

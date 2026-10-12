@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import EditingProjectPanels from './EditingProjectPanels';
 import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
@@ -34,6 +35,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteObs, setAjusteObs] = useState('');
   const [queueFilter, setQueueFilter] = useState(EDITING_LANES.includes(initialLane) ? initialLane : 'em_edicao');
+  const [sortOrder, setSortOrder] = useState('deadline');
 
   function nova() {
     const id = addProjeto({ etapa: 'para_editar', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
@@ -83,20 +85,20 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   }
 
   const materiais = sel?.materiais || [];
-  const comPrazo = emEdicao.filter((p) => p.edicao_prazo).length;
-  const emRevisao = emEdicao.filter((p) => p.edicao_status === 'revisao_interna').length;
-  const prontas = emEdicao.filter((p) => p.edicao_status === 'pronto_para_aprovacao').length;
   const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => laneForEditingProject(p) === lane).length]));
-  const filteredQueue = emEdicao.filter((p) => laneForEditingProject(p) === queueFilter);
+  const filteredQueue = emEdicao.filter((p) => laneForEditingProject(p) === queueFilter).sort((a,b) => sortOrder === 'title' ? (a.titulo || '').localeCompare(b.titulo || '') : (Date.parse(a.prazo || a.data_entrega) || Number.MAX_SAFE_INTEGER) - (Date.parse(b.prazo || b.data_entrega) || Number.MAX_SAFE_INTEGER));
   const selectedLane = sel ? laneForEditingProject(sel) : null;
   const selectedLaneIndex = selectedLane ? EDITING_LANES.indexOf(selectedLane) : -1;
   const mediaGroups = [
-    { label: 'Vídeos', Icon: Video, count: Math.max(8, materiais.filter((m) => /video|mp4|mov/i.test(`${m.tipo || ''}${m.nome || ''}`)).length), files: materiais.filter((m) => /mp4|mov/i.test(m.nome || '')).map((m) => m.nome).slice(0, 3), fallback: ['CAM_A_001.mp4', 'CAM_B_001.mp4', 'CAM_C_001.mp4'] },
-    { label: 'Áudio', Icon: AudioLines, count: 4, files: [], fallback: ['AUDIO_MASTER.wav', 'LAPELA_001.wav', 'AMBIENTE.wav'] },
-    { label: 'Imagens', Icon: Image, count: 6, files: [], fallback: ['thumbnail.jpg', 'background.png', 'grafico_01.png'] },
-    { label: 'Documentos', Icon: FileText, count: 4, files: [], fallback: ['roteiro.pdf', 'briefing.docx', 'pauta.docx'] },
-    { label: 'Referências', Icon: Link2, count: 2, files: [], fallback: ['referencia_visual.mp4', 'case_similar.mp4'] },
-  ];
+    { label: 'Vídeos', Icon: Video, match: /video|\.(mp4|mov|webm|avi)$/i },
+    { label: 'Áudio', Icon: AudioLines, match: /audio|\.(wav|mp3|aac|m4a)$/i },
+    { label: 'Imagens', Icon: Image, match: /image|\.(png|jpg|jpeg|webp)$/i },
+    { label: 'Documentos', Icon: FileText, match: /document|\.(pdf|docx?|txt)$/i },
+    { label: 'Referências', Icon: Link2, match: /referencia|reference/i },
+  ].map(group => {
+    const items = materiais.filter(media => group.match.test(`${media.tipo || ''} ${media.nome || ''}`));
+    return { ...group, count: items.length, files: items.slice(0, 3).map(media => media.nome), fallback: [] };
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
@@ -111,22 +113,22 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
 
       <div className="grid border-b border-slate-800 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: 'Na fila de edição', value: emEdicao.length, Icon: Scissors, tone: 'text-sky-300' },
-          { label: 'Com prazo definido', value: comPrazo, Icon: Clock3, tone: 'text-violet-300' },
-          { label: 'Em revisão interna', value: emRevisao, Icon: CircleAlert, tone: 'text-amber-300' },
-          { label: 'Prontas para revisão', value: prontas, Icon: CircleCheck, tone: 'text-emerald-300' },
-        ].map(({ label, value, Icon, tone }) => (
-          <div key={label} className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 last:border-b-0 sm:border-r xl:border-b-0">
+          { id: 'para_editar', label: 'Para editar', value: queueCounts.para_editar, Icon: Scissors, tone: 'text-sky-300' },
+          { id: 'em_edicao', label: 'Em edição', value: queueCounts.em_edicao, Icon: Clock3, tone: 'text-sky-300' },
+          { id: 'aguardando', label: 'Em alteração', value: queueCounts.aguardando, Icon: CircleAlert, tone: 'text-amber-300' },
+          { id: 'em_aprovacao', label: 'Aguardando revisão', value: projetos.filter(project => project.etapa === 'em_aprovacao').length, Icon: CircleCheck, tone: 'text-emerald-300' },
+        ].map(({ id, label, value, Icon, tone }) => (
+          <button key={label} disabled={id === 'em_aprovacao'} onClick={() => { setQueueFilter(id); const first = emEdicao.find(project => laneForEditingProject(project) === id); setSelId(first?.id ?? null); }} className={`flex items-center gap-3 border-b border-slate-800 px-4 py-3 text-left last:border-b-0 sm:border-r xl:border-b-0 ${queueFilter === id ? 'bg-sky-950/40 ring-1 ring-inset ring-sky-500' : ''}`}>
             <Icon size={15} className={tone} />
             <div className="min-w-0">
               <p className={`text-lg font-semibold tabular-nums ${tone}`}>{value}</p>
               <p className="truncate text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(300px,38%)_1fr]">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(280px,30%)_minmax(0,1fr)]">
       {/* Lista */}
       <div className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
@@ -145,6 +147,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
         </div>
+        <label className="flex items-center gap-2 p-3 text-xs text-slate-400">Ordenar por<select aria-label="Ordenar fila" value={sortOrder} onChange={event => setSortOrder(event.target.value)} className={inputCls()}><option value="deadline">Prazo (mais urgente)</option><option value="title">Título</option></select></label>
         <StageDragArea onMove={(id, dir) => {
           const project = emEdicao.find((item) => String(item.id) === String(id));
           const laneIndex = project ? EDITING_LANES.indexOf(laneForEditingProject(project)) : -1;
@@ -192,78 +195,18 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
             <div className="border-b border-slate-800 px-4 py-3">
               <div className="relative grid grid-cols-5 gap-2 before:absolute before:left-[10%] before:right-[10%] before:top-3 before:h-px before:bg-slate-700">
                 {[
-                  ['Gravação finalizada', '15/09/2026 14:30'],
-                  ['Processamento', '16/09/2026 09:12'],
-                  ['Para editar', '17/09/2026 11:05'],
-                  ['Em edição', '18/09/2026 10:23'],
+                  ['Gravação finalizada', sel.gravacao?.data || '—'],
+                  ['Materiais recebidos', materiais.length ? `${materiais.length} arquivo(s)` : '—'],
+                  ['Para editar', '—'],
+                  ['Em edição', '—'],
                   ['Em revisão', '—'],
-                ].map(([label, date], index) => <div key={label} className="relative z-10 text-center"><span className={`mx-auto flex size-6 items-center justify-center rounded-full border text-[9px] font-bold ${index < 4 ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-600 bg-slate-950 text-slate-500'}`}>{index < 3 ? '✓' : index + 1}</span><p className="mt-1 text-[9px] font-semibold text-slate-300">{label}</p><p className="text-[8px] tabular-nums text-slate-600">{date}</p></div>)}
+                ].map(([label, date], index) => <div key={label} className="relative z-10 text-center"><span className={`mx-auto flex size-6 items-center justify-center rounded-full border text-[9px] font-bold ${(index === 0 ? Boolean(sel.gravada) : index === 1 ? materiais.length > 0 : index === 2 ? selectedLaneIndex > 0 : index === 3 ? selectedLaneIndex >= 1 : false) ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-600 bg-slate-950 text-slate-500'}`}>{(index === 0 ? Boolean(sel.gravada) : index === 1 ? materiais.length > 0 : index === 2 ? selectedLaneIndex > 0 : false) ? '✓' : index + 1}</span><p className="mt-1 text-[9px] font-semibold text-slate-300">{label}</p><p className="text-[8px] tabular-nums text-slate-600">{date}</p></div>)}
               </div>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              <div className="grid gap-3 xl:grid-cols-[1.15fr_1.35fr_.8fr]">
-                <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/65">
-                  <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Play size={11} /> Preview</p>
-                    <span className="font-mono text-[10px] tabular-nums text-sky-300">00:00:38:12</span>
-                  </div>
-                  <div className="flex aspect-video items-center justify-center bg-[radial-gradient(circle_at_center,_#172033,_#050914_70%)]">
-                    <button className="flex size-10 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25" title="Reproduzir prévia"><Play size={17} className="ml-0.5" /></button>
-                  </div>
-                  <div className="grid grid-cols-3 border-t border-slate-800 text-center text-[9px] uppercase text-slate-500">
-                    <span className="border-r border-slate-800 py-1.5">IN 00:00:00</span><span className="border-r border-slate-800 py-1.5">OUT 00:12:48</span><span className="py-1.5">12m48s</span>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-800 bg-slate-950/45">
-                  <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><Layers3 size={11} /> Timeline da entrega</p>
-                    <span className="text-[9px] text-slate-500">V1 · corte bruto</span>
-                  </div>
-                  <div className="space-y-2 p-3">
-                    {[
-                      ['V2', 'bg-sky-500/55', 'w-[82%]'],
-                      ['V1', 'bg-violet-500/50', 'w-[68%]'],
-                      ['A1', 'bg-emerald-500/45', 'w-[91%]'],
-                      ['A2', 'bg-amber-500/45', 'w-[58%]'],
-                    ].map(([track, color, width]) => (
-                      <div key={track} className="grid grid-cols-[22px_1fr] items-center gap-2">
-                        <span className="font-mono text-[9px] text-slate-500">{track}</span>
-                        <div className="h-5 overflow-hidden border border-slate-800 bg-slate-900/80 p-0.5"><div className={`h-full ${width} ${color}`} /></div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-3 border-t border-slate-800 px-3 py-2 text-[9px] text-slate-500">
-                    <span>Marcadores: 4</span><span>Cortes: 17</span><span>Áudio: -3 LUFS</span>
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-slate-800 bg-slate-950/45">
-                  <div className="border-b border-slate-800 px-3 py-2"><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-400"><GitBranch size={11} /> Versões e revisão</p></div>
-                  <div className="divide-y divide-slate-800">
-                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-slate-200">V1 · Corte bruto</span><span className="text-[9px] text-emerald-300">Atual</span></div><p className="mt-0.5 text-[9px] text-slate-500">Salva agora · {sel.editor || 'Editor'}</p></div>
-                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] text-slate-300">Briefing recebido</span><CheckSquare2 size={12} className="text-emerald-400" /></div><p className="mt-0.5 text-[9px] text-slate-500">Pauta, roteiro e mídias vinculados</p></div>
-                    <div className="px-3 py-2"><div className="flex items-center justify-between"><span className="text-[11px] text-slate-300">Comentários</span><span className="text-[10px] font-semibold text-amber-300">2 abertos</span></div><p className="mt-0.5 text-[9px] text-slate-500">1 do produtor · 1 técnico</p></div>
-                  </div>
-                  <div className="grid grid-cols-2 border-t border-slate-800">
-                    <button className="flex items-center justify-center gap-1 border-r border-slate-800 py-2 text-[10px] text-slate-300 hover:bg-slate-800"><MessageCircle size={11} /> Comentários</button>
-                    <button className="flex items-center justify-center gap-1 py-2 text-[10px] text-slate-300 hover:bg-slate-800"><History size={11} /> Histórico</button>
-                  </div>
-                </section>
-              </div>
-
-              <section className="rounded-xl border border-slate-800 bg-slate-950/45">
-                <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
-                  <div><p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-300"><Layers3 size={12} className="text-sky-400" /> Mídias vinculadas à produção</p><p className="mt-0.5 text-[9px] text-slate-500">Arquivos da gravação e referências disponíveis para esta edição.</p></div>
-                  <button className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1 text-[9px] text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Ver todas as mídias ({mediaGroups.reduce((sum, group) => sum + group.count, 0)})</button>
-                </div>
-                <div className="grid gap-2 p-2 md:grid-cols-2 xl:grid-cols-5">
-                  {mediaGroups.map(({ label, Icon, count, files, fallback }) => <div key={label} className="border border-slate-800 bg-slate-950/55 p-2"><div className="mb-1.5 flex items-center justify-between"><p className="flex items-center gap-1 text-[9px] font-semibold text-slate-300"><Icon size={11} className="text-sky-400" /> {label}</p><span className="rounded bg-slate-800 px-1.5 py-0.5 text-[8px] tabular-nums text-slate-300">{count}</span></div>{(files.length ? files : fallback).map((file) => <p key={file} className="truncate py-0.5 text-[9px] text-slate-500">› {file}</p>)}<button className="mt-1 text-[8px] font-semibold text-sky-400 hover:text-sky-300">+ {Math.max(0, count - 3)} arquivos</button></div>)}
-                </div>
-              </section>
-
+              <EditingProjectPanels key={sel.id + selectedLane} project={sel} lane={selectedLane} onChange={field} />
               <section className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/45 p-3 xl:grid-cols-[1.25fr_.75fr]">
-                <div><p className="text-[10px] font-bold uppercase text-slate-300">Material para edição</p><p className="mb-2 text-[9px] text-slate-500">Baixe os arquivos, gere o pacote do projeto ou continue no Workspace.</p><div className="flex flex-wrap gap-1.5"><button onClick={copiarNomes} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Download size={11} /> Baixar mídias</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FileCode2 size={11} /> Baixar XML</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Layers3 size={11} /> Pacote completo</button><button onClick={() => window.location.assign('/workspace')} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Abrir no Workspace</button></div></div>
+                <div><p className="text-[10px] font-bold uppercase text-slate-300">Material para edição</p><p className="mb-2 text-[9px] text-slate-500">Baixe os arquivos, gere o pacote do projeto ou continue no Workspace.</p><div className="flex flex-wrap gap-1.5"><button onClick={copiarNomes} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Download size={11} /> Copiar nomes</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FileCode2 size={11} /> Baixar XML</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Layers3 size={11} /> Pacote XML</button><button onClick={() => window.location.assign('/workspace')} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Abrir no Workspace</button></div></div>
                 <div><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-300"><MessageCircle size={11} className="text-sky-400" /> Observações de edição</p><textarea value={sel.edicao_obs || ''} onChange={(e) => field('edicao_obs', e.target.value)} rows={3} className={`${inputCls()} mt-1`} placeholder="Cortes, ajustes, GC, trilha e observações..." /></div>
               </section>
 
@@ -334,17 +277,6 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
                   </div>
                 )}
               </div>
-
-              <section className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/45">
-                <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2"><div><p className="text-[10px] font-bold uppercase text-slate-300">Versões editadas</p><p className="text-[9px] text-slate-500">Histórico de entregas; novas versões não sobrescrevem as anteriores.</p></div><button className="flex items-center gap-1 rounded bg-sky-500 px-2 py-1.5 text-[9px] font-bold text-slate-950 hover:bg-sky-400"><Upload size={11} /> Enviar nova versão</button></div>
-                <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-[9px]"><thead className="border-b border-slate-800 bg-slate-900/55 uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Versão</th><th>Tipo</th><th>Responsável</th><th>Data e hora</th><th>Observações</th><th>Status</th><th className="pr-3 text-right">Ações</th></tr></thead><tbody className="divide-y divide-slate-800 text-slate-400">{[
-                  ['V3', 'Master', 'Ajustes de áudio e GC. Versão final.', 'Atual'],
-                  ['V2', 'Master', 'Primeira trilha e correção de cortes.', 'Para aprovação'],
-                  ['V1', 'Master', 'Primeira versão completa.', 'Arquivada'],
-                  ['V2', 'Vertical (9:16)', 'Corte para redes sociais.', 'Arquivada'],
-                  ['V1', 'Legendado', 'Versão com legendas em PT-BR.', 'Arquivada'],
-                ].map(([version, type, note, status], index) => <tr key={`${version}-${type}`}><td className="px-3 py-2 font-semibold text-slate-200">{version}</td><td>{type}</td><td>{sel.editor || 'Editor'}</td><td className="tabular-nums">18/09/2026 {15 - index}:42</td><td>{note}</td><td><span className={`rounded px-1.5 py-0.5 ${status === 'Atual' ? 'bg-emerald-500/15 text-emerald-300' : status === 'Para aprovação' ? 'bg-sky-500/15 text-sky-300' : 'bg-slate-800 text-slate-400'}`}>{status}</span></td><td className="pr-3 text-right"><button className="p-1 hover:text-sky-300" title="Baixar versão"><Download size={11} /></button><button className="p-1 hover:text-sky-300" title="Comentários"><MessageCircle size={11} /></button><button className="p-1 hover:text-sky-300" title="Mais ações"><MoreHorizontal size={11} /></button></td></tr>)}</tbody></table></div>
-              </section>
 
               <div>
                 <p className="mb-1.5 text-[10px] font-bold uppercase text-slate-500">Resumo da produção</p>
