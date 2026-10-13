@@ -11,11 +11,11 @@ describe("GraphicTools", () => {
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
     expect(screen.getByRole("button", { name: "Objeto Esfera 1" })).toBeInTheDocument();
   });
-  it("shows the MM programs plus MMSom and Office at the end", () => {
+  it("shows the MM programs plus MMSom, Word, Excel and PowerPoint at the end", () => {
     render(<GraphicTools />);
     const programTabs = screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" }).querySelectorAll('[role="tab"]');
-    expect(programTabs).toHaveLength(11);
-    expect([...programTabs].slice(-2).map((tab) => tab.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("MMSom"), expect.stringContaining("Office")]));
+    expect(programTabs).toHaveLength(13);
+    expect([...programTabs].slice(-4).map((tab) => tab.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("MMSom"), expect.stringContaining("Word"), expect.stringContaining("Excel"), expect.stringContaining("PowerPoint")]));
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
     expect(screen.getByRole("heading", { name: "MM3D" })).toBeInTheDocument();
     expect(screen.getByLabelText("Viewport 3D")).toBeInTheDocument();
@@ -41,13 +41,18 @@ describe("GraphicTools", () => {
     );
   });
 
-  it("opens the existing MMSom and Office workspaces inside graphic tools", () => {
+  it("opens the existing MMSom, Word, Excel and PowerPoint workspaces inside graphic tools", () => {
     render(<GraphicTools />);
     fireEvent.click(screen.getByRole("tab", { name: /MMSom/ }));
     expect(screen.getByText("MMSOM 0.5")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: /Office/ }));
-    expect(screen.getByText("Ferramentas Office")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "WordCraft" })).toBeInTheDocument();
+    const programs = screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" });
+    fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(3)'));
+    expect(screen.getByText("Ferramentas de documentos")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Word" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(2)'));
+    expect(screen.getByRole("tab", { name: "Excel" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(programs.querySelector('[role="tab"]:last-child'));
+    expect(screen.getByRole("tab", { name: "PowerPoint" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps the MM program switcher visible inside desktop editors", () => {

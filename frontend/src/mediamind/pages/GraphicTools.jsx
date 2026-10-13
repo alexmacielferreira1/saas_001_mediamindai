@@ -9,9 +9,10 @@ import {
   LayoutTemplate,
   Library,
   AudioLines,
-  Files,
+  FileSpreadsheet,
   Orbit,
   PenTool,
+  Presentation,
 } from "lucide-react";
 import CraftLibraryWorkspace from "../components/graphic-tools/CraftLibraryWorkspace";
 import DesignCraftWorkspace from "../components/graphic-tools/DesignCraftWorkspace";
@@ -151,14 +152,9 @@ const tools = [
     accept: "audio/*",
     panels: ["Edição multipista", "Mesa de mixagem", "Limpeza de voz", "Masterização"],
   },
-  {
-    id: "office",
-    label: "Office",
-    icon: Files,
-    subtitle: "Documentos · planilhas · slides",
-    accept: ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv",
-    panels: ["WordCraft", "GridCraft", "DeckCraft", "Exportação"],
-  },
+  { id: "word", label: "Word", icon: FileText, subtitle: "Documentos e textos", accept: ".doc,.docx,.txt", panels: ["Documento", "Revisão", "Estrutura", "Exportação"] },
+  { id: "excel", label: "Excel", icon: FileSpreadsheet, subtitle: "Planilhas e dados", accept: ".xls,.xlsx,.csv", panels: ["Planilha", "Fórmulas", "Dados", "Exportação"] },
+  { id: "powerpoint", label: "PowerPoint", icon: Presentation, subtitle: "Apresentações e slides", accept: ".ppt,.pptx", panels: ["Slides", "Layout", "Apresentação", "Exportação"] },
 ];
 
 export default function GraphicTools() {
@@ -326,8 +322,8 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "mmsom" ? (
         <SoundCraft />
-      ) : id === "office" ? (
-        <OfficeCraft />
+      ) : ["word", "excel", "powerpoint"].includes(id) ? (
+        <OfficeCraft initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} />
       ) : (
         <FilmCraftWorkspace />
       )}

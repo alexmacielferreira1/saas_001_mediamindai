@@ -2,7 +2,7 @@ import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useEffect, useMemo, useState } from "react";
 import { Bold, FilePlus2, Italic, LayoutTemplate, Plus, Redo2, Save, Underline, Undo2 } from "lucide-react";
 
-const apps = ["WordCraft", "GridCraft", "DeckCraft"];
+const apps = ["Word", "Excel", "PowerPoint"];
 const columns = ["A", "B", "C", "D", "E", "F"];
 
 function readLocal(key, fallback) {
@@ -53,7 +53,8 @@ function DeckCraft() {
   </div>;
 }
 
-export default function OfficeCraft() {
-  const [app, setApp] = useState("WordCraft");
-  return <section className="overflow-hidden rounded-xl border border-slate-300 shadow-2xl"><header className="flex h-12 items-center bg-[#24262a] px-4 text-white"><b className="mr-8">Ferramentas Office</b><div role="tablist" aria-label="Aplicativos Office" className="flex h-full">{apps.map(name=><button key={name} role="tab" aria-selected={app===name} onClick={()=>setApp(name)} className={`px-6 text-sm ${app===name?"border-b-2 border-white bg-white/10":"text-slate-300"}`}>{name}</button>)}</div></header>{app==="WordCraft"?<WordCraft/>:app==="GridCraft"?<GridCraft/>:<DeckCraft/>}</section>;
+export default function OfficeCraft({ initialApp = "Word" }) {
+  const [app, setApp] = useState(initialApp);
+  useEffect(() => setApp(initialApp), [initialApp]);
+  return <section className="overflow-hidden rounded-xl border border-slate-300 shadow-2xl"><header className="flex h-12 items-center bg-[#24262a] px-4 text-white"><b className="mr-8">Ferramentas de documentos</b><div role="tablist" aria-label="Aplicativos de documentos" className="flex h-full">{apps.map(name=><button key={name} role="tab" aria-selected={app===name} onClick={()=>setApp(name)} className={`px-6 text-sm ${app===name?"border-b-2 border-white bg-white/10":"text-slate-300"}`}>{name}</button>)}</div></header>{app==="Word"?<WordCraft/>:app==="Excel"?<GridCraft/>:<DeckCraft/>}</section>;
 }

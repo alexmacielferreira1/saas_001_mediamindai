@@ -8,7 +8,9 @@ const EXPRESS_APPS = {
   photocraft: { id: "mmphoto", label: "MMPhoto", actions: ["Recortar", "Ajustar luz e cor", "Aplicar identidade", "Criar thumbnail", "Remover fundo", "Redimensionar imagem"] },
   vectorcraft: { id: "mmvector", label: "MMVector", actions: ["Vetorizar", "Aplicar paleta", "Montar layout", "Exportar PNG", "Criar variações", "Ajustar tipografia"] },
   mmsom: { id: "mmsom", label: "MMSom", actions: ["Limpar ruído", "Remover pausas", "Normalizar", "Equalizar", "Separar voz e música", "Masterizar"] },
-  office: { id: "office", label: "Office", actions: ["Resumir conteúdo", "Gerar slides", "Aplicar template", "Exportar arquivo", "Criar planilha", "Revisar e reescrever"] },
+  word: { id: "word", label: "Word", actions: ["Resumir conteúdo", "Revisar e reescrever", "Gerar roteiro", "Aplicar estilo", "Criar documento", "Exportar DOCX ou PDF"] },
+  excel: { id: "excel", label: "Excel", actions: ["Organizar dados", "Criar planilha", "Gerar gráficos", "Classificar dados", "Criar fórmula", "Exportar XLSX ou CSV"] },
+  powerpoint: { id: "powerpoint", label: "PowerPoint", actions: ["Gerar slides", "Montar apresentação", "Aplicar template", "Criar resumo visual", "Organizar slides", "Exportar PPTX ou PDF"] },
   ai: { id: "ai", label: "Ferramentas IA", actions: ["Transcrever", "Resumir", "Gerar cortes", "Classificar mídia", "OCR", "Sugerir roteiro"] },
 };
 

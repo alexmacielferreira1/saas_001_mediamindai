@@ -37,12 +37,9 @@ MODULES = [
         "description": "Faixas, voz, mixagem e masterização.",
         "status": "connected",
     },
-    {
-        "id": "office",
-        "label": "Office",
-        "description": "Documentos, planilhas e apresentações.",
-        "status": "connected",
-    },
+    {"id": "word", "label": "Word", "description": "Documentos, texto e revisão.", "status": "connected"},
+    {"id": "excel", "label": "Excel", "description": "Planilhas, fórmulas e dados.", "status": "connected"},
+    {"id": "powerpoint", "label": "PowerPoint", "description": "Apresentações, slides e layouts.", "status": "connected"},
     {
         "id": "ai-tools",
         "label": "Ferramentas IA",
@@ -93,19 +90,9 @@ READ_OPERATIONS = {
         ("loudness", "Consultar loudness", "Lê métricas de loudness e picos da sessão."),
         ("transcript", "Consultar transcrição", "Lê disponibilidade e segmentos de transcrição."),
     ],
-    "office": [
-        (
-            "inspect",
-            "Inspecionar documento Office",
-            "Lê estrutura, metadados e estado de salvamento.",
-        ),
-        ("outline", "Consultar estrutura", "Resume páginas, planilhas ou slides ativos."),
-        (
-            "export_profiles",
-            "Consultar formatos de saída",
-            "Lista formatos de exportação autorizados.",
-        ),
-    ],
+    "word": [("inspect", "Inspecionar documento", "Lê estrutura, texto e estado de salvamento."), ("outline", "Consultar estrutura", "Resume páginas, títulos e seções."), ("export_profiles", "Consultar formatos de saída", "Lista DOCX e PDF autorizados.")],
+    "excel": [("inspect", "Inspecionar planilha", "Lê abas, células e estado de salvamento."), ("outline", "Consultar estrutura", "Resume abas, intervalos e tabelas."), ("export_profiles", "Consultar formatos de saída", "Lista XLSX e CSV autorizados.")],
+    "powerpoint": [("inspect", "Inspecionar apresentação", "Lê slides, layouts e estado de salvamento."), ("outline", "Consultar estrutura", "Resume slides e seções."), ("export_profiles", "Consultar formatos de saída", "Lista PPTX e PDF autorizados.")],
     "ai-tools": [
         (
             "inspect",
@@ -127,7 +114,9 @@ WRITE_OPERATIONS = {
     "vetor": ["Criar prancheta", "Alterar vetor", "Exportar arte"],
     "mmphoto": ["Aplicar ajuste", "Remover fundo", "Exportar imagem"],
     "mmsom": ["Limpar áudio", "Normalizar loudness", "Exportar master"],
-    "office": ["Criar documento", "Alterar conteúdo", "Exportar arquivo"],
+    "word": ["Criar documento", "Alterar conteúdo", "Exportar arquivo"],
+    "excel": ["Criar planilha", "Alterar dados", "Exportar arquivo"],
+    "powerpoint": ["Criar apresentação", "Alterar slides", "Exportar arquivo"],
     "ai-tools": ["Gerar mídia", "Executar automação", "Aplicar sugestão"],
 }
 

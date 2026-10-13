@@ -7,12 +7,15 @@ import {
   CircleDashed,
   Clock3,
   Film,
+  FileText,
+  FileSpreadsheet,
   LockKeyhole,
   Network,
   Play,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Presentation,
   TerminalSquare,
 } from "lucide-react";
 import { callMCPTool, listMCPTools } from "../../lib/mcpApi";
@@ -24,7 +27,9 @@ const MODULE_ICONS = {
   vetor: TerminalSquare,
   mmphoto: Bot,
   mmsom: Activity,
-  office: ShieldCheck,
+  word: FileText,
+  excel: FileSpreadsheet,
+  powerpoint: Presentation,
   "ai-tools": Sparkles,
 };
 
@@ -69,7 +74,7 @@ export default function MCPCenter({ initialModule = "system" }) {
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-sky-900/80 bg-gradient-to-r from-sky-950/80 via-slate-950 to-violet-950/40 p-5">
         <div className="flex gap-4">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-sky-500/40 bg-sky-500/15 text-sky-300"><Network size={24} /></span>
-          <div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-sky-400">Orquestração transversal</p><h2 className="mt-1 text-2xl font-black text-white">Centro MCP MediaMind</h2><p className="mt-1 max-w-2xl text-sm text-slate-400">Um único contrato para consultar e, futuramente, operar MMFilm, MMEffects, Vetor, MMPhoto, MMSom, Office e ferramentas de IA.</p></div>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-sky-400">Orquestração transversal</p><h2 className="mt-1 text-2xl font-black text-white">Centro MCP MediaMind</h2><p className="mt-1 max-w-2xl text-sm text-slate-400">Um único contrato para consultar e, futuramente, operar MMFilm, MMEffects, Vetor, MMPhoto, MMSom, Word, Excel, PowerPoint e ferramentas de IA.</p></div>
         </div>
         <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300"><ShieldCheck size={15}/> Somente leitura <LockKeyhole size={13}/></div>
       </header>

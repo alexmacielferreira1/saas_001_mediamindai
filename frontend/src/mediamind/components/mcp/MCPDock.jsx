@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  AudioLines, Bot, ChevronDown, ExternalLink, FileText, History,
-  Image, PenTool, Plus, Settings, Sparkles, Video, WandSparkles, X,
+  AudioLines, Bot, ChevronDown, ExternalLink, FileSpreadsheet, FileText, History,
+  Image, PenTool, Plus, Presentation, Settings, Sparkles, Video, WandSparkles, X,
 } from "lucide-react";
 
 import { createMCPQueue, executeMCPQueue, listMCPQueues, listMCPTools } from "../../lib/mcpApi";
@@ -15,7 +15,9 @@ const APPS = [
   { id: "mmphoto", module: "mmphoto", short: "MP", label: "MMPhoto", title: "MMPhoto", icon: Image, color: "sky", href: "/ferramentas-graficas?tool=photocraft" },
   { id: "mmvector", module: "vetor", short: "MV", label: "MMVector", title: "MMVector", icon: PenTool, color: "orange", href: "/ferramentas-graficas?tool=vectorcraft" },
   { id: "mmsom", module: "mmsom", short: "MS", label: "MMSom", title: "MMSom", icon: AudioLines, color: "cyan", href: "/ferramentas-graficas?tool=mmsom" },
-  { id: "office", module: "office", short: "O", label: "Office", title: "Office", icon: FileText, color: "orange", href: "/ferramentas-graficas?tool=office" },
+  { id: "word", module: "word", short: "W", label: "Word", title: "Word", icon: FileText, color: "blue", href: "/ferramentas-graficas?tool=word" },
+  { id: "excel", module: "excel", short: "X", label: "Excel", title: "Excel", icon: FileSpreadsheet, color: "green", href: "/ferramentas-graficas?tool=excel" },
+  { id: "powerpoint", module: "powerpoint", short: "P", label: "PowerPoint", title: "PowerPoint", icon: Presentation, color: "orange", href: "/ferramentas-graficas?tool=powerpoint" },
   { id: "ai", module: "ai-tools", short: "AI", label: "IA", title: "Ferramentas IA e Editoração", icon: Sparkles, color: "fuchsia", href: "/ferramentas-ia" },
 ];
 
@@ -25,7 +27,9 @@ const BASE_COMMANDS = {
   mmsom: ["Limpar voz", "Remover ruído", "Normalizar loudness", "Preparar masterização"],
   mmphoto: ["Tratar imagem", "Remover fundo", "Criar thumbnail", "Gerar variações"],
   mmvector: ["Criar vetor", "Ajustar logotipo", "Preparar SVG", "Gerar elementos gráficos"],
-  office: ["Criar documento", "Analisar planilha", "Montar apresentação", "Exportar versão"],
+  word: ["Criar documento", "Revisar texto", "Resumir conteúdo", "Exportar DOCX ou PDF"],
+  excel: ["Criar planilha", "Organizar dados", "Gerar gráficos", "Exportar XLSX ou CSV"],
+  powerpoint: ["Montar apresentação", "Gerar slides", "Aplicar template", "Exportar PPTX ou PDF"],
   ai: ["Planejar fluxo entre aplicativos", "Localizar mídia", "Resumir projeto", "Criar automação"],
 };
 

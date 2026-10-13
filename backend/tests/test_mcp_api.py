@@ -32,7 +32,9 @@ def test_mcp_catalog_exposes_transversal_modules_and_read_only_tools(permission_
         "vetor",
         "mmphoto",
         "mmsom",
-        "office",
+        "word",
+        "excel",
+        "powerpoint",
         "ai-tools",
     ]
     capabilities = next(tool for tool in payload["tools"] if tool["name"] == "system.capabilities")
@@ -64,7 +66,9 @@ def test_mcp_executes_capability_discovery_with_server_context(permission_client
         "vetor",
         "mmphoto",
         "mmsom",
-        "office",
+        "word",
+        "excel",
+        "powerpoint",
         "ai-tools",
     ]
     assert payload["correlation_id"]
@@ -115,7 +119,9 @@ def test_mcp_runs_read_only_variants_for_every_media_tool(permission_client):
         "vetor.artboards",
         "mmphoto.layers",
         "mmsom.loudness",
-        "office.outline",
+        "word.outline",
+        "excel.outline",
+        "powerpoint.outline",
         "ai-tools.providers",
     ]:
         response = client.post(

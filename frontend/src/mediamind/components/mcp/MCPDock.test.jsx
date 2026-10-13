@@ -59,14 +59,16 @@ describe("MCPDock", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/ferramentas-graficas?tool=mmsom");
   });
 
-  it("keeps MMSom immediately before Office at the end of the app rail", async () => {
+  it("keeps MMSom followed by Word, Excel and PowerPoint at the end of the app rail", async () => {
     render(<MemoryRouter><MCPDock /></MemoryRouter>);
     await screen.findByText("MCP");
     const names = screen.getByRole("navigation", { name: "Aplicativos MCP" })
       .querySelectorAll("button");
-    expect([...names].slice(-5).map((button) => button.getAttribute("aria-label"))).toEqual([
+    expect([...names].slice(-7).map((button) => button.getAttribute("aria-label"))).toEqual([
       "MMSom — planejado",
-      "Office — planejado",
+      "Word — planejado",
+      "Excel — planejado",
+      "PowerPoint — planejado",
       "IA — planejado",
       "Configuração MCP",
       "Adicionar aplicativos MCP",
