@@ -47,6 +47,7 @@ export default function MCPDock() {
   const [width, setWidth] = useState(() => Number(localStorage.getItem("mm_mcp_dock_width")) || 390);
   const [modules, setModules] = useState([]);
   const [tab, setTab] = useState("commands");
+  const [expressDraft, setExpressDraft] = useState(null);
 
   useEffect(() => {
     listMCPTools().then((data) => setModules(data.modules || [])).catch(() => setModules([]));
@@ -55,6 +56,7 @@ export default function MCPDock() {
     const open = (event) => {
       const target = APPS.find((item) => item.id === event.detail?.appId);
       if (!target) return;
+      setExpressDraft(event.detail || null);
       if (`${location.pathname}${location.search}` !== target.href) navigate(target.href);
       setActive(target.id);
       setTab("commands");
@@ -116,7 +118,7 @@ export default function MCPDock() {
       <div className="flex border-b border-slate-800 px-4"><button onClick={() => setTab("commands")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "commands" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Comandos</button><button onClick={() => setTab("history")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "history" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Histórico</button></div>
       <div className="flex-1 overflow-y-auto p-4">
         {tab === "history" ? <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-slate-800 p-6 text-center"><div><History className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">Nenhuma execução nesta sessão.</p><p className="mt-1 text-xs text-slate-600">Resultados e pedidos de confirmação aparecerão aqui.</p></div></div> : <>
-          <MCPActionPlanner module={app.module} label={app.label} commands={commands} />
+          <MCPActionPlanner module={app.module} appId={app.id} label={app.label} commands={commands} expressDraft={expressDraft} />
           <h3 className="mt-5 text-xs font-bold text-white">Projeto conectado</h3><div className="mt-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs"><p className="font-semibold text-slate-300">Nenhum projeto MM conectado</p><p className="mt-1 text-slate-600">A ponte local identificará o projeto e a sequência ativos.</p></div>
           <button onClick={() => toggle("settings")} className="mt-4 flex w-full items-center justify-between rounded-xl border border-slate-800 p-3 text-xs text-slate-400"><span className="flex items-center gap-2"><Settings size={14}/>Configurações e preferências</span><ChevronDown size={14}/></button>
         </>}
@@ -136,7 +138,7 @@ function AppMark({ app, large = false }) {
   return <span className={`mx-auto grid ${large ? "h-10 w-10" : "h-8 w-8"} place-items-center rounded-lg border border-slate-600 bg-slate-900 text-sky-300`}><Icon size={large ? 20 : 17}/><span className="sr-only">{app.short}</span></span>;
 }
 
-function MCPActionPlanner({ module, label, commands = [] }) {
+function MCPActionPlanner({ module, appId, label, commands = [], expressDraft }) {
   const availableProjects = useProducaoProjetos();
   const [mode, setMode] = useState("immediate");
   const [instruction, setInstruction] = useState("");
@@ -151,6 +153,12 @@ function MCPActionPlanner({ module, label, commands = [] }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { listMCPQueues().then((data) => setQueues(data.queues || [])).catch(() => setQueues([])); }, []);
+  useEffect(() => {
+    if (!expressDraft || expressDraft.appId !== appId) return;
+    const selected = (expressDraft.operations || []).filter((operation) => operation.enabled).map((operation) => operation.label);
+    const next = [expressDraft.prompt?.trim(), ...selected].filter(Boolean).join("\n");
+    if (next) setInstruction(next);
+  }, [appId, expressDraft]);
   async function submit() {
     if (!targets.length || !targets.every((target) => target.instruction.trim())) return;
     setSaving(true); setMessage("");

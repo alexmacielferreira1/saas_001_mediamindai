@@ -37,6 +37,17 @@ describe("MCPDock", () => {
     expect(screen.getByRole("dialog", { name: "Painel MCP MMFilm" })).toBeInTheDocument();
   });
 
+  it("moves active Express operations into the selected MCP form", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=photocraft"]}><MCPDock /></MemoryRouter>);
+    window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: {
+      appId: "mmphoto",
+      prompt: "Preparar capa",
+      operations: [{ label: "Recortar", enabled: true }, { label: "Remover fundo", enabled: false }],
+    } }));
+    expect(await screen.findByRole("dialog", { name: "Painel MCP MMPhoto" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Operações e prompt/i })).toHaveValue("Preparar capa\nRecortar");
+  });
+
   it("routes each MM application to its matching workspace", async () => {
     render(<MemoryRouter><MCPDock /><CurrentPath /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /MMPhoto/i }));
