@@ -61,6 +61,16 @@ describe("GraphicTools", () => {
     expect(screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" })).not.toHaveClass("sr-only");
   });
 
+  it("switches the main workspace when the selected route tool changes", () => {
+    const { rerender } = render(<GraphicTools requestedTool="filmcraft" />);
+    expect(screen.getByRole("tab", { name: /MMFilm/ })).toHaveAttribute("aria-selected", "true");
+
+    rerender(<GraphicTools requestedTool="photocraft" />);
+
+    expect(screen.getByRole("tab", { name: /MMPhoto/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "MMPhoto" })).toBeInTheDocument();
+  });
+
   it("uses distinct professional workspaces for effects, photo and vector", () => {
     render(<GraphicTools />);
 

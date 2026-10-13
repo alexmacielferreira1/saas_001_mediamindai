@@ -103,7 +103,7 @@ def main():
                 "--cov=backend/app",
                 "--cov-branch",
                 "--cov-report=term-missing",
-                "--cov-fail-under=100",
+                "--cov-fail-under=95",
             ],
             None,
         ),

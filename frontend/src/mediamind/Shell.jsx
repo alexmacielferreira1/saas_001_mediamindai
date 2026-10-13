@@ -25,9 +25,6 @@ import {
   Share2,
   PanelsTopLeft,
   Palette,
-  WandSparkles,
-  AudioLines,
-  Files,
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { useEmpresa } from "./lib/empresaContext";
@@ -36,6 +33,8 @@ import EmpresaSwitcher from "./components/EmpresaSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import QuickActionsButton from "./components/QuickActionsButton";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
+import MCPDock from "./components/mcp/MCPDock";
+import MCPExpress from "./components/mcp/MCPExpress";
 
 export const NAV_GROUPS = [
   {
@@ -152,15 +151,11 @@ export const NAV_GROUPS = [
     group: "IA",
     items: [
       { to: "/estudio-de-arte", label: "Estúdio de Arte", icon: Palette },
-      { to: "/ferramentas-ia", label: "Ferramentas IA", icon: WandSparkles },
       {
         to: "/ferramentas-graficas",
         label: "Ferramentas Gráficas",
         icon: Layers3,
       },
-      { to: "/soundcraft", label: "SoundCraft", icon: AudioLines },
-      { to: "/ferramentas-office", label: "Ferramentas Office", icon: Files },
-      { to: "/configuracoes/ia", label: "Configuração de IA", icon: Settings },
       { to: "/assistente", label: "Assistente IA", icon: Sparkles },
     ],
   },
@@ -434,7 +429,7 @@ export default function Shell({ children, persistentPath }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-x-hidden p-4 lg:p-6">
-          <div className="mx-auto w-full max-w-[1600px]"><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
+          <div className="mx-auto w-full max-w-[1600px]"><MCPExpress /><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
         </main>
       </div>
 
@@ -442,6 +437,7 @@ export default function Shell({ children, persistentPath }) {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
       />
+      <MCPDock />
     </div>
   );
 }

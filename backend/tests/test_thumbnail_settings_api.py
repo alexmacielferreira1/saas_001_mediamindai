@@ -1,6 +1,7 @@
 # ruff: noqa: F811
 from io import BytesIO
 
+import httpx
 import pytest
 from app.core.config import get_settings
 from app.models.identity import TenantRecord
@@ -95,6 +96,102 @@ def test_existing_alpha_is_preserved_without_loading_ai():
     with pytest.raises(Exception) as error:
         normalized_image(b"invalid")
     assert error.value.code == "INVALID_IMAGE"
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_local_connection_validation(permission_client, monkeypatch, fails):
+    client, _ = permission_client
+    login(client)
+
+    def load_model(model):
+        assert model == "isnet-general-use"
+        if fails:
+            raise RuntimeError("model unavailable")
+        return object()
+
+    monkeypatch.setattr("app.api.v1.thumbnail_settings.get_background_removal_session", load_model)
+    response = client.post("/api/v1/thumbnail-settings/test")
+    assert response.status_code == (503 if fails else 200)
+    if fails:
+        assert response.json()["error_code"] == "CUTOUT_UNAVAILABLE"
+    else:
+        assert response.json()["ok"] is True
+
+
+@pytest.mark.parametrize("outcome", [200, 401, "offline"])
+def test_external_connection_validation(permission_client, monkeypatch, outcome):
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("THUMBNAIL_SECRET_KEY", Fernet.generate_key().decode())
+    get_settings.cache_clear()
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["timeout"] == 20
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def get(self, url, headers):
+            assert url.endswith("/account")
+            assert headers == {"X-Api-Key": "test-key"}
+            if outcome == "offline":
+                raise httpx.ConnectError("offline")
+            return httpx.Response(outcome)
+
+    monkeypatch.setattr("app.api.v1.thumbnail_settings.httpx.AsyncClient", FakeClient)
+    try:
+        assert (
+            client.patch(
+                "/api/v1/thumbnail-settings", json={"provider": "removebg", "api_key": "test-key"}
+            ).status_code
+            == 200
+        )
+        response = client.post("/api/v1/thumbnail-settings/test")
+        assert response.status_code == {200: 200, 401: 422, "offline": 503}[outcome]
+        assert "test-key" not in response.text
+    finally:
+        get_settings.cache_clear()
+
+
+def test_key_clear_requires_local_provider_and_corrupt_key_is_public_error(
+    permission_client, monkeypatch
+):
+    from app.api.v1.thumbnail_settings import decrypt_key
+    from app.core.errors import PublicError
+
+    client, _ = permission_client
+    login(client)
+    monkeypatch.setenv("THUMBNAIL_SECRET_KEY", Fernet.generate_key().decode())
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(PublicError) as missing:
+            decrypt_key({})
+        assert missing.value.code == "AI_KEY_REQUIRED"
+        with pytest.raises(PublicError) as corrupt:
+            decrypt_key({"encrypted_key": "invalid"})
+        assert corrupt.value.code == "AI_KEY_UNREADABLE"
+        assert (
+            client.patch("/api/v1/thumbnail-settings", json={"provider": "removebg"}).status_code
+            == 422
+        )
+        assert (
+            client.patch(
+                "/api/v1/thumbnail-settings", json={"provider": "removebg", "api_key": "test-key"}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.patch(
+                "/api/v1/thumbnail-settings", json={"provider": "local", "clear_key": True}
+            ).json()["key_configured"]
+            is False
+        )
+    finally:
+        get_settings.cache_clear()
 
 
 def test_external_monthly_limit_and_cache(permission_client, monkeypatch, tmp_path):

@@ -1,0 +1,1 @@
+"""MediaMind MCP application services."""

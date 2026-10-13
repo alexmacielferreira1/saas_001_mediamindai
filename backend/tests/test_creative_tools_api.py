@@ -204,3 +204,48 @@ def test_creative_export_rejects_stale_revision_and_storage_failure(
     with permission_client[1]["session_factory"]() as session:
         exports = list(session.query(TenantRecord).filter_by(entity_type="CreativeExport").all())
     assert exports == []
+
+
+def test_creative_export_rejects_invalid_payloads(permission_client, monkeypatch, tmp_path):
+    client, _ = permission_client
+    login(client)
+    created = create_document(client)
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
+
+    invalid_type = client.post(
+        f"/api/v1/creative-documents/{created['id']}/exports",
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("arquivo.txt", b"texto", "text/plain")},
+    )
+    invalid_zip = client.post(
+        f"/api/v1/creative-documents/{created['id']}/exports",
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("arquivo.zip", b"nao e zip", "application/zip")},
+    )
+    monkeypatch.setattr("app.api.v1.creative_tools.MAX_CREATIVE_EXPORT_BYTES", 3)
+    too_large = client.post(
+        f"/api/v1/creative-documents/{created['id']}/exports",
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("arquivo.zip", b"PKconteudo", "application/zip")},
+    )
+
+    assert invalid_type.status_code == 422
+    assert invalid_zip.status_code == 422
+    assert too_large.status_code == 413
+
+
+def test_creative_export_reports_missing_stored_file(permission_client, monkeypatch, tmp_path):
+    client, ids = permission_client
+    login(client)
+    created = create_document(client)
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
+    exported = client.post(
+        f"/api/v1/creative-documents/{created['id']}/exports",
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("carrossel.zip", b"PK\x03\x04conteudo", "application/zip")},
+    )
+    with ids["session_factory"]() as session:
+        record = session.query(TenantRecord).filter_by(entity_type="CreativeExport").one()
+        (tmp_path / record.data["relative_path"]).unlink()
+    missing = client.get(f"/api/v1/creative-exports/{exported.json()['id']}/download")
+    assert missing.status_code == 404

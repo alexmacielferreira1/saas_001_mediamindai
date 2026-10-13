@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Camera,
   Clapperboard,
@@ -164,16 +165,30 @@ export default function GraphicTools() {
   const { currentEmpresa } = useEmpresa();
   const { user } = useAuth();
   const scope = `${currentEmpresa?.id || "global"}:${user?.id || "anonymous"}`;
-  return <GraphicDraftProvider key={scope} scope={scope}><GraphicToolsContent /></GraphicDraftProvider>;
+  return <GraphicDraftProvider key={scope} scope={scope}><GraphicToolsRoute /></GraphicDraftProvider>;
 }
 
-export function GraphicToolsContent() {
-  const params = new URLSearchParams(window.location.search);
-  const requested = params.get("tool");
+function GraphicToolsRoute() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedTool = new URLSearchParams(location.search).get("tool");
+
+  return <GraphicToolsContent
+    requestedTool={requestedTool}
+    onChoose={(id) => navigate(`/ferramentas-graficas?tool=${id}`)}
+  />;
+}
+
+export function GraphicToolsContent({ requestedTool, onChoose }) {
+  const requested = requestedTool ?? new URLSearchParams(window.location.search).get("tool");
   const initial = tools.some((tool) => tool.id === requested)
     ? requested
     : "filmcraft";
-  const [active, setActive] = useState(initial);
+  const routeActive = requestedTool && tools.some((tool) => tool.id === requestedTool)
+    ? requestedTool
+    : null;
+  const [localActive, setLocalActive] = useState(initial);
+  const active = routeActive || localActive;
   const [assets, setAssets] = useGraphicDraftState("shared:assets", []);
   const [selected, setSelected] = useGraphicDraftState("shared:selected", null);
   const [visited, setVisited] = useState([initial]);
@@ -183,6 +198,9 @@ export function GraphicToolsContent() {
     () => () => urls.current.forEach((url) => URL.revokeObjectURL(url)),
     [],
   );
+  useEffect(() => {
+    if (routeActive) setVisited((current) => current.includes(routeActive) ? current : [...current, routeActive]);
+  }, [routeActive]);
 
   function openFiles(fileList) {
     const next = [...fileList].map((file) => {
@@ -204,7 +222,11 @@ export function GraphicToolsContent() {
   }
   function choose(id) {
     setVisited(current => current.includes(id) ? current : [...current, id]);
-    setActive(id);
+    setLocalActive(id);
+    if (onChoose) {
+      onChoose(id);
+      return;
+    }
     const url = new URL(window.location.href);
     url.searchParams.set("tool", id);
     window.history.replaceState({}, "", url);
