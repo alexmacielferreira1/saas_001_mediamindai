@@ -11,13 +11,13 @@ export function useWorkStorageKey(key) {
   return sharedScope ? `${sharedScope}:${key}` : key;
 }
 
-export default function WorkProtection({ children }) {
+export default function WorkProtection({ children, persistentPath }) {
   const { user } = useAuth();
   const { currentEmpresa } = useEmpresa();
   const location = useLocation();
-  if (location.pathname.startsWith("/configuracoes") || location.pathname.includes("administration") || location.pathname === "/management" || location.pathname === "/ferramentas-graficas") return children;
+  if (!persistentPath && (location.pathname.startsWith("/configuracoes") || location.pathname.includes("administration") || location.pathname === "/management" || location.pathname === "/ferramentas-graficas")) return children;
   const params = new URLSearchParams(location.search);
   const project = params.get("project_id") || params.get("project") || "";
-  const scope = `work:${currentEmpresa?.id || "global"}:${user?.id || "anonymous"}:${location.pathname}:${project}`;
+  const scope = `work:${currentEmpresa?.id || "global"}:${user?.id || "anonymous"}:${persistentPath || location.pathname}:${persistentPath ? '' : project}`;
   return <GraphicDraftProvider key={scope} scope={scope}>{children}</GraphicDraftProvider>;
 }

@@ -4,6 +4,77 @@
 @tailwind components;
 @tailwind utilities;
 
+.mmfilm-project-actions > button,
+.mmfilm-project-actions > select,
+.mmfilm-project-actions > label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.mmfilm-project-actions > select { max-width: 230px; }
+.mmfilm-project-actions > button:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (min-width: 1280px) {
+  .mmfilm-project-header {
+    display: flex;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+  .mmfilm-project-header > div:first-child { flex-shrink: 0; }
+  .mmfilm-project-header > div:nth-child(2) {
+    order: 3;
+    flex: 0 1 190px;
+    min-width: 100px;
+  }
+  .mmfilm-project-header .mmfilm-project-actions {
+    order: 2;
+    flex: 1;
+    justify-content: flex-end;
+    border-top: 0;
+    padding-top: 0;
+    flex-wrap: nowrap;
+    gap: 6px;
+    min-width: 0;
+  }
+  .mmfilm-project-actions > button,
+  .mmfilm-project-actions > label { padding: 8px; font-size: 11px; }
+  .mmfilm-project-actions > select { max-width: 175px; font-size: 11px; }
+}
+
+/* MediaMind identity scoped to the comparison editor inside Workspace. */
+.mmfilm-workspace-preview {
+  background: #050b1b;
+  color: #dceafa;
+  border: 1px solid #21374f;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mmfilm-workspace-preview [class*="bg-[#"] {
+  background-color: #0b1628 !important;
+}
+.mmfilm-workspace-preview header,
+.mmfilm-workspace-preview aside {
+  background-color: #101e33 !important;
+}
+.mmfilm-workspace-preview [class*="border-[#"],
+.mmfilm-workspace-preview .border-black {
+  border-color: #21374f !important;
+}
+.mmfilm-workspace-preview .bg-blue-600,
+.mmfilm-workspace-preview .bg-blue-500 {
+  background-color: #0ea5e9 !important;
+}
+.mmfilm-workspace-preview .text-blue-400,
+.mmfilm-workspace-preview .text-blue-300 {
+  color: #38bdf8 !important;
+}
+
 @layer components {
   .w2-panel { @apply rounded-xl border border-slate-700/80 bg-slate-950/55 shadow-[0_12px_40px_rgba(0,0,0,0.22)]; }
   .w2-timeline-shell > main { grid-column: 3; }

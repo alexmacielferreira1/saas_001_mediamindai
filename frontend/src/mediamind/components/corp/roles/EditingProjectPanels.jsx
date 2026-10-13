@@ -6,11 +6,11 @@ import { GraphicDraftProvider } from '../../../lib/graphicDrafts';
 
 const fieldClass = 'w-full rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200';
 const buttonClass = 'rounded border border-sky-800 px-3 py-2 text-xs text-sky-300 hover:bg-sky-950';
-const sections = ['Timeline', 'Mídias', 'Documentos', 'Referências', 'Observações'];
+const sections = ['Mídias', 'Documentos', 'Referências', 'Observações'];
 
 export default function EditingProjectPanels({ project, lane, onChange }) {
   const scope = useWorkScope();
-  const [tab, setTab] = useState(lane === 'para_editar' ? 'Mídias' : 'Timeline');
+  const [tab, setTab] = useState('Mídias');
   const [versions, setVersions] = useWorkDraftState(`editing:${project.id}:versions`, []);
   const [versionId, setVersionId] = useWorkDraftState(`editing:${project.id}:versionId`, null);
   const [comments, setComments] = useWorkDraftState(`editing:${project.id}:comments`, []);

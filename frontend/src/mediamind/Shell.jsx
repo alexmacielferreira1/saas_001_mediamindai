@@ -186,7 +186,7 @@ export function navigationForRole(role) {
   })).filter((group) => group.items.length > 0);
 }
 
-export default function Shell({ children }) {
+export default function Shell({ children, persistentPath }) {
   const { user, logout, roleLabels } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -434,7 +434,7 @@ export default function Shell({ children }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-x-hidden p-4 lg:p-6">
-          <div className="mx-auto w-full max-w-[1600px]"><WorkProtection>{children}</WorkProtection></div>
+          <div className="mx-auto w-full max-w-[1600px]"><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
         </main>
       </div>
 

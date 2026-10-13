@@ -88,10 +88,19 @@ describe('carouselDocument', () => {
     draft.slides = [{ id: 's1', type: 'content', title: '', body: '' }];
 
     expect(validateCarouselDocument(draft)).toEqual([
-      { path: 'format', message: 'Formato deve ser 4:5 ou 1:1.' },
+      { path: 'format', message: 'Formato de rede social não reconhecido.' },
       { path: 'slides[0].title', message: 'Título do slide é obrigatório.' },
     ]);
   });
+
+  it.each(['4:5', '1:1', '9:16', '16:9', '1.91:1', '3:2'])(
+    'accepts the %s social format',
+    (format) => {
+      const draft = createCarouselDocument();
+      draft.format = format;
+      expect(validateCarouselDocument(draft)).toEqual([]);
+    },
+  );
 
   it('reorders slides without mutating the original document', () => {
     const draft = createCarouselDocument();

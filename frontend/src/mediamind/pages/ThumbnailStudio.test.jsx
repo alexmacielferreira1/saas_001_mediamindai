@@ -39,12 +39,21 @@ describe('Criar Thumbs', () => {
 
   it('opens on Padrão SIMERS and exposes all functional modes', async () => {
     renderPage();
-    expect(screen.getByRole('heading', { name: 'Criar Thumbs' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Thumbs' })).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Padrão SIMERS' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Usar Referência' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Criação Livre' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Outros Templates' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Meus modelos' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Outros' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Projeto')).toHaveValue('54'));
+  });
+
+  it('exposes the reference-layout workspace actions in the top bar', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Projeto')).toHaveValue('54'));
+    expect(screen.getByRole('button', { name: 'Salvar versão' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Baixar (2)' }));
+    await waitFor(() => expect(exportThumbnailElement).toHaveBeenCalledTimes(2));
   });
 
   it('loads production data into editable local fields and does not mutate the project', async () => {
@@ -60,11 +69,11 @@ describe('Criar Thumbs', () => {
 
   it('opens the pattern guide and exports both selected formats', async () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Ver guia do padrão' }));
+    fireEvent.click(screen.getByRole('button', { name: /Guia Padrão SIMERS/ }));
     expect(screen.getByRole('dialog', { name: 'Guia do padrão SIMERS' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Fechar guia' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Baixar imagens selecionadas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Baixar (2)' }));
     await waitFor(() => expect(exportThumbnailElement).toHaveBeenCalledTimes(2));
   });
 
@@ -74,46 +83,97 @@ describe('Criar Thumbs', () => {
     expect(screen.getByLabelText('Imagem de referência')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Criação Livre' }));
     expect(screen.getByLabelText('Orientação da composição')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: 'Outros Templates' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Meus modelos' }));
     expect(screen.getByText('Nenhum outro template funcional cadastrado')).toBeInTheDocument();
   });
 
   it('starts a new thumb from the program and keeps the source content optional', async () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Nova thumb' }));
-    expect(screen.getByRole('dialog', { name: 'Escolher programa' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Minuto Simers' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pediatricos' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Corações e Mentes' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'No Front' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sala de Prescrição' }));
+    expect(screen.queryByRole('button', { name: 'Nova thumb' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outra arte' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Sala de Prescrição' }));
 
     expect(screen.getByLabelText('Programa')).toHaveValue('Sala de Prescrição');
     expect(screen.getByLabelText('Projeto')).toHaveValue('');
     expect(screen.getByLabelText('Chamada da thumb')).toHaveValue('');
     expect(screen.getByText('Criação nova')).toBeInTheDocument();
-    expect(screen.getByTestId('thumbnail-canvas-horizontal')).toHaveStyle({ background: '#B4CC00' });
+    expect(screen.getAllByTestId('thumbnail-canvas-horizontal').some((canvas) => canvas.style.background === 'rgb(180, 204, 0)')).toBe(true);
   });
 
-  it('keeps several independent thumbs that can be collapsed and resumed', async () => {
+  it('keeps several independent thumbs in horizontal tabs', async () => {
     renderPage();
     const title = await screen.findByLabelText('Chamada da thumb');
     fireEvent.change(title, { target: { value: 'Primeira capa editada' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nova thumb' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Anamnese' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outra arte' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Anamnese' }));
 
-    expect(screen.getByRole('region', { name: 'Thumbs em criação' })).toHaveTextContent('2');
+    expect(screen.getByRole('tablist', { name: 'Artes abertas' }).querySelectorAll('[role="tab"]')).toHaveLength(2);
     expect(screen.getByLabelText('Programa')).toHaveValue('Anamnese');
-    expect(screen.getByRole('button', { name: 'Expandir Primeira capa editada' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Abrir Primeira capa editada' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expandir Primeira capa editada' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Abrir Primeira capa editada' }));
     expect(screen.getByLabelText('Chamada da thumb')).toHaveValue('Primeira capa editada');
     expect(screen.getByLabelText('Programa')).toHaveValue('Sala de Prescrição');
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recolher Primeira capa editada' }));
-    expect(screen.queryByRole('tab', { name: 'Padrão SIMERS' })).not.toBeInTheDocument();
+  it('creates a blank art and replaces the thumb with an editable 4:5 art model', async () => {
+    renderPage();
+    await screen.findByLabelText('Chamada da thumb');
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outra arte' }));
+    expect(screen.getByLabelText('Chamada da arte')).toHaveValue('');
+    expect(screen.queryByLabelText('Programa')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Artes individuais' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Lima institucional' }));
+    expect(screen.getByLabelText('Chamada da arte')).toHaveValue('Médicos aprovam Convenção Coletiva de Trabalho com o Sindiberf');
+    expect(screen.getByLabelText('Descrição / contexto')).toHaveValue('');
+    expect(screen.getByText('Retrato 1080×1350')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Arte em edição' }).querySelector('[data-testid="thumbnail-canvas-vertical"]')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Programa')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Modelo')).toHaveValue('Lima institucional');
+    expect(screen.getByRole('tab', { name: /Abrir Médicos aprovam/ })).toBeInTheDocument();
+  });
+
+  it('shows visual SIMERS model thumbnails that apply the selected program', () => {
+    renderPage();
+    expect(screen.getByRole('region', { name: 'Modelos SIMERS para thumbs' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Anamnese' }));
+    expect(screen.getByLabelText('Programa')).toHaveValue('Anamnese');
+  });
+
+  it('separates thumbs, individual arts and carousels in the same SIMERS gallery', () => {
+    renderPage();
+    const categories = screen.getByRole('tablist', { name: 'Categorias de modelos SIMERS' });
+    expect(categories.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('tab', { name: 'Artes individuais' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Lima institucional' }));
+    expect(screen.getByLabelText('Modelo')).toHaveValue('Lima institucional');
+    expect(screen.getByRole('button', { name: 'Restaurar padrão' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Carrosséis' }));
+    expect(screen.getByRole('button', { name: 'Aplicar modelo Giro da Semana' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Giro da Semana' }));
+    expect(screen.getByLabelText('Título do slide')).toHaveValue('GIRO DE NOTÍCIAS DA SEMANA');
+    expect(screen.getByText('Artes deste trabalho (5)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Artes individuais' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Turquesa institucional' }));
+    expect(screen.queryByLabelText('Título do slide')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Chamada da arte')).toHaveValue('Simers se reúne com diretoria do Hospital Estrela para tratar do atendimento psiquiátrico');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Thumbs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar modelo Anamnese' }));
+    expect(screen.getByLabelText('Programa')).toHaveValue('Anamnese');
+    expect(screen.queryByLabelText('Modelo')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Horizontal' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Vertical' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('allows adding another SIMERS model category', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: '+ Categoria' }));
+    fireEvent.change(screen.getByLabelText('Nome da nova categoria'), { target: { value: 'Campanhas' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }));
+    expect(screen.getByRole('tab', { name: 'Campanhas' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('adds a person directly from an uploaded photo and applies the local cutout', async () => {

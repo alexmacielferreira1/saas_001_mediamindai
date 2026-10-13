@@ -131,18 +131,20 @@ describe('MediaMind local authentication', () => {
     expect(result.current.user).toBeNull();
   });
 
-  it('allows a local-only demo role without depending on the backend', async () => {
+  it('authenticates a local demo through the backend without storing credentials', async () => {
     requestMock.mockRejectedValueOnce(new Error('offline'));
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
+    requestMock.mockResolvedValueOnce(session);
     await act(() => result.current.loginDemo('alexmacielferreira@gmail.com'));
 
     expect(result.current.user).toEqual(expect.objectContaining({
       email: 'alexmacielferreira@gmail.com',
       role: 'superadmin',
     }));
-    expect(localStorage.getItem('mm_demo_session_v1')).toContain('alexmacielferreira@gmail.com');
+    expect(localStorage.getItem('mm_demo_session_v1')).toBeNull();
+    expect(requestMock).toHaveBeenLastCalledWith('/auth/demo', { method: 'POST', body: { email: 'alexmacielferreira@gmail.com' } });
   });
 
   it.each([undefined, '   '])('rejects a demo login without an e-mail: %s', async (email) => {
@@ -155,7 +157,7 @@ describe('MediaMind local authentication', () => {
     expect(localStorage.getItem('mm_demo_session_v1')).toBeNull();
   });
 
-  it('restores a local demo session after a page reload without calling the protected API', async () => {
+  it('upgrades an old browser-only demo into a server session on reload', async () => {
     localStorage.setItem('mm_demo_session_v1', JSON.stringify({
       id: 'demo-editor',
       email: 'editor@mediamind.ai',
@@ -164,14 +166,15 @@ describe('MediaMind local authentication', () => {
       empresa_ids: ['mediamind-demo'],
       selected_tenant_id: 'mediamind-demo',
     }));
-    requestMock.mockRejectedValueOnce(new Error('offline'));
+    requestMock.mockResolvedValueOnce({ ...session, memberships: [{ tenant_id: 'tenant-1', role: 'editor' }] });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.user).toEqual(expect.objectContaining({ role: 'editor' }));
     expect(result.current.error).toBe('');
-    expect(requestMock).not.toHaveBeenCalled();
+    expect(requestMock).toHaveBeenCalledWith('/auth/demo', { method: 'POST', body: { email: 'editor@mediamind.ai' } });
+    expect(localStorage.getItem('mm_demo_session_v1')).toBeNull();
   });
 
   it('discards a corrupted local demo session and reports the unavailable backend', async () => {
@@ -186,16 +189,17 @@ describe('MediaMind local authentication', () => {
     expect(result.current.error).toBe('Não foi possível verificar sua sessão. Tente novamente.');
   });
 
-  it('builds readable names for the other local demo profiles', async () => {
+  it('preserves the demo identity returned by the server', async () => {
     requestMock.mockRejectedValueOnce(new Error('offline'));
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await act(() => result.current.loginDemo('editor_video@mediamind.ai'));
+    requestMock.mockResolvedValueOnce({ ...session, user: { ...session.user, full_name: 'Editor de vídeo' }, memberships: [{ tenant_id: 'tenant-1', role: 'editor' }] });
+    await act(() => result.current.loginDemo('editor@mediamind.ai'));
 
     expect(result.current.user).toEqual(expect.objectContaining({
-      name: 'Editor Video',
-      role: 'editor_video',
+      name: 'Editor de vídeo',
+      role: 'editor',
     }));
   });
 

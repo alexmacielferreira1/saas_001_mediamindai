@@ -27,7 +27,7 @@ export default function AgendaCalendarView({ events, selectedEventId, onSelectEv
   function nextM() { if (month === 11) { setYear((y) => y + 1); setMonth(0); } else setMonth((m) => m + 1); }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-col overflow-hidden" style={{height:'auto', flexShrink:0}}>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-bold uppercase tracking-wide text-slate-300">{MONTHS[month]} de {year}</p>
         <div className="flex gap-1">
@@ -35,7 +35,7 @@ export default function AgendaCalendarView({ events, selectedEventId, onSelectEv
           <button onClick={nextM} className="rounded-md border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400 hover:bg-slate-800">›</button>
         </div>
       </div>
-      <div className="grid flex-1 grid-cols-7 gap-1 auto-rows-[minmax(0,1fr)] text-center">
+      <div className="grid min-h-0 grid-cols-7 gap-1 text-center" style={{height:18+(cells.length/7)*110+(cells.length/7)*4, flexShrink:0, gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gridTemplateRows: `18px repeat(${cells.length / 7}, 110px)`}}>
         {DAYS.map((d) => (
           <div key={d} className="text-[9px] font-semibold uppercase text-slate-500">{d}</div>
         ))}
@@ -46,10 +46,10 @@ export default function AgendaCalendarView({ events, selectedEventId, onSelectEv
           return (
             <div
               key={i}
-              className={`flex h-full min-h-0 flex-col items-start gap-0.5 overflow-hidden rounded-lg p-1.5 text-left transition ${c.muted ? 'opacity-25' : dayHasSelected ? 'bg-sky-950/50 ring-1 ring-sky-600/50' : isToday ? 'bg-sky-950/30' : 'bg-slate-950/30'}`}
+              className={`flex min-h-0 flex-col items-start gap-0.5 overflow-hidden rounded-lg p-1.5 text-left transition ${c.muted ? 'opacity-25' : dayHasSelected ? 'bg-sky-950/50 ring-1 ring-sky-600/50' : isToday ? 'bg-sky-950/30' : 'bg-slate-950/30'}`}
             >
               <span className={`text-[10px] font-bold leading-none ${!c.muted && (dayHasSelected || isToday) ? 'text-sky-300' : 'text-slate-300'}`}>{c.day}</span>
-              <div className="flex w-full flex-col gap-1">
+              <div className="flex min-h-0 w-full flex-1 flex-col gap-1 overflow-y-auto">
                 {dEv.map((e) => {
                   const isSel = e.id === selectedEventId;
                   return (

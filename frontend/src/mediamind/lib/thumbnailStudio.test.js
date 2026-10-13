@@ -6,6 +6,7 @@ import {
   SIMERS_PROGRAMS,
   createThumbnailDraft,
   formatEpisode,
+  personNameFromFilename,
   suggestHighlight,
   validateSimersDraft,
 } from './thumbnailStudio';
@@ -77,6 +78,12 @@ describe('thumbnail studio model', () => {
       'Selecione ou informe um programa.',
       'Informe a chamada da thumb.',
     ]);
+  });
+
+  it('uses readable photo names but never exposes UUIDs as person names', () => {
+    expect(personNameFromFilename('dra_marina-lopes.jpg')).toBe('Dra Marina Lopes');
+    expect(personNameFromFilename('85215452-7883-4987-b638-9ddc7702cb52.png')).toBe('Nova pessoa');
+    expect(personNameFromFilename('IMG_20261009_184512.jpeg')).toBe('Nova pessoa');
   });
 
   it('formats episode identifiers with the required three digits', () => {

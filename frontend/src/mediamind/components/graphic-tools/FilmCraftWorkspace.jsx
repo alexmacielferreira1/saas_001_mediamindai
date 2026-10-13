@@ -98,7 +98,11 @@ const compatible = (asset, kind) =>
     ? asset.type.startsWith("audio") || asset.type.startsWith("video")
     : !asset.type.startsWith("audio");
 
-export default function FilmCraftWorkspace({ active = true }) {
+export default function FilmCraftWorkspace({ active = true, previewAsset = null }) {
+  useEffect(() => {
+    if (!previewAsset?.stream_url) return;
+    setSource({id:String(previewAsset.id),name:previewAsset.title || previewAsset.filename,type:previewAsset.mime_type || `${previewAsset.asset_type || 'video'}/mp4`,url:previewAsset.stream_url,duration:Number(previewAsset.duration) || 8});
+  }, [previewAsset]);
   const [media, setMedia] = useGraphicDraftState("FilmCraftWorkspace.jsx:media", []);
   const [clips, setClips] = useGraphicDraftState("FilmCraftWorkspace.jsx:clips", []);
   const [source, setSource] = useGraphicDraftState("FilmCraftWorkspace.jsx:source", null);
@@ -119,6 +123,8 @@ export default function FilmCraftWorkspace({ active = true }) {
   const [applicationMenu, setApplicationMenu] = useGraphicDraftState("FilmCraftWorkspace.jsx:applicationMenu", null);
   const [commandNotice, setCommandNotice] = useGraphicDraftState("FilmCraftWorkspace.jsx:commandNotice", "");
   const [sequenceName, setSequenceName] = useGraphicDraftState("FilmCraftWorkspace.jsx:sequenceName", "Sequência 01");
+  const [renamingSequence, setRenamingSequence] = useState(false);
+  const [sequenceNameDraft, setSequenceNameDraft] = useState('');
   const [projectFormat, setProjectFormat] = useGraphicDraftState("FilmCraftWorkspace.jsx:projectFormat", "mmfilm");
   const [editTool, setEditTool] = useGraphicDraftState("FilmCraftWorkspace.jsx:editTool", "Seleção");
   const [projectView, setProjectView] = useGraphicDraftState("FilmCraftWorkspace.jsx:projectView", "Projeto");
@@ -699,7 +705,7 @@ export default function FilmCraftWorkspace({ active = true }) {
     event.preventDefault();
     if (trackState[track].locked) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const raw = Math.max(0, (event.clientX - rect.left) / zoom);
+    const raw = Number.isFinite(event.clientX) ? Math.max(0, (event.clientX - rect.left) / zoom) : Math.max(0, playhead);
     const start = snap ? Math.round(raw) : raw;
     const clipId = event.dataTransfer.getData("application/x-filmcraft-clip");
     if (clipId) {
@@ -714,7 +720,20 @@ export default function FilmCraftWorkspace({ active = true }) {
       return;
     }
     const assetId = event.dataTransfer.getData("application/x-filmcraft-asset");
-    const asset = media.find((item) => item.id === assetId);
+    let asset = media.find((item) => String(item.id) === assetId);
+    if (!asset && source && String(source.id) === assetId) asset = source;
+    if (!asset) {
+      try { asset = JSON.parse(event.dataTransfer.getData('application/x-filmcraft-media') || 'null'); } catch { return; }
+    }
+    if (!asset) {
+      try {
+        const raw = JSON.parse(event.dataTransfer.getData("application/x-timeline2-media") || "null");
+        if (raw?.src && ['video','audio','image'].includes(raw.kind)) {
+          asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:raw.src,duration:Number(raw.duration) || 8};
+          if (compatible(asset, kind)) setMedia(old => old.some(item => String(item.id) === asset.id) ? old : [...old,asset]);
+        }
+      } catch { return; }
+    }
     if (!asset || !compatible(asset, kind)) return;
     const item = makeClip(asset, track, start);
     commit((old) => [...old, item]);
@@ -861,7 +880,7 @@ export default function FilmCraftWorkspace({ active = true }) {
 
   return (
     <section className="bg-[#191919] text-slate-200">
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center border-b border-black bg-[#1d1d1d] px-3 py-2">
+      <header className="mmfilm-project-header grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 border-b border-black bg-[#1d1d1d] px-4 py-3">
         <div>
           <nav className="flex items-center gap-5 text-sm">
             <button className="text-slate-400 hover:text-white">⌂</button>
@@ -885,13 +904,13 @@ export default function FilmCraftWorkspace({ active = true }) {
             </button>
           </nav>
         </div>
-        <div className="text-center">
-          <h1 className="text-sm font-medium text-slate-200">
+        <div className="min-w-0 text-right">
+          {renamingSequence ? <input autoFocus aria-label="Nome da sequência" value={sequenceNameDraft} onChange={event => setSequenceNameDraft(event.target.value)} onBlur={() => { if(sequenceNameDraft.trim()) setSequenceName(sequenceNameDraft.trim()); setRenamingSequence(false); }} onKeyDown={event => { event.stopPropagation(); if(event.key === 'Enter') event.currentTarget.blur(); if(event.key === 'Escape') setRenamingSequence(false); }} className="rounded border border-sky-500 bg-slate-950 px-2 py-1 text-sm text-white"/> : <h1 onDoubleClick={() => {setSequenceNameDraft(sequenceName);setRenamingSequence(true);}} className="cursor-text truncate text-sm font-semibold text-slate-200" title="Clique duas vezes para renomear a sequência">
             {sequenceName} — Editada
-          </h1>
+          </h1>}
           <p className="text-[9px] text-slate-500">MMFilm</p>
         </div>
-        <div className="ml-auto flex items-center gap-1 text-[10px]">
+        <div className="mmfilm-project-actions col-span-2 flex flex-wrap items-center gap-2 border-t border-slate-700/50 pt-3 text-xs">
           <button
             onClick={saveProjectLocally}
             className="border border-slate-700 px-2 py-1.5 text-slate-200"
@@ -1125,7 +1144,16 @@ export default function FilmCraftWorkspace({ active = true }) {
           )}
         </aside>
 
-        <aside className="overflow-auto border border-[#303030] bg-[#1e1e1e] xl:col-start-1 xl:row-start-2">
+        <aside aria-label="Pasta Projeto MMFilm" onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={event => {
+          event.preventDefault(); event.stopPropagation();
+          try {
+            const raw = JSON.parse(event.dataTransfer.getData('application/x-timeline2-media') || 'null');
+            if (!raw?.src || !['video','audio','image'].includes(raw.kind)) return;
+            const asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:raw.src,duration:Number(raw.duration) || 8};
+            setMedia(old => old.some(item => String(item.id) === asset.id) ? old : [...old,asset]);
+            openSource(asset);
+          } catch { return; }
+        }} className="overflow-auto border border-[#303030] bg-[#1e1e1e] xl:col-start-1 xl:row-start-2">
           {
             <PremiereProjectPanel
               media={media}
@@ -1192,6 +1220,7 @@ export default function FilmCraftWorkspace({ active = true }) {
                   <button
                     key={asset.id}
                     draggable
+                    onPointerDown={event => event.stopPropagation()}
                     onDragStart={(event) =>
                       event.dataTransfer.setData(
                         "application/x-filmcraft-asset",
@@ -1225,6 +1254,7 @@ export default function FilmCraftWorkspace({ active = true }) {
                       )}
                     </div>
                     <p
+                      onDoubleClick={event => { event.stopPropagation(); const name = window.prompt('Nome da mídia', asset.name)?.trim(); if(name) { setMedia(old => old.map(item => item.id === asset.id ? {...item,name} : item)); setSource(old => old?.id === asset.id ? {...old,name} : old); } }}
                       className={`truncate text-[10px] text-slate-300 ${workspace === "Cor" ? "px-1" : "p-2"}`}
                     >
                       {asset.name}
@@ -1253,7 +1283,7 @@ export default function FilmCraftWorkspace({ active = true }) {
         <main className="contents">
           <section className="flex min-h-0 flex-col overflow-hidden bg-black xl:col-start-2 xl:row-start-1">
             <div
-              className={`grid min-h-0 flex-1 gap-px ${workspace === "Cor" ? "grid-cols-1" : "md:grid-cols-2"}`}
+              className={`grid min-h-0 flex-1 gap-px ${workspace !== "Cor" && dualMonitor ? "md:grid-cols-2" : "grid-cols-1"}`}
             >
               {workspace !== "Cor" && dualMonitor && (
                 <Monitor title="Origem" asset={source}>
@@ -1276,6 +1306,8 @@ export default function FilmCraftWorkspace({ active = true }) {
                 asset={program}
                 playing={playing}
                 playhead={playhead}
+                onPlayingChange={setPlaying}
+                onSeek={setPlayhead}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 border border-[#303030] bg-[#1e1e1e] p-2 text-[10px] text-slate-400">
@@ -1999,6 +2031,13 @@ function PremiereProjectPanel({
                 role="button"
                 tabIndex={0}
                 aria-label={asset.name}
+                draggable
+                onPointerDown={event => event.stopPropagation()}
+                onDragStart={event => {
+                  event.dataTransfer.effectAllowed = 'copy';
+                  event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id));
+                  event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset));
+                }}
                 onClick={() => setSource(asset)}
                 onDoubleClick={() => setSource(asset)}
                 onKeyDown={(event) => {
@@ -2646,15 +2685,17 @@ function AudioTrackMixer({ trackState, toggleTrack }) {
     </div>
   );
 }
-function Monitor({ title, asset, children, playing = false, playhead = 0 }) {
+function Monitor({ title, asset, children, playing = false, playhead = 0, onPlayingChange, onSeek }) {
   const videoRef = useRef(null);
+  const [monitorPlaying, setMonitorPlaying] = useState(false);
+  const [monitorTime, setMonitorTime] = useState(0);
+  const [monitorDuration, setMonitorDuration] = useState(0);
   useEffect(() => {
     const video = videoRef.current;
     if (!video || title !== "Programa" || !asset?.url) return;
     const target = clipMediaTime(asset, playhead);
-    if (Number.isFinite(video.duration))
-      video.currentTime = Math.min(target, Math.max(0, video.duration - 0.01));
-    else video.currentTime = target;
+    const seekTime = Number.isFinite(video.duration) ? Math.min(target, Math.max(0, video.duration - 0.01)) : target;
+    if (!playing || Math.abs(video.currentTime - seekTime) > 0.35) video.currentTime = seekTime;
     video.playbackRate = Math.max(
       0.25,
       Math.min(4, (asset.speed || 100) / 100),
@@ -2665,19 +2706,27 @@ function Monitor({ title, asset, children, playing = false, playhead = 0 }) {
   const visualStyle = asset
     ? {
         opacity: (asset.opacity ?? 100) / 100,
+        transformOrigin: `${(asset.anchorX ?? 960) / 19.2}% ${(asset.anchorY ?? 540) / 10.8}%`,
+        clipPath: `inset(${asset.cropTop ?? 0}% ${asset.cropRight ?? 0}% ${asset.cropBottom ?? 0}% ${asset.cropLeft ?? 0}%)`,
         transform: `translate(${asset.x ?? 0}px, ${asset.y ?? 0}px) rotate(${asset.rotation ?? 0}deg) scale(${(asset.scale ?? 100) / 100})`,
         filter: `brightness(${100 + (asset.exposure ?? 0)}%) contrast(${asset.contrast ?? 100}%) saturate(${asset.saturation ?? 100}%)`,
       }
     : undefined;
   return (
-    <div className="overflow-hidden border border-[#303030] bg-black">
-      <div className="flex items-center gap-2 border-b border-black bg-[#1e1e1e] px-3 py-2 text-[11px] font-medium text-slate-300">
+    <div draggable={Boolean(asset)} onDragStart={event => {
+      if (!asset) return;
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id));
+      event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset));
+    }} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-[#303030] bg-black">
+      <div className="flex shrink-0 items-center gap-2 border-b border-black bg-[#1e1e1e] px-3 py-2 text-[11px] font-medium text-slate-300">
         <span className="mr-auto border-b border-slate-300 pb-0.5">
           {title} ☰
         </span>
         {children}
       </div>
-      <div className="grid aspect-video min-h-[230px] place-items-center">
+      <div className="relative grid min-h-0 flex-1 overflow-hidden place-items-center">
+        {asset && <div draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id)); event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset)); }} className="col-start-1 row-start-1 self-start justify-self-start z-10 m-2 cursor-grab rounded border border-sky-600 bg-slate-950/90 px-2 py-1 text-xs text-sky-300" title="Arraste para uma pista da timeline">Arrastar mídia para timeline</div>}
         {asset?.offline || (asset && !asset.url) ? (
           <div className="max-w-sm border border-amber-500/50 bg-amber-950/20 p-5 text-center text-xs text-amber-200">
             <b className="block text-sm">Mídia offline</b>
@@ -2691,10 +2740,13 @@ function Monitor({ title, asset, children, playing = false, playhead = 0 }) {
           asset.type?.startsWith("video") ? (
             <video
               ref={videoRef}
-              controls
+              onPlay={() => setMonitorPlaying(true)}
+              onPause={() => setMonitorPlaying(false)}
+              onTimeUpdate={event => setMonitorTime(event.currentTarget.currentTime)}
+              onLoadedMetadata={event => setMonitorDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
               src={asset.url}
               style={visualStyle}
-              className="h-full w-full object-contain"
+              className="absolute inset-0 h-full w-full object-contain"
             />
           ) : asset.type?.startsWith("image") ? (
             <img
@@ -2712,8 +2764,13 @@ function Monitor({ title, asset, children, playing = false, playhead = 0 }) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-3 border-t border-[#303030] bg-[#1e1e1e] px-3 py-2 text-[10px] text-slate-500">
-        <span className="font-mono text-blue-400">00:00:00:00</span>
+      <div className="mt-auto flex h-10 shrink-0 items-center gap-3 border-t border-[#303030] bg-[#1e1e1e] px-3 py-2 text-[10px] text-slate-500">
+        {asset?.type?.startsWith('video') && <>
+          <button aria-label={`${monitorPlaying ? 'Pausar' : 'Reproduzir'} ${title}`} onClick={() => { if(onPlayingChange) {onPlayingChange(!playing);return;} const video = videoRef.current; if (!video) return; if(video.paused) video.play().catch(() => {}); else video.pause(); }}>{monitorPlaying ? 'Ⅱ' : '▶'}</button>
+          <input aria-label={`Progresso ${title}`} type="range" min="0" max={monitorDuration || 1} step="0.01" value={Math.min(monitorTime,monitorDuration || 1)} onChange={event => { const next=Number(event.target.value); if(onSeek) onSeek(asset.start+Math.max(0,next-(asset.sourceIn || 0))/((asset.speed || 100)/100)); else if(videoRef.current) videoRef.current.currentTime=next; }} className="min-w-0 flex-1 accent-sky-400"/>
+          <button aria-label={`Silenciar ${title}`} onClick={() => {if(videoRef.current) videoRef.current.muted=!videoRef.current.muted;}}>♪</button>
+        </>}
+        <span className="font-mono text-blue-400">{clock(monitorTime)}</span>
         <button>Fit ▾</button>
         <button>1/2 ▾</button>
         <span className="ml-auto">◀ │ ▶</span>
@@ -3352,7 +3409,26 @@ const GRAPHIC_TEMPLATES = [
   ["Ticker – Crawl", "Lower Thirds", "Breaking news · MediaMind", "ticker"],
 ];
 
+function PrecisionProperty({label,value,min,max,speed,disabled,onChange}) {
+  const drag = useRef(null);
+  function start(event) {
+    if(disabled || event.button !== 0) return;
+    drag.current={x:event.clientX,value:Number(value)};
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+  function move(event) {
+    if(!drag.current) return;
+    const delta=event.clientX-drag.current.x;
+    if(Math.abs(delta)<3) return;
+    onChange(Math.max(min,Math.min(max,Math.round((drag.current.value+delta*speed)*100)/100)));
+  }
+  const span=(max-min)*Math.min(1,speed);
+  const low=Math.max(min,Math.min(max-span,Number(value)-span/2));
+  return <label className="grid grid-cols-[90px_minmax(0,1fr)_70px] items-center gap-2 px-3 py-2 text-xs"><span>{label}</span><input aria-label={`Propriedades ${label}`} type="range" disabled={disabled} min={low} max={low+span} step={Math.max(0.01,Math.min(1,speed))} value={value} onChange={event=>onChange(Number(event.target.value))} className="min-w-0 accent-sky-400"/><input aria-label={`Valor ${label}`} title="Arraste para os lados para ajustar; clique para digitar" type="number" disabled={disabled} value={value} onPointerDown={start} onPointerMove={move} onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}} onChange={event=>{const next=Number(event.target.value);if(Number.isFinite(next))onChange(Math.max(min,Math.min(max,next)));}} className="w-full cursor-ew-resize rounded border border-slate-700 bg-slate-950 p-1"/></label>;
+}
+
 function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
+  const [adjustmentSpeed, setAdjustmentSpeed] = useState(1);
   const [tab, setTab] = useState(initialTab);
   const [graphicsMode, setGraphicsMode] = useState("Procurar");
   const [textMode, setTextMode] = useState("Transcrição");
@@ -3393,31 +3469,16 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
               patch("opacity", 100);
             }}
           >
-            <PropertyNumber
-              label="Posição"
-              value={`${clip?.x ?? 960} X     ${clip?.y ?? 540} Y`}
-              diamond
-            />
-            <PropertyNumber
-              label="Ponto de ancoragem"
-              value={`${clip?.anchorX ?? 960} X     ${clip?.anchorY ?? 540} Y`}
-              diamond
-            />
-            <PropertyNumber
-              label="Escala"
-              value={`${clip?.scale ?? 100} %`}
-              diamond
-            />
-            <PropertyNumber
-              label="Rotação"
-              value={`${clip?.rotation ?? 0}.0°`}
-              diamond
-            />
-            <PropertyNumber
-              label="Opacidade"
-              value={`${clip?.opacity ?? 100} %`}
-              diamond
-            />
+            <label className="grid grid-cols-[100px_minmax(0,1fr)_42px] items-center gap-2 px-3 py-2 text-xs"><span>Precisão dos ajustes</span><input aria-label="Velocidade dos ajustes" type="range" min="-2" max="1" step="0.05" value={Math.log10(adjustmentSpeed)} onChange={event => setAdjustmentSpeed(10 ** Number(event.target.value))} className="min-w-0 accent-sky-400"/><span className="text-right tabular-nums text-sky-300">{adjustmentSpeed.toFixed(2)}×</span></label>
+            {[
+              ['Posição X','x',0,-1920,1920],
+              ['Posição Y','y',0,-1080,1080],
+              ['Âncora X','anchorX',960,0,1920],
+              ['Âncora Y','anchorY',540,0,1080],
+              ['Escala','scale',100,1,400],
+              ['Rotação','rotation',0,-360,360],
+              ['Opacidade','opacity',100,0,100],
+            ].map(([label,key,fallback,min,max]) => <PrecisionProperty key={key} label={label} value={clip?.[key] ?? fallback} min={min} max={max} speed={adjustmentSpeed} disabled={!clip} onChange={value => patch(key,value)}/>)}
           </PropertyGroup>
           <PropertyGroup title="Cortar">
             {[

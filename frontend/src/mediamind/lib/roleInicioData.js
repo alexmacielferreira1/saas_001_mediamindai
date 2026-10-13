@@ -116,9 +116,15 @@ const ROLE_WORK_TABS = {
 export function workTabForRole(roleId, status = '') {
   const normalized = String(status).toLowerCase().replace(/\s+/g, '_');
   if (roleId === 'producer') {
+    if (normalized === 'rascunho') return 'rascunhos';
+    if (normalized === 'agendamentos' || normalized === 'agendada') return 'agendamentos';
+    if (normalized === 'aguardando_aprovacao') return 'aguardando_aprovacao';
+    if (normalized === 'publicado') return 'publicado';
+    if (normalized === 'redes_sociais') return 'redes_sociais';
+    if (normalized === 'analytics') return 'analytics';
     if (normalized.includes('aprov')) return 'em_aprovacao';
     if (normalized.includes('edi')) return 'em_edicao';
-    if (normalized.includes('public')) return 'publicacoes';
+    if (normalized.includes('public')) return 'para_publicar';
     if (normalized.includes('final')) return 'finalizado';
   }
   return ROLE_WORK_TABS[roleId] || 'workspace';

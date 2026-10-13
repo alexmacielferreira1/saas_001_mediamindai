@@ -1,12 +1,13 @@
 import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Eye, LayoutTemplate, Lock, Search, Unlock, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Eye, Search, Upload } from 'lucide-react';
 import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import Workspace2Stepper from '../components/workspace2/Workspace2Stepper';
 import Workspace2Script from '../components/workspace2/Workspace2Script';
 import Workspace2Export from '../components/workspace2/Workspace2Export';
 import Workspace2Create from '../components/workspace2/Workspace2Create';
 import Timeline2 from './Timeline2';
+import FilmCraftWorkspace from '../components/graphic-tools/FilmCraftWorkspace';
 import UploadReceiptPanel from '../components/UploadReceiptPanel';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
@@ -30,7 +31,8 @@ export default function Workspace2() {
   const [showPreview] = useState(true);
   const [showSearch] = useState(true);
   const [researchOpen, setResearchOpen] = useState(false);
-  const [locked, setLocked] = useState(false);
+  const [timelinePreview, setTimelinePreview] = useState('current');
+  const locked = false;
   const [uploadReceipts, setUploadReceipts] = useState([]);
   const importRef = useRef(null);
   const projectImportRef = useRef(null);
@@ -169,28 +171,27 @@ export default function Workspace2() {
       </div>
       <div role="status" className="mb-3 min-h-5 text-right text-xs text-sky-300">{notice}</div>
       <UploadReceiptPanel assets={uploadReceipts} />
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
+      {!(activeStep === 'timeline' && timelinePreview === 'mmfilm') && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
         {(activeStep === 'script' || activeStep === 'timeline') && <span className="text-[10px] text-slate-500">Use a aba Pesquisa na lateral esquerda para buscar e arrastar mídias.</span>}
         <button type="button" onClick={() => importRef.current?.click()} className="w2-button"><Upload size={14} /> Importar mídias</button><input ref={importRef} aria-label="Importar mídias" type="file" multiple accept="video/*,audio/*,image/*" onChange={importMedia} className="hidden" />
         <button type="button" onClick={() => projectImportRef.current?.click()} className="w2-button">Importar projeto</button><input ref={projectImportRef} aria-label="Arquivo do projeto" type="file" accept="application/json,.json" onChange={importProject} className="hidden" />
         <button type="button" onClick={exportProject} className="w2-button"><Download size={14} /> Exportar</button>
-        <button type="button" onClick={() => setNotice('Layout Padrão MediaMind ativo')} className="w2-button"><LayoutTemplate size={14} /> Layouts</button>
-        <button type="button" onClick={() => { setLocked((value) => !value); setNotice(locked ? 'Projeto destravado' : 'Projeto travado para evitar alterações'); }} className={`w2-button ${locked ? 'border-amber-500 text-amber-300' : ''}`}>{locked ? <Lock size={14} /> : <Unlock size={14} />} Travar</button>
-      </div>
+      </div>}
       {activeStep === 'create' && <WorkspaceStageShell {...shared} showSearch={false} showPreview={false} contentOnRight><Workspace2Create {...shared} showSearch={false} showPreview={false} onOpenScript={openScript} onCreate={createScript} /></WorkspaceStageShell>}
       {activeStep === 'script' && <WorkspaceStageShell {...shared} collapsibleSearch showSearch={researchOpen} onToggleSearch={() => setResearchOpen((value) => !value)} showPreview={false} contentOnRight><Workspace2Script {...shared} showSearch={false} showPreview /></WorkspaceStageShell>}
-      {activeStep === 'timeline' && <><WorkspaceFinalGuide active="timeline" onChange={changeStep}/><WorkspaceStageShell {...shared} collapsibleSearch showSearch={researchOpen} onToggleSearch={() => setResearchOpen((value) => !value)} showPreview={false} contentOnRight><Timeline2 embedded projectAssets={selectedAssets} /></WorkspaceStageShell></>}
-      {activeStep === 'export' && <><WorkspaceFinalGuide active="export" onChange={changeStep}/><WorkspaceStageShell {...shared} showSearch={false} showPreview={false} contentOnRight><Workspace2Export project={project} timeline={latestTimeline} onSave={saveProject} onNotice={setNotice} /></WorkspaceStageShell></>}
+      {activeStep === 'timeline' && <>
+        <div role="tablist" aria-label="Comparar editores de timeline" className="mb-2 flex gap-2">
+          <button role="tab" aria-selected={timelinePreview === 'current'} onClick={() => setTimelinePreview('current')} className="rounded-lg border border-slate-700 px-4 py-2 text-sm">Timeline atual</button>
+          <button role="tab" aria-selected={timelinePreview === 'mmfilm'} onClick={() => setTimelinePreview('mmfilm')} className="rounded-lg border border-sky-700 px-4 py-2 text-sm text-sky-300">MMFilm · prévia</button>
+        </div>
+        <WorkspaceStageShell {...shared} collapsibleSearch showSearch={researchOpen} onToggleSearch={() => setResearchOpen((value) => !value)} showPreview={false} contentOnRight>
+          <div hidden={timelinePreview !== 'current'}><Timeline2 embedded projectAssets={selectedAssets} /></div>
+          {timelinePreview === 'mmfilm' && <div className="mmfilm-workspace-preview"><p className="mb-2 text-xs text-amber-300">Prévia independente para comparar o editor. As alterações aqui ainda não são enviadas à exportação do Workspace.</p><FilmCraftWorkspace previewAsset={previewAsset}/></div>}
+        </WorkspaceStageShell>
+      </>}
+      {activeStep === 'export' && <WorkspaceStageShell {...shared} showSearch={false} showPreview={false} contentOnRight><Workspace2Export project={project} timeline={latestTimeline} onSave={saveProject} onNotice={setNotice} /></WorkspaceStageShell>}
     </div>
   );
-}
-
-function WorkspaceFinalGuide({ active, onChange }) {
-  return <nav aria-label="Timeline e prévia final" className="mb-2 flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">
-    <button type="button" aria-pressed={active === 'timeline'} onClick={() => onChange('timeline')} className={`rounded-lg border px-5 py-2 text-xs font-bold ${active === 'timeline' ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-700 text-slate-400'}`}>Timeline</button>
-    <span className="h-px w-10 bg-slate-700" />
-    <button type="button" aria-pressed={active === 'export'} onClick={() => onChange('export')} className={`rounded-lg border px-5 py-2 text-xs font-bold ${active === 'export' ? 'border-sky-400 bg-sky-500 text-slate-950' : 'border-slate-700 text-slate-400'}`}>Prévia final</button>
-  </nav>;
 }
 
 function WorkspaceStageShell({ children, assets = [], selectedAssets = [], selectedIds = [], previewAsset, mediaSearch, onMediaSearchChange, onPreview, onToggle, showSearch, showPreview, contentOnRight = false, collapsibleSearch = false, onToggleSearch = () => {} }) {

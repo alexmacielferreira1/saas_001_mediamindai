@@ -1,5 +1,9 @@
 # Central de edição — implementação local
 
+Seletor refinado: barra entre os quatro indicadores e a timeline. Lista contém só entregas da etapa selecionada, inclusive Aguardando revisão. Etapa vazia não mantém timeline de outra fila. Criar entrega seleciona Para editar. Indicadores de outras filas não contam entregas em revisão como Para editar.
+
+Refinamento solicitado às 21h de 12/10: cabeçalho, Nova edição e indicadores/menus superiores permanecem visíveis. Fila e detalhes abrem para baixo por botão com aria-expanded, recolhidos inicialmente. Seleção de entrega em uma linha. Abaixo fica o mesmo FilmCraftWorkspace usado na aba **MMFilm · prévia** do Workspace, isolado por empresa/usuário/entrega com recuperação. Não apagar drafts da Timeline2 anterior nem migrá-los implicitamente. Esse editor ainda é independente do fluxo de exportação da Timeline2; salvar/exportar o projeto MMFilm é um fluxo próprio.
+
 Publicação solicitada em 12/10: enviar a fatia para `update/creative-studios-2026-10-11`, sem merge/deploy de produção. Último relatório completo: frontend 495 testes / 101 arquivos aprovados; backend 231 testes aprovados, mas gate de cobertura 94,24% versus 100% e 21 erros de qualidade. Não declarar publicação online aprovada. Solicitação adicional de usar a timeline de prévia do Workspace nas três filas ainda pendente de implementação; o código atual incorpora Timeline2 completa.
 
 Origem: três imagens fornecidas por Alex da Central de edição (Para editar, Em edição, Em alteração), em `C:/Users/Alex/Desktop/para editar/`, e pedido de players reais em 12/10/2026.

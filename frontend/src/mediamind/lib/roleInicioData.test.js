@@ -48,7 +48,7 @@ describe('roleInicioData', () => {
   it('direciona o trabalho para a guia operacional do perfil', () => {
     expect(workTabForRole('editor', 'Em edição')).toBe('em_edicao');
     expect(workTabForRole('videomaker', 'confirmada')).toBe('gravacoes');
-    expect(workTabForRole('producer', 'aguardando_aprovacao')).toBe('em_aprovacao');
+    expect(workTabForRole('producer', 'aguardando_aprovacao')).toBe('aguardando_aprovacao');
     expect(workTabForRole('cedoc', 'complete')).toBe('midias');
     expect(workTabForRole('design', 'pendente')).toBe('solicitacoes');
   });

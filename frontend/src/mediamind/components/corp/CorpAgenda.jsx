@@ -25,7 +25,7 @@ export default function CorpAgenda({ events, selectedEventId, onSelectEvent }) {
   }, [events, q]);
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40 p-4">
       <div className="mb-3 flex items-center gap-1 rounded-md border border-slate-700 p-0.5">
         {VIEWS.map((v) => {
           const Icon = v.Icon;

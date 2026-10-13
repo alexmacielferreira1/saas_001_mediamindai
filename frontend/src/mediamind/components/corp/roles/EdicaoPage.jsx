@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import EditingProjectPanels from './EditingProjectPanels';
+import FilmCraftWorkspace from '../../graphic-tools/FilmCraftWorkspace';
+import { GraphicDraftProvider } from '../../../lib/graphicDrafts';
+import { useWorkScope } from '../../../lib/workProtection';
 import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
@@ -17,6 +20,8 @@ const EDICAO_STATUS = [
 ];
 const STATUS_LABEL = { rascunho_corte: 'Rascunho de corte', corte_fino: 'Corte fino', revisao_interna: 'Revisão interna', pronto_para_aprovacao: 'Pronto para revisão' };
 
+const projectLane = project => project?.etapa === "em_aprovacao" ? "em_aprovacao" : laneForEditingProject(project);
+
 function inputCls() {
   return 'w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500';
 }
@@ -24,22 +29,26 @@ function inputCls() {
 // Em edição: lista (arrastável) + detalhamento + acesso às mídias (download,
 // copiar nomes, baixar XML Premiere) + ajuste ao videomaker / revisão do produtor.
 export default function EdicaoPage({ disableBack = false, initialLane = 'em_edicao' }) {
+  const workScope = useWorkScope();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const projetos = useProducaoProjetos();
   const { user } = useAuth();
   const { toast } = useToast();
   const editorName = user?.name || 'Editor';
-  const emEdicao = projetos.filter((p) => ['para_editar', 'em_edicao', 'aguardando_aprovacao', 'aguardando'].includes(p.etapa));
-  const initialProject = emEdicao.find((project) => laneForEditingProject(project) === initialLane) || emEdicao[0];
+  const emEdicao = projetos.filter((p) => ['para_editar', 'em_edicao', 'aguardando_aprovacao', 'aguardando', 'em_aprovacao'].includes(p.etapa));
+  const initialProject = emEdicao.find((project) => projectLane(project) === initialLane) || emEdicao[0];
   const [selId, setSelId] = useState(initialProject?.id ?? null);
-  const sel = emEdicao.find((p) => p.id === selId) || emEdicao[0] || null;
   const [ajusteOpen, setAjusteOpen] = useState(false);
   const [ajusteObs, setAjusteObs] = useState('');
-  const [queueFilter, setQueueFilter] = useState(EDITING_LANES.includes(initialLane) ? initialLane : 'em_edicao');
+  const [queueFilter, setQueueFilter] = useState([...EDITING_LANES, "em_aprovacao"].includes(initialLane) ? initialLane : 'em_edicao');
   const [sortOrder, setSortOrder] = useState('deadline');
+  const laneProjects = emEdicao.filter(project => projectLane(project) === queueFilter);
+  const sel = laneProjects.find(project => project.id === selId) || laneProjects[0] || null;
 
   function nova() {
     const id = addProjeto({ etapa: 'para_editar', programa: '', titulo: 'Nova edição', apresentadores: [], editor: editorName, responsavel: editorName });
     setSelId(id);
+    setQueueFilter('para_editar');
   }
   function field(name, value) { if (sel) updateProjeto(sel.id, { [name]: value }); }
 
@@ -85,9 +94,9 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   }
 
   const materiais = sel?.materiais || [];
-  const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => laneForEditingProject(p) === lane).length]));
-  const filteredQueue = emEdicao.filter((p) => laneForEditingProject(p) === queueFilter).sort((a,b) => sortOrder === 'title' ? (a.titulo || '').localeCompare(b.titulo || '') : (Date.parse(a.prazo || a.data_entrega) || Number.MAX_SAFE_INTEGER) - (Date.parse(b.prazo || b.data_entrega) || Number.MAX_SAFE_INTEGER));
-  const selectedLane = sel ? laneForEditingProject(sel) : null;
+  const queueCounts = Object.fromEntries(EDITING_LANES.map((lane) => [lane, emEdicao.filter((p) => projectLane(p) === lane).length]));
+  const filteredQueue = emEdicao.filter((p) => projectLane(p) === queueFilter).sort((a,b) => sortOrder === 'title' ? (a.titulo || '').localeCompare(b.titulo || '') : (Date.parse(a.prazo || a.data_entrega) || Number.MAX_SAFE_INTEGER) - (Date.parse(b.prazo || b.data_entrega) || Number.MAX_SAFE_INTEGER));
+  const selectedLane = sel ? projectLane(sel) : null;
   const selectedLaneIndex = selectedLane ? EDITING_LANES.indexOf(selectedLane) : -1;
   const mediaGroups = [
     { label: 'Vídeos', Icon: Video, match: /video|\.(mp4|mov|webm|avi)$/i },
@@ -101,7 +110,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#020817]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-400">Produção / Pós-produção</p>
@@ -118,7 +127,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
           { id: 'aguardando', label: 'Em alteração', value: queueCounts.aguardando, Icon: CircleAlert, tone: 'text-amber-300' },
           { id: 'em_aprovacao', label: 'Aguardando revisão', value: projetos.filter(project => project.etapa === 'em_aprovacao').length, Icon: CircleCheck, tone: 'text-emerald-300' },
         ].map(({ id, label, value, Icon, tone }) => (
-          <button key={label} disabled={id === 'em_aprovacao'} onClick={() => { setQueueFilter(id); const first = emEdicao.find(project => laneForEditingProject(project) === id); setSelId(first?.id ?? null); }} className={`flex items-center gap-3 border-b border-slate-800 px-4 py-3 text-left last:border-b-0 sm:border-r xl:border-b-0 ${queueFilter === id ? 'bg-sky-950/40 ring-1 ring-inset ring-sky-500' : ''}`}>
+          <button key={label} onClick={() => { setQueueFilter(id); const first = emEdicao.find(project => projectLane(project) === id); setSelId(first?.id ?? null); }} className={`flex items-center gap-3 border-b border-slate-800 px-4 py-3 text-left last:border-b-0 sm:border-r xl:border-b-0 ${queueFilter === id ? 'bg-sky-950/40 ring-1 ring-inset ring-sky-500' : ''}`}>
             <Icon size={15} className={tone} />
             <div className="min-w-0">
               <p className={`text-lg font-semibold tabular-nums ${tone}`}>{value}</p>
@@ -128,7 +137,13 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(280px,30%)_minmax(0,1fr)]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 p-2">
+        <select aria-label="Projeto aberto" value={sel?.id || ''} onChange={event => setSelId(emEdicao.find(project => String(project.id) === event.target.value)?.id ?? null)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="" disabled>Selecione um projeto</option>{filteredQueue.map(project => <option key={project.id} value={project.id}>{project.episodio || '—'} · {project.titulo}</option>)}</select>
+        <button type="button" aria-expanded={detailsOpen} aria-controls="editing-project-details" onClick={() => setDetailsOpen(value => !value)} className="shrink-0 rounded border border-sky-800 px-3 py-2 text-xs text-sky-300">{detailsOpen ? 'Esconder fila e detalhes' : 'Mostrar fila e detalhes'}</button>
+      </div>
+
+      <div id="editing-project-details" data-testid="editing-project-details" hidden={!detailsOpen} className="max-h-[65vh] shrink-0 overflow-y-auto border-b border-slate-800">
+      <div className="grid min-h-0 lg:grid-cols-[minmax(280px,30%)_minmax(0,1fr)]">
       {/* Lista */}
       <div className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950/20 lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
@@ -142,7 +157,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
             ['para_editar', 'Para editar', queueCounts.para_editar],
             ['em_edicao', 'Em edição', queueCounts.em_edicao],
             ['aguardando', 'Alteração', queueCounts.aguardando],
-          ].map(([id, label, count]) => <button key={id} onClick={() => { setQueueFilter(id); const first = emEdicao.find((project) => laneForEditingProject(project) === id); if (first) setSelId(first.id); }} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();moveToLane(e.dataTransfer.getData('text/plain'),id);}} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
+          ].map(([id, label, count]) => <button key={id} onClick={() => { setQueueFilter(id); const first = emEdicao.find((project) => projectLane(project) === id); setSelId(first?.id ?? null); }} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();moveToLane(e.dataTransfer.getData('text/plain'),id);}} className={`min-h-8 rounded border px-1.5 text-[9px] font-semibold transition-colors ${queueFilter === id ? 'border-sky-500 bg-sky-500/15 text-sky-300' : 'border-slate-800 text-slate-500 hover:bg-slate-900'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 py-0.5 tabular-nums text-slate-300">{count}</span></button>)}
         </div>
         <div className="grid grid-cols-[1fr_auto] border-b border-slate-800 bg-slate-900/45 px-4 py-2 text-[9px] font-bold uppercase tracking-wide text-slate-500">
           <span>Entrega / responsável</span><span>Etapa</span>
@@ -204,7 +219,7 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
               </div>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              <EditingProjectPanels key={sel.id + selectedLane} project={sel} lane={selectedLane} onChange={field} />
+              {selectedLane === 'em_edicao' && <EditingProjectPanels key={sel.id + selectedLane} project={sel} lane={selectedLane} onChange={field} />}
               <section className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/45 p-3 xl:grid-cols-[1.25fr_.75fr]">
                 <div><p className="text-[10px] font-bold uppercase text-slate-300">Material para edição</p><p className="mb-2 text-[9px] text-slate-500">Baixe os arquivos, gere o pacote do projeto ou continue no Workspace.</p><div className="flex flex-wrap gap-1.5"><button onClick={copiarNomes} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Download size={11} /> Copiar nomes</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FileCode2 size={11} /> Baixar XML</button><button onClick={() => baixarXmlPremiere(sel)} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><Layers3 size={11} /> Pacote XML</button><button onClick={() => window.location.assign('/workspace')} className="flex items-center gap-1 rounded border border-sky-700/50 px-2 py-1.5 text-[9px] font-semibold text-sky-300 hover:bg-sky-950/40"><FolderOpen size={11} /> Abrir no Workspace</button></div></div>
                 <div><p className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-300"><MessageCircle size={11} className="text-sky-400" /> Observações de edição</p><textarea value={sel.edicao_obs || ''} onChange={(e) => field('edicao_obs', e.target.value)} rows={3} className={`${inputCls()} mt-1`} placeholder="Cortes, ajustes, GC, trilha e observações..." /></div>
@@ -305,6 +320,9 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
         )}
       </div>
       </div>
+
+      </div>
+      {sel && selectedLane === 'em_edicao' ? <div className="mmfilm-workspace-preview min-h-0 flex-1 overflow-auto" data-testid="editing-preview-timeline"><GraphicDraftProvider key={sel.id} scope={`${workScope || 'local'}:editing-mmfilm:${sel.id}`}><FilmCraftWorkspace previewAsset={(sel.materiais || []).filter(item => item.url || item.stream_url).map(item => ({...item,stream_url:item.stream_url || item.url,title:item.nome || item.filename,asset_type:item.tipo || 'video'}))[0] || null}/></GraphicDraftProvider></div> : sel ? <div className="min-h-0 flex-1 overflow-y-auto p-3"><EditingProjectPanels key={sel.id + selectedLane} project={sel} lane={selectedLane} onChange={field}/></div> : <p className="p-6 text-xs text-slate-400">Nenhuma entrega nesta etapa.</p>}
 
       <Dialog open={ajusteOpen} onOpenChange={setAjusteOpen}>
         <DialogContent className="max-w-md">

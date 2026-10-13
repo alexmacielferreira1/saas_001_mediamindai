@@ -121,7 +121,7 @@ export default function ProdutoraPage() {
   return (
     <div>
       <div className="h-[calc(100vh-11rem)]">
-        {sub === 'overview' && <RoleInicio roleId="producer" onNavigate={setSub} />}
+        {sub === 'overview' && <RoleInicio roleId="producer" onNavigate={target => { const next = normalizeProductionSubtab(target); if (tabs.some(tab => tab.id === next)) { setSub(next); setParams(previous => { const updated = new URLSearchParams(previous); updated.set('sub', next); return updated; }); } }} />}
         {false && (
           <div className="flex h-full flex-col gap-3">
             <CorpHeader onNavigate={setSub} />

@@ -34,4 +34,16 @@ describe("local carousel export", () => {
       "Todos os slides",
     );
   });
+
+  it("renders landscape exports at the selected network dimensions", async () => {
+    const element = { offsetWidth: 480 };
+    await buildCarouselZip(
+      { format: "16:9", slides: [{ id: "one", type: "cover", title: "Capa" }] },
+      [element],
+    );
+    expect(html2canvas).toHaveBeenCalledWith(
+      element,
+      expect.objectContaining({ scale: 4 }),
+    );
+  });
 });

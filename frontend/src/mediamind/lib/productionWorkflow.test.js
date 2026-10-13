@@ -45,6 +45,8 @@ describe('canonical production workflow', () => {
   });
 
   it('separates legacy scheduled and completed recordings without losing records', () => {
+    expect(resolveProjectProductionStage(null)).toBeNull();
+    expect(resolveProjectProductionStage({ etapa: 'em_edicao' })).toBe('em_edicao');
     expect(resolveProjectProductionStage({ etapa: 'gravacao', gravada: false, grav_status: 'agendada' })).toBe('agendamentos');
     expect(resolveProjectProductionStage({ etapa: 'gravacao', gravada: true, grav_status: 'gravada' })).toBe('gravacoes');
     expect(resolveProjectProductionStage({ etapa: 'gravacao', grav_status: 'gravada' })).toBe('gravacoes');
@@ -64,6 +66,8 @@ describe('canonical production workflow', () => {
   });
 
   it('only moves to the adjacent stage', () => {
+    expect(getAdjacentProductionStage('aguardando_aprovacao', 1)).toBe('em_aprovacao');
+    expect(getAdjacentProductionStage('aguardando_aprovacao', -1)).toBe('em_edicao');
     expect(getAdjacentProductionStage('rascunho', 1)).toBe('agendamentos');
     expect(getAdjacentProductionStage('gravacao', 1)).toBe('para_editar');
     expect(getAdjacentProductionStage('em_aprovacao', -1)).toBe('aguardando_aprovacao');

@@ -78,7 +78,7 @@ export default function RoleInicio({ roleId, onNavigate }) {
         : localTasks;
 
   return (
-    <div className="h-full space-y-4 overflow-y-auto pb-4">
+    <div className="h-full space-y-4 overflow-y-auto pb-4" style={{display:'block'}}>
       <div className="flex flex-col gap-1 rounded-xl border border-slate-800 bg-gradient-to-r from-slate-900/90 to-sky-950/30 px-5 py-4">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">Visão geral</p>
         <h2 className="text-xl font-bold text-slate-100">{d.roleName}</h2>
@@ -199,8 +199,8 @@ export default function RoleInicio({ roleId, onNavigate }) {
 
       <Panel title={`Agenda personalizada · ${d.roleName}`} right={<CalendarDays size={16} className="text-sky-400" />}>
         {agendaEvents.length > 0 ? (
-          <div className={`grid min-h-[25rem] gap-3 ${selectedEvent ? 'lg:grid-cols-[minmax(0,1fr)_22rem]' : ''}`}>
-            <div className="h-[25rem] min-w-0">
+          <div className={`grid gap-3 ${selectedEvent ? 'lg:grid-cols-[minmax(0,1fr)_22rem]' : ''}`}>
+            <div className="min-w-0" style={{display:'flow-root', overflow:'hidden'}}>
               <CorpAgenda
                 events={agendaEvents}
                 selectedEventId={selectedEventId}

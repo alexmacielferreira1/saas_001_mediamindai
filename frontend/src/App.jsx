@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
+import { useEffect, useState } from 'react';
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
 import {
@@ -7,6 +8,7 @@ import {
   Routes,
   Navigate,
   Outlet,
+  useLocation,
 } from "react-router-dom";
 import PageNotFound from "./lib/PageNotFound";
 import ScrollToTop from "./components/ScrollToTop";
@@ -16,7 +18,7 @@ import {
   AuthProvider as MmAuthProvider,
   useAuth as useMmAuth,
 } from "./mediamind/auth";
-import { EmpresaProvider } from "./mediamind/lib/empresaContext";
+import { EmpresaProvider, useEmpresa } from "./mediamind/lib/empresaContext";
 import EmpresaGate from "./mediamind/components/EmpresaGate";
 import Shell from "./mediamind/Shell";
 import Login from "./mediamind/pages/Login";
@@ -240,7 +242,7 @@ const AuthenticatedApp = () => {
         />
         <Route
           path="/soundcraft"
-          element={<ModuleRoute moduleId="ai_tools"><Shell><SoundCraft /></Shell></ModuleRoute>}
+          element={<ModuleRoute moduleId="ai_tools"><></></ModuleRoute>}
         />
         <Route
           path="/ferramentas-office"
@@ -271,10 +273,23 @@ function MmProtectedRoute() {
   return (
     <EmpresaProvider user={user}>
       <EmpresaGate>
-        <Outlet />
+        <PersistentSoundWorkspace />
       </EmpresaGate>
     </EmpresaProvider>
   );
+}
+
+function PersistentSoundWorkspace() {
+  const { user } = useMmAuth();
+  const { currentEmpresa } = useEmpresa();
+  const location = useLocation();
+  const visible = location.pathname === '/soundcraft' && canAccessModule(user?.role,'ai_tools');
+  const [visited, setVisited] = useState(false);
+  useEffect(() => { if(visible) setVisited(true); },[visible]);
+  return <>
+    <div hidden={visible}><Outlet /></div>
+    {(visible || visited) && canAccessModule(user?.role,'ai_tools') && <div hidden={!visible} key={`${user.id}:${currentEmpresa?.id || 'global'}`}><Shell persistentPath="/soundcraft"><SoundCraft /></Shell></div>}
+  </>;
 }
 
 function App() {

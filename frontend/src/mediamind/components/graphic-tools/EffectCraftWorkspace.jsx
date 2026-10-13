@@ -123,7 +123,7 @@ export default function EffectCraftWorkspace({
     },
     {
       id: "text",
-      name: "EFFECTCRAFT",
+      name: "MMEffect",
       kind: "T",
       color: "bg-[#a9343c]",
       visible: true,
@@ -227,6 +227,7 @@ export default function EffectCraftWorkspace({
 
   const visibleEffectGroups = useMemo(() => Object.entries(EFFECT_GROUPS).map(([group, effects]) => [group, effects.filter(effect => effect.toLowerCase().includes(search.toLowerCase()))]).filter(([group, effects]) => effects.length || group.toLowerCase().includes(search.toLowerCase())), [search]);
   const activeLayer = layers.find((layer) => layer.id === selectedLayer);
+  const [maskSelected, setMaskSelected] = useState(false);
   const displayTransform = useMemo(() => {
     const animated = propertyKeyframes[selectedLayer] || {};
     return Object.fromEntries(Object.entries(transform).map(([property, fallback]) => [
@@ -410,10 +411,49 @@ export default function EffectCraftWorkspace({
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  useEffect(() => {
+    function handleEditorKey(event) {
+      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (!selectedLayer || activeLayer?.locked) return;
+        event.preventDefault();
+        if (maskSelected && activeLayer?.mask) {
+          setLayers(old => old.map(layer => layer.id === selectedLayer ? { ...layer, mask: null } : layer));
+          setMaskSelected(false);
+          return;
+        }
+        setLayers(old => old.filter(layer => layer.id !== selectedLayer));
+        setSelectedLayer(null);
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+        if (!activeLayer) return;
+        event.preventDefault();
+        const copy = { ...activeLayer, id: crypto.randomUUID(), name: `${activeLayer.name} cópia` };
+        setLayers(old => [copy, ...old]);
+        setSelectedLayer(copy.id);
+      } else if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        const shortcut = TOOLS.find(([key]) => key.toLowerCase() === event.key.toLowerCase());
+        if (shortcut) { event.preventDefault(); setTool(shortcut[1]); }
+        if (event.key === "Escape") setSelectedLayer(null);
+      }
+    }
+    window.addEventListener("keydown", handleEditorKey);
+    return () => window.removeEventListener("keydown", handleEditorKey);
+  }, [selectedLayer, activeLayer, maskSelected, setLayers, setSelectedLayer]);
+
   function useActiveTool(event) {
     if (tool === "Seleção") return;
     if (tool === "Mão") {
       beginCanvasGesture(event, "pan");
+      return;
+    }
+    if (tool === "Forma" && activeLayer && !activeLayer.locked) {
+      const element = event.currentTarget.querySelector('[data-effect-layer]');
+      if (!element) return;
+      const bounds = element.getBoundingClientRect();
+      const point = { x: (event.clientX - bounds.left) / bounds.width * 100, y: (event.clientY - bounds.top) / bounds.height * 100 };
+      gesture.current = { mode: "mask", layerId: activeLayer.id, bounds, point };
+      setMaskSelected(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
       return;
     }
     const layerKind = tool === "Caneta" ? "Forma" : tool;
@@ -455,6 +495,27 @@ export default function EffectCraftWorkspace({
   function moveCanvasGesture(event) {
     const active = gesture.current;
     if (!active) return;
+    if (active.mode === "mask-edit") {
+      const dx = (event.clientX - active.startX) / active.bounds.width * 100;
+      const dy = (event.clientY - active.startY) / active.bounds.height * 100;
+      const mask = { ...active.mask };
+      if (active.edge === "move") { mask.left += dx; mask.right += dx; mask.top += dy; mask.bottom += dy; }
+      else {
+        if (active.edge.includes("w")) mask.left = Math.min(mask.right - 1, mask.left + dx);
+        if (active.edge.includes("e")) mask.right = Math.max(mask.left + 1, mask.right + dx);
+        if (active.edge.includes("n")) mask.top = Math.min(mask.bottom - 1, mask.top + dy);
+        if (active.edge.includes("s")) mask.bottom = Math.max(mask.top + 1, mask.bottom + dy);
+      }
+      setLayers(old => old.map(layer => layer.id === active.layerId ? { ...layer, mask } : layer));
+      return;
+    }
+    if (active.mode === "mask") {
+      const x = (event.clientX - active.bounds.left) / active.bounds.width * 100;
+      const y = (event.clientY - active.bounds.top) / active.bounds.height * 100;
+      const mask = { left: Math.min(x, active.point.x), top: Math.min(y, active.point.y), right: Math.max(x, active.point.x), bottom: Math.max(y, active.point.y) };
+      setLayers(old => old.map(layer => layer.id === active.layerId ? { ...layer, mask } : layer));
+      return;
+    }
     if (active.mode === "pan") {
       setViewportOffset({
         x: active.offset.x + event.clientX - active.startX,
@@ -466,7 +527,7 @@ export default function EffectCraftWorkspace({
     const dy = (event.clientY - active.startY) / 5;
     setCanvasBox(active.mode === "resize"
       ? { ...active.box, w: Math.max(18, Math.min(78, active.box.w + dx)), h: Math.max(10, Math.min(55, active.box.h + dy)) }
-      : { ...active.box, x: Math.max(0, Math.min(100 - active.box.w, active.box.x + dx)), y: Math.max(0, Math.min(100 - active.box.h, active.box.y + dy)) });
+      : { ...active.box, x: active.box.x + dx, y: active.box.y + dy });
   }
 
   const compactWorkspace = workspace === "Tela pequena";
@@ -564,6 +625,7 @@ export default function EffectCraftWorkspace({
           <div className="flex h-full min-h-0 flex-col bg-black">
             <div className="flex items-center border-b border-slate-800 bg-[#151920] px-3 py-2 text-[10px]">
               <b>Composição: {composition}</b>
+              {activeLayer && <label className="ml-3 flex items-center gap-2">Texto da camada<input aria-label="Texto da camada selecionada" disabled={activeLayer.locked} value={activeLayer.text ?? "MMEffect"} onChange={event => setLayers(old => old.map(layer => layer.id === activeLayer.id ? { ...layer, text: event.target.value } : layer))} className="w-40 bg-[#252525] px-2 py-1"/></label>}
               <span className="ml-auto text-slate-500">
                 Visualização: Ativa · Resolução: Completa · 100%
               </span>
@@ -583,18 +645,36 @@ export default function EffectCraftWorkspace({
                 {composition === "EffectCraft Intro" && <>
                 <div
                   aria-label={`Camada ${activeLayer?.name || "EFFECTCRAFT"} na composição`}
+                  data-effect-layer
                   onPointerDown={(event)=>tool === "Seleção" && beginCanvasGesture(event,"move")}
                   onPointerMove={moveCanvasGesture}
                   onPointerUp={()=>{gesture.current=null}}
                   className="absolute cursor-move select-none border border-[#55a4ff] px-6 py-4 text-center"
                   style={{left:`${canvasBox.x}%`,top:`${canvasBox.y}%`,width:`${canvasBox.w}%`,height:`${canvasBox.h}%`,transform:`translate(${(displayTransform.x-960)/19.2}%, ${(displayTransform.y-540)/10.8}%) scale(${displayTransform.scale/100}) rotate(${displayTransform.rotation}deg)`,opacity:displayTransform.opacity/100}}
                 >
+                  <div style={{clipPath: activeLayer?.mask ? `inset(${activeLayer.mask.top}% ${100-activeLayer.mask.right}% ${100-activeLayer.mask.bottom}% ${activeLayer.mask.left}%)` : undefined}}>
                   <span className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]">
-                    EFFECTCRAFT
+                    {activeLayer?.text ?? "MMEffect"}
                   </span>
                   <span className="text-sm tracking-[0.4em] text-cyan-300">
                     MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST
                   </span>
+                  </div>
+                  {activeLayer?.mask && <div
+                    aria-label="Máscara da camada"
+                    onPointerDown={event => {
+                      event.preventDefault(); event.stopPropagation();
+                      if (activeLayer.locked) return;
+                      setMaskSelected(true);
+                      gesture.current = { mode: "mask-edit", layerId: activeLayer.id, edge: event.target.dataset.edge || "move", mask: { ...activeLayer.mask }, bounds: event.currentTarget.parentElement.getBoundingClientRect(), startX: event.clientX, startY: event.clientY };
+                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                    }}
+                    className="absolute z-20 cursor-move border border-yellow-400"
+                    style={{left:`${activeLayer.mask.left}%`,top:`${activeLayer.mask.top}%`,width:`${activeLayer.mask.right-activeLayer.mask.left}%`,height:`${activeLayer.mask.bottom-activeLayer.mask.top}%`}}
+                  >
+                    {[['nw',0,0],['n',50,0],['ne',100,0],['e',100,50],['se',100,100],['s',50,100],['sw',0,100],['w',0,50]].map(([edge,x,y]) => <button key={edge} data-edge={edge} aria-label={`Redimensionar máscara ${edge}`} className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 bg-yellow-400" style={{left:`${x}%`,top:`${y}%`,cursor:`${edge}-resize`}}/>)}
+                    <button aria-label="Excluir máscara" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setLayers(old => old.map(layer => layer.id === activeLayer.id ? {...layer,mask:null} : layer)); setMaskSelected(false); }} className="absolute -top-7 left-0 whitespace-nowrap bg-[#252525] px-2 text-xs text-yellow-300">Excluir máscara</button>
+                  </div>}
                   <i className="absolute -left-1 -top-1 h-2 w-2 bg-indigo-300" />
                   <button aria-label="Redimensionar camada" onPointerDown={(event)=>{event.stopPropagation();beginCanvasGesture(event,"resize")}} onPointerMove={moveCanvasGesture} onPointerUp={()=>{gesture.current=null}} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize bg-[#55a4ff]" />
                 </div>

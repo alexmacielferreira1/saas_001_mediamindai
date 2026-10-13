@@ -19,6 +19,15 @@ describe('Workspace 2 flow', () => {
     mediaApi.listMediaAssets.mockReset().mockResolvedValue([]);
     mediaApi.uploadMediaAsset.mockReset();
   });
+  it('uses the MMFilm controls without the duplicate Workspace toolbar', () => {
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', {name:/3\s*Timeline/i}));
+    fireEvent.click(screen.getByRole('tab', {name:'MMFilm · prévia'}));
+    expect(screen.queryByRole('button',{name:'Importar mídias',exact:true})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Layouts',exact:true})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'Travar',exact:true})).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Importar mídia', {exact:true})).toHaveAttribute('type', 'file');
+  });
   it('goes from media selection to the simplified creation screen and then the editor', () => {
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
@@ -52,7 +61,7 @@ describe('Workspace 2 flow', () => {
     expect(screen.getByRole('heading', { name: 'Workspace' })).toBeInTheDocument();
     expect(screen.queryByTestId('workspace2-search')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Importar mídias' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Travar' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Travar' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /2\s*montar roteiro/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));
@@ -128,17 +137,16 @@ describe('Workspace 2 flow', () => {
     expect(saved.tracks).toHaveLength(5);
   });
 
-  it('switches between Timeline and final preview using the local guide', () => {
+  it('switches between Timeline and export using the main steps', () => {
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /3\s*Timeline/i }));
 
-    expect(screen.getByRole('button', { name: 'Timeline', pressed: true })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Prévia final' }));
-    expect(screen.getByRole('button', { name: 'Prévia final', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Timeline atual', selected: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /4\s*Exportar/i }));
     expect(screen.getByTestId('workspace2-export')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
-    expect(screen.getByRole('button', { name: 'Timeline', pressed: true })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /3\s*Timeline/i }));
+    expect(screen.getByRole('tab', { name: 'Timeline atual', selected: true })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Timeline 2' })).toBeInTheDocument();
   }, 10000);
 

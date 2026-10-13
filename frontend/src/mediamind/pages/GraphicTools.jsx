@@ -7,6 +7,8 @@ import {
   Layers3,
   LayoutTemplate,
   Library,
+  AudioLines,
+  Files,
   Orbit,
   PenTool,
 } from "lucide-react";
@@ -21,6 +23,8 @@ import {
 } from "../components/graphic-tools/RemainingCraftWorkspaces";
 import VectorCraftWorkspace from "../components/graphic-tools/VectorCraftWorkspace";
 import ThreeDCraftWorkspace from "../components/graphic-tools/ThreeDCraftWorkspace";
+import SoundCraft from "./SoundCraft";
+import OfficeCraft from "./OfficeCraft";
 import { GraphicDraftProvider, useGraphicDraftState } from "../lib/graphicDrafts";
 import { useEmpresa } from "../lib/empresaContext";
 import { useAuth } from "../auth";
@@ -41,7 +45,7 @@ const tools = [
   },
   {
     id: "effectcraft",
-    label: "MMEffect",
+    label: "MMEffects",
     icon: Layers3,
     subtitle: "After Effects · motion",
     accept: "video/*,image/*,audio/*",
@@ -137,6 +141,22 @@ const tools = [
       "Automação por comandos",
       "Componentes usados pelos editores",
     ],
+  },
+  {
+    id: "mmsom",
+    label: "MMSom",
+    icon: AudioLines,
+    subtitle: "Áudio · edição e mixagem",
+    accept: "audio/*",
+    panels: ["Edição multipista", "Mesa de mixagem", "Limpeza de voz", "Masterização"],
+  },
+  {
+    id: "office",
+    label: "Office",
+    icon: Files,
+    subtitle: "Documentos · planilhas · slides",
+    accept: ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv",
+    panels: ["WordCraft", "GridCraft", "DeckCraft", "Exportação"],
   },
 ];
 
@@ -282,6 +302,10 @@ export function GraphicToolsContent() {
           onSelect={setSelected}
           onOpenFiles={openFiles}
         />
+      ) : id === "mmsom" ? (
+        <SoundCraft />
+      ) : id === "office" ? (
+        <OfficeCraft />
       ) : (
         <FilmCraftWorkspace />
       )}
