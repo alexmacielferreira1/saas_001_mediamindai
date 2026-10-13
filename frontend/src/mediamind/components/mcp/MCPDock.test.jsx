@@ -46,6 +46,9 @@ describe("MCPDock", () => {
     } }));
     expect(await screen.findByRole("dialog", { name: "Painel MCP MMPhoto" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /Operações e prompt/i })).toHaveValue("Preparar capa\nRecortar");
+    fireEvent.click(screen.getByRole("button", { name: /Etapas 3 e 4/ }));
+    expect(screen.getByText("3. Pacote de tarefas")).toBeInTheDocument();
+    expect(screen.getByText("4. Execução e fila")).toBeInTheDocument();
   });
 
   it("routes each MM application to its matching workspace", async () => {
