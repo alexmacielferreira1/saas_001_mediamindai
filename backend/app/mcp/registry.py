@@ -37,9 +37,24 @@ MODULES = [
         "description": "Faixas, voz, mixagem e masterização.",
         "status": "connected",
     },
-    {"id": "word", "label": "Word", "description": "Documentos, texto e revisão.", "status": "connected"},
-    {"id": "excel", "label": "Excel", "description": "Planilhas, fórmulas e dados.", "status": "connected"},
-    {"id": "powerpoint", "label": "PowerPoint", "description": "Apresentações, slides e layouts.", "status": "connected"},
+    {
+        "id": "word",
+        "label": "Word",
+        "description": "Documentos, texto e revisão.",
+        "status": "connected",
+    },
+    {
+        "id": "excel",
+        "label": "Excel",
+        "description": "Planilhas, fórmulas e dados.",
+        "status": "connected",
+    },
+    {
+        "id": "powerpoint",
+        "label": "PowerPoint",
+        "description": "Apresentações, slides e layouts.",
+        "status": "connected",
+    },
     {
         "id": "ai-tools",
         "label": "Ferramentas IA",
@@ -90,9 +105,21 @@ READ_OPERATIONS = {
         ("loudness", "Consultar loudness", "Lê métricas de loudness e picos da sessão."),
         ("transcript", "Consultar transcrição", "Lê disponibilidade e segmentos de transcrição."),
     ],
-    "word": [("inspect", "Inspecionar documento", "Lê estrutura, texto e estado de salvamento."), ("outline", "Consultar estrutura", "Resume páginas, títulos e seções."), ("export_profiles", "Consultar formatos de saída", "Lista DOCX e PDF autorizados.")],
-    "excel": [("inspect", "Inspecionar planilha", "Lê abas, células e estado de salvamento."), ("outline", "Consultar estrutura", "Resume abas, intervalos e tabelas."), ("export_profiles", "Consultar formatos de saída", "Lista XLSX e CSV autorizados.")],
-    "powerpoint": [("inspect", "Inspecionar apresentação", "Lê slides, layouts e estado de salvamento."), ("outline", "Consultar estrutura", "Resume slides e seções."), ("export_profiles", "Consultar formatos de saída", "Lista PPTX e PDF autorizados.")],
+    "word": [
+        ("inspect", "Inspecionar documento", "Lê estrutura, texto e estado de salvamento."),
+        ("outline", "Consultar estrutura", "Resume páginas, títulos e seções."),
+        ("export_profiles", "Consultar formatos de saída", "Lista DOCX e PDF autorizados."),
+    ],
+    "excel": [
+        ("inspect", "Inspecionar planilha", "Lê abas, células e estado de salvamento."),
+        ("outline", "Consultar estrutura", "Resume abas, intervalos e tabelas."),
+        ("export_profiles", "Consultar formatos de saída", "Lista XLSX e CSV autorizados."),
+    ],
+    "powerpoint": [
+        ("inspect", "Inspecionar apresentação", "Lê slides, layouts e estado de salvamento."),
+        ("outline", "Consultar estrutura", "Resume slides e seções."),
+        ("export_profiles", "Consultar formatos de saída", "Lista PPTX e PDF autorizados."),
+    ],
     "ai-tools": [
         (
             "inspect",

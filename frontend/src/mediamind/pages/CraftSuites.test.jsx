@@ -43,10 +43,10 @@ describe("OfficeCraft", () => {
 
   it("edits spreadsheet cells and adds presentation slides", () => {
     render(<OfficeCraft />);
-    fireEvent.click(screen.getByRole("tab", { name: "GridCraft" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Excel" }));
     fireEvent.change(screen.getByLabelText("Célula A1"), { target: { value: "Receita" } });
     expect(screen.getByLabelText("Célula A1")).toHaveValue("Receita");
-    fireEvent.click(screen.getByRole("tab", { name: "DeckCraft" }));
+    fireEvent.click(screen.getByRole("tab", { name: "PowerPoint" }));
     fireEvent.click(screen.getByRole("button", { name: "Novo slide" }));
     expect(screen.getAllByRole("button", { name: /^Slide \d+$/ })).toHaveLength(2);
   });
