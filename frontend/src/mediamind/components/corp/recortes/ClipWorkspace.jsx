@@ -8,6 +8,7 @@ import ClipNetworkFormatsPanel from './ClipNetworkFormatsPanel';
 import { ClipApprovalStage, ClipPublicationStage } from './ClipSocialStages';
 import ClipReimportPanel from './ClipReimportPanel';
 import ClipStageResources from './ClipStageResources';
+import ClipCGPanel from './ClipCGPanel';
 
 function AnalysisAndCaptions({ clip, onChange, seekTo, onFinish, onOpenNewClip }) {
   const [tab, setTab] = useState('ia');
@@ -58,10 +59,11 @@ function AnalysisSummary() {
 // + player IN/OUT + painel da etapa ativa.
 export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewClip }) {
   const [stage, setStage] = useState(clip.stage || 'selecao');
+  const [editPanel, setEditPanel] = useState('corte');
   const seekRef = useRef(null);
   const seekTo = (ms) => seekRef.current?.(ms);
 
-  useEffect(() => { setStage(clip.stage || 'selecao'); }, [clip.id, clip.stage]);
+  useEffect(() => { setStage(clip.stage || 'selecao'); setEditPanel('corte'); }, [clip.id, clip.stage]);
 
   function patch(p) { onChange(p); }
   function setStageBoth(s) { setStage(s); patch({ stage: s }); }
@@ -90,10 +92,11 @@ export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewC
       <p className="text-[11px] text-slate-400">{STAGES.find((s) => s.id === stage)?.desc}</p>
 
       {stage === 'formatos' ? <ClipNetworkFormatsPanel clip={clip} onChange={patch} onProsseguir={onProsseguir}/> : <>
-      {stage === 'ia' ? <div className="grid min-h-[34rem] gap-3 xl:grid-cols-[1.05fr_1.05fr_.55fr]"><div className="min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 p-3"><AnalysisAndCaptions clip={clip} onChange={patch} seekTo={seekTo} onFinish={salvar} onOpenNewClip={onOpenNewClip}/></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3"><ClipPlayer source_url={clip.source_url} in_ms={clip.in_ms} out_ms={clip.out_ms} segments={segments} onSetIn={(ms)=>patch({in_ms:ms})} onSetOut={(ms)=>patch({out_ms:ms})} onReady={(d)=>patch({duration_ms:d})} seekRef={seekRef}/><div className="mt-3 border border-slate-800 bg-slate-950/40 p-3 text-[10px]"><p className="font-bold text-slate-300">Transcrição / Legenda do trecho selecionado</p><p className="mt-2 text-slate-400">Isso vai melhorar a mobilidade e a qualidade de vida da população.</p></div></div><AnalysisSummary/></div> : <div className="grid min-h-[31rem] gap-3 xl:grid-cols-[1.3fr_1fr]">
+      {stage === 'ia' ? <div className="grid min-h-[34rem] gap-3 xl:grid-cols-[1.05fr_1.05fr_.55fr]"><div className="min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 p-3"><AnalysisAndCaptions clip={clip} onChange={patch} seekTo={seekTo} onFinish={salvar} onOpenNewClip={onOpenNewClip}/></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3"><ClipPlayer source_url={clip.source_url} captions={clip.legendas} in_ms={clip.in_ms} out_ms={clip.out_ms} segments={segments} onSetIn={(ms)=>patch({in_ms:ms})} onSetOut={(ms)=>patch({out_ms:ms})} onReady={(d)=>patch({duration_ms:d})} seekRef={seekRef}/><div className="mt-3 border border-slate-800 bg-slate-950/40 p-3 text-[10px]"><p className="font-bold text-slate-300">Transcrição / Legenda do trecho selecionado</p><p className="mt-2 text-slate-400">Isso vai melhorar a mobilidade e a qualidade de vida da população.</p></div></div><AnalysisSummary/></div> : <div className="grid min-h-[31rem] gap-3 xl:grid-cols-[1.3fr_1fr]">
         <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 p-3">
           <ClipPlayer
             source_url={clip.source_url}
+            captions={clip.legendas}
             in_ms={clip.in_ms}
             out_ms={clip.out_ms}
             segments={segments}
@@ -104,7 +107,13 @@ export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewC
           />
         </div>
         <div className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-          {stage === 'selecao' && <SelecaoPanel clip={clip} onChange={patch} onAvancar={() => setStageBoth('ia')} />}
+          {stage === 'selecao' && <>
+            <div className="mb-3 flex gap-1 border-b border-slate-800 pb-2">
+              <button onClick={() => setEditPanel('corte')} className={`rounded px-2.5 py-1 text-[10px] font-bold ${editPanel === 'corte' ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800'}`}>Corte</button>
+              <button onClick={() => setEditPanel('camadas')} className={`rounded px-2.5 py-1 text-[10px] font-bold ${editPanel === 'camadas' ? 'bg-sky-500 text-slate-950' : 'text-slate-400 hover:bg-slate-800'}`}>Camadas e arte</button>
+            </div>
+            {editPanel === 'corte' ? <SelecaoPanel clip={clip} onChange={patch} onAvancar={() => setStageBoth('ia')} /> : <ClipCGPanel clip={clip} onChange={patch} seekTo={seekTo} onAvancar={() => setStageBoth('ia')} />}
+          </>}
           {stage === 'legendas' && <ClipReimportPanel clip={clip} onChange={patch} onProsseguir={() => setStageBoth('cg')} />}
           {stage === 'cg' && <ClipApprovalStage clip={clip} onChange={patch} onAdvance={() => setStageBoth('reimport')} />}
           {stage === 'reimport' && <ClipPublicationStage clip={clip} onChange={patch} onAdvance={() => setStageBoth('formatos')} />}

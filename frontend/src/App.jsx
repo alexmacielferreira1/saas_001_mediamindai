@@ -29,6 +29,7 @@ import Administration2 from "./mediamind/pages/Administration2";
 import Roteiro2 from "./mediamind/pages/Roteiro2";
 import Corp from "./mediamind/pages/Corp";
 import ViralClips from "./mediamind/pages/ViralClips";
+import ClipsFree from "./mediamind/pages/ClipsFree";
 import Ingest from "./mediamind/pages/Ingest";
 import Workspace2 from "./mediamind/pages/Workspace2";
 import Timeline from "./mediamind/pages/Timeline";
@@ -142,6 +143,16 @@ const AuthenticatedApp = () => {
         />
         <Route path="/clips" element={<Navigate to="/social" replace />} />
         <Route path="/publish" element={<Navigate to="/social" replace />} />
+        <Route
+          path="/clipsfree"
+          element={
+            <ModuleRoute moduleId="social">
+              <Shell>
+                <ClipsFree />
+              </Shell>
+            </ModuleRoute>
+          }
+        />
         <Route
           path="/acervo"
           element={

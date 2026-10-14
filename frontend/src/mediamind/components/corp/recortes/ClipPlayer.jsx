@@ -4,7 +4,7 @@ import { fmt } from './clipModel';
 
 // Player de seleção IN/OUT com timeline + overlay de trechos virais/CGs.
 // seekRef permite que os painéis chamem seekRef.current(ms).
-export default function ClipPlayer({ source_url, in_ms = 0, out_ms = 0, segments = [], onSetIn, onSetOut, onReady, seekRef }) {
+export default function ClipPlayer({ source_url, captions = [], in_ms = 0, out_ms = 0, segments = [], onSetIn, onSetOut, onReady, seekRef }) {
   const vref = useRef(null);
   const [time, setTime] = useState(0);
   const [dur, setDur] = useState(0);
@@ -54,11 +54,21 @@ export default function ClipPlayer({ source_url, in_ms = 0, out_ms = 0, segments
     seekTo(ratio * total);
   }
   const pct = (t) => `${(t / total) * 100}%`;
+  const activeCaption = captions.find((caption) => time >= caption.start_ms && time <= caption.end_ms);
+  const captionPosition = activeCaption?.posicao || 'bottom';
+  const captionStyle = activeCaption?.estilo || 'impacto';
+  const captionClasses = {
+    impacto: 'bg-black/80 text-lg font-black uppercase tracking-tight text-white shadow-lg',
+    dinamico: 'bg-amber-300 text-base font-black text-slate-950 shadow-lg',
+    limpo: 'bg-slate-950/75 text-sm font-semibold text-white',
+  }[captionStyle];
+  const captionPlacement = { top: 'top-4', center: 'top-1/2 -translate-y-1/2', bottom: 'bottom-4' }[captionPosition];
 
   return (
     <div className="flex h-full flex-col">
       <div className="relative aspect-video overflow-hidden rounded-lg border border-slate-800 bg-black">
         {source_url ? <video ref={vref} src={source_url} className="h-full w-full object-contain" controls={false} playsInline preload="metadata" /> : <p className="p-6 text-center text-xs text-slate-400">Nenhuma mídia vinculada ao corte.</p>}
+        {activeCaption?.texto && <div aria-label="Legenda em prévia" className={`pointer-events-none absolute inset-x-4 flex justify-center ${captionPlacement}`}><span className={`max-w-[90%] rounded px-3 py-1.5 text-center ${captionClasses}`}>{activeCaption.texto}</span></div>}
       </div>
 
       <div className="mt-3">

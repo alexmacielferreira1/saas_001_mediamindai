@@ -51,7 +51,7 @@ export default function ClipCGPanel({ clip, onChange, seekTo, onAvancar }) {
       </div>
 
       <div className="flex justify-end border-t border-slate-800 pt-3">
-        <button onClick={onAvancar} className="rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Ir pra Reimportar →</button>
+        <button onClick={onAvancar} className="rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Continuar →</button>
       </div>
     </div>
   );

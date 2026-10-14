@@ -2,6 +2,18 @@ import React, { useState } from 'react';
 import { Play, Trash2, Plus, Scissors, Save, Volume2, VolumeX } from 'lucide-react';
 import { fmt, gerarLegendas } from './clipModel';
 
+const ESTILOS = [
+  { id: 'impacto', label: 'Impacto' },
+  { id: 'dinamico', label: 'Dinâmico' },
+  { id: 'limpo', label: 'Limpo' },
+];
+
+const POSICOES = [
+  { id: 'top', label: 'Topo' },
+  { id: 'center', label: 'Centro' },
+  { id: 'bottom', label: 'Base' },
+];
+
 // Legendas: gerar, editar texto, dividir, remover. Remover pode cortar o áudio
 // (cortar_audio true) ou só o texto. Os cortes de áudio ficam listados embaixo.
 export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, onAvancar }) {
@@ -55,6 +67,12 @@ export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, on
               </div>
             </div>
             <textarea value={l.texto} onChange={(e) => upd(l.id, { texto: e.target.value })} rows={2} className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]">
+              <span className="font-semibold uppercase tracking-wide text-slate-500">Estilo</span>
+              {ESTILOS.map((estilo) => <button key={estilo.id} type="button" onClick={() => upd(l.id, { estilo: estilo.id })} className={`rounded border px-1.5 py-1 ${l.estilo === estilo.id || (!l.estilo && estilo.id === 'impacto') ? 'border-sky-500 bg-sky-500/15 text-sky-200' : 'border-slate-700 text-slate-400 hover:bg-slate-800'}`}>{estilo.label}</button>)}
+              <span className="ml-2 font-semibold uppercase tracking-wide text-slate-500">Posição</span>
+              {POSICOES.map((posicao) => <button key={posicao.id} type="button" onClick={() => upd(l.id, { posicao: posicao.id })} className={`rounded border px-1.5 py-1 ${l.posicao === posicao.id || (!l.posicao && posicao.id === 'bottom') ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-slate-700 text-slate-400 hover:bg-slate-800'}`}>{posicao.label}</button>)}
+            </div>
             {l.cortar_audio && <p className="mt-1 text-[9px] text-rose-300/80">Remover esta legenda vai cortar o áudio deste trecho.</p>}
           </div>
         ))}

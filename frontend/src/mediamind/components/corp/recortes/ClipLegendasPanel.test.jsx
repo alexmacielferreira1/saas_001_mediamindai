@@ -1,0 +1,24 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import ClipLegendasPanel from './ClipLegendasPanel';
+
+const clip = {
+  id: 'clip-caption-test',
+  in_ms: 0,
+  out_ms: 9000,
+  legendas: [{ id: 'caption-1', start_ms: 1000, end_ms: 4000, texto: 'Texto da legenda', cortar_audio: false }],
+  cortes_audio: [],
+};
+
+describe('ClipLegendasPanel', () => {
+  it('persists the chosen caption style and position instead of making the controls decorative', () => {
+    const onChange = vi.fn();
+    render(<ClipLegendasPanel clip={clip} onChange={onChange} seekTo={vi.fn()} onSalvar={vi.fn()} onAvancar={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dinâmico' }));
+    expect(onChange).toHaveBeenLastCalledWith({ legendas: [expect.objectContaining({ id: 'caption-1', estilo: 'dinamico' })] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Topo' }));
+    expect(onChange).toHaveBeenLastCalledWith({ legendas: [expect.objectContaining({ id: 'caption-1', posicao: 'top' })] });
+  });
+});

@@ -117,6 +117,11 @@ export const NAV_GROUPS = [
         sub: "redes_sociais",
       },
       {
+        to: "/clipsfree",
+        label: "CLIPSFREE",
+        icon: Scissors,
+      },
+      {
         to: "/corp?tab=producao&sub=para_publicar",
         label: "Para publicação",
         icon: Send,
