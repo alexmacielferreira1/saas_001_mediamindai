@@ -67,6 +67,12 @@ describe("MCPDock", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/ferramentas-graficas?tool=mmsom");
   });
 
+  it("keeps the IA tools shortcut in the MCP rail", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /><CurrentPath /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /Ferramentas IA/i }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/ferramentas-ia");
+  });
+
   it("keeps MMSom followed by Word, Excel and PowerPoint at the end of the app rail", async () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
     await screen.findByText("MCP");

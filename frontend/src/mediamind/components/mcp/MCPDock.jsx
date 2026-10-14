@@ -11,6 +11,7 @@ import { listMediaAssets, mediaStreamUrl } from "../../../api/media";
 import MCPCenter from "../ai-tools/MCPCenter";
 
 const APPS = [
+  { id: "ai", module: "ai", short: "IA", label: "Ferramentas IA", title: "Ferramentas IA", icon: Sparkles, color: "sky", href: "/ferramentas-ia" },
   { id: "mmfilm", module: "mmfilm", short: "MF", label: "MMFilm", title: "MMFilm", icon: Video, color: "violet", href: "/ferramentas-graficas?tool=filmcraft" },
   { id: "mmeffects", module: "mmeffects", short: "ME", label: "MMEffects", title: "MMEffects", icon: WandSparkles, color: "indigo", href: "/ferramentas-graficas?tool=effectcraft" },
   { id: "mmphoto", module: "mmphoto", short: "MP", label: "MMPhoto", title: "MMPhoto", icon: Image, color: "sky", href: "/ferramentas-graficas?tool=photocraft" },
