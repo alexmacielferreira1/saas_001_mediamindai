@@ -42,4 +42,18 @@ describe("MCPExpress", () => {
     expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ appId: "mmphoto", actions: ["Ajustar luz e cor", "Aplicar identidade"] }) }));
     window.removeEventListener("mm:mcp-open", opened);
   });
+
+  it("prepares one enabled operation as a quick individual action", () => {
+    const opened = vi.fn();
+    window.addEventListener("mm:mcp-open", opened);
+    renderExpress();
+    fireEvent.click(screen.getByRole("button", { name: "Executar rapidamente Recortar" }));
+    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ appId: "mmphoto", quickOperation: "Recortar", actions: ["Recortar"] }) }));
+    window.removeEventListener("mm:mcp-open", opened);
+  });
+
+  it("stays out of pages outside Ferramentas Gráficas", () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
+    expect(screen.queryByLabelText("MCP Express")).not.toBeInTheDocument();
+  });
 });

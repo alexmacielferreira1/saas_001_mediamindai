@@ -52,16 +52,29 @@ export default function MCPExpress() {
   function openPanel() {
     window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: { appId: app.id, prompt, operations, actions: enabledOperations.map((operation) => operation.label) } }));
   }
+  function runQuick(operation) {
+    window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: {
+      appId: app.id,
+      prompt: prompt || operation.label,
+      operations: [{ ...operation, enabled: true }],
+      actions: [operation.label],
+      quickOperation: operation.label,
+    } }));
+  }
+
+  if (location.pathname !== "/ferramentas-graficas") return null;
 
   return <section aria-label="MCP Express" className="relative mb-4 rounded-xl border-2 border-sky-500/90 bg-gradient-to-r from-[#041a31] via-[#062748] to-[#041a31] p-2 shadow-lg shadow-sky-950/40">
     <div aria-hidden="true" className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-cyan-300" />
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={openPanel} className="flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-900"><span className="grid h-6 w-6 place-items-center rounded bg-gradient-to-br from-sky-400 to-violet-500"><Sparkles size={15}/></span>MCP Express</button>
+      <select aria-label="Aplicar operações MCP em" className="rounded-lg border border-sky-800 bg-slate-950 px-2 py-2 text-xs text-slate-200"><option>Timeline aberta</option><option>Projeto atual</option><option>Mídias selecionadas</option></select>
       <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-sky-800 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><Search size={15}/><input aria-label="Pesquisar operações MCP" value={query} onFocus={() => setPickerOpen(true)} onChange={(event) => { setQuery(event.target.value); setPickerOpen(true); }} placeholder={`Pesquisar operação para ${app.label}…`} className="w-full bg-transparent py-2 outline-none"/></label>
       <label className="flex min-w-[210px] flex-[1.2] items-center rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><input aria-label="Descreva a ação MCP" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Descreva o que deseja fazer…" className="w-full bg-transparent py-2 outline-none"/></label>
       <div className="flex flex-wrap items-center gap-1">{operations.map((operation) => <div key={operation.id} className={`flex items-center rounded-lg border text-xs ${operation.enabled ? "border-sky-500/80 bg-sky-950/80 text-sky-100" : "border-slate-700 bg-slate-950 text-slate-500"}`}>
         <button aria-label={`${operation.enabled ? "Desligar" : "Ligar"} ${operation.label}`} aria-pressed={operation.enabled} onClick={() => toggleOperation(operation.id)} className="p-2 text-sky-300 hover:text-cyan-200">{operation.enabled ? <ToggleRight size={17}/> : <ToggleLeft size={17}/>}</button>
         <span className="max-w-28 truncate py-2 pr-1" title={operation.label}>{operation.label}</span>
+        <button aria-label={`Executar rapidamente ${operation.label}`} onClick={() => runQuick(operation)} disabled={!operation.enabled} className="border-l border-sky-700/60 p-2 text-sky-200 hover:text-cyan-100 disabled:text-slate-600"><Play size={13} fill="currentColor"/></button>
         <button aria-label={`Remover ${operation.label}`} onClick={() => removeOperation(operation.id)} className="p-2 text-slate-400 hover:text-rose-300"><X size={14}/></button>
       </div>)}
       <button aria-label="Adicionar operação MCP" onClick={() => { setPickerOpen((current) => !current); setQuery(""); }} className="rounded-lg border border-sky-500 bg-sky-950/70 p-2 text-sky-200 hover:bg-sky-900"><Plus size={16}/></button></div>

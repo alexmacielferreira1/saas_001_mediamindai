@@ -7,6 +7,7 @@ import {
 
 import { createMCPQueue, executeMCPQueue, listMCPQueues, listMCPTools } from "../../lib/mcpApi";
 import { useProducaoProjetos } from "../../lib/producaoStore";
+import { listMediaAssets, mediaStreamUrl } from "../../../api/media";
 import MCPCenter from "../ai-tools/MCPCenter";
 
 const APPS = [
@@ -18,7 +19,6 @@ const APPS = [
   { id: "word", module: "word", short: "W", label: "Word", title: "Word", icon: FileText, color: "blue", href: "/ferramentas-graficas?tool=word" },
   { id: "excel", module: "excel", short: "X", label: "Excel", title: "Excel", icon: FileSpreadsheet, color: "green", href: "/ferramentas-graficas?tool=excel" },
   { id: "powerpoint", module: "powerpoint", short: "P", label: "PowerPoint", title: "PowerPoint", icon: Presentation, color: "orange", href: "/ferramentas-graficas?tool=powerpoint" },
-  { id: "ai", module: "ai-tools", short: "AI", label: "IA", title: "Ferramentas IA e Editoração", icon: Sparkles, color: "fuchsia", href: "/ferramentas-ia" },
 ];
 
 const BASE_COMMANDS = {
@@ -73,7 +73,6 @@ export default function MCPDock() {
   const app = APPS.find((item) => item.id === active);
   const activePageApp = useMemo(() => APPS.find((item) => {
     const destination = new URL(item.href, window.location.origin);
-    if (item.id === "ai") return destination.pathname === location.pathname;
     return destination.pathname === location.pathname && destination.search === location.search;
   }), [location.pathname, location.search]);
   const moduleStatus = useMemo(() => Object.fromEntries(modules.map((item) => [item.id, item.status])), [modules]);
@@ -101,6 +100,10 @@ export default function MCPDock() {
   }
 
   const connected = app && moduleStatus[app.module] === "connected";
+
+  // MCP Express e o painel completo ainda são uma experiência exclusiva das Ferramentas Gráficas.
+  // Manter a condição depois de todos os hooks evita alterar a ordem durante a navegação.
+  if (location.pathname !== "/ferramentas-graficas") return null;
 
   return <div data-testid="mcp-dock" className="sticky right-0 top-0 z-[55] flex h-screen shrink-0 self-start pointer-events-none">
     {active === "settings" && <aside role="dialog" aria-label="Configuração MCP" style={{ width: Math.max(width, 640) }} className="pointer-events-auto relative flex h-full flex-col border-l border-sky-900/70 bg-[#03101f]/[.98] shadow-2xl shadow-black/60">
@@ -156,36 +159,52 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
+  const [assets, setAssets] = useState([]);
+  const [selectedAssetIds, setSelectedAssetIds] = useState([]);
 
   useEffect(() => { listMCPQueues().then((data) => setQueues(data.queues || [])).catch(() => setQueues([])); }, []);
+  useEffect(() => {
+    let live = true;
+    listMediaAssets().then((data) => { if (live) setAssets(Array.isArray(data) ? data : []); }).catch(() => { if (live) setAssets([]); });
+    return () => { live = false; };
+  }, []);
   useEffect(() => {
     if (!expressDraft || expressDraft.appId !== appId) return;
     const selected = (expressDraft.operations || []).filter((operation) => operation.enabled).map((operation) => operation.label);
     const next = [expressDraft.prompt?.trim(), ...selected].filter(Boolean).join("\n");
     if (next) setInstruction(next);
+    if (expressDraft.quickOperation) {
+      setPage(0);
+      setMessage(`“${expressDraft.quickOperation}” está pronto para uma ação individual. Escolha o projeto e confirme.`);
+    }
   }, [appId, expressDraft]);
   useEffect(() => {
     if (!instruction.trim()) return;
     setTargets((current) => current.map((target) => target.instruction.trim() ? target : { ...target, instruction }));
   }, [instruction]);
-  async function submit() {
-    if (!targets.length || !targets.every((target) => target.instruction.trim())) return;
+  async function submit({ command, quick = false } = {}) {
+    const requestInstruction = (command || instruction).trim();
+    if (!targets.length || !requestInstruction || !targets.every((target) => target.instruction.trim())) {
+      setPage(0);
+      setMessage("Escolha ao menos um projeto e informe a ação antes de executar.");
+      return;
+    }
     setSaving(true); setMessage("");
     try {
       const created = await createMCPQueue({
-        name: mode === "immediate" ? `Ação imediata · ${label}` : `Fila ${label} · ${new Date().toLocaleString("pt-BR")}`,
+        name: quick ? `Ação individual · ${label}` : mode === "immediate" ? `Ação imediata · ${label}` : `Fila ${label} · ${new Date().toLocaleString("pt-BR")}`,
         module,
-        instruction: instruction.trim() || targets.map((target) => target.instruction).join("\n"),
+        instruction: requestInstruction,
         output_mode: output,
-        execution_mode: mode,
+        execution_mode: quick ? "immediate" : mode,
         target_projects: targets.filter((target) => target.kind === "existing").map((target) => target.name),
         create_projects: targets.filter((target) => target.kind === "new").map((target) => target.name),
-        targets,
+        targets: targets.map((target) => ({ ...target, asset_ids: selectedAssetIds })),
         export_name: output === "external" ? exportName.trim() : null,
         export_destination: output === "external" ? exportDestination : null,
       });
       setQueues((current) => [created, ...current]); setInstruction(""); setTargets([]);
-      setMessage(mode === "immediate" ? "Pedido registrado para confirmação de execução." : "Fila MCP criada como rascunho.");
+      setMessage(quick ? "Ação individual salva. A ponte local executará após a confirmação." : mode === "immediate" ? "Pedido registrado para confirmação de execução." : "Fila MCP criada como rascunho.");
     } catch (error) { setMessage(error?.message || "Não foi possível salvar o pedido MCP."); }
     finally { setSaving(false); }
   }
@@ -204,6 +223,19 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
   function updateTarget(id, patch) {
     setTargets((current) => current.map((target) => target.id === id ? { ...target, ...patch } : target));
   }
+  function toggleAsset(assetId) {
+    setSelectedAssetIds((current) => current.includes(assetId) ? current.filter((id) => id !== assetId) : [...current, assetId]);
+  }
+  function prepareQuick(command) {
+    setInstruction(command);
+    setTargets((current) => current.map((target) => ({ ...target, instruction: command })));
+    if (!targets.length) {
+      setPage(0);
+      setMessage(`“${command}” está preparado. Escolha o projeto e execute a ação individual.`);
+      return;
+    }
+    submit({ command, quick: true });
+  }
   async function execute(queue) {
     setMessage("");
     try {
@@ -219,8 +251,8 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
     <h3 className="text-sm font-bold text-white">Pedir ao MCP · {label}</h3><p className="mt-1 text-xs text-slate-400">Fluxo de quatro etapas. Veja duas por vez e avance quando estiver pronto.</p>
     <div className="mt-3 grid grid-cols-4 gap-1">{steps.map((step, index) => <button key={step} onClick={() => setPage(index < 2 ? 0 : 1)} className={`rounded-lg border p-2 text-left text-[10px] ${((page === 0 && index < 2) || (page === 1 && index > 1)) ? "border-sky-600 bg-sky-950/60 text-sky-100" : "border-slate-800 text-slate-500"}`}><span className="mr-1 inline-grid h-4 w-4 place-items-center rounded-full bg-sky-500 text-[9px] font-bold text-slate-950">{index + 1}</span>{step}</button>)}</div>
     {page === 0 && <div className="mt-3 grid grid-cols-2 gap-3">
-      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. Projeto e mídias</p><p className="mt-1 text-[11px] text-slate-500">Selecione projetos existentes ou crie um novo para receber a operação.</p><div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><p className="mt-3 text-[11px] text-slate-500">{targets.length} projeto(s) selecionado(s)</p></section>
-      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">2. Operações e prompt</p><label className="mt-2 block text-xs text-slate-300">Operações e prompt<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder={`Descreva o que o ${label} deve fazer.`} className="mt-1 h-24 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white outline-none focus:border-sky-500"/></label><div className="mt-2 flex flex-wrap gap-1">{commands.map((command) => <button key={command} onClick={() => setInstruction((current) => current.includes(command) ? current.replace(command, "").replace(/^\s*\n|\n\s*$/g, "") : [current, command].filter(Boolean).join("\n"))} className={`rounded-full border px-2 py-1 text-[11px] ${instruction.includes(command) ? "border-sky-400 bg-sky-950 text-sky-100" : "border-slate-700 text-slate-400"}`}>{instruction.includes(command) ? "✓ " : "+ "}{command}</button>)}</div></section>
+      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. Projeto e mídias</p><p className="mt-1 text-[11px] text-slate-500">Use um projeto real e as mídias persistidas no Acervo.</p><div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><div className="mt-3"><div className="flex items-center justify-between text-[11px]"><strong className="text-slate-200">Mídias do Acervo</strong><span className="text-sky-300">{selectedAssetIds.length} selecionada(s)</span></div><div className="mt-2 grid max-h-36 grid-cols-3 gap-1 overflow-y-auto">{assets.slice(0, 12).map((asset) => { const id = String(asset.id); const selected = selectedAssetIds.includes(id); const url = mediaStreamUrl(asset); return <button key={id} type="button" aria-pressed={selected} aria-label={`Selecionar mídia ${asset.title || asset.filename || id}`} onClick={() => toggleAsset(id)} className={`overflow-hidden rounded border text-left ${selected ? "border-sky-400 ring-1 ring-sky-400" : "border-slate-700"}`}><div className="aspect-video bg-slate-900">{url && <video src={url} muted preload="metadata" className="h-full w-full object-cover" />}</div><span className="block truncate p-1 text-[9px] text-slate-300">{asset.title || asset.filename || "Mídia"}</span></button>; })}</div>{!assets.length && <p className="mt-2 text-[11px] text-slate-600">Nenhuma mídia persistida foi encontrada no Acervo.</p>}</div><p className="mt-3 text-[11px] text-slate-500">{targets.length} projeto(s) selecionado(s)</p></section>
+      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">2. Operações e prompt</p><label className="mt-2 block text-xs text-slate-300">Operações e prompt<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder={`Descreva o que o ${label} deve fazer.`} className="mt-1 h-24 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white outline-none focus:border-sky-500"/></label><div className="mt-2 space-y-1">{commands.map((command) => <div key={command} className={`flex items-center gap-1 rounded-lg border p-1 ${instruction.includes(command) ? "border-sky-400 bg-sky-950/60" : "border-slate-700"}`}><button onClick={() => setInstruction((current) => current.includes(command) ? current.replace(command, "").replace(/^\s*\n|\n\s*$/g, "") : [current, command].filter(Boolean).join("\n"))} className="min-w-0 flex-1 truncate px-1.5 py-1 text-left text-[11px] text-slate-200">{instruction.includes(command) ? "✓ " : "+ "}{command}</button><button aria-label={`Executar individualmente ${command}`} onClick={() => prepareQuick(command)} className="rounded border border-sky-700 p-1 text-sky-200 hover:bg-sky-950">▶</button></div>)}</div></section>
     </div>}
     {page === 1 && <div className="mt-3 grid grid-cols-2 gap-3">
       <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-white">3. Pacote de tarefas</p><span className="text-[11px] text-sky-300">{selectedCommands.length} operação(ões)</span></div><div className="mt-3 space-y-2">{selectedCommands.length ? selectedCommands.map((command, index) => <div key={command} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200"><span className="grid h-5 w-5 place-items-center rounded bg-sky-500 font-bold text-slate-950">{index + 1}</span><span className="flex-1">{command}</span><button aria-label={`Remover tarefa ${command}`} onClick={() => setInstruction((current) => current.replace(command, "").replace(/^\s*\n|\n\s*$/g, ""))} className="text-rose-300">Remover</button></div>) : <p className="rounded-lg border border-dashed border-slate-700 p-3 text-xs text-slate-500">Selecione operações no passo 2.</p>}</div><button onClick={() => setPage(0)} className="mt-3 w-full rounded-lg border border-sky-800 py-2 text-xs text-sky-200">Editar operações</button></section>
