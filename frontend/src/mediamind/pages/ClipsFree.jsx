@@ -1,5 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clapperboard, Clock3, Film, Play, Scissors, Sparkles, Upload, WandSparkles } from "lucide-react";
+import { uploadMediaAsset } from "../../api/media";
+import { startClipAnalysis } from "../../api/clips";
+import { getAIConnections } from "../../api/generation";
 import { useWorkDraftState } from "../lib/workProtection";
 import { useProducaoProjetos } from "../lib/producaoStore";
 import ClipWorkspace from "../components/corp/recortes/ClipWorkspace";
@@ -17,30 +20,16 @@ const EMPTY_SESSION = {
   selectedSuggestionId: "",
   sourceProject: null,
   workspaceClip: null,
+  sourceAssetId: "",
+  analysisStatus: "",
+  analysisMessage: "",
+  analysisConnectionId: "",
 };
 
 function formatTime(seconds) {
   const total = Math.max(0, Math.round(Number(seconds) || 0));
   const minutes = Math.floor(total / 60);
   return `${String(minutes).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-function buildSuggestions(duration, maximum, prompt) {
-  const sourceDuration = duration > 0 ? duration : Math.max(maximum * 3, 180);
-  const length = Math.min(Math.max(Number(maximum) || 60, 10), sourceDuration);
-  const offsets = [0.12, 0.43, 0.72];
-  return offsets.map((position, index) => {
-    const start = Math.round(Math.max(0, Math.min(sourceDuration - length, sourceDuration * position)));
-    const end = Math.round(Math.min(sourceDuration, start + length));
-    return {
-      id: `local-${Date.now()}-${index}`,
-      title: ["Abertura que prende", "Ponto principal", "Fechamento com impacto"][index],
-      start,
-      end,
-      score: 94 - index * 6,
-      notes: prompt || "Trecho preparado localmente para revisão.",
-    };
-  });
 }
 
 function mediaUrlFromProject(project) {
@@ -58,11 +47,27 @@ export default function ClipsFree() {
   const [savedSession, setSession] = useWorkDraftState("clipsfree-session", EMPTY_SESSION);
   const session = { ...EMPTY_SESSION, ...savedSession };
   const projetos = useProducaoProjetos();
+  const [sourceFile, setSourceFile] = useState(null);
+  const [analysing, setAnalysing] = useState(false);
+  const [connections, setConnections] = useState([]);
   const finalizados = useMemo(() => projetos.filter((project) => project.etapa === "finalizado"), [projetos]);
   const selected = useMemo(
     () => session.suggestions.find((item) => item.id === session.selectedSuggestionId) || session.suggestions[0],
     [session.selectedSuggestionId, session.suggestions],
   );
+
+  useEffect(() => {
+    let active = true;
+    getAIConnections()
+      .then((result) => {
+        if (!active) return;
+        const available = (result.connections || []).filter((connection) => connection.enabled && connection.key_configured);
+        setConnections(available);
+        if (!session.analysisConnectionId && available[0]?.id) update({ analysisConnectionId: available[0].id });
+      })
+      .catch(() => { if (active) setConnections([]); });
+    return () => { active = false; };
+  }, []);
 
   function update(patch) {
     setSession((current) => ({ ...current, ...patch }));
@@ -78,13 +83,41 @@ export default function ClipsFree() {
       suggestions: [],
       selectedSuggestionId: "",
       workspaceClip: null,
+      sourceAssetId: "",
+      analysisStatus: "",
+      analysisMessage: "",
     });
+    setSourceFile(file);
     event.target.value = "";
   }
 
-  function generateSuggestions() {
-    const suggestions = buildSuggestions(session.duration, session.maximum, session.prompt);
-    update({ suggestions, selectedSuggestionId: suggestions[0].id });
+  async function generateSuggestions() {
+    if (!sourceFile || analysing) return;
+    setAnalysing(true);
+    update({ analysisStatus: "processing", analysisMessage: "Enviando mídia para análise real.", suggestions: [], selectedSuggestionId: "" });
+    try {
+      const asset = session.sourceAssetId ? { id: session.sourceAssetId } : await uploadMediaAsset(sourceFile, { origin: "clipsfree" });
+      const analysis = await startClipAnalysis(asset.id, session.analysisConnectionId || null);
+      const suggestions = (analysis.candidates || []).map((candidate) => ({
+        id: candidate.id,
+        title: candidate.quote || "Trecho analisado",
+        start: candidate.start,
+        end: candidate.end,
+        score: candidate.score,
+        notes: candidate.rationale || "Evidência retirada da transcrição.",
+      }));
+      update({
+        sourceAssetId: asset.id,
+        analysisStatus: analysis.status,
+        analysisMessage: analysis.message || "Análise concluída.",
+        suggestions,
+        selectedSuggestionId: suggestions[0]?.id || "",
+      });
+    } catch (error) {
+      update({ analysisStatus: "failed", analysisMessage: error?.message || "Não foi possível analisar esta mídia.", suggestions: [] });
+    } finally {
+      setAnalysing(false);
+    }
   }
 
   function updateSelected(patch) {
@@ -189,8 +222,15 @@ export default function ClipsFree() {
               <label className="text-xs font-semibold text-slate-400">Máximo (s)<input aria-label="Duração máxima" type="number" min="5" value={session.maximum} onChange={(event) => update({ maximum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             </div>
             <label className="block text-xs font-semibold text-slate-400">Orientação editorial<textarea aria-label="Orientação editorial" value={session.prompt} onChange={(event) => update({ prompt: event.target.value })} rows="4" className="mt-1 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
-            <button type="button" disabled={!session.sourceUrl} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> Gerar sugestões</button>
-            <p className="text-xs leading-relaxed text-slate-500">As sugestões locais são o ponto de partida. No editor, a etapa de análise e legendas pode ser revisada sem bloquear a edição manual.</p>
+            <label className="block text-xs font-semibold text-slate-400">IA para analisar e legendar
+              <select aria-label="IA para analisar e legendar" value={session.analysisConnectionId} onChange={(event) => update({ analysisConnectionId: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400">
+                {connections.length === 0 && <option value="">Nenhuma IA com créditos configurada</option>}
+                {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.model}</option>)}
+              </select>
+            </label>
+            <button type="button" disabled={!session.sourceUrl || analysing} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
+            <p className="text-xs leading-relaxed text-slate-500">As sugestões só aparecem após transcrição e análise reais. O sistema nunca cria notas ou trechos demonstrativos para um envio.</p>
+            {session.analysisMessage && <p role="status" className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${session.analysisStatus === "completed" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : session.analysisStatus === "failed" ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-amber-500/30 bg-amber-500/10 text-amber-100"}`}>{session.analysisMessage}</p>}
           </div>
         </aside>
       </div>
