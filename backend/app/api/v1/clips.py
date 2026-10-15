@@ -4,13 +4,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from cryptography.fernet import InvalidToken
 
 from app.clips.service import ClipAnalysisService
-from app.clips.analysis import CommandAnalysisAdapter
-from app.clips.transcription import CommandTranscriptionAdapter, TranscriptionUnavailable
+from app.clips.analysis import CommandAnalysisAdapter, RemoteAnalysisAdapter
+from app.clips.transcription import (
+    CommandTranscriptionAdapter,
+    RemoteTranscriptionAdapter,
+    TranscriptionUnavailable,
+)
 from app.core.config import get_settings
 from app.media.storage import LocalMediaStorage
-from app.api.v1.ai import ai_settings_record, connection_configuration
+from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
 from app.core.errors import PublicError
 from app.db.session import get_session
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
@@ -36,7 +41,24 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
     require_permission(session, current, "clips.write")
     membership = require_membership(current)
     service = ClipAnalysisService(session)
+    connection = None
     try:
+        if body.connection_id:
+            settings = ai_settings_record(session, membership.tenant_id)
+            connection = next(
+                (
+                    item
+                    for item in connection_configuration(settings.data if settings else {}).get("connections", [])
+                    if item.get("id") == body.connection_id and item.get("enabled", True)
+                ),
+                None,
+            )
+            if connection is None or not connection.get("encrypted_key"):
+                raise PublicError(
+                    422,
+                    "CLIP_AI_CONNECTION_INVALID",
+                    "Escolha uma IA ativa e com créditos configurados.",
+                )
         record = service.create(
             asset_id=body.asset_id,
             tenant_id=membership.tenant_id,
@@ -45,30 +67,24 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
     except LookupError as error:
         raise PublicError(404, "ASSET_NOT_FOUND", "Mídia não encontrada.") from error
 
-    if body.connection_id:
-        settings = ai_settings_record(session, membership.tenant_id)
-        connection = next(
-            (
-                item
-                for item in connection_configuration(settings.data if settings else {}).get("connections", [])
-                if item.get("id") == body.connection_id and item.get("enabled", True)
-            ),
-            None,
-        )
-        if connection is None or not connection.get("encrypted_key"):
-            raise PublicError(422, "CLIP_AI_CONNECTION_INVALID", "Escolha uma IA ativa e com créditos configurados.")
-        record.data = {**record.data, "connection_id": body.connection_id}
+    if connection:
+        record.data = {**record.data, "connection_id": connection["id"]}
 
     try:
         # Resolve only the tenant-owned asset key, never a browser-provided path.
         from app.api.v1.media import find_asset
         asset = find_asset(session, membership.tenant_id, body.asset_id)
         source = LocalMediaStorage(get_settings().media_root).resolve(asset.data["storage_key"])
-        segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
+        if connection:
+            api_key = decrypt_ai_key(connection)
+            segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
+            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(segments)
+        else:
+            segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
+            candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         service.save_transcript(record.id, membership.tenant_id, segments)
-        candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         service.save_candidates(record.id, membership.tenant_id, candidates)
-    except (TranscriptionUnavailable, FileNotFoundError, KeyError):
+    except (PublicError, TranscriptionUnavailable, FileNotFoundError, KeyError, InvalidToken):
         service.set_state(
             record.id,
             membership.tenant_id,

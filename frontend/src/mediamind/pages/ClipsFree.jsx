@@ -228,8 +228,8 @@ export default function ClipsFree() {
                 {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.model}</option>)}
               </select>
             </label>
-            <button type="button" disabled={!session.sourceUrl || analysing} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
-            <p className="text-xs leading-relaxed text-slate-500">As sugestões só aparecem após transcrição e análise reais. O sistema nunca cria notas ou trechos demonstrativos para um envio.</p>
+            <button type="button" disabled={!session.sourceUrl || !session.analysisConnectionId || analysing} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
+            <p className="text-xs leading-relaxed text-slate-500">Escolha uma IA com créditos para transcrever, analisar e criar legendas temporizadas. O sistema nunca cria notas ou trechos demonstrativos para um envio.</p>
             {session.analysisMessage && <p role="status" className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${session.analysisStatus === "completed" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : session.analysisStatus === "failed" ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-amber-500/30 bg-amber-500/10 text-amber-100"}`}>{session.analysisMessage}</p>}
           </div>
         </aside>

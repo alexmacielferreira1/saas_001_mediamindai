@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import httpx
+
 from app.clips.contracts import TranscriptSegment, TranscriptWord
 
 
@@ -57,3 +59,78 @@ class CommandTranscriptionAdapter:
                 ]
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 raise TranscriptionUnavailable("O transcritor retornou marcações de tempo inválidas.") from error
+
+
+class RemoteTranscriptionAdapter:
+    """Use the selected OpenAI-compatible connection for a real transcript.
+
+    The response must include time-coded segments.  There is intentionally no
+    text fallback: captions and cut candidates cannot be honestly generated
+    without temporal evidence.
+    """
+
+    def __init__(self, connection: dict, api_key: str):
+        self.connection = connection
+        self.api_key = api_key
+
+    def transcribe(self, source: Path) -> list[TranscriptSegment]:
+        if self.connection.get("provider") != "compatible":
+            raise TranscriptionUnavailable(
+                "A IA escolhida não oferece transcrição de mídia neste formato."
+            )
+        if not source.is_file():
+            raise FileNotFoundError("Arquivo de mídia não encontrado.")
+        try:
+            with source.open("rb") as media:
+                response = httpx.post(
+                    f"{str(self.connection['base_url']).rstrip('/')}/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    data={
+                        "model": self.connection.get("transcription_model", "whisper-1"),
+                        "response_format": "verbose_json",
+                        "timestamp_granularities[]": "word",
+                    },
+                    files={"file": (source.name, media, "application/octet-stream")},
+                    timeout=60 * 15,
+                )
+            response.raise_for_status()
+            return self._segments(response.json())
+        except (httpx.HTTPError, OSError, KeyError, TypeError, ValueError) as error:
+            raise TranscriptionUnavailable(
+                "A IA selecionada não conseguiu transcrever esta mídia."
+            ) from error
+
+    @staticmethod
+    def _segments(payload: dict) -> list[TranscriptSegment]:
+        raw_words = payload.get("words") or []
+        words = [
+            TranscriptWord(
+                text=item.get("word", item.get("text", "")).strip(),
+                start=item["start"],
+                end=item["end"],
+            )
+            for item in raw_words
+            if item.get("word", item.get("text", "")).strip()
+        ]
+        raw_segments = payload.get("segments") or []
+        segments = []
+        for item in raw_segments:
+            start = float(item["start"])
+            end = float(item["end"])
+            segment_words = [word for word in words if word.start >= start and word.end <= end]
+            if not segment_words:
+                text = str(item.get("text", "")).strip()
+                if not text:
+                    continue
+                segment_words = [TranscriptWord(text=text, start=start, end=end)]
+            segments.append(
+                TranscriptSegment(
+                    start=start,
+                    end=end,
+                    text=str(item.get("text") or " ".join(word.text for word in segment_words)).strip(),
+                    words=segment_words,
+                )
+            )
+        if not segments:
+            raise ValueError("Resposta sem segmentos temporizados.")
+        return segments
