@@ -39,6 +39,67 @@ def test_clip_analysis_is_not_visible_to_other_tenant(permission_client):
     assert response.json()["error_code"] == "CLIP_ANALYSIS_NOT_FOUND"
 
 
+def test_selected_ai_connection_is_saved_on_the_analysis_job(permission_client):
+    client, ids = permission_client
+    login(client)
+    with ids["session_factory"]() as session:
+        asset = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="Asset",
+            data={"filename": "entrevista.mp4", "storage_key": "missing/source.mp4"},
+        )
+        settings = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="AISettings",
+            data={
+                "connections": [
+                    {
+                        "id": "creditos-video",
+                        "name": "IA com créditos",
+                        "provider": "compatible",
+                        "base_url": "https://api.example.test/v1",
+                        "model": "gpt-4o",
+                        "enabled": True,
+                        "encrypted_key": "stored-without-exposure",
+                    }
+                ]
+            },
+        )
+        session.add_all([asset, settings])
+        session.commit()
+        asset_id = asset.id
+
+    response = client.post(
+        "/api/v1/clips/analyses",
+        json={"asset_id": str(asset_id), "connection_id": "creditos-video"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["connection_id"] == "creditos-video"
+
+
+def test_unknown_ai_connection_is_rejected_before_creating_an_analysis(permission_client):
+    client, ids = permission_client
+    login(client)
+    with ids["session_factory"]() as session:
+        asset = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="Asset",
+            data={"filename": "entrevista.mp4", "storage_key": "missing/source.mp4"},
+        )
+        session.add(asset)
+        session.commit()
+        asset_id = asset.id
+
+    response = client.post(
+        "/api/v1/clips/analyses",
+        json={"asset_id": str(asset_id), "connection_id": "inexistente"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "CLIP_AI_CONNECTION_INVALID"
+
+
 def test_starting_analysis_returns_only_transcript_grounded_candidates(
     permission_client, monkeypatch, tmp_path
 ):

@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import httpx
+
 from app.clips.contracts import CandidateDimensions, ClipCandidate, TranscriptSegment, TranscriptWord
 from app.clips.scoring import build_candidate
 from app.clips.transcription import TranscriptionUnavailable
@@ -64,3 +66,57 @@ class CommandAnalysisAdapter:
                 shareability=int(proposal["shareability"]),
             ),
         )
+
+
+class RemoteAnalysisAdapter:
+    """Ask the selected AI for proposals, then validate every one locally."""
+
+    def __init__(self, connection: dict, api_key: str):
+        self.connection = connection
+        self.api_key = api_key
+
+    def suggest(self, segments: list[TranscriptSegment]) -> list[ClipCandidate]:
+        if self.connection.get("provider") != "compatible":
+            raise TranscriptionUnavailable(
+                "A IA escolhida ainda não oferece análise de cortes neste formato."
+            )
+        words = [word for segment in segments for word in segment.words]
+        transcript = [
+            {"start": segment.start, "end": segment.end, "text": segment.text}
+            for segment in segments
+        ]
+        instructions = (
+            "Analise esta transcrição temporizada e proponha apenas trechos viralizáveis "
+            "entre 15 e 60 segundos. Retorne JSON estrito, sem Markdown, no formato "
+            '{"candidates":[{"start":number,"end":number,"hook":0-25,"flow":0-25,'
+            '"value":0-25,"shareability":0-25}]}. Não invente palavras ou tempos.\n\n'
+            + json.dumps(transcript, ensure_ascii=False)
+        )
+        try:
+            response = httpx.post(
+                f"{str(self.connection['base_url']).rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={
+                    "model": self.connection["model"],
+                    "messages": [
+                        {"role": "system", "content": "Você é um editor de vídeo rigoroso e baseado em evidências."},
+                        {"role": "user", "content": instructions},
+                    ],
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=60 * 5,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            content = payload["choices"][0]["message"]["content"]
+            proposals = json.loads(content)["candidates"]
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            raise TranscriptionUnavailable(
+                "A IA selecionada não conseguiu propor cortes verificáveis."
+            ) from error
+        try:
+            return [CommandAnalysisAdapter._candidate(proposal, words) for proposal in proposals]
+        except (KeyError, TypeError, ValueError) as error:
+            raise TranscriptionUnavailable(
+                "A IA selecionada retornou cortes sem evidências utilizáveis."
+            ) from error

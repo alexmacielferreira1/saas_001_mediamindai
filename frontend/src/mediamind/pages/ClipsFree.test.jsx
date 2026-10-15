@@ -34,11 +34,12 @@ describe("CLIPSFREE", () => {
     aiApi.getAIConnections.mockResolvedValue({ connections: [{ id: "credits-ai", name: "IA com créditos", model: "modelo-real", enabled: true, key_configured: true }] });
   });
 
-  it("turns an uploaded source into an editable local clip session", () => {
+  it("turns an uploaded source into an editable local clip session", async () => {
     render(<ClipsFree />);
 
     expect(screen.getByRole("heading", { name: "CLIPSFREE" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Gerar sugestões" })).toBeDisabled();
+    await screen.findByRole("option", { name: /IA com créditos/i });
 
     const video = new File(["video"], "entrevista.mp4", { type: "video/mp4" });
     fireEvent.change(screen.getByLabelText("Selecionar vídeo"), { target: { files: [video] } });
