@@ -105,6 +105,7 @@ export default function ClipsFree() {
         end: candidate.end,
         score: candidate.score,
         notes: candidate.rationale || "Evidência retirada da transcrição.",
+        captions: candidate.captions || [],
       }));
       update({
         sourceAssetId: asset.id,
@@ -147,6 +148,13 @@ export default function ClipsFree() {
         duration_ms: Math.round((session.duration || item.end) * 1000),
         formato: session.format,
         source_project_id: session.sourceProject?.id || null,
+        legendas: item.captions.map((caption, index) => ({
+          id: `caption-${item.id}-${index}`,
+          start_ms: Math.round(caption.start * 1000),
+          end_ms: Math.round(caption.end * 1000),
+          texto: caption.text,
+          cortar_audio: false,
+        })),
       },
     });
   }

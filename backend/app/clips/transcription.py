@@ -43,9 +43,13 @@ class CommandTranscriptionAdapter:
             try:
                 subprocess.run(command, check=True, capture_output=True, timeout=60 * 60)
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                raise TranscriptionUnavailable("O transcritor não conseguiu processar a mídia.") from error
+                raise TranscriptionUnavailable(
+                    "O transcritor não conseguiu processar a mídia."
+                ) from error
             if not output.is_file():
-                raise TranscriptionUnavailable("O transcritor não retornou uma transcrição utilizável.")
+                raise TranscriptionUnavailable(
+                    "O transcritor não retornou uma transcrição utilizável."
+                )
             try:
                 payload = json.loads(output.read_text(encoding="utf-8"))
                 return [
@@ -58,7 +62,9 @@ class CommandTranscriptionAdapter:
                     for item in payload["segments"]
                 ]
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-                raise TranscriptionUnavailable("O transcritor retornou marcações de tempo inválidas.") from error
+                raise TranscriptionUnavailable(
+                    "O transcritor retornou marcações de tempo inválidas."
+                ) from error
 
 
 class RemoteTranscriptionAdapter:
@@ -127,7 +133,9 @@ class RemoteTranscriptionAdapter:
                 TranscriptSegment(
                     start=start,
                     end=end,
-                    text=str(item.get("text") or " ".join(word.text for word in segment_words)).strip(),
+                    text=str(
+                        item.get("text") or " ".join(word.text for word in segment_words)
+                    ).strip(),
                     words=segment_words,
                 )
             )
