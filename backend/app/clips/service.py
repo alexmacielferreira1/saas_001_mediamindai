@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.clips.contracts import ClipCandidate, TranscriptSegment
+from app.clips.contracts import CaptionCue, ClipCandidate, TranscriptSegment
 from app.models.identity import TenantRecord
 
 ANALYSIS_ENTITY = "ClipAnalysis"
@@ -81,12 +81,22 @@ class ClipAnalysisService:
                     },
                 )
             )
-        analysis.data = {**analysis.data, "status": "processing", "message": "Transcrição concluída."}
+        analysis.data = {
+            **analysis.data,
+            "status": "processing",
+            "message": "Transcrição concluída.",
+        }
         self.session.flush()
 
     def save_candidates(
-        self, analysis_id: UUID, tenant_id: UUID, candidates: list[ClipCandidate]
+        self,
+        analysis_id: UUID,
+        tenant_id: UUID,
+        candidates: list[ClipCandidate],
+        captions: list[list[CaptionCue]],
     ) -> None:
+        if len(candidates) != len(captions):
+            raise ValueError("Cada candidato deve manter as próprias legendas.")
         analysis = self._require_analysis(analysis_id, tenant_id)
         self._delete_for_analysis(CANDIDATE_ENTITY, analysis_id, tenant_id)
         for index, candidate in enumerate(candidates):
@@ -99,6 +109,7 @@ class ClipAnalysisService:
                         "position": index,
                         "status": "suggested",
                         **candidate.model_dump(mode="json"),
+                        "captions": [cue.model_dump(mode="json") for cue in captions[index]],
                     },
                 )
             )

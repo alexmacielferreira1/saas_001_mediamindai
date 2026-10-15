@@ -1,8 +1,10 @@
+# ruff: noqa: F811
+
 from uuid import uuid4
 
-from app.models.identity import TenantRecord
 from app.clips.contracts import CandidateDimensions, TranscriptSegment, TranscriptWord
 from app.clips.scoring import build_candidate
+from app.models.identity import TenantRecord
 from test_media_api import login, permission_client  # noqa: F401
 
 
@@ -21,7 +23,7 @@ def test_starting_analysis_returns_an_honest_unavailable_state_without_a_provide
         session.commit()
         asset_id = asset.id
 
-    response = client.post(f"/api/v1/clips/analyses", json={"asset_id": str(asset_id)})
+    response = client.post("/api/v1/clips/analyses", json={"asset_id": str(asset_id)})
 
     assert response.status_code == 202
     assert response.json()["status"] == "unavailable"
@@ -112,13 +114,19 @@ def test_starting_analysis_returns_only_transcript_grounded_candidates(
         asset = TenantRecord(
             tenant_id=ids["tenant"],
             entity_type="Asset",
-            data={"filename": "entrevista.mp4", "storage_key": source.relative_to(tmp_path).as_posix()},
+            data={
+                "filename": "entrevista.mp4",
+                "storage_key": source.relative_to(tmp_path).as_posix(),
+            },
         )
         session.add(asset)
         session.commit()
         asset_id = asset.id
 
-    words = [TranscriptWord(text="Fala", start=1, end=1.2), TranscriptWord(text="real", start=1.2, end=1.5)]
+    words = [
+        TranscriptWord(text="Fala", start=1, end=1.2),
+        TranscriptWord(text="real", start=1.2, end=1.5),
+    ]
     segment = TranscriptSegment(start=0, end=30, text="Fala real", words=words)
     candidate = build_candidate(
         start=0,
@@ -127,11 +135,18 @@ def test_starting_analysis_returns_only_transcript_grounded_candidates(
         dimensions=CandidateDimensions(hook=20, flow=20, value=20, shareability=20),
     )
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
-    monkeypatch.setattr("app.api.v1.clips.CommandTranscriptionAdapter.from_environment", lambda: type("A", (), {"transcribe": lambda _self, _path: [segment]})())
-    monkeypatch.setattr("app.api.v1.clips.CommandAnalysisAdapter.from_environment", lambda: type("A", (), {"suggest": lambda _self, _segments: [candidate]})())
+    monkeypatch.setattr(
+        "app.api.v1.clips.CommandTranscriptionAdapter.from_environment",
+        lambda: type("A", (), {"transcribe": lambda _self, _path: [segment]})(),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.clips.CommandAnalysisAdapter.from_environment",
+        lambda: type("A", (), {"suggest": lambda _self, _segments: [candidate]})(),
+    )
 
-    response = client.post(f"/api/v1/clips/analyses", json={"asset_id": str(asset_id)})
+    response = client.post("/api/v1/clips/analyses", json={"asset_id": str(asset_id)})
 
     assert response.status_code == 202
     assert response.json()["status"] == "completed"
     assert response.json()["candidates"][0]["quote"] == "Fala real"
+    assert response.json()["candidates"][0]["captions"][0]["text"] == "Fala real"

@@ -28,13 +28,28 @@ def test_analysis_adapter_maps_a_provider_proposal_to_real_transcript_evidence(m
     def fake_run(command, **_kwargs):
         output = Path(command[command.index("--output") + 1])
         output.write_text(
-            json.dumps({"candidates": [{"start": 0, "end": 25, "hook": 22, "flow": 20, "value": 21, "shareability": 19}]}),
+            json.dumps(
+                {
+                    "candidates": [
+                        {
+                            "start": 0,
+                            "end": 25,
+                            "hook": 22,
+                            "flow": 20,
+                            "value": 21,
+                            "shareability": 19,
+                        }
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
 
     monkeypatch.setattr("app.clips.analysis.subprocess.run", fake_run)
 
-    candidates = CommandAnalysisAdapter("analyzer --input {input} --output {output}").suggest(segments)
+    candidates = CommandAnalysisAdapter("analyzer --input {input} --output {output}").suggest(
+        segments
+    )
 
     assert candidates[0].quote == "Esta medida melhora a vida de todos os moradores."
     assert candidates[0].score == 82
@@ -66,7 +81,16 @@ def test_remote_adapter_maps_only_provider_candidates_to_transcript_evidence(mon
 
         def json(self):
             return {
-                "choices": [{"message": {"content": '{"candidates":[{"start":0,"end":25,"hook":22,"flow":20,"value":21,"shareability":19}]}'}}]
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"candidates":[{"start":0,"end":25,"hook":22,"flow":20,'
+                                '"value":21,"shareability":19}]}'
+                            )
+                        }
+                    }
+                ]
             }
 
     monkeypatch.setattr("app.clips.analysis.httpx.post", lambda *_args, **_kwargs: Response())

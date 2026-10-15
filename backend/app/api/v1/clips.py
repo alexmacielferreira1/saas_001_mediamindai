@@ -1,23 +1,24 @@
 from typing import Annotated
 from uuid import UUID
 
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from cryptography.fernet import InvalidToken
 
-from app.clips.service import ClipAnalysisService
+from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
 from app.clips.analysis import CommandAnalysisAdapter, RemoteAnalysisAdapter
+from app.clips.captions import captions_for_candidate
+from app.clips.service import ClipAnalysisService
 from app.clips.transcription import (
     CommandTranscriptionAdapter,
     RemoteTranscriptionAdapter,
     TranscriptionUnavailable,
 )
 from app.core.config import get_settings
-from app.media.storage import LocalMediaStorage
-from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
 from app.core.errors import PublicError
 from app.db.session import get_session
+from app.media.storage import LocalMediaStorage
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
 
@@ -48,7 +49,9 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
             connection = next(
                 (
                     item
-                    for item in connection_configuration(settings.data if settings else {}).get("connections", [])
+                    for item in connection_configuration(settings.data if settings else {}).get(
+                        "connections", []
+                    )
                     if item.get("id") == body.connection_id and item.get("enabled", True)
                 ),
                 None,
@@ -73,6 +76,7 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
     try:
         # Resolve only the tenant-owned asset key, never a browser-provided path.
         from app.api.v1.media import find_asset
+
         asset = find_asset(session, membership.tenant_id, body.asset_id)
         source = LocalMediaStorage(get_settings().media_root).resolve(asset.data["storage_key"])
         if connection:
@@ -83,13 +87,19 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
             segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
             candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         service.save_transcript(record.id, membership.tenant_id, segments)
-        service.save_candidates(record.id, membership.tenant_id, candidates)
+        service.save_candidates(
+            record.id,
+            membership.tenant_id,
+            candidates,
+            [captions_for_candidate(candidate) for candidate in candidates],
+        )
     except (PublicError, TranscriptionUnavailable, FileNotFoundError, KeyError, InvalidToken):
         service.set_state(
             record.id,
             membership.tenant_id,
             "unavailable",
-            "A transcrição ainda não está configurada para esta empresa. Configure um provedor para analisar esta mídia.",
+            "A transcrição ainda não está configurada para esta empresa. "
+            "Configure um provedor para analisar esta mídia.",
         )
     session.commit()
     result = service.get_analysis(record.id, membership.tenant_id)

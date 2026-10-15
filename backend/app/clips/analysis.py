@@ -7,7 +7,12 @@ from pathlib import Path
 
 import httpx
 
-from app.clips.contracts import CandidateDimensions, ClipCandidate, TranscriptSegment, TranscriptWord
+from app.clips.contracts import (
+    CandidateDimensions,
+    ClipCandidate,
+    TranscriptSegment,
+    TranscriptWord,
+)
 from app.clips.scoring import build_candidate
 from app.clips.transcription import TranscriptionUnavailable
 
@@ -31,7 +36,10 @@ class CommandAnalysisAdapter:
             source = root / "transcript.json"
             destination = root / "candidates.json"
             source.write_text(
-                json.dumps({"segments": [segment.model_dump(mode="json") for segment in segments]}, ensure_ascii=False),
+                json.dumps(
+                    {"segments": [segment.model_dump(mode="json") for segment in segments]},
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             command = [
@@ -41,14 +49,18 @@ class CommandAnalysisAdapter:
             try:
                 subprocess.run(command, check=True, capture_output=True, timeout=15 * 60)
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-                raise TranscriptionUnavailable("O analisador não conseguiu avaliar a transcrição.") from error
+                raise TranscriptionUnavailable(
+                    "O analisador não conseguiu avaliar a transcrição."
+                ) from error
             if not destination.is_file():
                 raise TranscriptionUnavailable("O analisador não retornou candidatos utilizáveis.")
             try:
                 proposals = json.loads(destination.read_text(encoding="utf-8"))["candidates"]
                 return [self._candidate(proposal, words) for proposal in proposals]
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-                raise TranscriptionUnavailable("O analisador retornou candidatos inválidos.") from error
+                raise TranscriptionUnavailable(
+                    "O analisador retornou candidatos inválidos."
+                ) from error
 
     @staticmethod
     def _candidate(proposal: dict, words: list[TranscriptWord]) -> ClipCandidate:
@@ -99,7 +111,12 @@ class RemoteAnalysisAdapter:
                 json={
                     "model": self.connection["model"],
                     "messages": [
-                        {"role": "system", "content": "Você é um editor de vídeo rigoroso e baseado em evidências."},
+                        {
+                            "role": "system",
+                            "content": (
+                                "Você é um editor de vídeo rigoroso e baseado em evidências."
+                            ),
+                        },
                         {"role": "user", "content": instructions},
                     ],
                     "response_format": {"type": "json_object"},

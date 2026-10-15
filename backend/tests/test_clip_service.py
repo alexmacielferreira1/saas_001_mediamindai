@@ -1,5 +1,8 @@
+# ruff: noqa: F811
+
 from uuid import uuid4
 
+from app.clips.captions import captions_for_candidate
 from app.clips.contracts import CandidateDimensions, TranscriptWord
 from app.clips.scoring import build_candidate
 from app.clips.service import ClipAnalysisService
@@ -28,14 +31,20 @@ def test_service_persists_evidence_and_hides_analysis_from_another_tenant(permis
     asset_id = uuid4()
     with session_factory() as session:
         tenant = session.get(Tenant, ids["tenant"])
-        session.add(TenantRecord(tenant_id=tenant.id, entity_type="Asset", data={"title": "Teste"}, id=asset_id))
+        session.add(
+            TenantRecord(
+                tenant_id=tenant.id, entity_type="Asset", data={"title": "Teste"}, id=asset_id
+            )
+        )
         session.commit()
         service = ClipAnalysisService(session)
         job = service.create(asset_id=asset_id, tenant_id=tenant.id, requested_by=uuid4())
-        service.save_candidates(job.id, tenant.id, [candidate()])
+        item = candidate()
+        service.save_candidates(job.id, tenant.id, [item], [captions_for_candidate(item)])
         session.commit()
 
         analysis = service.get_analysis(job.id, tenant.id)
         assert analysis is not None
         assert analysis["candidates"][0]["evidence"][0]["text"] == "Este"
+        assert analysis["candidates"][0]["captions"][0]["text"] == "Este é um trecho"
         assert service.get_analysis(job.id, ids["other"]) is None
