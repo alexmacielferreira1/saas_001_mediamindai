@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Plus, X, ArrowRight, Building2, Search, Workflow, FolderOpen, AlertTriangle, Film, CheckCircle2, RotateCcw } from "lucide-react";
 import VideoStudio from "../components/ai-tools/VideoStudio";
 import AgencyMissionControl from "../components/agency/AgencyMissionControl";
+import AgencyCopilot from "../components/agency/AgencyCopilot";
 
 // Agência: protótipo navegável isolado, com dados locais; nenhuma ação comercial é disparada.
 const STORE_KEY = "mediamind_agencia_video_prototipo_v1";
@@ -50,6 +51,7 @@ export default function AgenciaVideo({ embedded = false }) {
   const active = MODULES.some(m => m[0] === params.get("guia")) ? params.get("guia") : "comando";
   const [data, setData] = useState(load);
   const [query, setQuery] = useState("");
+  const [copilotOpen, setCopilotOpen] = useState(true);
   useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch { /* quota / privado */ } }, [data]);
   const go = (id) => setParams((old) => { const p = new URLSearchParams(old); p.set("guia", id); return p; });
   const mutate = (fn, label) => setData((prev) => { const next = fn(prev); return { ...next, activity: [{ id:newId(), label, at:new Date().toLocaleString("pt-BR") }, ...prev.activity].slice(0,40) }; });
@@ -73,6 +75,10 @@ export default function AgenciaVideo({ embedded = false }) {
     <nav className="flex gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-1.5" role="tablist" aria-label="Guias da agência">
       {MODULES.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={active === id} onClick={() => go(id)} className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold ${active === id ? "bg-cyan-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>{label}</button>)}
     </nav>
+    <div className="flex min-w-0 items-start gap-3">
+      {copilotOpen && <aside className="w-[320px] min-w-[280px] max-w-[38%] shrink-0 sticky top-2 max-h-[calc(100vh-24px)] overflow-y-auto rounded-lg" aria-label="Copiloto da Agência"><AgencyCopilot activeModule={active} moduleLabel={MODULES.find(m=>m[0]===active)?.[1]} data={data} go={go} onClose={()=>setCopilotOpen(false)} /></aside>}
+      <div className="min-w-0 flex-1">
+      {!copilotOpen && <button type="button" onClick={()=>setCopilotOpen(true)} className="mb-2 rounded-md bg-cyan-900 px-3 py-2 text-xs text-cyan-100">Abrir Copiloto IA</button>}
     {active === "geracao" ? <section role="tabpanel"><div className={`${colors} mb-3 flex items-center justify-between gap-2 p-3 text-xs text-slate-400`}><span>A mesma ferramenta utilizada no VIDEO_ESTUDIO, sem duplicar o código.</span><Link className="text-cyan-300 underline" to="/geracao-de-video">Abrir página isolada</Link></div><VideoStudio /></section> : <section role="tabpanel" className="space-y-3">
       {active === "comando" && <><AgencyMissionControl compact /><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Leads cadastrados" value={data.leads.length}/><Metric label="Oportunidades" value={data.opportunities.length}/><Metric label="Campanhas-base" value={data.campaigns.length}/><Metric label="Projetos" value={data.projects.length}/></div><div className="grid gap-3 lg:grid-cols-2"><Panel title="Próximas ações" description="Fluxo de trabalho para a validação das telas"><div className="grid gap-2">{[["radar","Cadastrar leads"],["crm","Criar oportunidades"],["campanhas","Preparar uma campanha-base"],["projetos","Abrir projeto de produção"]].map(([id,label]) => <button key={id} onClick={() => go(id)} className="flex items-center justify-between rounded-lg border border-slate-800 p-3 text-left text-sm hover:bg-slate-800">{label}<ArrowRight size={15}/></button>)}</div></Panel><Panel title="Atividade recente"><Rows data={data.activity.slice(0,8)} render={(item) => <><span>{item.label}</span><small className="text-slate-500">{item.at}</small></>}/></Panel></div></>}
       {active === "planejamento" && <><Panel title="Planejamento semanal" description="Cadastre decisões, orçamento e próximos passos. Sem execução automática."><Form fields={[["nome","Tarefa ou objetivo"],["responsavel","Responsável"],["prazo","Prazo ou referência"]]} buttonLabel="Criar tarefa" onSave={(v)=>add("tasks",{...v,status:"Pendente"},`Planejamento: ${v.nome}`)}/><Rows data={data.tasks} render={(x)=><><div><strong>{x.nome}</strong><p className="text-xs text-slate-500">{x.responsavel} · {x.prazo}</p></div><select className={inputStyle} value={x.status} onChange={(e)=>update("tasks",x.id,{status:e.target.value},`Tarefa ${x.nome}: ${e.target.value}`)}><option>Pendente</option><option>Em andamento</option><option>Concluída</option></select></>}/></Panel></>}
@@ -88,6 +94,8 @@ export default function AgenciaVideo({ embedded = false }) {
       {active === "clientes" && <Panel title="Clientes e Pós-venda" description="Leads e clientes serão unificados no CRM definitivo sem perder o histórico."><Rows data={data.leads} render={(x)=><><div><strong>{x.nome}</strong><p className="text-xs text-slate-500">{x.segmento} · {x.cidade}</p></div><span className="text-xs text-slate-400">{x.status}</span></>}/></Panel>}
       {active === "agentes" && <AgencyMissionControl />}
     </section>}
+      </div>
+    </div>
     <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>Protótipo local no navegador; não compartilha dados entre dispositivos nem integra o banco do MediaMindAI.</span><button type="button" className="inline-flex items-center gap-1 text-rose-300 hover:text-rose-200" onClick={()=>{if(window.confirm("Apagar todos os registros de teste da agência neste navegador?")){setData({leads:[],opportunities:[],campaigns:[],projects:[],tasks:[],activity:[]});setQuery("");}}}><RotateCcw size={13}/>Limpar testes</button></footer>
   </main>;
 }
