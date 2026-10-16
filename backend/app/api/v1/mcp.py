@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai import ai_settings_record, generate_connection_text, resolve_connection
+from app.api.v1.ai_usage import guard_budget, record_usage
 from app.api.v1.records import add_audit
 from app.core.errors import PublicError
 from app.db.session import get_session
@@ -55,7 +56,7 @@ def inspect_assets(session: Session, tenant_id: UUID, arguments: dict, *, operat
     }
 
 
-async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments: dict) -> dict:
+async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments: dict, user_id=None) -> dict:
     tool = tool_by_name(tool_name)
     if tool is None:
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
@@ -81,7 +82,14 @@ async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments:
                 "AI_PROVIDER_NOT_CONFIGURED",
                 "Cadastre uma conexão de IA ativa para esta ferramenta.",
             )
-        text = await generate_connection_text(connection, prompt)
+        guard_budget(session, tenant_id, connection["provider"], connection["model"], max_tokens=4000)
+        start = perf_counter()
+        try:
+            text, usage = await generate_connection_text(connection, prompt, return_usage=True)
+        except PublicError as error:
+            record_usage(session, tenant_id, user_id, provider=connection["provider"], model=connection["model"], feature=tool_name, status="error", latency_ms=(perf_counter() - start)*1000, error_code=error.code, connection_id=connection["id"])
+            raise
+        record_usage(session, tenant_id, user_id, provider=connection["provider"], model=connection["model"], feature=tool_name, latency_ms=(perf_counter() - start)*1000, input_tokens=usage.get("input_tokens",usage.get("prompt_tokens",0)) or 0, output_tokens=usage.get("output_tokens",usage.get("completion_tokens",0)) or 0, connection_id=connection["id"], usage_known=bool(usage))
         return {
             "operation": tool_name,
             "mode": "provider",
@@ -93,7 +101,7 @@ async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments:
     raise PublicError(409, "MCP_TOOL_UNAVAILABLE", "Ferramenta MCP ainda não está conectada.")
 
 
-async def execute_queue_record(record: TenantRecord, session: Session) -> None:
+async def execute_queue_record(record: TenantRecord, session: Session, user_id=None) -> None:
     tool_name = record.data.get("tool_name") or f"{record.data['module']}.inspect"
     targets = record.data.get("targets") or [
         {"id": value, "name": value, "asset_ids": []}
@@ -112,6 +120,7 @@ async def execute_queue_record(record: TenantRecord, session: Session) -> None:
                 "asset_ids": target.get("asset_ids") or [],
                 "prompt": target.get("instruction") or record.data.get("instruction"),
             },
+            user_id,
         )
         results.append({"target_id": target.get("id"), "status": "completed", **result})
     record.data = {**record.data, "status": "completed", "results": results}
@@ -136,7 +145,7 @@ async def call_mcp_tool(
     tool = tool_by_name(tool_name)
     if tool is None:
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
-    result = await run_tool(session, membership.tenant_id, tool_name, body.arguments)
+    result = await run_tool(session, membership.tenant_id, tool_name, body.arguments, current.user.id)
     correlation_id = getattr(request.state, "correlation_id", str(uuid4()))
     add_audit(
         session,
@@ -201,7 +210,7 @@ async def create_mcp_queue(body: MCPQueueCreate, current: Authenticated, session
     session.add(record)
     session.flush()
     if body.execution_mode == "immediate":
-        await execute_queue_record(record, session)
+        await execute_queue_record(record, session, current.user.id)
     add_audit(
         session,
         current,
@@ -228,7 +237,7 @@ async def execute_mcp_queue(queue_id: UUID, current: Authenticated, session: DbS
         raise PublicError(404, "MCP_QUEUE_NOT_FOUND", "Fila MCP não encontrada.")
     if record.data.get("status") == "completed":
         return serialize_queue(record)
-    await execute_queue_record(record, session)
+    await execute_queue_record(record, session, current.user.id)
     add_audit(
         session,
         current,

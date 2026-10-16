@@ -18,12 +18,15 @@ from app.api.v1.tenants import router as tenants_router
 from app.api.v1.thumbnail_settings import router as thumbnail_settings_router
 from app.api.v1.uploads import router as uploads_router
 
+from app.api.v1.ai_usage import router as ai_usage_router
+
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth_router)
 router.include_router(creative_tools_router)
 router.include_router(admin_users_router)
 router.include_router(admin_settings_router)
 router.include_router(ai_router)
+router.include_router(ai_usage_router)
 router.include_router(dashboard_router)
 router.include_router(tenants_router)
 router.include_router(permission_groups_router)

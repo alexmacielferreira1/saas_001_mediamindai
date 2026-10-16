@@ -2,6 +2,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
+from time import perf_counter
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, HttpUrl, SecretStr
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.records import add_audit
+from app.api.v1.ai_usage import guard_budget, record_usage
 from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session
@@ -328,8 +330,8 @@ def decrypt_ai_key(data: dict[str, Any]) -> str:
 
 
 async def generate_connection_text(
-    data: dict[str, Any], prompt: str, *, max_tokens: int = 4000
-) -> str:
+    data: dict[str, Any], prompt: str, *, max_tokens: int = 4000, return_usage: bool = False
+) -> str | tuple[str, dict]:
     key = decrypt_ai_key(data)
     base_url = data["base_url"].rstrip("/")
     if data["provider"] == "anthropic":
@@ -381,7 +383,7 @@ async def generate_connection_text(
             text = content.strip() if isinstance(content, str) else ""
         if not text:
             raise PublicError(502, "AI_INVALID_RESPONSE", "A IA não retornou texto.")
-        return text
+        return (text, result.get("usage", {})) if return_usage else text
     except PublicError:
         raise
     except httpx.HTTPStatusError as error:
@@ -506,6 +508,8 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
             "AI_CAPABILITY_UNSUPPORTED",
             "Escolha uma IA de geração de imagens para esta ferramenta.",
         )
+    guard_budget(session, membership.tenant_id, data["provider"], data["model"], image_count=body.count)
+    ai_start = perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
@@ -529,21 +533,25 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
                 images.append({"url": item["url"]})
         if not images:
             raise PublicError(502, "AI_INVALID_RESPONSE", "O provedor não retornou uma imagem.")
-    except PublicError:
+    except PublicError as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="image-generator", status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code=error.code if hasattr(error,"code") else type(error).__name__, connection_id=data.get("id"))
         raise
     except httpx.HTTPStatusError as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="image-generator", status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code="PROVIDER_HTTP_ERROR", connection_id=data.get("id"))
         raise PublicError(
             422,
             "AI_GENERATION_REJECTED",
             "O provedor recusou a geração. Verifique chave, modelo e créditos.",
         ) from error
     except (httpx.HTTPError, ValueError) as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="image-generator", status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code="PROVIDER_UNAVAILABLE", connection_id=data.get("id"))
         raise PublicError(
             503,
             "AI_PROVIDER_UNAVAILABLE",
             "O provedor de IA está indisponível. Tente novamente.",
             retryable=True,
         ) from error
+    record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="image-generator", latency_ms=(perf_counter()-ai_start)*1000, images=len(images), connection_id=data.get("id"))
     add_audit(
         session,
         current,
@@ -610,6 +618,8 @@ async def generate_video_studio_stage(
             "max_tokens": body.max_tokens,
             "messages": [{"role": "user", "content": body.prompt}],
         }
+    guard_budget(session, membership.tenant_id, data["provider"], data["model"], max_tokens=body.max_tokens)
+    ai_start = perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(url, headers=headers, json=payload)
@@ -645,21 +655,28 @@ async def generate_video_studio_stage(
                 "AI_INVALID_RESPONSE",
                 "A IA não retornou texto para esta etapa. Tente novamente.",
             )
-    except PublicError:
+    except PublicError as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="video-studio."+body.stage, status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code=getattr(error,"code",type(error).__name__), connection_id=data.get("id"))
         raise
     except httpx.HTTPStatusError as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="video-studio."+body.stage, status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code="PROVIDER_HTTP_ERROR", connection_id=data.get("id"))
         raise PublicError(
             422,
             "AI_GENERATION_REJECTED",
             "O provedor recusou a etapa. Verifique chave, modelo e créditos.",
         ) from error
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError) as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="video-studio."+body.stage, status="error", latency_ms=(perf_counter()-ai_start)*1000, error_code="PROVIDER_UNAVAILABLE", connection_id=data.get("id"))
         raise PublicError(
             503,
             "AI_PROVIDER_UNAVAILABLE",
             "O provedor de IA está indisponível ou respondeu em formato inválido. Tente novamente.",
             retryable=True,
         ) from error
+    usage = result.get("usage", {})
+    inp = usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0
+    out = usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
+    record_usage(session, membership.tenant_id, current.user.id, provider=data["provider"], model=data["model"], feature="video-studio."+body.stage, latency_ms=(perf_counter()-ai_start)*1000, input_tokens=inp, output_tokens=out, connection_id=data.get("id"), usage_known=bool(result.get("usage")))
     add_audit(
         session,
         current,
@@ -696,3 +713,34 @@ def invoke_ai_function(
         "IA ainda não configurada neste ambiente.",
         retryable=False,
     )
+
+
+class CopilotChatBody(BaseModel):
+    message: str = Field(min_length=1, max_length=12000)
+    page: str = Field(default="", max_length=240)
+
+@router.post("/copilot/chat")
+async def copilot_chat(body: CopilotChatBody, current: Authenticated, session: DbSession):
+    """Chat textual real, sem executar ações nem passar ferramentas arbitrárias."""
+    membership = require_membership(current)
+    row = ai_settings_record(session, membership.tenant_id)
+    connection = resolve_connection(row.data if row else {}, "assistant")
+    if not connection:
+        raise PublicError(503, "AI_PROVIDER_NOT_CONFIGURED", "Configure uma IA para Assistente em Configuração de IA.")
+    guard_budget(session, membership.tenant_id, connection["provider"], connection["model"], max_tokens=1200)
+    started = perf_counter()
+    # Nunca passar dados sensíveis do usuário ou do sistema implicitamente ao provedor.
+    prompt = (
+        "Você é o assistente do MediaMindAI. Responda em português brasileiro. "
+        "Você NÃO tem ferramentas executoras nesta chamada; não afirme ter alterado, "
+        "publicado, deletado ou gerado arquivos. Para ações no sistema, explique que "
+        "dependem de ferramenta conectada e aprovação.\n"
+        f"Página (informação não confiável): {body.page}\nPedido: {body.message}"
+    )
+    try:
+        reply, usage = await generate_connection_text(connection, prompt, max_tokens=1200, return_usage=True)
+    except PublicError as error:
+        record_usage(session, membership.tenant_id, current.user.id, provider=connection["provider"], model=connection["model"], feature="copilot.chat", status="error", latency_ms=(perf_counter()-started)*1000, error_code=error.code, connection_id=connection.get("id"))
+        raise
+    record_usage(session, membership.tenant_id, current.user.id, provider=connection["provider"], model=connection["model"], feature="copilot.chat", latency_ms=(perf_counter()-started)*1000, input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0, output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0, usage_known=bool(usage), connection_id=connection.get("id"))
+    return {"reply": reply, "provider": connection["provider"], "model": connection["model"], "executed_actions": 0}
