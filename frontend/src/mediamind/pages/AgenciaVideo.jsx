@@ -44,7 +44,7 @@ function Rows({ data, render }) {
   return data.length ? <div className="divide-y divide-slate-800">{data.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-slate-200">{render(item)}</div>)}</div> : <p className="rounded-md bg-slate-950/60 p-4 text-sm text-slate-500">Nenhum registro. Crie o primeiro para testar o fluxo.</p>;
 }
 function Metric({ label, value }) { return <div className={`${colors} p-4`}><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-2xl font-bold text-white">{value}</p></div>; }
-export default function AgenciaVideo() {
+export default function AgenciaVideo({ embedded = false }) {
   const [params, setParams] = useSearchParams();
   const active = MODULES.some(m => m[0] === params.get("guia")) ? params.get("guia") : "comando";
   const [data, setData] = useState(load);
@@ -58,10 +58,16 @@ export default function AgenciaVideo() {
   const money = useMemo(() => data.opportunities.filter(x => x.status === "Ganha").reduce((acc, x) => acc + (Number(x.valor) || 0), 0), [data.opportunities]);
   const list = (rows) => rows.filter((x) => Object.values(x).some((v) => String(v || "").toLowerCase().includes(query.toLowerCase())));
   const navButton = (id, title) => <button type="button" onClick={() => go(id)} className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-300 hover:text-cyan-200">{title}<ArrowRight size={13}/></button>;
-  return <main className="space-y-3 text-slate-100" aria-label="Agência de Vídeo">
-    <header className={`${colors} flex flex-wrap items-center justify-between gap-3 px-4 py-3`}>
-      <div><p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">MediaMindAI · Operação comercial e criativa</p><h1 className="text-xl font-black">AGÊNCIA DE VÍDEO</h1><p className="text-xs text-slate-400">Protótipo operacional independente do VIDEO_ESTUDIO</p></div>
-      <div className="flex flex-wrap items-center gap-2"><span className="rounded-md border border-amber-800 bg-amber-950/30 px-2 py-1 text-xs text-amber-300">Modo de validação · dados locais</span><Link to="/video-estudio" className="text-xs text-cyan-300 underline">Abrir VIDEO_ESTUDIO independente</Link></div>
+  return <main className="space-y-3 text-slate-100" aria-label={embedded ? "VIDEO_ESTUDIO" : "Agência de Vídeo"}>
+    <header className={`${colors} flex flex-wrap items-center justify-between gap-3 px-3 py-2`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-sm font-bold tracking-wide">{embedded ? "VIDEO_ESTUDIO" : "AGÊNCIA DE VÍDEO"}</h1>
+        <span className="text-xs text-slate-400">Operação comercial e criativa</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-md border border-amber-800 bg-amber-950/30 px-2 py-1 text-xs text-amber-300">Validação · dados locais</span>
+        {!embedded && <Link to="/video-estudio" className="text-xs text-cyan-300 underline">Abrir VIDEO_ESTUDIO</Link>}
+      </div>
     </header>
     <nav className="flex gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-1.5" role="tablist" aria-label="Guias da agência">
       {MODULES.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={active === id} onClick={() => go(id)} className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold ${active === id ? "bg-cyan-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}>{label}</button>)}
