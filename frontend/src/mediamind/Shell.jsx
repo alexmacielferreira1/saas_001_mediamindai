@@ -436,19 +436,20 @@ export default function Shell({ children, persistentPath }) {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-x-hidden p-4 lg:p-6">
-          <div className="mx-auto w-full max-w-[1600px]"><MCPExpress /><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
-        </main>
+        {/* Coluna real: o Copiloto ocupa espaço no layout e nunca cobre a página. */}
+        <div className="flex min-w-0 flex-1 items-stretch gap-2 px-2 py-3 lg:gap-3 lg:px-3">
+          <UniversalCopilot />
+          <main className="min-w-0 flex-1 overflow-x-auto p-2 lg:p-3">
+            <div className="mx-auto w-full max-w-[1600px]"><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
+          </main>
+        </div>
       </div>
 
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
       />
-      <MCPDock />
-      {/* Copiloto global: disponível em todas as páginas renderizadas pelo Shell */}
-      <UniversalCopilot />
+      {/* MCPDock e MCPExpress preservados em código como referência; não exibidos junto do Copiloto. */}
     </div>
   );
 }
