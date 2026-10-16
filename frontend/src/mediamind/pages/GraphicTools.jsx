@@ -188,7 +188,6 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
   const [assets, setAssets] = useGraphicDraftState("shared:assets", []);
   const [selected, setSelected] = useGraphicDraftState("shared:selected", null);
   const [visited, setVisited] = useState([initial]);
-  const isDesktopStudio = ["filmcraft", "effectcraft", "vectorcraft", "photocraft", "threecraft"].includes(active);
   const urls = useRef(new Set());
   useEffect(
     () => () => urls.current.forEach((url) => URL.revokeObjectURL(url)),
@@ -240,7 +239,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
       <nav
         role="tablist"
         aria-label="Programas das Ferramentas Gráficas"
-        className={`flex overflow-x-auto border border-slate-800 bg-[#191919] p-0.5 ${isDesktopStudio ? "h-9 rounded-none" : "rounded-xl"}`}
+        className="flex h-9 overflow-x-auto border border-slate-800 bg-[#191919] p-0.5 rounded-none"
       >
         {tools.map((item) => {
           const TabIcon = item.icon;
@@ -250,16 +249,11 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
               aria-selected={active === item.id}
               key={item.id}
               onClick={() => choose(item.id)}
-              className={`flex-1 px-3 text-left ${active === item.id ? "border-b-2 border-blue-500 bg-[#242424] text-white" : "text-slate-500 hover:bg-[#242424]"} ${isDesktopStudio ? "min-w-24 py-1" : "min-w-32 rounded-lg py-2"}`}
+              className={`flex-1 px-3 text-left ${active === item.id ? "border-b-2 border-blue-500 bg-[#242424] text-white" : "text-slate-500 hover:bg-[#242424]"} min-w-24 py-1`}
             >
               <span className="flex items-center gap-2 text-sm font-bold">
                 <TabIcon size={16} />
                 {item.label}
-              </span>
-              <span
-                className={`${isDesktopStudio ? "hidden" : "mt-1 block"} text-[10px] opacity-70`}
-              >
-                {item.subtitle}
               </span>
             </button>
           );
