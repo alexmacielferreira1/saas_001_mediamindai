@@ -39,6 +39,22 @@ const GROUPS = {
  agency_client: {label:'Agência · Clientes',module:'ai-tools',cards:['Abrir cliente','Consultar histórico','Revisar entregas','Preparar suporte','Registrar feedback','Sugerir oferta']},
  agency_agents: {label:'Agência · Agentes',module:'ai-tools',cards:['Criar missão','Consultar fila','Conferir falhas','Pausar tarefa','Revisar permissões','Ver execuções']},
 };
+// Catálogos por aplicativo REAL da página GraphicTools.jsx (?tool=...).
+const GRAPHIC_APPS = {
+ filmcraft: {label:'MMFilm · Premiere',module:'mmfilm',cards:['Selecionar clipe','Marcar IN / OUT','Cortar trecho','Criar legendas','Ajustar áudio','Exportar sequência']},
+ effectcraft: {label:'MMEffects · Motion',module:'mmeffects',cards:['Selecionar composição','Selecionar camada','Criar keyframes','Aplicar efeito','Animar elemento','Renderizar composição']},
+ vectorcraft: {label:'MMVector · Illustrator',module:'vetor',cards:['Selecionar objeto','Criar forma','Editar vetor','Alinhar elementos','Converter em curvas','Exportar SVG']},
+ photocraft: {label:'MMPhoto · Photoshop',module:'mmphoto',cards:['Selecionar camada','Remover fundo','Criar máscara','Ajustar cores','Aplicar filtro','Exportar imagem']},
+ lightcraft: {label:'MMLight · Revelação',module:'mmphoto',cards:['Selecionar foto','Ajustar exposição','Corrigir balanço de branco','Aplicar preset','Comparar antes/depois','Exportar fotos']},
+ pdfcraft: {label:'PDF · Documentos',module:'ai-tools',cards:['Abrir documento','Organizar páginas','Extrair texto','Combinar PDFs','Revisar documento','Exportar PDF']},
+ designcraft: {label:'DesignCraft · Peças',module:'mmphoto',cards:['Selecionar prancheta','Adicionar texto','Inserir imagem','Aplicar identidade visual','Duplicar peça','Exportar design']},
+ threecraft: {label:'3D · Cena',module:'ai-tools',cards:['Selecionar objeto 3D','Posicionar câmera','Ajustar iluminação','Aplicar material','Animar objeto','Renderizar cena']},
+ 'craft-libs': {label:'Bibliotecas criativas',module:'ai-tools',cards:['Localizar recurso','Filtrar biblioteca','Importar recurso','Organizar coleção','Selecionar referência','Vincular ao projeto']},
+ mmsom: {label:'MMSom · Áudio',module:'mmsom',cards:['Selecionar faixa','Remover ruído','Equalizar voz','Normalizar volume','Sincronizar áudio','Exportar mixagem']},
+ word: {label:'Word · Documentos',module:'word',cards:['Selecionar texto','Revisar redação','Criar resumo','Formatar documento','Inserir tabela','Exportar DOCX']},
+ excel: {label:'Excel · Planilhas',module:'excel',cards:['Selecionar células','Aplicar fórmula','Organizar tabela','Localizar duplicados','Criar gráfico','Exportar XLSX']},
+ powerpoint: {label:'PowerPoint · Slides',module:'powerpoint',cards:['Selecionar slide','Criar slide','Revisar texto','Aplicar layout','Organizar apresentação','Exportar PPTX']},
+};
 const AGENCY_GUIDES={comando:'agency_command',planejamento:'agency_planning',radar:'agency_radar',prospeccao:'agency_prospect',crm:'agency_crm',campanhas:'agency_campaign',projetos:'agency_project',geracao:'video',edicao:'agency_production',aprovacao:'agency_approval',publicacao:'publication',financeiro:'agency_finance',clientes:'agency_client',agentes:'agency_agents'};
 const detectGroup=(location)=>{
  const path=location.pathname.toLowerCase();
@@ -49,7 +65,7 @@ const detectGroup=(location)=>{
  if(path.includes('agencia-video'))return AGENCY_GUIDES[q.get('guia')]||'agency_command';
  if(path.includes('administration'))return 'admin';
  if(path.includes('thumb')||path.includes('estudio-de-arte'))return 'image';
- if(path.includes('ferramentas-graficas'))return 'graphics';
+ if(path.includes('ferramentas-graficas'))return GRAPHIC_APPS[tool] ? `graphic:${tool}` : 'graphic:filmcraft';
  if(path.includes('clipsfree'))return 'clips';
  if(path.includes('geracao-de-video')||path.includes('video-estudio'))return 'video';
  if(path.includes('ferramentas-ia'))return 'video';
@@ -75,7 +91,7 @@ const detectGroup=(location)=>{
 // O Copiloto conversa em todas as páginas; o MCP mostra só a complexidade necessária.
 const CREATIVE_MCP = new Set(['workspace','edit','video','clips','image','graphics','audio','agency_production']);
 const OPERATIONAL_MCP = new Set(['ingest','agency_command','agency_planning','agency_campaign','agency_project','agency_agents']);
-const mcpModeFor = group => CREATIVE_MCP.has(group) ? 'creative' : OPERATIONAL_MCP.has(group) ? 'operational' : 'essential';
+const mcpModeFor = group => group.startsWith('graphic:') ? 'creative' : CREATIVE_MCP.has(group) ? 'creative' : OPERATIONAL_MCP.has(group) ? 'operational' : 'essential';
 const key='mm_universal_copilot_v1';
 const newQueue=(id,group)=>({id,name:`Fila ${String(id).padStart(2,'0')}`,context:group,projectMode:'current',projectName:'',targetMode:'selected',targetName:'',assets:[],operations:[]});
 function restore(){try {const s=JSON.parse(localStorage.getItem(key)||'null');if(s&&Array.isArray(s.queues)&&s.queues.length)return s;}catch{} return {queues:[newQueue(1,'media')],active:1,history:[],chat:[],suggestionsDismissed:[]};}
@@ -84,11 +100,12 @@ export default function UniversalCopilot(){
  const { user } = useAuth();
  const canManageAI = ['admin','superadmin'].includes(String(user?.role || '').toLowerCase());
  const [aiSettingsOpen,setAiSettingsOpen] = useState(false);
- const location=useLocation(); const group=detectGroup(location);const catalogue=GROUPS[group]; const mcpMode=mcpModeFor(group);
+ const location=useLocation(); const group=detectGroup(location);const catalogue=group.startsWith('graphic:') ? GRAPHIC_APPS[group.slice(8)] : GROUPS[group]; const mcpMode=mcpModeFor(group);
  const [showBatch,setShowBatch]=useState(false); const [showContext,setShowContext]=useState(true); const [showMcp,setShowMcp]=useState(false); const [projectOptions,setProjectOptions]=useState([]);const [mediaOptions,setMediaOptions]=useState([]);const [assetPicker,setAssetPicker]=useState(false);const [toolSettings,setToolSettings]=useState({});
  const [open,setOpen]=useState(()=>{try{return localStorage.getItem('mm_copilot_open')!=='0'}catch{return false}});
  const [tab,setTab]=useState('execute');const [data,setData]=useState(restore);const [input,setInput]=useState('');const [toolList,setToolList]=useState([]);const [status,setStatus]=useState('');const [expanded,setExpanded]=useState('');const [busy,setBusy]=useState(false);const [contextItem,setContextItem]=useState(null);
  const queue=data.queues.find(q=>q.id===data.active)||data.queues[0];
+ useEffect(()=>{setExpanded('');setStatus('');setAssetPicker(false)},[group]);
  useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(data))}catch{setStatus('Armazenamento local indisponível ou cheio.')}} ,[data]);
  useEffect(()=>{try{localStorage.setItem('mm_copilot_open',open?'1':'0')}catch{}},[open]);
  useEffect(()=>{listMCPTools().then(r=>setToolList(Array.isArray(r?.tools)?r.tools:[])).catch(()=>setToolList([]))},[]);
@@ -125,7 +142,7 @@ export default function UniversalCopilot(){
     {tab==='suggest'&&<div className="space-y-2"><p className="text-xs text-slate-400">Sugestões de ferramentas para a página atual. Não são diagnósticos de IA.</p>{catalogue.cards.slice(0,5).map(t=><button key={t} onClick={()=>{setInput(`Quero preparar: ${t}.`);setTab('execute')}} className="block w-full rounded-lg border border-slate-700 p-2 text-left text-xs hover:bg-slate-800">{t} <span className="float-right text-sky-300">Conversar →</span></button>)}</div>}
     {tab==='history'&&<div className="space-y-2">{data.history.length===0?<p className="text-xs text-slate-400">Ainda não há registros locais.</p>:data.history.map(e=><div key={e.id} className="rounded-lg border border-slate-700 p-2 text-xs"><div className="flex justify-between gap-2"><b>{e.title}</b><span className={statusStyle[e.state]||'text-slate-300'}>{e.state}</span></div><p className="mt-1 text-slate-400">{e.details}</p><button className="mt-2 text-sky-300" onClick={()=>discuss(e)}>Conversar e corrigir →</button></div>)}</div>}
     {tab==='execute'&&<div className="space-y-2"><div className="min-h-[175px] max-h-[300px] space-y-2 overflow-y-auto rounded-lg bg-slate-900 p-3 text-xs">{data.chat.length===0?<p className="text-slate-400">Descreva o que deseja fazer. O comando será registrado; a conversa com IA real ainda requer integração.</p>:data.chat.slice(-7).map((m,i)=><p key={i} className={m.role==='user'?'text-sky-200':'text-slate-400'}>{m.text}</p>)}</div>{contextItem&&<div className="flex items-center justify-between rounded bg-sky-950 p-2 text-xs">Histórico: {contextItem.title}<button onClick={()=>setContextItem(null)}><X size={14}/></button></div>}<form onSubmit={chatSubmit} className="space-y-2"><textarea rows={4} className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm" value={input} onChange={e=>setInput(e.target.value)} placeholder="Converse, planeje ou descreva uma alteração. Pode escrever um comando longo..."/><button className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold">Registrar comando</button></form></div>}
-    <div className="border-t border-slate-700 pt-3"><div className="mb-2 flex items-center justify-between"><button onClick={()=>setShowMcp(v=>!v)} className="flex items-center gap-2 text-sm font-bold"><Wrench size={15}/> MCP · Ferramentas <ChevronDown size={14} className={showMcp?'':'-rotate-90'}/></button></div>
+    <div className="border-t border-slate-700 pt-3"><div className="mb-2 flex items-center justify-between"><button onClick={()=>setShowMcp(v=>!v)} className="flex items-center gap-2 text-sm font-bold"><Wrench size={15}/> MCP · {catalogue.label} <ChevronDown size={14} className={showMcp?'':'-rotate-90'}/></button></div>
      {showMcp&&<>
      {mcpMode!=='creative'&&<div className="mb-3 space-y-2">
       <p className="text-[11px] text-slate-400">{mcpMode==='essential'?'Atalhos simples desta página. Para tarefas complexas, converse com o Copiloto.':'Ações frequentes da área. Operações em lote ficam recolhidas para não ocupar espaço.'}</p>
@@ -138,7 +155,7 @@ export default function UniversalCopilot(){
      <details className="mb-2 text-xs"><summary className="cursor-pointer text-slate-400">Renomear {queue.name}</summary><input aria-label="Nome da fila" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.name} onChange={e=>patchQueue({name:e.target.value})}/></details><div className="mb-2 flex items-center gap-2 text-xs font-semibold"><FolderOpen size={14}/> Projeto e destino</div>
      <label className="mb-1 block text-xs text-slate-400">Projeto</label><select className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.projectMode} onChange={e=>patchQueue({projectMode:e.target.value,projectName:''})}><option value="current">Usar projeto atual</option><option value="existing">Outro projeto existente</option><option value="new">Criar novo projeto</option></select>
      {queue.projectMode!=='current'&&<div className="mb-2"><input className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" placeholder={queue.projectMode==='new'?'Nome do novo projeto':'ID/nome do projeto existente'} value={queue.projectName} onChange={e=>patchQueue({projectName:e.target.value})}/><p className="mt-1 text-[10px] text-amber-300">{queue.projectMode==='new'?'A criação do projeto ainda requer integração ao cadastro.':'Confirme o projeto no seletor real antes de executar.'}</p></div>}
-     <label className="mb-1 block text-xs text-slate-400">Onde trabalhar</label><select className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.targetMode} onChange={e=>patchQueue({targetMode:e.target.value})}><option value="selected">{group==='edit'?'Timeline/clipe selecionado':group==='image'?'Prancheta ou camada atual':group==='video'?'Projeto/cena atual':group==='agency'?'Registro/guia atual':'Contexto da página atual'}</option>{['edit','video'].includes(group)&&<><option value="timeline">Outra timeline existente</option><option value="new-timeline">Nova timeline</option></>}{['image','edit'].includes(group)&&<option value="board">Prancheta / camada</option>}<option value="media">Mídias vinculadas</option></select>
+     <label className="mb-1 block text-xs text-slate-400">Onde trabalhar</label><select className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.targetMode} onChange={e=>patchQueue({targetMode:e.target.value})}><option value="selected">{group==='edit'||group==='graphic:filmcraft'?'Timeline/clipe selecionado':group.startsWith('graphic:')?'Seleção atual de '+catalogue.label:group==='image'?'Prancheta ou camada atual':group==='video'?'Projeto/cena atual':'Contexto da página atual'}</option>{(['edit','video','graphic:filmcraft','graphic:effectcraft'].includes(group))&&<><option value="timeline">Outra timeline existente</option><option value="new-timeline">Nova timeline</option></>}{(group==='image'||group==='edit'||['graphic:photocraft','graphic:vectorcraft','graphic:designcraft','graphic:effectcraft'].includes(group))&&<option value="board">Prancheta / camada</option>}<option value="media">Mídias vinculadas</option></select>
      {queue.targetMode!=='selected'&&<input className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" placeholder="ID ou nome da timeline / prancheta" value={queue.targetName} onChange={e=>patchQueue({targetName:e.target.value})}/>}
      <div className="mb-2 flex items-center justify-between"><span className="flex items-center gap-1 text-xs font-semibold"><Paperclip size={14}/> Mídias vinculadas ({queue.assets.length})</span><span className="text-[10px] text-slate-500">Contexto desta fila</span></div>
      {queue.assets.map(a=><div key={a.id} className="mb-1 flex items-center gap-2 rounded bg-slate-900 p-2 text-xs"><span className="min-w-0 flex-1 truncate">{a.name} {a.attached?'':'(não enviado)'}</span><button onClick={()=>patchQueue({assets:queue.assets.filter(x=>x.id!==a.id)})}><X size={12}/></button></div>)}
