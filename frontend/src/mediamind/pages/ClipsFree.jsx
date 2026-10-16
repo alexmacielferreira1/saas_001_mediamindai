@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Clapperboard, Clock3, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
+import { Clapperboard, Clock3, Download, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
 import { uploadMediaAsset } from "../../api/media";
 import { startClipAnalysis } from "../../api/clips";
+import { downloadClipFcpxml } from "../lib/clipsfreeExport";
 import { getAIConnections } from "../../api/generation";
 import { useWorkDraftState } from "../lib/workProtection";
 import { useProducaoProjetos } from "../lib/producaoStore";
@@ -54,6 +55,7 @@ export default function ClipsFree() {
   const [newCutOpen, setNewCutOpen] = useState(false);
   const [sourceUrlInput, setSourceUrlInput] = useState("");
   const sourcePreviewRef = useRef(null);
+  const clipPreviewRefs = useRef({});
   const finalizados = useMemo(() => projetos.filter((project) => project.etapa === "finalizado"), [projetos]);
   const selected = useMemo(
     () => session.suggestions.find((item) => item.id === session.selectedSuggestionId) || session.suggestions[0],
@@ -84,6 +86,7 @@ export default function ClipsFree() {
     if (!file) return;
     update({
       sourceName: file.name,
+      sourceProject: null,
       sourceUrl: URL.createObjectURL(file),
       duration: 0,
       suggestions: [],
@@ -103,7 +106,11 @@ export default function ClipsFree() {
     update({ analysisStatus: "processing", analysisMessage: "Enviando mídia para análise real.", suggestions: [], selectedSuggestionId: "" });
     try {
       const asset = session.sourceAssetId ? { id: session.sourceAssetId } : await uploadMediaAsset(sourceFile, { origin: "clipsfree" });
-      const analysis = await startClipAnalysis(asset.id, session.analysisConnectionId || null);
+      const analysis = await startClipAnalysis(asset.id, session.analysisConnectionId || null, {
+        minimum: session.minimum,
+        maximum: session.maximum,
+        editorial_prompt: session.prompt,
+      });
       const suggestions = (analysis.candidates || []).map((candidate) => ({
         id: candidate.id,
         title: candidate.quote || "Trecho analisado",
@@ -125,6 +132,31 @@ export default function ClipsFree() {
     } finally {
       setAnalysing(false);
     }
+  }
+
+  function playSuggestedClip(item) {
+    const video = clipPreviewRefs.current[item.id];
+    if (!video) return;
+    video.currentTime = Math.max(0, Number(item.start) || 0);
+    video.play().catch(() => {});
+  }
+
+  function stopAtSuggestedOut(item, event) {
+    const video = event.currentTarget;
+    if (video.currentTime >= Number(item.end)) {
+      video.pause();
+      video.currentTime = Math.max(0, Number(item.start) || 0);
+    }
+  }
+
+  function exportSelectedXml() {
+    if (!session.workspaceClip) return;
+    downloadClipFcpxml({
+      title: session.workspaceClip.titulo,
+      filename: session.sourceName,
+      start: Number(session.workspaceClip.in_ms || 0) / 1000,
+      end: Number(session.workspaceClip.out_ms || 0) / 1000,
+    });
   }
 
   function updateSelected(patch) {
@@ -261,8 +293,8 @@ export default function ClipsFree() {
               </div>
             </fieldset>
             <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs font-semibold text-slate-400">Mínimo (s)<input aria-label="Duração mínima" type="number" min="5" value={session.minimum} onChange={(event) => update({ minimum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
-              <label className="text-xs font-semibold text-slate-400">Máximo (s)<input aria-label="Duração máxima" type="number" min="5" value={session.maximum} onChange={(event) => update({ maximum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
+              <label className="text-xs font-semibold text-slate-400">Mínimo (s)<input aria-label="Duração mínima" type="number" min="15" max="60" value={session.minimum} onChange={(event) => update({ minimum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
+              <label className="text-xs font-semibold text-slate-400">Máximo (s)<input aria-label="Duração máxima" type="number" min="15" max="60" value={session.maximum} onChange={(event) => update({ maximum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             </div>
             <label className="block text-xs font-semibold text-slate-400">Orientação editorial<textarea aria-label="Orientação editorial" value={session.prompt} onChange={(event) => update({ prompt: event.target.value })} rows="4" className="mt-1 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             <div className="block text-xs font-semibold text-slate-400">IA para analisar e legendar
@@ -272,8 +304,8 @@ export default function ClipsFree() {
               </select> : <p className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm font-medium text-slate-200">{connections.find((connection) => connection.id === session.analysisConnectionId)?.name || "Nenhuma IA configurada"}</p>}
               <p className="mt-1 text-[11px] font-normal leading-relaxed text-slate-500">{canManageAi ? "A administração define qual conexão atende os cortes automáticos." : "A IA desta ferramenta é definida pela administração da empresa."}</p>
             </div>
-            <button type="button" disabled={!session.sourceUrl || !session.analysisConnectionId || analysing} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
-            <p className="text-xs leading-relaxed text-slate-500">Escolha uma IA com créditos para transcrever, analisar e criar legendas temporizadas. O sistema nunca cria notas ou trechos demonstrativos para um envio.</p>
+            <button type="button" disabled={!session.sourceUrl || !session.analysisConnectionId || analysing || !sourceFile || (session.minimum < 15 || session.maximum > 60 || session.minimum > session.maximum)} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
+            <p className="text-xs leading-relaxed text-slate-500">A IA analisa uma vez; as prévias abaixo usam o vídeo original e não consomem tokens. Somente arquivos locais enviados são analisados nesta versão.</p>
             {session.analysisMessage && <p role="status" className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${session.analysisStatus === "completed" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : session.analysisStatus === "failed" ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-amber-500/30 bg-amber-500/10 text-amber-100"}`}>{session.analysisMessage}</p>}
           </div>
         </aside>
@@ -286,8 +318,11 @@ export default function ClipsFree() {
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {session.suggestions.map((item) => <article key={item.id} className={`rounded-xl border p-3 ${selected?.id === item.id ? "border-violet-400 bg-violet-500/10" : "border-slate-800 bg-slate-900/50"}`}>
-            <div className="mb-3 flex h-20 items-end rounded-lg border border-slate-700/70 bg-gradient-to-br from-violet-950 via-slate-900 to-slate-950 p-2" aria-label={`Linha do tempo do trecho ${formatTime(item.start)} a ${formatTime(item.end)}`}><div className="h-2 w-full rounded-full bg-slate-700"><div className="h-2 rounded-full bg-violet-400" style={{ width: `${Math.max(14, Math.min(100, ((item.end - item.start) / Math.max(session.duration || item.end, 1)) * 100))}%` }} /></div></div>
-            <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-100">{item.title}</p><p className="mt-1 text-xs text-slate-400">{formatTime(item.start)} — {formatTime(item.end)} · {session.format}</p></div><span className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-300">{item.score}%</span></div>
+            <div className="mb-3 overflow-hidden rounded-lg border border-slate-700/70 bg-black">
+              <video ref={(node) => { if (node) clipPreviewRefs.current[item.id] = node; }} src={session.sourceUrl} preload="metadata" controls playsInline onTimeUpdate={(event) => stopAtSuggestedOut(item, event)} onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.max(0, item.start); }} aria-label={`Prévia do corte ${item.title}`} className="aspect-video w-full object-contain" />
+              <button type="button" onClick={() => playSuggestedClip(item)} className="flex w-full items-center justify-center gap-2 border-t border-slate-800 py-2 text-xs font-semibold text-violet-200"><Play size={12} /> Reproduzir do IN ao OUT</button>
+            </div>
+            <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-100">{item.title}</p><p className="mt-1 text-xs text-slate-400">{formatTime(item.start)} — {formatTime(item.end)} · {session.format}</p></div><span className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-300" title="Nota heurística baseada nas dimensões fornecidas pela IA; não prevê visualizações">{item.score}/100</span></div>
             <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">{item.notes}</p>
             <p className="mt-3 text-xs text-slate-400">{item.captions.length} legenda{item.captions.length === 1 ? " temporizada" : "s temporizadas"}</p>
             <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" aria-label={`Revisar trecho ${formatTime(item.start)} a ${formatTime(item.end)}`} onClick={() => reviewSuggestion(item)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-violet-400 hover:bg-slate-800"><Play size={14} /> Revisar</button><button type="button" onClick={() => openEditor(item)} className="flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-violet-300"><Clapperboard size={14} /> Editor</button></div>
@@ -313,8 +348,9 @@ export default function ClipsFree() {
       {session.workspaceClip && <section className="rounded-2xl border border-violet-500/30 bg-slate-950/70 p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-300">Corte em edição</p><h2 className="text-lg font-black text-white">{session.workspaceClip.titulo}</h2></div>
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">Rascunho salvo automaticamente</span>
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={exportSelectedXml} className="flex items-center gap-1 rounded-lg border border-violet-400/50 px-3 py-2 text-xs font-bold text-violet-200"><Download size={14} /> Exportar XML (FCPXML)</button><span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">Rascunho salvo automaticamente</span></div>
         </div>
+        <p className="mb-3 text-xs text-slate-400">O XML leva o intervalo IN/OUT e o nome do vídeo; no editor externo será necessário religar a mídia original. Não exporta efeitos nem legendas animadas.</p>
         <ClipWorkspace clip={session.workspaceClip} onChange={updateWorkspace} onProsseguir={() => updateWorkspace({ pronto: true })} />
       </section>}
     </div>
