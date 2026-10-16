@@ -19,64 +19,64 @@
       "status": "failed",
       "checks": {
         "backend_lint": {
-          "status": "passed",
-          "updated_at": "2026-10-11T14:49:57.303966+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/backend_lint.log"
+          "status": "failed",
+          "updated_at": "2026-10-16T01:49:59.145571+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/backend_lint.log"
         },
         "backend_format": {
-          "status": "passed",
-          "updated_at": "2026-10-11T14:49:57.698819+00:00",
-          "notes": "Exit 0; evidence: .runtime/checks/backend_format.log"
+          "status": "failed",
+          "updated_at": "2026-10-16T01:49:59.452536+00:00",
+          "notes": "Exit 1; evidence: .runtime/checks/backend_format.log"
         },
         "unit_tests": {
-          "status": "failed",
-          "updated_at": "2026-10-11T14:49:57.991238+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/unit_tests.log"
+          "status": "passed",
+          "updated_at": "2026-10-16T01:50:00.135397+00:00",
+          "notes": "Exit 0; evidence: .runtime/checks/unit_tests.log"
         },
         "migration": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:51:34.554533+00:00",
+          "updated_at": "2026-10-16T01:52:35.293082+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/migration.log"
         },
         "database_integration": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:51:36.540673+00:00",
+          "updated_at": "2026-10-16T01:52:39.309523+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/database_integration.log"
         },
         "dependency_consistency": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:51:39.058105+00:00",
+          "updated_at": "2026-10-16T01:52:44.398189+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/dependency_consistency.log"
         },
         "frontend_build": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:51:42.676481+00:00",
+          "updated_at": "2026-10-16T01:52:50.317919+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_build.log"
         },
         "frontend_lint": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:51:49.830007+00:00",
+          "updated_at": "2026-10-16T01:52:58.198526+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_lint.log"
         },
         "frontend_typecheck": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:52:03.236261+00:00",
+          "updated_at": "2026-10-16T01:53:42.647463+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/frontend_typecheck.log"
         },
         "frontend_unit_tests": {
-          "status": "failed",
-          "updated_at": "2026-10-11T14:52:07.922121+00:00",
-          "notes": "Exit 1; evidence: .runtime/checks/frontend_unit_tests.log"
+          "status": "blocked",
+          "updated_at": "2026-10-16T01:53:47.295790+00:00",
+          "notes": "Unable to execute (TimeoutExpired)"
         },
         "http_smoke": {
           "status": "passed",
-          "updated_at": "2026-10-11T14:53:23.722644+00:00",
+          "updated_at": "2026-10-16T02:07:21.706822+00:00",
           "notes": "Exit 0; evidence: .runtime/checks/http_smoke.log"
         },
         "original_frontend_integrity": {
           "status": "failed",
-          "updated_at": "2026-10-11T14:53:24.707081+00:00",
-          "notes": "288 original files; 7 approved typed corrections; 67 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/CorpProductionDetail.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/NewClipDialog.jsx, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/components/management/ManagementAuditoriaTab.jsx, src/mediamind/components/management/ManagementProcessamentosTab.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/clipEngineService.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js"
+          "updated_at": "2026-10-16T02:07:23.028125+00:00",
+          "notes": "288 original files; 7 approved typed corrections; 73 unapproved changes or missing. vite.config.js, package-lock.json, package.json, src/App.jsx, src/index.css, src/api/base44Client.js, src/mediamind/data.js, src/mediamind/auth.jsx, src/mediamind/Shell.jsx, src/mediamind/components/IngestNewPackage.jsx, src/mediamind/components/RoteiroEditor.jsx, src/mediamind/components/corp/FinalizadoTimeline.jsx, src/mediamind/components/corp/CorpAgenda.jsx, src/mediamind/components/corp/StageDragList.jsx, src/mediamind/components/corp/CorpProductionDetail.jsx, src/mediamind/components/corp/RascunhosPage.jsx, src/mediamind/components/corp/SocialCortesWorkspace.jsx, src/mediamind/components/corp/CorpPublications.jsx, src/mediamind/components/corp/RoleInicio.jsx, src/mediamind/components/corp/AgendaEventDetail.jsx, src/mediamind/components/corp/CorpAnalytics.jsx, src/mediamind/components/corp/GravacoesMateriais.jsx, src/mediamind/components/corp/roles/EdicaoPage.jsx, src/mediamind/components/corp/roles/AdminAcessosPage.jsx, src/mediamind/components/corp/roles/VideomakerPage.jsx, src/mediamind/components/corp/roles/DesignPage.jsx, src/mediamind/components/corp/roles/AgendamentosView.jsx, src/mediamind/components/corp/roles/EditorVideoPage.jsx, src/mediamind/components/corp/roles/CedocPage.jsx, src/mediamind/components/corp/roles/EndomarketingPage.jsx, src/mediamind/components/corp/roles/AprovacoesPage.jsx, src/mediamind/components/corp/roles/EmployeeAccessRow.jsx, src/mediamind/components/corp/roles/CommonScreens.jsx, src/mediamind/components/corp/roles/AprovacaoReviewPanel.jsx, src/mediamind/components/corp/roles/ProdutoraPage.jsx, src/mediamind/components/corp/roles/AssessoriaPage.jsx, src/mediamind/components/corp/roles/AgendamentoDetail.jsx, src/mediamind/components/corp/roles/AudiovisualPage.jsx, src/mediamind/components/corp/roles/RolePageShell.jsx, src/mediamind/components/corp/roles/GestaoPage.jsx, src/mediamind/components/corp/roles/DocumentacaoPage.jsx, src/mediamind/components/corp/roles/RedacaoPage.jsx, src/mediamind/components/corp/roles/RevistasPage.jsx, src/mediamind/components/corp/agenda/AgendaCalendarView.jsx, src/mediamind/components/corp/recortes/ClipPlayer.jsx, src/mediamind/components/corp/recortes/clipModel.js, src/mediamind/components/corp/recortes/NewClipDialog.jsx, src/mediamind/components/corp/recortes/ClipCandidatesPanel.jsx, src/mediamind/components/corp/recortes/ClipWorkspace.jsx, src/mediamind/components/corp/recortes/ClipLegendasPanel.jsx, src/mediamind/components/corp/recortes/ClipCGPanel.jsx, src/mediamind/components/management/ManagementAuditoriaTab.jsx, src/mediamind/components/management/ManagementProcessamentosTab.jsx, src/mediamind/pages/Workspace.jsx, src/mediamind/pages/AssistenteIA.jsx, src/mediamind/pages/Home.jsx, src/mediamind/pages/Timeline.jsx, src/mediamind/pages/Login.jsx, src/mediamind/pages/Search.jsx, src/mediamind/pages/ViralClips.jsx, src/mediamind/pages/Corp.jsx, src/mediamind/pages/Management.jsx, src/mediamind/pages/Acervo.jsx, src/mediamind/lib/empresaContext.jsx, src/mediamind/lib/producaoStore.js, src/mediamind/lib/quickActions.js, src/mediamind/lib/mamData.js, src/mediamind/lib/roleCatalog.js, src/mediamind/lib/roleInicioData.js, src/mediamind/lib/clipEngineService.js, src/mediamind/lib/roleSubtabs.js, src/mediamind/lib/permissions.js, src/lib/app-params.js"
         },
         "frontend_functional_validation": {
           "status": "partial",
@@ -85,11 +85,11 @@
         },
         "git_clean_at_check": {
           "status": "pending",
-          "updated_at": "2026-10-11T14:53:24.707081+00:00",
+          "updated_at": "2026-10-16T02:07:23.028125+00:00",
           "notes": "Snapshot before writing this report. Verify and commit reviewed work separately."
         }
       },
-      "updated_at": "2026-10-11T14:53:24.707081+00:00",
+      "updated_at": "2026-10-16T02:07:23.028125+00:00",
       "notes": "Partial M0; unresolved gates. Do not advance to M1."
     },
     "M1": {

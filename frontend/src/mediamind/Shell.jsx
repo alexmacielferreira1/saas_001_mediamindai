@@ -156,6 +156,7 @@ export const NAV_GROUPS = [
     group: "IA",
     items: [
       { to: "/estudio-de-arte", label: "Estúdio de Arte", icon: Palette },
+      { to: "/geracao-de-video", label: "Geração de vídeo", icon: Clapperboard },
       {
         to: "/ferramentas-graficas",
         label: "Ferramentas Gráficas",

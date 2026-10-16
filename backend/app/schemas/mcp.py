@@ -10,6 +10,7 @@ class MCPToolCall(BaseModel):
 class MCPQueueCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     module: str = Field(min_length=1, max_length=80)
+    tool_name: str | None = Field(default=None, min_length=1, max_length=160)
     instruction: str = Field(min_length=1, max_length=4000)
     target_projects: list[str] = Field(default_factory=list, max_length=500)
     create_projects: list[str] = Field(default_factory=list, max_length=500)

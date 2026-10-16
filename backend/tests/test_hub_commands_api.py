@@ -118,6 +118,28 @@ def test_replayed_idempotency_key_returns_the_same_command_without_second_row(co
     assert command_count(session_factory) == 1
 
 
+def test_idempotency_key_rejects_different_command_payload_without_second_row(command_client):
+    client, session_factory = command_client
+    key = "same-key-different-operation"
+
+    first = post_command(client, "system.describe", key=key)
+    conflict = post_command(client, "media.count", key=key)
+
+    assert first.status_code == 202
+    assert conflict.status_code == 409
+    assert conflict.json()["error_code"] == "HUB_IDEMPOTENCY_CONFLICT"
+    assert command_count(session_factory) == 1
+
+
+def test_command_lookup_does_not_expose_unknown_command(command_client):
+    client, _session_factory = command_client
+
+    response = client.get(f"/api/hub/v1/commands/{uuid4()}", headers=HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "HUB_COMMAND_NOT_FOUND"
+
+
 def test_invalid_service_token_creates_no_command(command_client):
     client, session_factory = command_client
     headers = {**HEADERS, "Authorization": "Bearer wrong-token", "Idempotency-Key": "bad"}

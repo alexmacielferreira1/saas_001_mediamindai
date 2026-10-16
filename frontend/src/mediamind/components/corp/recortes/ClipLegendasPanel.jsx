@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Play, Trash2, Plus, Scissors, Save, Volume2, VolumeX } from 'lucide-react';
+import React from 'react';
+import { Play, Trash2, Plus, Scissors, Save, Video } from 'lucide-react';
 import { fmt, gerarLegendas } from './clipModel';
 
 const ESTILOS = [
@@ -17,19 +17,17 @@ const POSICOES = [
 // Legendas: gerar, editar texto, dividir, remover. Remover pode cortar o áudio
 // (cortar_audio true) ou só o texto. Os cortes de áudio ficam listados embaixo.
 export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, onAvancar }) {
-  const [cortarAudioPadrao, setCortarAudioPadrao] = useState(false);
-
   function gerar() { onChange({ legendas: gerarLegendas(clip) }); }
   function upd(id, patch) { onChange({ legendas: clip.legendas.map((l) => (l.id === id ? { ...l, ...patch } : l)) }); }
   function add() {
     const last = clip.legendas[clip.legendas.length - 1];
     const start = last ? last.end_ms : clip.in_ms;
-    onChange({ legendas: [...clip.legendas, { id: `l-${Date.now()}`, start_ms: start, end_ms: start + 3000, texto: '', cortar_audio: cortarAudioPadrao }] });
+    onChange({ legendas: [...clip.legendas, { id: `l-${Date.now()}`, start_ms: start, end_ms: start + 3000, texto: '', cortar_audio: false }] });
   }
-  function remove(id) {
+  function remove(id, { removeVideo = false } = {}) {
     const l = clip.legendas.find((x) => x.id === id);
-    const cortes = l?.cortar_audio ? [...clip.cortes_audio, { start_ms: l.start_ms, end_ms: l.end_ms }] : clip.cortes_audio;
-    onChange({ legendas: clip.legendas.filter((x) => x.id !== id), cortes_audio: cortes });
+    const videoCuts = removeVideo && l ? [...(clip.cortes_video || []), { start_ms: l.start_ms, end_ms: l.end_ms }] : (clip.cortes_video || []);
+    onChange({ legendas: clip.legendas.filter((x) => x.id !== id), cortes_audio: clip.cortes_audio || [], cortes_video: videoCuts });
   }
   function split(id) {
     const l = clip.legendas.find((x) => x.id === id);
@@ -47,10 +45,7 @@ export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, on
           <button onClick={gerar} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">Gerar legendas</button>
           <button onClick={add} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-slate-800"><Plus size={12} /> Legenda</button>
         </div>
-        <label className="flex items-center gap-1.5 text-[10px] text-slate-400">
-          <input type="checkbox" checked={cortarAudioPadrao} onChange={(e) => setCortarAudioPadrao(e.target.checked)} className="accent-sky-500" />
-          Ao cortar, cortar o áudio também
-        </label>
+        <p className="text-[10px] text-slate-500">Remova só o texto ou elimine o intervalo completo do vídeo.</p>
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto">
@@ -62,8 +57,8 @@ export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, on
               <span className="text-[10px] text-slate-500">{fmt(l.start_ms)} – {fmt(l.end_ms)}</span>
               <div className="ml-auto flex items-center gap-1">
                 <button onClick={() => split(l.id)} title="Dividir" className="rounded-md border border-slate-700 px-1.5 py-1 text-slate-300 hover:bg-slate-800"><Scissors size={11} /></button>
-                <button onClick={() => upd(l.id, { cortar_audio: !l.cortar_audio })} title={l.cortar_audio ? 'Remover corta o áudio' : 'Remover só o texto'} className={`rounded-md border px-1.5 py-1 ${l.cortar_audio ? 'border-rose-700 text-rose-300' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>{l.cortar_audio ? <VolumeX size={11} /> : <Volume2 size={11} />}</button>
-                <button onClick={() => remove(l.id)} title="Remover legenda" className="rounded-md border border-slate-700 px-1.5 py-1 text-slate-300 hover:bg-rose-950/40 hover:text-rose-300"><Trash2 size={11} /></button>
+                <button type="button" onClick={() => remove(l.id)} className="rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-rose-950/40 hover:text-rose-300"><Trash2 size={11} className="mr-1 inline" />Remover legenda</button>
+                <button type="button" onClick={() => remove(l.id, { removeVideo: true })} className="rounded-md border border-rose-700/70 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-950/40"><Video size={11} className="mr-1 inline" />Remover legenda e vídeo</button>
               </div>
             </div>
             <textarea value={l.texto} onChange={(e) => upd(l.id, { texto: e.target.value })} rows={2} className="w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500" />
@@ -73,7 +68,6 @@ export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, on
               <span className="ml-2 font-semibold uppercase tracking-wide text-slate-500">Posição</span>
               {POSICOES.map((posicao) => <button key={posicao.id} type="button" onClick={() => upd(l.id, { posicao: posicao.id })} className={`rounded border px-1.5 py-1 ${l.posicao === posicao.id || (!l.posicao && posicao.id === 'bottom') ? 'border-violet-500 bg-violet-500/15 text-violet-200' : 'border-slate-700 text-slate-400 hover:bg-slate-800'}`}>{posicao.label}</button>)}
             </div>
-            {l.cortar_audio && <p className="mt-1 text-[9px] text-rose-300/80">Remover esta legenda vai cortar o áudio deste trecho.</p>}
           </div>
         ))}
       </div>
@@ -84,6 +78,13 @@ export default function ClipLegendasPanel({ clip, onChange, seekTo, onSalvar, on
           <div className="flex flex-wrap gap-1.5">
             {clip.cortes_audio.map((c, i) => <span key={i} className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] text-rose-300">{fmt(c.start_ms)}–{fmt(c.end_ms)}</span>)}
           </div>
+        </div>
+      )}
+
+      {(clip.cortes_video || []).length > 0 && (
+        <div className="rounded-lg border border-rose-900/40 bg-rose-950/20 p-2.5">
+          <p className="mb-1 text-[10px] font-bold uppercase text-rose-300/80">Intervalos removidos do vídeo</p>
+          <div className="flex flex-wrap gap-1.5">{clip.cortes_video.map((c, i) => <span key={i} className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] text-rose-300">{fmt(c.start_ms)}–{fmt(c.end_ms)}</span>)}</div>
         </div>
       )}
 

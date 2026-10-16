@@ -105,6 +105,21 @@ def test_authenticated_readiness_reports_database_evidence(hub_client, monkeypat
     assert response.json()["checks"] == {"api": "ready", "database": "ready"}
 
 
+def test_authenticated_readiness_reports_database_unavailability_without_internal_details(
+    hub_client, monkeypatch
+):
+    import app.api.v1.hub_admin as hub_admin
+
+    monkeypatch.setattr(hub_admin, "database_available", lambda: False)
+
+    response = hub_client.get("/api/hub/v1/readiness", headers=BASE_HEADERS)
+
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "HUB_DATABASE_UNAVAILABLE"
+    assert TOKEN not in response.text
+    assert "database_url" not in response.text
+
+
 def test_authenticated_version_identifies_product_and_api(hub_client):
     response = hub_client.get("/api/hub/v1/version", headers=BASE_HEADERS)
 

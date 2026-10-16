@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import MCPCenter from "./MCPCenter";
 
@@ -11,10 +11,13 @@ const catalog = {
     { id: "system", label: "Sistema", description: "Descoberta", status: "connected" },
     { id: "mmfilm", label: "MMFilm", description: "Timeline", status: "connected" },
     { id: "mmphoto", label: "MMPhoto", description: "Imagem", status: "planned" },
+    { id: "ai-tools", label: "Ferramentas IA", description: "IA", status: "connected" },
   ],
   tools: [
     { name: "system.capabilities", module: "system", title: "Descobrir capacidades", description: "Lista capacidades", effect: "read", available: true },
     { name: "mmphoto.inspect", module: "mmphoto", title: "Inspecionar imagem", description: "Lê imagem", effect: "read", available: false },
+    { name: "ai-tools.prompt", module: "ai-tools", title: "Executar prompt com IA cadastrada", description: "Usa IA", effect: "generate", available: true },
+    { name: "ai-tools.video_studio", module: "ai-tools", title: "Gerar etapa do Video Studio", description: "Usa IA de vídeo", effect: "generate", available: true },
   ],
 };
 
@@ -57,5 +60,16 @@ describe("MCPCenter", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("MCP indisponível");
     expect(screen.queryByText("Chamada concluída")).not.toBeInTheDocument();
+  });
+
+  it("sends the typed prompt to the registered IA tool", async () => {
+    render(<MCPCenter initialModule="ai-tools" />);
+    const input = await screen.findByRole("textbox", { name: "Prompt para IA" });
+    fireEvent.change(input, { target: { value: "Resuma o briefing." } });
+    fireEvent.click(screen.getByRole("button", { name: "Executar Executar prompt com IA cadastrada" }));
+
+    await waitFor(() => expect(api.callMCPTool).toHaveBeenCalledWith("ai-tools.prompt", {
+      prompt: "Resuma o briefing.",
+    }));
   });
 });

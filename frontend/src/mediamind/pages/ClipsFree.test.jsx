@@ -31,7 +31,7 @@ describe("CLIPSFREE", () => {
       candidates: [],
       message: "A transcrição ainda não está configurada para esta empresa.",
     });
-    aiApi.getAIConnections.mockResolvedValue({ connections: [{ id: "credits-ai", name: "IA com créditos", model: "modelo-real", enabled: true, key_configured: true }] });
+    aiApi.getAIConnections.mockResolvedValue({ connections: [{ id: "credits-ai", name: "IA com créditos", model: "modelo-real", enabled: true, key_configured: true }], tool_connections: { "auto-clips": "credits-ai" }, can_manage: true });
   });
 
   it("turns an uploaded source into an editable local clip session", async () => {
@@ -58,6 +58,8 @@ describe("CLIPSFREE", () => {
 
     expect(await screen.findByText(/transcrição ainda não está configurada/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Sugestões de cortes" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir editor manual" }));
+    expect(screen.getByRole("heading", { name: "Corte manual" })).toBeInTheDocument();
     expect(mediaApi.uploadMediaAsset).toHaveBeenCalledWith(video, { origin: "clipsfree" });
     expect(clipsApi.startClipAnalysis).toHaveBeenCalledWith("asset-real", "credits-ai");
   });
@@ -70,6 +72,56 @@ describe("CLIPSFREE", () => {
 
     expect(screen.getByText(/master ainda não foi vinculado/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Prévia do vídeo de origem")).not.toBeInTheDocument();
+  });
+
+  it("opens the new-cut intake with project, file and authorized URL choices", () => {
+    render(<ClipsFree />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Novo corte" }));
+
+    expect(screen.getByRole("heading", { name: "Novo corte" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Usar projeto finalizado/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Enviar arquivo/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("URL do vídeo")).toBeInTheDocument();
+  });
+
+  it("shows returned suggestions as reviewable cuts before opening the editor", async () => {
+    clipsApi.startClipAnalysis.mockResolvedValueOnce({
+      id: "analysis-real",
+      status: "completed",
+      message: "Análise concluída.",
+      candidates: [{
+        id: "candidate-1",
+        quote: "A vacinação protege toda a comunidade.",
+        start: 12,
+        end: 42,
+        score: 88,
+        rationale: "O trecho começa com uma afirmação completa e tem contexto suficiente.",
+        captions: [{ start: 12, end: 16, text: "A vacinação protege" }],
+      }],
+    });
+    render(<ClipsFree />);
+    await screen.findByRole("option", { name: /IA com créditos/i });
+    fireEvent.change(screen.getByLabelText("Selecionar vídeo"), { target: { files: [new File(["video"], "podcast.mp4", { type: "video/mp4" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Gerar sugestões" }));
+
+    expect(await screen.findByRole("heading", { name: "Sugestões de cortes" })).toBeInTheDocument();
+    expect(screen.getByText("A vacinação protege toda a comunidade.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Revisar trecho 00:12 a 00:42/ })).toBeInTheDocument();
+    expect(screen.getByText("1 legenda temporizada")).toBeInTheDocument();
+  });
+
+  it("shows the admin-assigned AI without exposing a selector to regular users", async () => {
+    aiApi.getAIConnections.mockResolvedValueOnce({
+      connections: [{ id: "credits-ai", name: "IA definida pela empresa", model: "modelo-real", enabled: true, key_configured: true }],
+      tool_connections: { "auto-clips": "credits-ai" },
+      can_manage: false,
+    });
+    render(<ClipsFree />);
+
+    expect(await screen.findByText("IA definida pela empresa")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "IA para analisar e legendar" })).not.toBeInTheDocument();
+    expect(screen.getByText("A IA desta ferramenta é definida pela administração da empresa.")).toBeInTheDocument();
   });
 
 });

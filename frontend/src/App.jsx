@@ -30,6 +30,7 @@ import Roteiro2 from "./mediamind/pages/Roteiro2";
 import Corp from "./mediamind/pages/Corp";
 import ViralClips from "./mediamind/pages/ViralClips";
 import ClipsFree from "./mediamind/pages/ClipsFree";
+import ClipsFree2 from "./mediamind/pages/ClipsFree2";
 import Ingest from "./mediamind/pages/Ingest";
 import Workspace2 from "./mediamind/pages/Workspace2";
 import Timeline from "./mediamind/pages/Timeline";
@@ -38,6 +39,7 @@ import SearchPage from "./mediamind/pages/Search";
 import AssistenteIA from "./mediamind/pages/AssistenteIA";
 import ThumbnailStudio from "./mediamind/pages/ThumbnailStudio";
 import AITools from "./mediamind/pages/AITools";
+import VideoGeneration from "./mediamind/pages/VideoGeneration";
 import GraphicTools from "./mediamind/pages/GraphicTools";
 import SoundCraft from "./mediamind/pages/SoundCraft";
 import OfficeCraft from "./mediamind/pages/OfficeCraft";
@@ -154,6 +156,16 @@ const AuthenticatedApp = () => {
           }
         />
         <Route
+          path="/clipsfree2"
+          element={
+            <ModuleRoute moduleId="social">
+              <Shell>
+                <ClipsFree2 />
+              </Shell>
+            </ModuleRoute>
+          }
+        />
+        <Route
           path="/acervo"
           element={
             <ModuleRoute moduleId="acervo">
@@ -237,6 +249,16 @@ const AuthenticatedApp = () => {
             <ModuleRoute moduleId="ai_tools">
               <Shell>
                 <AITools />
+              </Shell>
+            </ModuleRoute>
+          }
+        />
+        <Route
+          path="/geracao-de-video"
+          element={
+            <ModuleRoute moduleId="ai_tools">
+              <Shell>
+                <VideoGeneration />
               </Shell>
             </ModuleRoute>
           }

@@ -258,6 +258,22 @@ class ImageGenerationRequest(BaseModel):
     count: int = Field(default=1, ge=1, le=4)
 
 
+class VideoStudioGenerationRequest(BaseModel):
+    stage: Literal[
+        "roteiro",
+        "elementos",
+        "mood_style",
+        "character_sheets",
+        "shot_list",
+        "storyboard",
+        "prompts",
+        "multiplanos",
+    ]
+    prompt: str = Field(min_length=1, max_length=240_000)
+    connection_id: str | None = Field(default=None, max_length=80)
+    max_tokens: int = Field(default=4000, ge=256, le=8192)
+
+
 LEGACY_AI_FUNCTIONS = {
     "analisar_clipes_ia",
     "assistente_ia",
@@ -308,6 +324,78 @@ def decrypt_ai_key(data: dict[str, Any]) -> str:
             503,
             "AI_KEY_UNREADABLE",
             "Reconfigure a chave de IA deste cliente.",
+        ) from error
+
+
+async def generate_connection_text(
+    data: dict[str, Any], prompt: str, *, max_tokens: int = 4000
+) -> str:
+    key = decrypt_ai_key(data)
+    base_url = data["base_url"].rstrip("/")
+    if data["provider"] == "anthropic":
+        url = f"{base_url}/messages"
+        headers = {
+            "content-type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+        }
+        payload = {
+            "model": data["model"],
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    else:
+        url = f"{base_url}/chat/completions"
+        headers = {"content-type": "application/json", "authorization": f"Bearer {key}"}
+        payload = {
+            "model": data["model"],
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+        result = response.json()
+        if data["provider"] == "anthropic":
+            if result.get("stop_reason") == "max_tokens":
+                raise PublicError(
+                    502,
+                    "AI_OUTPUT_TRUNCATED",
+                    "A resposta excedeu o limite de saída. Reduza o pedido e tente novamente.",
+                )
+            text = "\n".join(
+                block.get("text", "")
+                for block in result.get("content", [])
+                if block.get("type") == "text"
+            ).strip()
+        else:
+            choices = result.get("choices") or []
+            if choices and choices[0].get("finish_reason") == "length":
+                raise PublicError(
+                    502,
+                    "AI_OUTPUT_TRUNCATED",
+                    "A resposta excedeu o limite de saída. Reduza o pedido e tente novamente.",
+                )
+            content = choices[0].get("message", {}).get("content") if choices else ""
+            text = content.strip() if isinstance(content, str) else ""
+        if not text:
+            raise PublicError(502, "AI_INVALID_RESPONSE", "A IA não retornou texto.")
+        return text
+    except PublicError:
+        raise
+    except httpx.HTTPStatusError as error:
+        raise PublicError(
+            422,
+            "AI_GENERATION_REJECTED",
+            "O provedor recusou a execução. Verifique chave, modelo e créditos.",
+        ) from error
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+        raise PublicError(
+            503,
+            "AI_PROVIDER_UNAVAILABLE",
+            "O provedor de IA está indisponível ou respondeu em formato inválido.",
+            retryable=True,
         ) from error
 
 
@@ -466,6 +554,127 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
     )
     session.commit()
     return {"images": images, "model": data["model"], "provider": data["provider"]}
+
+
+@router.post("/generation/video-studio")
+async def generate_video_studio_stage(
+    body: VideoStudioGenerationRequest,
+    current: Authenticated,
+    session: DbSession,
+):
+    membership = require_membership(current)
+    record = ai_settings_record(session, membership.tenant_id)
+    configuration = connection_configuration(record.data if record else {})
+    connection_id = body.connection_id or configuration.get("tool_connections", {}).get(
+        "video-studio", configuration.get("default_connection_id")
+    )
+    data = next(
+        (
+            item
+            for item in configuration["connections"]
+            if item.get("id") == connection_id and item.get("enabled", True)
+        ),
+        None,
+    )
+    if data is None:
+        if body.connection_id:
+            raise PublicError(
+                422,
+                "AI_INVALID_ASSIGNMENT",
+                "Escolha uma conexão de IA ativa desta empresa.",
+            )
+        raise PublicError(
+            503,
+            "AI_PROVIDER_NOT_CONFIGURED",
+            "Cadastre ou selecione uma conexão de IA ativa para o Video Studio.",
+        )
+    key = decrypt_ai_key(data)
+    base_url = data["base_url"].rstrip("/")
+    if data["provider"] == "anthropic":
+        url = f"{base_url}/messages"
+        headers = {
+            "content-type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+        }
+        payload = {
+            "model": data["model"],
+            "max_tokens": body.max_tokens,
+            "messages": [{"role": "user", "content": body.prompt}],
+        }
+    else:
+        url = f"{base_url}/chat/completions"
+        headers = {"content-type": "application/json", "authorization": f"Bearer {key}"}
+        payload = {
+            "model": data["model"],
+            "max_tokens": body.max_tokens,
+            "messages": [{"role": "user", "content": body.prompt}],
+        }
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+        result = response.json()
+        if data["provider"] == "anthropic":
+            if result.get("stop_reason") == "max_tokens":
+                raise PublicError(
+                    502,
+                    "AI_OUTPUT_TRUNCATED",
+                    "A resposta excedeu o limite de saída desta etapa. "
+                    "Reduza o contexto e tente novamente.",
+                )
+            text = "\n".join(
+                block.get("text", "")
+                for block in result.get("content", [])
+                if block.get("type") == "text"
+            ).strip()
+        else:
+            choices = result.get("choices") or []
+            if choices and choices[0].get("finish_reason") == "length":
+                raise PublicError(
+                    502,
+                    "AI_OUTPUT_TRUNCATED",
+                    "A resposta excedeu o limite de saída desta etapa. "
+                    "Reduza o contexto e tente novamente.",
+                )
+            content = choices[0].get("message", {}).get("content") if choices else ""
+            text = content.strip() if isinstance(content, str) else ""
+        if not text:
+            raise PublicError(
+                502,
+                "AI_INVALID_RESPONSE",
+                "A IA não retornou texto para esta etapa. Tente novamente.",
+            )
+    except PublicError:
+        raise
+    except httpx.HTTPStatusError as error:
+        raise PublicError(
+            422,
+            "AI_GENERATION_REJECTED",
+            "O provedor recusou a etapa. Verifique chave, modelo e créditos.",
+        ) from error
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, AttributeError) as error:
+        raise PublicError(
+            503,
+            "AI_PROVIDER_UNAVAILABLE",
+            "O provedor de IA está indisponível ou respondeu em formato inválido. Tente novamente.",
+            retryable=True,
+        ) from error
+    add_audit(
+        session,
+        current,
+        "ai.video_studio_stage_generated",
+        SETTINGS_ENTITY,
+        str(record.id),
+        {"provider": data["provider"], "model": data["model"], "stage": body.stage},
+    )
+    session.commit()
+    return {
+        "text": text,
+        "provider": data["provider"],
+        "model": data["model"],
+        "connection_id": data["id"],
+    }
 
 
 @router.post("/functions/{function_name}")

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Clapperboard, Clock3, Film, Play, Scissors, Sparkles, Upload, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Clapperboard, Clock3, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
 import { uploadMediaAsset } from "../../api/media";
 import { startClipAnalysis } from "../../api/clips";
 import { getAIConnections } from "../../api/generation";
@@ -50,6 +50,10 @@ export default function ClipsFree() {
   const [sourceFile, setSourceFile] = useState(null);
   const [analysing, setAnalysing] = useState(false);
   const [connections, setConnections] = useState([]);
+  const [canManageAi, setCanManageAi] = useState(false);
+  const [newCutOpen, setNewCutOpen] = useState(false);
+  const [sourceUrlInput, setSourceUrlInput] = useState("");
+  const sourcePreviewRef = useRef(null);
   const finalizados = useMemo(() => projetos.filter((project) => project.etapa === "finalizado"), [projetos]);
   const selected = useMemo(
     () => session.suggestions.find((item) => item.id === session.selectedSuggestionId) || session.suggestions[0],
@@ -63,7 +67,9 @@ export default function ClipsFree() {
         if (!active) return;
         const available = (result.connections || []).filter((connection) => connection.enabled && connection.key_configured);
         setConnections(available);
-        if (!session.analysisConnectionId && available[0]?.id) update({ analysisConnectionId: available[0].id });
+        setCanManageAi(Boolean(result.can_manage));
+        const assigned = result.tool_connections?.["auto-clips"] || result.default_connection_id || available[0]?.id || "";
+        if (assigned) update({ analysisConnectionId: assigned });
       })
       .catch(() => { if (active) setConnections([]); });
     return () => { active = false; };
@@ -147,6 +153,9 @@ export default function ClipsFree() {
         out_ms: Math.round(item.end * 1000),
         duration_ms: Math.round((session.duration || item.end) * 1000),
         formato: session.format,
+        source_asset_id: session.sourceAssetId || null,
+        analysis_candidates: session.suggestions,
+        analysis_status: session.analysisStatus,
         source_project_id: session.sourceProject?.id || null,
         legendas: item.captions.map((caption, index) => ({
           id: `caption-${item.id}-${index}`,
@@ -159,8 +168,32 @@ export default function ClipsFree() {
     });
   }
 
+  function openManualEditor() {
+    openEditor({
+      id: "manual",
+      title: "Corte manual",
+      start: 0,
+      end: Math.max(5, Math.min(session.duration || session.maximum, session.maximum)),
+      score: null,
+      notes: "Defina os pontos de entrada e saída diretamente no editor.",
+      captions: [],
+    });
+  }
+
+  function reviewSuggestion(item) {
+    update({ selectedSuggestionId: item.id });
+    if (sourcePreviewRef.current) {
+      sourcePreviewRef.current.currentTime = item.start;
+      sourcePreviewRef.current.play().catch(() => {});
+    }
+  }
+
   function updateWorkspace(patch) {
     update({ workspaceClip: { ...session.workspaceClip, ...patch } });
+  }
+
+  function requestUrlImport() {
+    update({ analysisStatus: "unavailable", analysisMessage: "A importação por URL depende de um conector autorizado. Envie o arquivo ou selecione um projeto até ele ser configurado." });
   }
 
   return (
@@ -171,8 +204,10 @@ export default function ClipsFree() {
           <h1 className="mt-1 text-3xl font-black tracking-tight text-white">CLIPSFREE</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">Transforme um vídeo em uma sessão de cortes: assista, defina o formato, selecione trechos e mantenha o rascunho neste navegador.</p>
         </div>
-        <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Sessão local protegida</span>
+        <div className="flex items-center gap-2"><span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200">Sessão local protegida</span><button type="button" onClick={() => setNewCutOpen(true)} className="flex items-center gap-1 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950"><Plus size={15} /> Novo corte</button></div>
       </header>
+
+      {newCutOpen && <section role="dialog" aria-modal="true" aria-labelledby="new-cut-title" className="rounded-2xl border border-violet-400/40 bg-slate-950 p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><h2 id="new-cut-title" className="text-xl font-black text-white">Novo corte</h2><p className="mt-1 text-sm text-slate-400">Escolha a origem; a mesma sessão seguirá para sugestões, revisão, editor e publicação.</p></div><button type="button" aria-label="Fechar novo corte" onClick={() => setNewCutOpen(false)} className="rounded-lg border border-slate-700 p-2 text-slate-300"><X size={16} /></button></div><div className="mt-4 grid gap-3 md:grid-cols-3"><button type="button" onClick={() => { setNewCutOpen(false); }} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 text-left hover:border-violet-400"><Film size={20} className="text-violet-300" /><b className="mt-3 block">Usar projeto finalizado</b><span className="mt-1 block text-xs text-slate-500">Escolha um master na coluna de produções.</span></button><label role="button" className="cursor-pointer rounded-xl border border-slate-700 bg-slate-900/60 p-4 hover:border-violet-400"><Upload size={20} className="text-violet-300" /><b className="mt-3 block">Enviar arquivo</b><span className="mt-1 block text-xs text-slate-500">MP4, MOV ou WebM do seu computador.</span><input aria-label="Arquivo do novo corte" type="file" accept="video/mp4,video/quicktime,video/webm" className="sr-only" onChange={(event) => { chooseSource(event); setNewCutOpen(false); }} /></label><div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4"><Link2 size={20} className="text-violet-300" /><b className="mt-3 block">Importar por URL</b><input aria-label="URL do vídeo" value={sourceUrlInput} onChange={(event) => setSourceUrlInput(event.target.value)} placeholder="https://…" className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-white" /><button type="button" onClick={requestUrlImport} className="mt-2 rounded-lg border border-violet-400/50 px-3 py-2 text-xs font-bold text-violet-200">Validar URL autorizada</button></div></div></section>}
 
       <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_360px]">
         <aside className="order-2 rounded-2xl border border-slate-800 bg-slate-950/60 xl:order-none">
@@ -202,7 +237,7 @@ export default function ClipsFree() {
           </div>
           {session.sourceUrl ? (
             <div className="bg-black p-3">
-              <video aria-label="Prévia do vídeo de origem" src={session.sourceUrl} controls className="max-h-[480px] min-h-64 w-full rounded-xl bg-black" onLoadedMetadata={(event) => update({ duration: event.currentTarget.duration })} />
+              <video ref={sourcePreviewRef} aria-label="Prévia do vídeo de origem" src={session.sourceUrl} controls className="max-h-[480px] min-h-64 w-full rounded-xl bg-black" onLoadedMetadata={(event) => update({ duration: event.currentTarget.duration })} />
             </div>
           ) : (
             <label className="flex min-h-80 cursor-pointer flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-700 bg-slate-950/40 px-6 text-center transition hover:border-violet-400 hover:bg-violet-500/5">
@@ -230,12 +265,13 @@ export default function ClipsFree() {
               <label className="text-xs font-semibold text-slate-400">Máximo (s)<input aria-label="Duração máxima" type="number" min="5" value={session.maximum} onChange={(event) => update({ maximum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             </div>
             <label className="block text-xs font-semibold text-slate-400">Orientação editorial<textarea aria-label="Orientação editorial" value={session.prompt} onChange={(event) => update({ prompt: event.target.value })} rows="4" className="mt-1 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
-            <label className="block text-xs font-semibold text-slate-400">IA para analisar e legendar
-              <select aria-label="IA para analisar e legendar" value={session.analysisConnectionId} onChange={(event) => update({ analysisConnectionId: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400">
+            <div className="block text-xs font-semibold text-slate-400">IA para analisar e legendar
+              {canManageAi ? <select aria-label="IA para analisar e legendar" value={session.analysisConnectionId} onChange={(event) => update({ analysisConnectionId: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400">
                 {connections.length === 0 && <option value="">Nenhuma IA com créditos configurada</option>}
                 {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name} · {connection.model}</option>)}
-              </select>
-            </label>
+              </select> : <p className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm font-medium text-slate-200">{connections.find((connection) => connection.id === session.analysisConnectionId)?.name || "Nenhuma IA configurada"}</p>}
+              <p className="mt-1 text-[11px] font-normal leading-relaxed text-slate-500">{canManageAi ? "A administração define qual conexão atende os cortes automáticos." : "A IA desta ferramenta é definida pela administração da empresa."}</p>
+            </div>
             <button type="button" disabled={!session.sourceUrl || !session.analysisConnectionId || analysing} onClick={generateSuggestions} className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2.5 text-sm font-black text-slate-950 transition hover:bg-violet-300 disabled:cursor-not-allowed disabled:opacity-40"><Sparkles size={16} /> {analysing ? "Analisando..." : "Gerar sugestões"}</button>
             <p className="text-xs leading-relaxed text-slate-500">Escolha uma IA com créditos para transcrever, analisar e criar legendas temporizadas. O sistema nunca cria notas ou trechos demonstrativos para um envio.</p>
             {session.analysisMessage && <p role="status" className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${session.analysisStatus === "completed" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : session.analysisStatus === "failed" ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-amber-500/30 bg-amber-500/10 text-amber-100"}`}>{session.analysisMessage}</p>}
@@ -250,11 +286,18 @@ export default function ClipsFree() {
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {session.suggestions.map((item) => <article key={item.id} className={`rounded-xl border p-3 ${selected?.id === item.id ? "border-violet-400 bg-violet-500/10" : "border-slate-800 bg-slate-900/50"}`}>
+            <div className="mb-3 flex h-20 items-end rounded-lg border border-slate-700/70 bg-gradient-to-br from-violet-950 via-slate-900 to-slate-950 p-2" aria-label={`Linha do tempo do trecho ${formatTime(item.start)} a ${formatTime(item.end)}`}><div className="h-2 w-full rounded-full bg-slate-700"><div className="h-2 rounded-full bg-violet-400" style={{ width: `${Math.max(14, Math.min(100, ((item.end - item.start) / Math.max(session.duration || item.end, 1)) * 100))}%` }} /></div></div>
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-100">{item.title}</p><p className="mt-1 text-xs text-slate-400">{formatTime(item.start)} — {formatTime(item.end)} · {session.format}</p></div><span className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-300">{item.score}%</span></div>
             <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">{item.notes}</p>
-            <button type="button" onClick={() => openEditor(item)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-violet-400 hover:bg-slate-800"><Play size={14} /> Abrir no editor</button>
+            <p className="mt-3 text-xs text-slate-400">{item.captions.length} legenda{item.captions.length === 1 ? " temporizada" : "s temporizadas"}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" aria-label={`Revisar trecho ${formatTime(item.start)} a ${formatTime(item.end)}`} onClick={() => reviewSuggestion(item)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-violet-400 hover:bg-slate-800"><Play size={14} /> Revisar</button><button type="button" onClick={() => openEditor(item)} className="flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-violet-300"><Clapperboard size={14} /> Editor</button></div>
           </article>)}
         </div>
+      </section>}
+
+      {session.sourceUrl && session.suggestions.length === 0 && ["unavailable", "failed"].includes(session.analysisStatus) && <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div><h2 className="text-lg font-black text-white">Corte manual disponível</h2><p className="mt-1 text-sm text-slate-400">A análise automática não está disponível, mas você pode marcar IN/OUT, adicionar camadas e seguir o mesmo fluxo de edição.</p></div>
+        <button type="button" onClick={openManualEditor} className="flex items-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-violet-300"><Scissors size={15} /> Abrir editor manual</button>
       </section>}
 
       {selected && !session.workspaceClip && <section className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">

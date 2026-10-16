@@ -80,6 +80,46 @@ def test_selected_ai_connection_is_saved_on_the_analysis_job(permission_client):
     assert response.json()["connection_id"] == "creditos-video"
 
 
+def test_analysis_uses_the_admin_assigned_auto_clips_connection(permission_client):
+    client, ids = permission_client
+    login(client)
+    with ids["session_factory"]() as session:
+        asset = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="Asset",
+            data={"filename": "entrevista.mp4", "storage_key": "missing/source.mp4"},
+        )
+        settings = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="AISettings",
+            data={
+                "connections": [
+                    {
+                        "id": "auto-clips-admin",
+                        "name": "IA definida pela administração",
+                        "provider": "compatible",
+                        "base_url": "https://api.example.test/v1",
+                        "model": "gpt-4o",
+                        "enabled": True,
+                        "encrypted_key": "stored-without-exposure",
+                    }
+                ],
+                "tool_connections": {"auto-clips": "auto-clips-admin"},
+            },
+        )
+        session.add_all([asset, settings])
+        session.commit()
+        asset_id = asset.id
+
+    response = client.post(
+        "/api/v1/clips/analyses",
+        json={"asset_id": str(asset_id), "connection_id": "tentativa-de-sobrescrever"},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["connection_id"] == "auto-clips-admin"
+
+
 def test_unknown_ai_connection_is_rejected_before_creating_an_analysis(permission_client):
     client, ids = permission_client
     login(client)

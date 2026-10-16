@@ -95,6 +95,177 @@ def test_claude_connection_does_not_send_image_requests_or_reuse_openai_secret(p
     assert response.json()["error_code"] == "AI_CAPABILITY_UNSUPPORTED"
 
 
+def test_video_studio_uses_selected_claude_connection_without_exposing_key(
+    permission_client, monkeypatch
+):
+    client, _ids = permission_client
+    login(client)
+    monkeypatch.setenv("AI_SECRET_KEY", Fernet.generate_key().decode())
+    get_settings.cache_clear()
+    saved = client.put(
+        "/api/v1/ai/connections",
+        json={
+            "connections": [
+                {
+                    "id": "claude-prod",
+                    "name": "Claude Roteiros",
+                    "provider": "anthropic",
+                    "base_url": "https://api.anthropic.com/v1",
+                    "model": "claude-sonnet-5-5",
+                    "api_key": "anthropic-secret-for-test",
+                }
+            ],
+            "default_connection_id": "claude-prod",
+            "tool_connections": {"video-studio": "claude-prod"},
+        },
+    )
+    assert saved.status_code == 200
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"content": [{"type": "text", "text": "Roteiro gerado"}]}
+
+    calls = []
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, url, *, headers, json):
+            calls.append((url, headers, json))
+            return FakeResponse()
+
+    monkeypatch.setattr("app.api.v1.ai.httpx.AsyncClient", lambda **_kwargs: FakeClient())
+    response = client.post(
+        "/api/v1/ai/generation/video-studio",
+        json={"stage": "roteiro", "prompt": "Uma ideia de documentário"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "text": "Roteiro gerado",
+        "provider": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "connection_id": "claude-prod",
+    }
+    assert calls == [
+        (
+            "https://api.anthropic.com/v1/messages",
+            {
+                "content-type": "application/json",
+                "x-api-key": "anthropic-secret-for-test",
+                "anthropic-version": "2023-06-01",
+            },
+            {
+                "model": "claude-sonnet-5-5",
+                "max_tokens": 4000,
+                "messages": [
+                    {"role": "user", "content": "Uma ideia de documentário"}
+                ],
+            },
+        )
+    ]
+    assert "anthropic-secret-for-test" not in response.text
+    get_settings.cache_clear()
+
+
+def test_video_studio_requires_auth_and_rejects_unknown_stage(permission_client):
+    client, _ids = permission_client
+    assert (
+        client.post(
+            "/api/v1/ai/generation/video-studio",
+            json={"stage": "roteiro", "prompt": "Uma ideia"},
+        ).status_code
+        == 401
+    )
+    login(client)
+    response = client.post(
+        "/api/v1/ai/generation/video-studio",
+        json={"stage": "executar-codigo", "prompt": "Uma ideia"},
+    )
+    assert response.status_code == 422
+
+
+def test_video_studio_rejects_connection_not_registered_for_current_company(permission_client):
+    client, _ids = permission_client
+    login(client)
+    response = client.post(
+        "/api/v1/ai/generation/video-studio",
+        json={
+            "stage": "roteiro",
+            "prompt": "Uma ideia",
+            "connection_id": "connection-from-another-company",
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "AI_INVALID_ASSIGNMENT"
+
+
+def test_video_studio_reports_truncated_provider_output_without_leaking_secret(
+    permission_client, monkeypatch
+):
+    client, _ids = permission_client
+    login(client)
+    monkeypatch.setenv("AI_SECRET_KEY", Fernet.generate_key().decode())
+    get_settings.cache_clear()
+    secret = "provider-secret-for-truncation-test"
+    saved = client.put(
+        "/api/v1/ai/connections",
+        json={
+            "connections": [
+                {
+                    "id": "text-provider",
+                    "name": "Texto",
+                    "provider": "compatible",
+                    "base_url": "https://text.example.test/v1",
+                    "model": "text-model",
+                    "api_key": secret,
+                }
+            ],
+            "default_connection_id": "text-provider",
+            "tool_connections": {"video-studio": "text-provider"},
+        },
+    )
+    assert saved.status_code == 200
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {"finish_reason": "length", "message": {"content": "incompleto"}}
+                ]
+            }
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.api.v1.ai.httpx.AsyncClient", lambda **_kwargs: FakeClient())
+    response = client.post(
+        "/api/v1/ai/generation/video-studio",
+        json={"stage": "roteiro", "prompt": "Uma ideia"},
+    )
+    assert response.status_code == 502
+    assert response.json()["error_code"] == "AI_OUTPUT_TRUNCATED"
+    assert secret not in response.text
+    get_settings.cache_clear()
+
+
 def test_demo_login_authenticates_only_seeded_accounts_locally(permission_client, monkeypatch):
     from test_permission_groups_api import PASSWORD
 

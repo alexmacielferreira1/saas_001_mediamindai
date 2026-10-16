@@ -35,6 +35,7 @@ export function newClip({ titulo, source_url } = {}) {
     viral: [],
     legendas: [],
     cortes_audio: [],
+    cortes_video: [],
     cgs: [],
     salvo: false,
     edited_url: '',
