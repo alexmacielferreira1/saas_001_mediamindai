@@ -40,6 +40,8 @@ import AssistenteIA from "./mediamind/pages/AssistenteIA";
 import ThumbnailStudio from "./mediamind/pages/ThumbnailStudio";
 import AITools from "./mediamind/pages/AITools";
 import VideoGeneration from "./mediamind/pages/VideoGeneration";
+import VideoEstudio from "./mediamind/pages/VideoEstudio";
+import AgenciaVideo from "./mediamind/pages/AgenciaVideo";
 import GraphicTools from "./mediamind/pages/GraphicTools";
 import SoundCraft from "./mediamind/pages/SoundCraft";
 import OfficeCraft from "./mediamind/pages/OfficeCraft";
@@ -249,6 +251,26 @@ const AuthenticatedApp = () => {
             <ModuleRoute moduleId="ai_tools">
               <Shell>
                 <AITools />
+              </Shell>
+            </ModuleRoute>
+          }
+        />
+        <Route
+          path="/agencia-video"
+          element={
+            <ModuleRoute moduleId="ai_tools">
+              <Shell>
+                <AgenciaVideo />
+              </Shell>
+            </ModuleRoute>
+          }
+        />
+        <Route
+          path="/video-estudio"
+          element={
+            <ModuleRoute moduleId="ai_tools">
+              <Shell>
+                <VideoEstudio />
               </Shell>
             </ModuleRoute>
           }
