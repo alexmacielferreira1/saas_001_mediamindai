@@ -439,8 +439,8 @@ export default function Shell({ children, persistentPath }) {
         {/* Coluna real: o Copiloto ocupa espaço no layout e nunca cobre a página. */}
         <div className="flex min-w-0 flex-1 items-stretch gap-2 px-2 py-3 lg:gap-3 lg:px-3">
           <UniversalCopilot />
-          <main className="min-w-0 flex-1 overflow-x-auto p-2 lg:p-3">
-            <div className="mx-auto w-full max-w-[1600px]"><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
+          <main className="min-w-0 w-0 flex-1 overflow-x-auto p-2 lg:p-3">
+            <div className="w-full min-w-0 max-w-none"><WorkProtection persistentPath={persistentPath}>{children}</WorkProtection></div>
           </main>
         </div>
       </div>
