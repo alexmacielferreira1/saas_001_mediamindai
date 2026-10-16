@@ -40,12 +40,11 @@ import AssistenteIA from "./mediamind/pages/AssistenteIA";
 import ThumbnailStudio from "./mediamind/pages/ThumbnailStudio";
 import AITools from "./mediamind/pages/AITools";
 import VideoGeneration from "./mediamind/pages/VideoGeneration";
-import VideoEstudio from "./mediamind/pages/VideoEstudio";
-import AgenciaVideo from "./mediamind/pages/AgenciaVideo";
 import GraphicTools from "./mediamind/pages/GraphicTools";
 import SoundCraft from "./mediamind/pages/SoundCraft";
 import OfficeCraft from "./mediamind/pages/OfficeCraft";
 import AISettings from "./mediamind/pages/AISettings";
+import AIUsageDashboard from "./mediamind/pages/AIUsageDashboard";
 import { canAccessModule } from "./mediamind/lib/moduleAccess";
 
 const AuthenticatedApp = () => {
@@ -256,26 +255,6 @@ const AuthenticatedApp = () => {
           }
         />
         <Route
-          path="/agencia-video"
-          element={
-            <ModuleRoute moduleId="ai_tools">
-              <Shell>
-                <AgenciaVideo />
-              </Shell>
-            </ModuleRoute>
-          }
-        />
-        <Route
-          path="/video-estudio"
-          element={
-            <ModuleRoute moduleId="ai_tools">
-              <Shell>
-                <VideoEstudio />
-              </Shell>
-            </ModuleRoute>
-          }
-        />
-        <Route
           path="/geracao-de-video"
           element={
             <ModuleRoute moduleId="ai_tools">
@@ -303,6 +282,7 @@ const AuthenticatedApp = () => {
           path="/ferramentas-office"
           element={<ModuleRoute moduleId="ai_tools"><Shell><OfficeCraft /></Shell></ModuleRoute>}
         />
+        <Route path="/dash-ias" element={<Shell><AIUsageDashboard /></Shell>} />
         <Route
           path="/configuracoes/ia"
           element={<ModuleRoute moduleId="ai_tools"><Shell><AISettings /></Shell></ModuleRoute>}

@@ -25,6 +25,7 @@ import {
   Share2,
   PanelsTopLeft,
   Palette,
+  Activity,
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { useEmpresa } from "./lib/empresaContext";
@@ -40,7 +41,7 @@ import UniversalCopilot from "./components/copilot/UniversalCopilot";
 export const NAV_GROUPS = [
   {
     group: "Principal",
-    items: [{ to: "/", label: "Início", icon: Home, end: true }],
+    items: [{ to: "/", label: "Início", icon: Home, end: true }, { to: "/dash-ias", label: "Dash de IAs", icon: Activity }],
   },
   {
     group: "Produção",
@@ -183,7 +184,7 @@ const MVP_LABELS = new Set([
 ]);
 
 export function navigationForRole(role) {
-  if (role !== "mvp") return NAV_GROUPS;
+  if (role !== "mvp") return NAV_GROUPS.map(g => ({...g, items: g.items.filter(it => it.to !== "/dash-ias" || ["admin", "superadmin"].includes(role))})).filter(g => g.items.length);
   return NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) => MVP_LABELS.has(item.label)),

@@ -4,6 +4,7 @@ import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightb
 import { createMCPQueue, listMCPTools } from '../../lib/mcpApi';
 import { useAuth } from '../../auth';
 import CopilotAISettings from './CopilotAISettings';
+import { request } from '../../../api/httpClient';
 
 // Catálogo visual: operações só executam se o backend anunciar ferramenta disponível.
 // Catálogo contextual extensível: cada tela/subguia recebe comandos adequados.
@@ -129,7 +130,20 @@ export default function UniversalCopilot(){
      patchQueue({operations:[...queue.operations,{...op,status:state,backendQueueId:result?.id||result?.queue?.id||null}]});history({title:label,state,details:state==='completed'?'Backend informou conclusão.':'Solicitação recebida pelo backend; acompanhe o registro de execução.',operation:op});setStatus(state==='completed'?'Backend informou conclusão.':'Enviado ao backend. Consulte o histórico desta operação.');
    }catch(e){history({title:label,state:'failed',details:e?.message||'Falha na solicitação MCP.',operation:op});setStatus(e?.message||'Falha no MCP.');}finally{setBusy(false)}
  }
- function chatSubmit(e){e.preventDefault();if(!input.trim())return;const message=input.trim();setData(s=>({...s,chat:[...s.chat,{role:'user',text:message,context:contextItem,at:new Date().toISOString()},{role:'system',text:'Comando registrado como rascunho. Este painel ainda não possui modelo de linguagem conectado; nenhuma alteração foi feita.',at:new Date().toISOString()}].slice(-150)}));history({title:'Comando de conversa',state:'queued',details:message});setInput('');}
+ async function chatSubmit(e){
+  e.preventDefault();if(!input.trim()||busy)return;
+  const message=input.trim();setInput('');setBusy(true);setStatus('Consultando modelo de IA…');
+  setData(s=>({...s,chat:[...s.chat,{role:'user',text:message,context:contextItem,at:new Date().toISOString()}].slice(-150)}));
+  try{
+    const result=await request('/ai/copilot/chat',{method:'POST',body:{message,page:location.pathname+location.search}});
+    setData(s=>({...s,chat:[...s.chat,{role:'assistant',text:result.reply,at:new Date().toISOString()}].slice(-150)}));
+    history({title:'Conversa IA',state:'completed',details:`${result.provider} / ${result.model} · resposta textual (nenhuma operação executada)`});
+    setStatus(`Resposta de ${result.model}. Nenhuma ação no sistema foi executada.`);
+  }catch(error){
+    setData(s=>({...s,chat:[...s.chat,{role:'system',text:`Falha: ${error.message}. Nenhuma ação realizada.`,at:new Date().toISOString()}].slice(-150)}));
+    history({title:'Erro na conversa',state:'failed',details:error.message});setStatus(error.message);
+  }finally{setBusy(false)}
+ }
  function discuss(entry){setContextItem(entry);setInput(`Conferir e corrigir: ${entry.title}. ${entry.details||''}`);setTab('execute');}
  const items=useMemo(()=>[...new Set([...catalogue.cards,...toolList.filter(t=>t.available&&t.module===catalogue.module).map(t=>t.title).filter(Boolean)])].slice(0,14),[catalogue,toolList]);
  function quickCommand(label){setInput(`Na página ${catalogue.label}, quero: ${label}. Use o registro selecionado se houver; caso contrário pergunte o que falta.`);setTab('execute');setStatus(`Atalho “${label}” preparado para conversa. Nenhuma alteração foi executada.`);}
@@ -141,7 +155,7 @@ export default function UniversalCopilot(){
    <div className="flex-1 overflow-y-auto p-3 space-y-3">
     {tab==='suggest'&&<div className="space-y-2"><p className="text-xs text-slate-400">Sugestões de ferramentas para a página atual. Não são diagnósticos de IA.</p>{catalogue.cards.slice(0,5).map(t=><button key={t} onClick={()=>{setInput(`Quero preparar: ${t}.`);setTab('execute')}} className="block w-full rounded-lg border border-slate-700 p-2 text-left text-xs hover:bg-slate-800">{t} <span className="float-right text-sky-300">Conversar →</span></button>)}</div>}
     {tab==='history'&&<div className="space-y-2">{data.history.length===0?<p className="text-xs text-slate-400">Ainda não há registros locais.</p>:data.history.map(e=><div key={e.id} className="rounded-lg border border-slate-700 p-2 text-xs"><div className="flex justify-between gap-2"><b>{e.title}</b><span className={statusStyle[e.state]||'text-slate-300'}>{e.state}</span></div><p className="mt-1 text-slate-400">{e.details}</p><button className="mt-2 text-sky-300" onClick={()=>discuss(e)}>Conversar e corrigir →</button></div>)}</div>}
-    {tab==='execute'&&<div className="space-y-2"><div className="min-h-[175px] max-h-[300px] space-y-2 overflow-y-auto rounded-lg bg-slate-900 p-3 text-xs">{data.chat.length===0?<p className="text-slate-400">Descreva o que deseja fazer. O comando será registrado; a conversa com IA real ainda requer integração.</p>:data.chat.slice(-7).map((m,i)=><p key={i} className={m.role==='user'?'text-sky-200':'text-slate-400'}>{m.text}</p>)}</div>{contextItem&&<div className="flex items-center justify-between rounded bg-sky-950 p-2 text-xs">Histórico: {contextItem.title}<button onClick={()=>setContextItem(null)}><X size={14}/></button></div>}<form onSubmit={chatSubmit} className="space-y-2"><textarea rows={4} className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm" value={input} onChange={e=>setInput(e.target.value)} placeholder="Converse, planeje ou descreva uma alteração. Pode escrever um comando longo..."/><button className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold">Registrar comando</button></form></div>}
+    {tab==='execute'&&<div className="space-y-2"><div className="min-h-[175px] max-h-[300px] space-y-2 overflow-y-auto rounded-lg bg-slate-900 p-3 text-xs">{data.chat.length===0?<p className="text-slate-400">Descreva o que deseja fazer. Se houver um modelo Assistente configurado, a IA responderá; ações no sistema ainda exigem ferramentas conectadas.</p>:data.chat.slice(-7).map((m,i)=><p key={i} className={m.role==='user'?'text-sky-200':'text-slate-400'}>{m.text}</p>)}</div>{contextItem&&<div className="flex items-center justify-between rounded bg-sky-950 p-2 text-xs">Histórico: {contextItem.title}<button onClick={()=>setContextItem(null)}><X size={14}/></button></div>}<form onSubmit={chatSubmit} className="space-y-2"><textarea rows={4} className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm" value={input} onChange={e=>setInput(e.target.value)} placeholder="Converse, planeje ou descreva uma alteração. Pode escrever um comando longo..."/><button className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold">{busy?'Consultando…':'Enviar à IA'}</button></form></div>}
     <div className="border-t border-slate-700 pt-3"><div className="mb-2 flex items-center justify-between"><button onClick={()=>setShowMcp(v=>!v)} className="flex items-center gap-2 text-sm font-bold"><Wrench size={15}/> MCP · {catalogue.label} <ChevronDown size={14} className={showMcp?'':'-rotate-90'}/></button></div>
      {showMcp&&<>
      {mcpMode!=='creative'&&<div className="mb-3 space-y-2">
