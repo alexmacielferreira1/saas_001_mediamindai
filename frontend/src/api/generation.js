@@ -30,3 +30,7 @@ export function getImageGenerationStatus() {
 export function generateImage(payload) {
   return request("/ai/generation/image", { method: "POST", body: payload });
 }
+
+export function generateVideoStudioStage(payload) {
+  return request("/ai/generation/video-studio", { method: "POST", body: payload });
+}

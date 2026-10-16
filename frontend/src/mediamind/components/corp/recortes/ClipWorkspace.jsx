@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, CheckCircle2, Info, Sparkles, Tag } from 'lucide-react';
+import { Captions, Check, CheckCircle2, Crop, Info, Layers3, Sparkles, Tag, Type } from 'lucide-react';
 import { STAGES, fmt } from './clipModel';
 import ClipPlayer from './ClipPlayer';
 import ClipCandidatesPanel from './ClipCandidatesPanel';
@@ -68,6 +68,18 @@ export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewC
   function patch(p) { onChange(p); }
   function setStageBoth(s) { setStage(s); patch({ stage: s }); }
   function salvar() { patch({ salvo: true }); setStageBoth('legendas'); }
+  function addTextLayer() {
+    patch({
+      cgs: [...(clip.cgs || []), {
+        id: `text-${Date.now()}`,
+        tipo: 'titulo',
+        titulo: 'Novo texto',
+        start_ms: clip.in_ms || 0,
+        end_ms: Math.max((clip.in_ms || 0) + 3000, clip.out_ms || 0),
+      }],
+    });
+    setEditPanel('camadas');
+  }
 
   const segments = [
     ...(clip.viral || []).filter((v) => v.selected).map((v) => ({ start_ms: v.start_ms, end_ms: v.end_ms, color: 'bg-violet-500/40', title: v.titulo })),
@@ -90,6 +102,14 @@ export default function ClipWorkspace({ clip, onChange, onProsseguir, onOpenNewC
         })}
       </div>
       <p className="text-[11px] text-slate-400">{STAGES.find((s) => s.id === stage)?.desc}</p>
+
+      {stage === 'selecao' && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 p-2" aria-label="Ferramentas do editor">
+        <span className="px-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Editor</span>
+        <button type="button" onClick={() => setEditPanel('camadas')} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-200 hover:border-sky-500"><Layers3 size={13} /> Camadas</button>
+        <button type="button" onClick={addTextLayer} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-200 hover:border-sky-500"><Type size={13} /> Adicionar texto</button>
+        <button type="button" onClick={() => setStageBoth('ia')} className="flex items-center gap-1 rounded-md border border-slate-700 px-2.5 py-1.5 text-[11px] text-slate-200 hover:border-sky-500"><Captions size={13} /> Legendas</button>
+        <button type="button" onClick={() => patch({ reenquadramento: clip.reenquadramento === 'fill' ? 'fit' : 'fill' })} className="ml-auto flex items-center gap-1 rounded-md border border-violet-700/70 px-2.5 py-1.5 text-[11px] text-violet-200 hover:bg-violet-950/30"><Crop size={13} /> Reenquadrar: {clip.reenquadramento === 'fit' ? 'Ajustar' : 'Preencher'}</button>
+      </div>}
 
       {stage === 'formatos' ? <ClipNetworkFormatsPanel clip={clip} onChange={patch} onProsseguir={onProsseguir}/> : <>
       {stage === 'ia' ? <div className="grid min-h-[34rem] gap-3 xl:grid-cols-[1.05fr_1.05fr_.55fr]"><div className="min-h-0 rounded-xl border border-slate-800 bg-slate-900/40 p-3"><AnalysisAndCaptions clip={clip} onChange={patch} seekTo={seekTo} onFinish={salvar} onOpenNewClip={onOpenNewClip}/></div><div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3"><ClipPlayer source_url={clip.source_url} captions={clip.legendas} in_ms={clip.in_ms} out_ms={clip.out_ms} segments={segments} onSetIn={(ms)=>patch({in_ms:ms})} onSetOut={(ms)=>patch({out_ms:ms})} onReady={(d)=>patch({duration_ms:d})} seekRef={seekRef}/><div className="mt-3 border border-slate-800 bg-slate-950/40 p-3 text-[10px]"><p className="font-bold text-slate-300">Transcrição / Legenda do trecho selecionado</p><p className="mt-2 text-slate-400">Isso vai melhorar a mobilidade e a qualidade de vida da população.</p></div></div><AnalysisSummary/></div> : <div className="grid min-h-[31rem] gap-3 xl:grid-cols-[1.3fr_1fr]">

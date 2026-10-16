@@ -30,6 +30,7 @@ import TrendStudio from "../components/ai-tools/TrendStudio";
 import DubbingStudio from "../components/ai-tools/DubbingStudio";
 import { AI_TOOLS, getAITool } from "../lib/aiToolsRegistry";
 import GenerativeStudio from "../components/ai-tools/GenerativeStudio";
+import VideoStudio from "../components/ai-tools/VideoStudio";
 
 const TOOL_PRESENTATION = {
   "image-generator": { icon: ImagePlus, label: "Imagem IA" },
@@ -105,7 +106,8 @@ export default function AITools() {
         {selected.id === "frames" && <FramesStudio />}
         {selected.id === "trend-radar" && <TrendStudio />}
         {selected.id === "ai-dubbing" && <DubbingStudio />}
-        {selected.status === "integrated" && (
+        {selected.id === "video-studio" && <VideoStudio />}
+        {selected.status === "integrated" && selected.id !== "video-studio" && (
           <ExistingWorkflowTool key={selected.id} toolId={selected.id} />
         )}
         {selected.id === "sales-videos" && <PromoVideoStudio key="sales" />}

@@ -15,7 +15,7 @@ import {
 } from "./StudioUI";
 const demo =
   "Toda boa história começa com uma pergunta.\nComo transformar informação em uma mensagem que conecta?\nComece pelo que seu público precisa entender.\nEscolha uma ideia e mostre um exemplo concreto.\nRevise, simplifique e publique com intenção.";
-export default function ExistingWorkflowTool({ toolId }) {
+export default function ExistingWorkflowTool({ toolId, incomingText = null }) {
   const clips = toolId === "auto-clips",
     speech = toolId === "speech-montage";
   const [text, setText] = useWorkDraftState("components/ai-tools/ExistingWorkflowTool.jsx:text", ""),
@@ -34,6 +34,17 @@ export default function ExistingWorkflowTool({ toolId }) {
     () => () => sourceUrls.current.forEach((url) => URL.revokeObjectURL(url)),
     [],
   );
+  useEffect(() => {
+    if (toolId !== "video-studio" || !incomingText?.revision || !incomingText.text) return;
+    const nextScenes = makeScenes(incomingText.text).slice(0, 300);
+    setText(incomingText.text);
+    setScenes(nextScenes);
+    setMessage(
+      nextScenes.length === 300
+        ? "Roteiro enviado do pipeline. As primeiras 300 cenas estão na prévia editável."
+        : "Roteiro enviado do pipeline e cenas criadas para a prévia editável.",
+    );
+  }, [toolId, incomingText?.revision, incomingText?.text, setText, setScenes]);
   const lines = text.split(/\n+/).filter((s) => s.trim());
 
   function build() {

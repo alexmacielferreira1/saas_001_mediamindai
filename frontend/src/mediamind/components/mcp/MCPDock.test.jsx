@@ -1,19 +1,31 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import MCPDock from "./MCPDock";
 
+const mcpApi = vi.hoisted(() => ({
+  createMCPQueue: vi.fn(),
+  executeMCPQueue: vi.fn(),
+}));
 vi.mock("../../lib/mcpApi", () => ({
   listMCPTools: vi.fn().mockResolvedValue({
     modules: [
       { id: "mmfilm", status: "connected" },
       { id: "mmphoto", status: "planned" },
+      { id: "ai-tools", status: "connected" },
+    ],
+    tools: [
+      { name: "mmfilm.inspect", module: "mmfilm", title: "Inspecionar projeto", available: true },
+      { name: "mmfilm.timeline", module: "mmfilm", title: "Ler timeline", available: true },
+      { name: "mmphoto.inspect", module: "mmphoto", title: "Inspecionar imagem", available: false },
+      { name: "ai-tools.prompt", module: "ai-tools", title: "Executar prompt com IA cadastrada", available: true },
+      { name: "ai-tools.video_studio", module: "ai-tools", title: "Gerar etapa do Video Studio", available: true },
     ],
   }),
   listMCPQueues: vi.fn().mockResolvedValue({ queues: [] }),
-  createMCPQueue: vi.fn(),
-  executeMCPQueue: vi.fn(),
+  createMCPQueue: mcpApi.createMCPQueue,
+  executeMCPQueue: mcpApi.executeMCPQueue,
 }));
 vi.mock("../../../api/media", () => ({
   listMediaAssets: vi.fn().mockResolvedValue([{ id: "asset-real", title: "Entrevista real", stream_url: "/api/v1/media/assets/asset-real/stream" }]),
@@ -88,9 +100,34 @@ describe("MCPDock", () => {
     ]);
   });
 
-  it("does not render MCP outside the graphic tools area", () => {
-    render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPDock /></MemoryRouter>);
+  it("renders MCP in the IA tools area and keeps other areas out", async () => {
+    const { unmount } = render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPDock /></MemoryRouter>);
+    expect(await screen.findByTestId("mcp-dock")).toBeInTheDocument();
+    unmount();
+    render(<MemoryRouter initialEntries={["/corp?tab=producao"]}><MCPDock /></MemoryRouter>);
     expect(screen.queryByTestId("mcp-dock")).not.toBeInTheDocument();
+  });
+
+  it("submits an IA prompt without requiring a project", async () => {
+    mcpApi.createMCPQueue.mockResolvedValueOnce({
+      id: "queue-ai",
+      status: "completed",
+      results: [{ status: "completed", text: "Resposta do provedor" }],
+      target_projects: [],
+      create_projects: [],
+      output_mode: "internal",
+    });
+    render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /Ferramentas IA/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Operações e prompt/i }), { target: { value: "Resuma este briefing." } });
+    fireEvent.click(screen.getByRole("button", { name: /Etapas 3 e 4/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Executar pacote agora" }));
+
+    await waitFor(() => expect(mcpApi.createMCPQueue).toHaveBeenCalledWith(expect.objectContaining({
+      module: "ai-tools",
+      tool_name: "ai-tools.prompt",
+      targets: [expect.objectContaining({ id: "assistant", instruction: "Resuma este briefing." })],
+    })));
   });
 
   it("preserves hook order when navigating out of and back into graphic tools", async () => {
@@ -109,6 +146,75 @@ describe("MCPDock", () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
     fireEvent.click(await screen.findByRole("button", { name: /MMFilm/ }));
     expect(await screen.findByRole("button", { name: "Selecionar mídia Entrevista real" })).toBeInTheDocument();
+  });
+
+  it("lets MMFilm target the active timeline before building the task package", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
+
+    expect(screen.getByRole("button", { name: /Usar timeline aberta/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Usar timeline aberta/ }));
+    expect(screen.getByText("Timeline aberta · Corte principal")).toBeInTheDocument();
+  });
+
+  it("keeps the timeline selected when it arrives from MCP Express", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: { appId: "mmfilm", target: "timeline", prompt: "Ler timeline", operations: [] } }));
+    expect(await screen.findByText("Timeline aberta · Corte principal")).toBeInTheDocument();
+  });
+
+  it("labels the immediate package action as execute now", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Usar timeline aberta/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Operações e prompt/i }), { target: { value: "Ler timeline" } });
+    fireEvent.click(screen.getByRole("button", { name: /Etapas 3 e 4/ }));
+
+    expect(screen.getByRole("button", { name: "Executar pacote agora" })).toBeEnabled();
+  });
+
+  it("executes an authorized individual tool instead of only copying its title", async () => {
+    mcpApi.createMCPQueue.mockResolvedValueOnce({
+      id: "queue-1",
+      status: "completed",
+      results: [{ status: "completed", asset_count: 1 }],
+      target_projects: ["Projeto MCP"],
+      create_projects: [],
+      output_mode: "internal",
+    });
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome do novo projeto" }), { target: { value: "Projeto MCP" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Novo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Executar individualmente Inspecionar projeto" }));
+
+    await waitFor(() => expect(mcpApi.createMCPQueue).toHaveBeenCalledWith(expect.objectContaining({
+      tool_name: "mmfilm.inspect",
+      execution_mode: "immediate",
+    })));
+    expect(await screen.findByRole("status")).toHaveTextContent("concluída");
+  });
+
+  it("shows persisted MCP executions in history", async () => {
+    mcpApi.createMCPQueue.mockResolvedValueOnce({
+      id: "queue-history",
+      name: "Ação individual · MMFilm",
+      status: "completed",
+      results: [{ status: "completed", asset_count: 1 }],
+      target_projects: ["Projeto histórico"],
+      create_projects: [],
+      output_mode: "internal",
+    });
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nome do novo projeto" }), { target: { value: "Projeto histórico" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ Novo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Executar individualmente Inspecionar projeto" }));
+    await screen.findByText(/Execução concluída/);
+    fireEvent.click(screen.getByRole("button", { name: "Histórico" }));
+
+    expect(screen.getByText("Ação individual · MMFilm")).toBeInTheDocument();
+    expect(screen.getByText(/1 resultado/)).toBeInTheDocument();
   });
 
   it("uses MM product names and opens the MCP center from the gear", async () => {

@@ -21,4 +21,17 @@ describe('ClipLegendasPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Topo' }));
     expect(onChange).toHaveBeenLastCalledWith({ legendas: [expect.objectContaining({ id: 'caption-1', posicao: 'top' })] });
   });
+
+  it('distinguishes removing only a caption from removing its caption and video interval', () => {
+    const onChange = vi.fn();
+    render(<ClipLegendasPanel clip={clip} onChange={onChange} seekTo={vi.fn()} onSalvar={vi.fn()} onAvancar={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover legenda e vídeo' }));
+
+    expect(onChange).toHaveBeenLastCalledWith({
+      legendas: [],
+      cortes_audio: [],
+      cortes_video: [{ start_ms: 1000, end_ms: 4000 }],
+    });
+  });
 });

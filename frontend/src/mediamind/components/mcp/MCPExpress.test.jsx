@@ -4,6 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import MCPExpress from "./MCPExpress";
 
+vi.mock("../../lib/mcpApi", () => ({
+  listMCPTools: vi.fn().mockResolvedValue({
+    tools: [
+      { name: "mmfilm.timeline", module: "mmfilm", title: "Ler timeline", available: true },
+      { name: "mmfilm.inspect", module: "mmfilm", title: "Inspecionar projeto", available: true },
+    ],
+  }),
+  createMCPQueue: vi.fn().mockResolvedValue({ status: "completed" }),
+}));
+
 function renderExpress() {
   return render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=photocraft"]}><MCPExpress /></MemoryRouter>);
 }
@@ -33,27 +43,32 @@ describe("MCPExpress", () => {
     expect(screen.queryByRole("button", { name: /Recortar/ })).not.toBeInTheDocument();
   });
 
-  it("opens the matching MCP flow with only active operations", () => {
+  it("keeps the complete MCP panel independent from Express", () => {
     const opened = vi.fn();
     window.addEventListener("mm:mcp-open", opened);
     renderExpress();
     fireEvent.click(screen.getByRole("button", { name: "Desligar Recortar" }));
-    fireEvent.click(screen.getByRole("button", { name: /Abrir MCP/ }));
-    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ appId: "mmphoto", actions: ["Ajustar luz e cor", "Aplicar identidade"] }) }));
+    fireEvent.click(screen.getByRole("button", { name: /Abrir painel completo/ }));
+    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ appId: "mmphoto" }) }));
+    expect(opened.mock.calls[0][0].detail.operations).toBeUndefined();
     window.removeEventListener("mm:mcp-open", opened);
   });
 
-  it("prepares one enabled operation as a quick individual action", () => {
-    const opened = vi.fn();
-    window.addEventListener("mm:mcp-open", opened);
+  it("shows the active timeline as the Express execution target", () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPExpress /></MemoryRouter>);
+    expect(screen.getByRole("combobox", { name: "Alvo de execução MCP Express" })).toHaveValue("timeline");
+    expect(screen.getByText("Timeline aberta · Corte principal")).toBeInTheDocument();
+  });
+
+  it("offers direct execution for one operation and for all active operations", () => {
     renderExpress();
-    fireEvent.click(screen.getByRole("button", { name: "Executar rapidamente Recortar" }));
-    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ detail: expect.objectContaining({ appId: "mmphoto", quickOperation: "Recortar", actions: ["Recortar"] }) }));
-    window.removeEventListener("mm:mcp-open", opened);
+    expect(screen.getByRole("button", { name: "Executar Recortar" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Executar 3 ações ativas/ })).toBeEnabled();
   });
 
-  it("stays out of pages outside Ferramentas Gráficas", () => {
+  it("opens the real Assistant command in Ferramentas IA", () => {
     render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
-    expect(screen.queryByLabelText("MCP Express")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("MCP Express")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Executar rapidamente Executar prompt com IA cadastrada/i })).toBeInTheDocument();
   });
 });

@@ -17,43 +17,43 @@ MODULES = [
         "id": "mmeffects",
         "label": "MMEffects",
         "description": "Composições, camadas, efeitos e renderização.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "vetor",
         "label": "MMVector",
         "description": "Pranchetas, camadas vetoriais e exportações.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "mmphoto",
         "label": "MMPhoto",
         "description": "Imagens, máscaras, ajustes e versões.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "mmsom",
         "label": "MMSom",
         "description": "Faixas, voz, mixagem e masterização.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "word",
         "label": "Word",
         "description": "Documentos, texto e revisão.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "excel",
         "label": "Excel",
         "description": "Planilhas, fórmulas e dados.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "powerpoint",
         "label": "PowerPoint",
         "description": "Apresentações, slides e layouts.",
-        "status": "connected",
+        "status": "planned",
     },
     {
         "id": "ai-tools",
@@ -158,6 +158,28 @@ TOOLS = [
         "requires_confirmation": False,
     },
 ]
+TOOLS.append(
+    {
+        "name": "ai-tools.prompt",
+        "module": "ai-tools",
+        "title": "Executar prompt com IA cadastrada",
+        "description": "Usa a conexão Assistente da empresa e retorna a resposta real do provedor.",
+        "effect": "generate",
+        "available": True,
+        "requires_confirmation": False,
+    }
+)
+TOOLS.append(
+    {
+        "name": "ai-tools.video_studio",
+        "module": "ai-tools",
+        "title": "Gerar etapa do Video Studio",
+        "description": "Usa a conexão Video Studio da empresa para gerar roteiro, cenas e prompts.",
+        "effect": "generate",
+        "available": True,
+        "requires_confirmation": False,
+    }
+)
 for module, operations in READ_OPERATIONS.items():
     for operation, title, description in operations:
         TOOLS.append(
@@ -167,7 +189,7 @@ for module, operations in READ_OPERATIONS.items():
                 "title": title,
                 "description": description,
                 "effect": "read",
-                "available": True,
+                "available": module == "mmfilm" and operation in {"inspect", "timeline"},
                 "requires_confirmation": False,
             }
         )
@@ -194,10 +216,12 @@ def tool_by_name(name: str) -> dict[str, Any] | None:
 
 def capability_result() -> dict[str, Any]:
     return {
-        "mode": "read_only",
-        "connected_modules": [module["id"] for module in MODULES],
+        "mode": "read_and_generate",
+        "connected_modules": [
+            module["id"] for module in MODULES if module["status"] == "connected"
+        ],
         "available_tools": [tool["name"] for tool in TOOLS if tool["available"]],
-        "next_gate": "Ações reversíveis com confirmação humana e ponte local",
+        "next_gate": "Renderização de vídeo requer um adaptador próprio do provedor",
     }
 
 

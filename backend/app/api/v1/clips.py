@@ -44,15 +44,18 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
     service = ClipAnalysisService(session)
     connection = None
     try:
-        if body.connection_id:
-            settings = ai_settings_record(session, membership.tenant_id)
+        settings = ai_settings_record(session, membership.tenant_id)
+        configuration = connection_configuration(settings.data if settings else {})
+        configured_connection_id = configuration.get("tool_connections", {}).get(
+            "auto-clips", configuration.get("default_connection_id")
+        )
+        connection_id = configured_connection_id or body.connection_id
+        if connection_id:
             connection = next(
                 (
                     item
-                    for item in connection_configuration(settings.data if settings else {}).get(
-                        "connections", []
-                    )
-                    if item.get("id") == body.connection_id and item.get("enabled", True)
+                    for item in configuration.get("connections", [])
+                    if item.get("id") == connection_id and item.get("enabled", True)
                 ),
                 None,
             )

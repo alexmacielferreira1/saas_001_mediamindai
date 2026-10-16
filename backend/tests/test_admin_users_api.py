@@ -116,6 +116,36 @@ def test_admin_users_list_is_paginated_filterable_and_never_leaks_secrets(admin_
     assert "password" not in response.text
 
 
+def test_admin_users_validate_status_and_trim_search_terms(admin_users_client):
+    client, _ids = admin_users_client
+    login(client)
+
+    invalid = client.get("/api/v1/admin/users?status=unknown")
+    matching = client.get("/api/v1/admin/users?search=%20%20EDITOR%20%20")
+    blank = client.get("/api/v1/admin/users?search=%20%20")
+
+    assert invalid.status_code == 422
+    assert invalid.json()["error_code"] == "VALIDATION_ERROR"
+    assert matching.status_code == 200
+    assert [item["email"] for item in matching.json()["items"]] == ["editor@mediamind.ai"]
+    assert blank.status_code == 200
+    assert blank.json()["total"] == 2
+
+
+def test_admin_cannot_suspend_own_account(admin_users_client):
+    client, _ids = admin_users_client
+    login(client)
+    current_user = client.get("/api/v1/admin/users?search=admin%40mediamind.ai").json()["items"][0]
+
+    response = client.post(
+        f"/api/v1/admin/users/{current_user['id']}/suspend",
+        json={"reason": "self suspension must be denied"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "SELF_STATUS_CHANGE"
+
+
 def test_admin_user_detail_is_scoped_to_selected_tenant(admin_users_client):
     client, ids = admin_users_client
     login(client)

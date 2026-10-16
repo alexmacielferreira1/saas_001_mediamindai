@@ -10,6 +10,7 @@ from app.api.v1.management import router as management_router
 from app.api.v1.mcp import router as mcp_router
 from app.api.v1.media import router as media_router
 from app.api.v1.clips import router as clips_router
+from app.api.v1.clipsfree2 import router as clipsfree2_router
 from app.api.v1.memberships import router as memberships_router
 from app.api.v1.permission_groups import router as permission_groups_router
 from app.api.v1.records import router as records_router
@@ -31,6 +32,7 @@ router.include_router(management_router)
 router.include_router(mcp_router)
 router.include_router(media_router)
 router.include_router(clips_router)
+router.include_router(clipsfree2_router)
 router.include_router(records_router)
 router.include_router(uploads_router)
 

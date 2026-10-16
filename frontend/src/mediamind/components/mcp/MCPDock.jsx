@@ -11,7 +11,7 @@ import { listMediaAssets, mediaStreamUrl } from "../../../api/media";
 import MCPCenter from "../ai-tools/MCPCenter";
 
 const APPS = [
-  { id: "ai", module: "ai", short: "IA", label: "Ferramentas IA", title: "Ferramentas IA", icon: Sparkles, color: "sky", href: "/ferramentas-ia" },
+  { id: "ai", module: "ai-tools", short: "IA", label: "Ferramentas IA", title: "Ferramentas IA", icon: Sparkles, color: "sky", href: "/ferramentas-ia" },
   { id: "mmfilm", module: "mmfilm", short: "MF", label: "MMFilm", title: "MMFilm", icon: Video, color: "violet", href: "/ferramentas-graficas?tool=filmcraft" },
   { id: "mmeffects", module: "mmeffects", short: "ME", label: "MMEffects", title: "MMEffects", icon: WandSparkles, color: "indigo", href: "/ferramentas-graficas?tool=effectcraft" },
   { id: "mmphoto", module: "mmphoto", short: "MP", label: "MMPhoto", title: "MMPhoto", icon: Image, color: "sky", href: "/ferramentas-graficas?tool=photocraft" },
@@ -31,7 +31,7 @@ const BASE_COMMANDS = {
   word: ["Criar documento", "Revisar texto", "Resumir conteúdo", "Exportar DOCX ou PDF"],
   excel: ["Criar planilha", "Organizar dados", "Gerar gráficos", "Exportar XLSX ou CSV"],
   powerpoint: ["Montar apresentação", "Gerar slides", "Aplicar template", "Exportar PPTX ou PDF"],
-  ai: ["Planejar fluxo entre aplicativos", "Localizar mídia", "Resumir projeto", "Criar automação"],
+  ai: ["Executar prompt com IA cadastrada"],
 };
 
 function contextualCommands(appId, location) {
@@ -51,11 +51,16 @@ export default function MCPDock() {
   const [active, setActive] = useState(null);
   const [width, setWidth] = useState(() => Number(localStorage.getItem("mm_mcp_dock_width_v2")) || 720);
   const [modules, setModules] = useState([]);
+  const [tools, setTools] = useState([]);
   const [tab, setTab] = useState("commands");
   const [expressDraft, setExpressDraft] = useState(null);
+  const [historyQueues, setHistoryQueues] = useState([]);
 
   useEffect(() => {
-    listMCPTools().then((data) => setModules(data.modules || [])).catch(() => setModules([]));
+    listMCPTools().then((data) => {
+      setModules(data.modules || []);
+      setTools(data.tools || []);
+    }).catch(() => { setModules([]); setTools([]); });
   }, []);
   useEffect(() => {
     const open = (event) => {
@@ -70,6 +75,12 @@ export default function MCPDock() {
     return () => window.removeEventListener("mm:mcp-open", open);
   }, [location.pathname, location.search, navigate]);
   useEffect(() => localStorage.setItem("mm_mcp_dock_width_v2", String(width)), [width]);
+  useEffect(() => {
+    listMCPQueues().then((data) => setHistoryQueues(data.queues || [])).catch(() => setHistoryQueues([]));
+    const receive = (event) => setHistoryQueues((current) => [event.detail, ...current.filter((item) => item.id !== event.detail?.id)]);
+    window.addEventListener("mm:mcp-result", receive);
+    return () => window.removeEventListener("mm:mcp-result", receive);
+  }, []);
 
   const app = APPS.find((item) => item.id === active);
   const activePageApp = useMemo(() => APPS.find((item) => {
@@ -77,7 +88,12 @@ export default function MCPDock() {
     return destination.pathname === location.pathname && destination.search === location.search;
   }), [location.pathname, location.search]);
   const moduleStatus = useMemo(() => Object.fromEntries(modules.map((item) => [item.id, item.status])), [modules]);
-  const commands = app ? contextualCommands(app.id, location) : [];
+  const authorizedTools = app
+    ? tools.filter((tool) => tool.module === app.module && tool.available)
+    : [];
+  const commands = authorizedTools.length
+    ? authorizedTools.map((tool) => tool.title)
+    : app ? contextualCommands(app.id, location) : [];
 
   function toggle(id) {
     const target = APPS.find((item) => item.id === id);
@@ -102,9 +118,9 @@ export default function MCPDock() {
 
   const connected = app && moduleStatus[app.module] === "connected";
 
-  // MCP Express e o painel completo ainda são uma experiência exclusiva das Ferramentas Gráficas.
+  // O dock é oferecido onde há uma experiência MCP: Ferramentas Gráficas e IA.
   // Manter a condição depois de todos os hooks evita alterar a ordem durante a navegação.
-  if (location.pathname !== "/ferramentas-graficas") return null;
+  if (!["/ferramentas-graficas", "/ferramentas-ia"].includes(location.pathname)) return null;
 
   return <div data-testid="mcp-dock" className="sticky right-0 top-0 z-[55] flex h-screen shrink-0 self-start pointer-events-none">
     {active === "settings" && <aside role="dialog" aria-label="Configuração MCP" style={{ width: Math.max(width, 640) }} className="pointer-events-auto relative flex h-full flex-col border-l border-sky-900/70 bg-[#03101f]/[.98] shadow-2xl shadow-black/60">
@@ -125,8 +141,8 @@ export default function MCPDock() {
       </header>
       <div className="flex border-b border-slate-800 px-4"><button onClick={() => setTab("commands")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "commands" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Comandos</button><button onClick={() => setTab("history")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "history" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Histórico</button></div>
       <div className="flex-1 overflow-y-auto p-4">
-        {tab === "history" ? <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-slate-800 p-6 text-center"><div><History className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">Nenhuma execução nesta sessão.</p><p className="mt-1 text-xs text-slate-600">Resultados e pedidos de confirmação aparecerão aqui.</p></div></div> : <>
-          <MCPActionPlanner module={app.module} appId={app.id} label={app.label} commands={commands} expressDraft={expressDraft} />
+        {tab === "history" ? (historyQueues.length ? <div className="space-y-2">{historyQueues.map((queue) => <article key={queue.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs"><strong className="text-slate-200">{queue.name}</strong><p className="mt-1 text-sky-300">{queue.status === "completed" ? "Concluída" : "Rascunho"} · {queue.results?.length || 0} resultado(s)</p></article>)}</div> : <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-slate-800 p-6 text-center"><div><History className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">Nenhuma execução registrada.</p><p className="mt-1 text-xs text-slate-600">Resultados e pedidos de confirmação aparecerão aqui.</p></div></div>) : <>
+          <MCPActionPlanner module={app.module} appId={app.id} label={app.label} commands={commands} tools={authorizedTools} connected={connected} expressDraft={expressDraft} />
           <h3 className="mt-5 text-xs font-bold text-white">Projeto conectado</h3><div className="mt-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs"><p className="font-semibold text-slate-300">Nenhum projeto MM conectado</p><p className="mt-1 text-slate-600">A ponte local identificará o projeto e a sequência ativos.</p></div>
           <button onClick={() => toggle("settings")} className="mt-4 flex w-full items-center justify-between rounded-xl border border-slate-800 p-3 text-xs text-slate-400"><span className="flex items-center gap-2"><Settings size={14}/>Configurações e preferências</span><ChevronDown size={14}/></button>
         </>}
@@ -146,7 +162,7 @@ function AppMark({ app, large = false }) {
   return <span className={`mx-auto grid ${large ? "h-10 w-10" : "h-8 w-8"} place-items-center rounded-lg border border-slate-600 bg-slate-900 text-sky-300`}><Icon size={large ? 20 : 17}/><span className="sr-only">{app.short}</span></span>;
 }
 
-function MCPActionPlanner({ module, appId, label, commands = [], expressDraft }) {
+function MCPActionPlanner({ module, appId, label, commands = [], tools = [], connected, expressDraft }) {
   const availableProjects = useProducaoProjetos();
   const [mode, setMode] = useState("immediate");
   const [instruction, setInstruction] = useState("");
@@ -162,6 +178,8 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
   const [page, setPage] = useState(0);
   const [assets, setAssets] = useState([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
+  const isAiPrompt = module === "ai-tools";
+  const supportsTimeline = appId === "mmfilm";
 
   useEffect(() => { listMCPQueues().then((data) => setQueues(data.queues || [])).catch(() => setQueues([])); }, []);
   useEffect(() => {
@@ -174,6 +192,14 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
     const selected = (expressDraft.operations || []).filter((operation) => operation.enabled).map((operation) => operation.label);
     const next = [expressDraft.prompt?.trim(), ...selected].filter(Boolean).join("\n");
     if (next) setInstruction(next);
+    if (expressDraft.target === "timeline" && appId === "mmfilm") {
+      setTargets((current) => current.some((target) => target.id === "timeline-active") ? current : [...current, {
+        id: "timeline-active",
+        name: "Timeline aberta · Corte principal",
+        kind: "timeline",
+        instruction: next,
+      }]);
+    }
     if (expressDraft.quickOperation) {
       setPage(0);
       setMessage(`“${expressDraft.quickOperation}” está pronto para uma ação individual. Escolha o projeto e confirme.`);
@@ -185,9 +211,18 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
   }, [instruction]);
   async function submit({ command, quick = false } = {}) {
     const requestInstruction = (command || instruction).trim();
-    if (!targets.length || !requestInstruction || !targets.every((target) => target.instruction.trim())) {
+    const selectedTool = tools.find((tool) => tool.title === command)
+      || tools.find((tool) => requestInstruction.includes(tool.title))
+      || tools[0];
+    if (!connected || !selectedTool) {
+      setMessage(`O adaptador ${label} ainda não possui executor real.`);
+      return;
+    }
+    if ((!isAiPrompt && !targets.length) || !requestInstruction) {
       setPage(0);
-      setMessage("Escolha ao menos um projeto e informe a ação antes de executar.");
+      setMessage(isAiPrompt
+        ? "Informe o pedido para a IA antes de executar."
+        : "Escolha ao menos um projeto e informe a ação antes de executar.");
       return;
     }
     setSaving(true); setMessage("");
@@ -195,17 +230,25 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
       const created = await createMCPQueue({
         name: quick ? `Ação individual · ${label}` : mode === "immediate" ? `Ação imediata · ${label}` : `Fila ${label} · ${new Date().toLocaleString("pt-BR")}`,
         module,
+        tool_name: selectedTool.name,
         instruction: requestInstruction,
         output_mode: output,
         execution_mode: quick ? "immediate" : mode,
         target_projects: targets.filter((target) => target.kind === "existing").map((target) => target.name),
         create_projects: targets.filter((target) => target.kind === "new").map((target) => target.name),
-        targets: targets.map((target) => ({ ...target, asset_ids: selectedAssetIds })),
+        targets: (isAiPrompt && !targets.length ? [{ id: "assistant", name: "Assistente IA", kind: "virtual", instruction: requestInstruction }] : targets).map((target) => ({
+          ...target,
+          instruction: target.instruction.trim() || requestInstruction,
+          asset_ids: selectedAssetIds,
+        })),
         export_name: output === "external" ? exportName.trim() : null,
         export_destination: output === "external" ? exportDestination : null,
       });
       setQueues((current) => [created, ...current]); setInstruction(""); setTargets([]);
-      setMessage(quick ? "Ação individual salva. A ponte local executará após a confirmação." : mode === "immediate" ? "Pedido registrado para confirmação de execução." : "Fila MCP criada como rascunho.");
+      window.dispatchEvent(new CustomEvent("mm:mcp-result", { detail: created }));
+      setMessage(created.status === "completed"
+        ? `Execução concluída: ${created.results?.length || 0} resultado(s).`
+        : "Fila MCP criada como rascunho.");
     } catch (error) { setMessage(error?.message || "Não foi possível salvar o pedido MCP."); }
     finally { setSaving(false); }
   }
@@ -221,6 +264,15 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
     setTargets((current) => [...current, { id: `new-${Date.now()}`, name, kind: "new", instruction }]);
     setNewProject("");
   }
+  function addActiveTimeline() {
+    if (targets.some((target) => target.id === "timeline-active")) return;
+    setTargets((current) => [...current, {
+      id: "timeline-active",
+      name: "Timeline aberta · Corte principal",
+      kind: "timeline",
+      instruction,
+    }]);
+  }
   function updateTarget(id, patch) {
     setTargets((current) => current.map((target) => target.id === id ? { ...target, ...patch } : target));
   }
@@ -230,7 +282,7 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
   function prepareQuick(command) {
     setInstruction(command);
     setTargets((current) => current.map((target) => ({ ...target, instruction: command })));
-    if (!targets.length) {
+    if (!targets.length && !isAiPrompt) {
       setPage(0);
       setMessage(`“${command}” está preparado. Escolha o projeto e execute a ação individual.`);
       return;
@@ -252,12 +304,12 @@ function MCPActionPlanner({ module, appId, label, commands = [], expressDraft })
     <h3 className="text-sm font-bold text-white">Pedir ao MCP · {label}</h3><p className="mt-1 text-xs text-slate-400">Fluxo de quatro etapas. Veja duas por vez e avance quando estiver pronto.</p>
     <div className="mt-3 grid grid-cols-4 gap-1">{steps.map((step, index) => <button key={step} onClick={() => setPage(index < 2 ? 0 : 1)} className={`rounded-lg border p-2 text-left text-[10px] ${((page === 0 && index < 2) || (page === 1 && index > 1)) ? "border-sky-600 bg-sky-950/60 text-sky-100" : "border-slate-800 text-slate-500"}`}><span className="mr-1 inline-grid h-4 w-4 place-items-center rounded-full bg-sky-500 text-[9px] font-bold text-slate-950">{index + 1}</span>{step}</button>)}</div>
     {page === 0 && <div className="mt-3 grid grid-cols-2 gap-3">
-      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. Projeto e mídias</p><p className="mt-1 text-[11px] text-slate-500">Use um projeto real e as mídias persistidas no Acervo.</p><div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><div className="mt-3"><div className="flex items-center justify-between text-[11px]"><strong className="text-slate-200">Mídias do Acervo</strong><span className="text-sky-300">{selectedAssetIds.length} selecionada(s)</span></div><div className="mt-2 grid max-h-36 grid-cols-3 gap-1 overflow-y-auto">{assets.slice(0, 12).map((asset) => { const id = String(asset.id); const selected = selectedAssetIds.includes(id); const url = mediaStreamUrl(asset); return <button key={id} type="button" aria-pressed={selected} aria-label={`Selecionar mídia ${asset.title || asset.filename || id}`} onClick={() => toggleAsset(id)} className={`overflow-hidden rounded border text-left ${selected ? "border-sky-400 ring-1 ring-sky-400" : "border-slate-700"}`}><div className="aspect-video bg-slate-900">{url && <video src={url} muted preload="metadata" className="h-full w-full object-cover" />}</div><span className="block truncate p-1 text-[9px] text-slate-300">{asset.title || asset.filename || "Mídia"}</span></button>; })}</div>{!assets.length && <p className="mt-2 text-[11px] text-slate-600">Nenhuma mídia persistida foi encontrada no Acervo.</p>}</div><p className="mt-3 text-[11px] text-slate-500">{targets.length} projeto(s) selecionado(s)</p></section>
+      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. {isAiPrompt ? "Contexto" : "Projeto e mídias"}</p>{isAiPrompt ? <p className="mt-1 text-[11px] text-slate-500">O Assistente usa o pedido informado. Adicione contexto no prompt; não é necessário escolher um projeto.</p> : <><p className="mt-1 text-[11px] text-slate-500">Defina primeiro onde o MCP deve trabalhar. A timeline aberta é um alvo direto e visível.</p>{supportsTimeline && <button type="button" aria-pressed={targets.some((target) => target.id === "timeline-active")} onClick={addActiveTimeline} className="mt-3 flex w-full items-center justify-between rounded-lg border border-sky-700 bg-sky-950/40 px-3 py-2 text-left text-xs text-sky-100 hover:bg-sky-900/60"><span><strong className="block">Usar timeline aberta</strong><small className="text-sky-300">Corte principal · pronta para inspeção e ações</small></span><Video size={16}/></button>}<div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><div className="mt-3"><div className="flex items-center justify-between text-[11px]"><strong className="text-slate-200">Mídias do Acervo</strong><span className="text-sky-300">{selectedAssetIds.length} selecionada(s)</span></div><div className="mt-2 grid max-h-36 grid-cols-3 gap-1 overflow-y-auto">{assets.slice(0, 12).map((asset) => { const id = String(asset.id); const selected = selectedAssetIds.includes(id); const url = mediaStreamUrl(asset); return <button key={id} type="button" aria-pressed={selected} aria-label={`Selecionar mídia ${asset.title || asset.filename || id}`} onClick={() => toggleAsset(id)} className={`overflow-hidden rounded border text-left ${selected ? "border-sky-400 ring-1 ring-sky-400" : "border-slate-700"}`}><div className="aspect-video bg-slate-900">{url && <video src={url} muted preload="metadata" className="h-full w-full object-cover" />}</div><span className="block truncate p-1 text-[9px] text-slate-300">{asset.title || asset.filename || "Mídia"}</span></button>; })}</div>{!assets.length && <p className="mt-2 text-[11px] text-slate-600">Nenhuma mídia persistida foi encontrada no Acervo.</p>}</div><p className="mt-3 text-[11px] text-slate-500">{targets.length} alvo(s) selecionado(s)</p></>}</section>
       <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">2. Operações e prompt</p><label className="mt-2 block text-xs text-slate-300">Operações e prompt<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder={`Descreva o que o ${label} deve fazer.`} className="mt-1 h-24 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white outline-none focus:border-sky-500"/></label><div className="mt-2 space-y-1">{commands.map((command) => <div key={command} className={`flex items-center gap-1 rounded-lg border p-1 ${instruction.includes(command) ? "border-sky-400 bg-sky-950/60" : "border-slate-700"}`}><button onClick={() => setInstruction((current) => current.includes(command) ? current.replace(command, "").replace(/^\s*\n|\n\s*$/g, "") : [current, command].filter(Boolean).join("\n"))} className="min-w-0 flex-1 truncate px-1.5 py-1 text-left text-[11px] text-slate-200">{instruction.includes(command) ? "✓ " : "+ "}{command}</button><button aria-label={`Executar individualmente ${command}`} onClick={() => prepareQuick(command)} className="rounded border border-sky-700 p-1 text-sky-200 hover:bg-sky-950">▶</button></div>)}</div></section>
     </div>}
     {page === 1 && <div className="mt-3 grid grid-cols-2 gap-3">
       <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-white">3. Pacote de tarefas</p><span className="text-[11px] text-sky-300">{selectedCommands.length} operação(ões)</span></div><div className="mt-3 space-y-2">{selectedCommands.length ? selectedCommands.map((command, index) => <div key={command} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200"><span className="grid h-5 w-5 place-items-center rounded bg-sky-500 font-bold text-slate-950">{index + 1}</span><span className="flex-1">{command}</span><button aria-label={`Remover tarefa ${command}`} onClick={() => setInstruction((current) => current.replace(command, "").replace(/^\s*\n|\n\s*$/g, ""))} className="text-rose-300">Remover</button></div>) : <p className="rounded-lg border border-dashed border-slate-700 p-3 text-xs text-slate-500">Selecione operações no passo 2.</p>}</div><button onClick={() => setPage(0)} className="mt-3 w-full rounded-lg border border-sky-800 py-2 text-xs text-sky-200">Editar operações</button></section>
-      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">4. Execução e fila</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => setMode("immediate")} className={`rounded-lg border p-2 text-xs ${mode === "immediate" ? "border-sky-500 bg-sky-950 text-sky-200" : "border-slate-700 text-slate-400"}`}>Executar agora</button><button onClick={() => setMode("queue")} className={`rounded-lg border p-2 text-xs ${mode === "queue" ? "border-violet-500 bg-violet-950 text-violet-200" : "border-slate-700 text-slate-400"}`}>Adicionar à fila</button></div><div className="mt-2 flex gap-2"><button onClick={() => setOutput("internal")} className={`flex-1 rounded-lg border p-2 text-xs ${output === "internal" ? "border-emerald-500 text-emerald-200" : "border-slate-700 text-slate-400"}`}>Salvar interno</button><button onClick={() => setOutput("external")} className={`flex-1 rounded-lg border p-2 text-xs ${output === "external" ? "border-amber-500 text-amber-200" : "border-slate-700 text-slate-400"}`}>Exportar final</button></div>{output === "external" && <div className="mt-2 grid grid-cols-2 gap-2"><input aria-label="Nome do arquivo final" value={exportName} onChange={(event) => setExportName(event.target.value)} placeholder="Nome do arquivo" className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><select aria-label="Destino do arquivo final" value={exportDestination} onChange={(event) => setExportDestination(event.target.value)} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="downloads">Downloads</option><option value="acervo">Acervo MediaMind</option><option value="drive">Pasta conectada</option></select></div>}<button disabled={!targets.length || !targets.every((target) => target.instruction.trim()) || saving} onClick={submit} className="mt-3 w-full rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:bg-slate-700 disabled:text-slate-400">{saving ? "Salvando…" : mode === "immediate" ? "Solicitar ação imediata" : "Adicionar à fila MCP"}</button></section>
+      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">4. Execução e fila</p><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={() => setMode("immediate")} className={`rounded-lg border p-2 text-xs ${mode === "immediate" ? "border-sky-500 bg-sky-950 text-sky-200" : "border-slate-700 text-slate-400"}`}>Executar agora</button><button onClick={() => setMode("queue")} className={`rounded-lg border p-2 text-xs ${mode === "queue" ? "border-violet-500 bg-violet-950 text-violet-200" : "border-slate-700 text-slate-400"}`}>Adicionar à fila</button></div><div className="mt-2 flex gap-2"><button onClick={() => setOutput("internal")} className={`flex-1 rounded-lg border p-2 text-xs ${output === "internal" ? "border-emerald-500 text-emerald-200" : "border-slate-700 text-slate-400"}`}>Salvar interno</button><button onClick={() => setOutput("external")} className={`flex-1 rounded-lg border p-2 text-xs ${output === "external" ? "border-amber-500 text-amber-200" : "border-slate-700 text-slate-400"}`}>Exportar final</button></div>{output === "external" && <div className="mt-2 grid grid-cols-2 gap-2"><input aria-label="Nome do arquivo final" value={exportName} onChange={(event) => setExportName(event.target.value)} placeholder="Nome do arquivo" className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><select aria-label="Destino do arquivo final" value={exportDestination} onChange={(event) => setExportDestination(event.target.value)} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="downloads">Downloads</option><option value="acervo">Acervo MediaMind</option><option value="drive">Pasta conectada</option></select></div>}<button aria-label={mode === "immediate" ? "Executar pacote agora" : "Adicionar pacote à fila MCP"} disabled={(!isAiPrompt && (!targets.length || !targets.every((target) => target.instruction.trim()))) || !instruction.trim() || saving} onClick={submit} className="mt-3 w-full rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:bg-slate-700 disabled:text-slate-400">{saving ? "Preparando…" : mode === "immediate" ? "Executar agora" : "Adicionar à fila MCP"}</button></section>
     </div>}
     {targets.length > 0 && <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs font-semibold text-white">Projetos selecionados</p>{targets.map((target) => <div key={target.id} className="mt-2 rounded-lg border border-slate-700 bg-slate-950/60 p-2"><div className="flex items-center justify-between text-xs"><strong className="text-slate-200">{target.name}</strong><button onClick={() => setTargets((current) => current.filter((item) => item.id !== target.id))} className="text-rose-300">Remover</button></div><textarea value={target.instruction} onChange={(event) => updateTarget(target.id, { instruction: event.target.value })} placeholder="O que aplicar neste projeto?" className="mt-2 h-14 w-full resize-none rounded border border-slate-700 bg-slate-900 p-2 text-xs text-white"/></div>)}</div>}
     <div className="mt-3 flex justify-between gap-2"><button disabled={page === 0} onClick={() => setPage(0)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 disabled:opacity-40">← Etapas 1 e 2</button><button disabled={page === 1} onClick={() => setPage(1)} className="rounded-lg border border-sky-700 px-3 py-2 text-xs text-sky-200 disabled:opacity-40">Etapas 3 e 4 →</button></div>
