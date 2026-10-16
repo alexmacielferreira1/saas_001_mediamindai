@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileText, LoaderCircle, Plus, Sparkles } from "lucide-react";
+import { Download, LoaderCircle, Plus, Sparkles, SlidersHorizontal } from "lucide-react";
 import {
   generateVideoStudioStage,
   getAICompanies,
@@ -27,6 +27,7 @@ function newProject() {
     idea: "",
     engine: engines[0],
     connectionId: "",
+    preferences: { format: "16:9", duration: "", language: "Português (Brasil)", audience: "", niche: "", tone: "", mediaStrategy: "", voice: "", visualReferences: "", availableAssets: "" },
     outputs: {},
     adjustments: {},
     updatedAt: new Date().toISOString(),
@@ -58,10 +59,7 @@ export default function VideoStudio() {
     `components/ai-tools/VideoStudio.jsx:active:${companyId || "select"}`,
     "",
   );
-  const [expandedProjectIds, setExpandedProjectIds] = useWorkDraftState(
-    `components/ai-tools/VideoStudio.jsx:expanded:${companyId || "select"}`,
-    [],
-  );
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [stageId, setStageId] = useState("roteiro");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -148,39 +146,26 @@ export default function VideoStudio() {
     }
   }, [projects, activeProjectId, setProjects, setActiveProjectId]);
 
-  useEffect(() => {
-    const available = new Set(projects.map((item) => item.id));
-    setExpandedProjectIds((current) => {
-      const existing = Array.isArray(current) ? current.filter((id) => available.has(id)) : [];
-      const next = activeProjectId && !existing.includes(activeProjectId)
-        ? [...existing, activeProjectId]
-        : existing;
-      return next.length === current?.length && next.every((id, index) => id === current[index])
-        ? current
-        : next;
-    });
-  }, [projects, activeProjectId, setExpandedProjectIds]);
-
   const project = projects.find((item) => item.id === activeProjectId) || null;
   const stageIndex = VIDEO_STUDIO_STAGES.findIndex((item) => item.id === stageId);
   const stage = VIDEO_STUDIO_STAGES[stageIndex] || VIDEO_STUDIO_STAGES[0];
   const connection = connections.find((item) => item.id === selectedConnectionId);
   const completeCount = useMemo(
-    () => VIDEO_STUDIO_STAGES.filter((item) => project?.outputs[item.id]?.text?.trim()).length,
+    () => VIDEO_STUDIO_STAGES.filter((item) => project?.outputs?.[item.id]?.text?.trim()).length,
     [project],
   );
   const stageReady =
     !!project &&
     (stage.id === "roteiro"
-      ? !!project.idea.trim()
+      ? !!project.idea?.trim()
       : stage.dependsOn.every(
           (dependency) =>
-            !!project.outputs[dependency]?.text?.trim() &&
-            !project.outputs[dependency]?.stale,
+            !!project.outputs?.[dependency]?.text?.trim() &&
+            !project.outputs?.[dependency]?.stale,
         ));
   const stageNeedsRefresh =
-    !!project?.outputs[stage.id]?.stale ||
-    stage.dependsOn.some((dependency) => project?.outputs[dependency]?.stale);
+    !!project?.outputs?.[stage.id]?.stale ||
+    stage.dependsOn.some((dependency) => project?.outputs?.[dependency]?.stale);
 
   useEffect(() => {
     if (!connections.length) return;
@@ -208,7 +193,6 @@ export default function VideoStudio() {
     const created = newProject();
     updateProject(created);
     setActiveProjectId(created.id);
-    setExpandedProjectIds((current) => Array.from(new Set([...(current || []), created.id])));
     setStageId("roteiro");
     setError("");
     setStatus("Novo projeto criado e salvo como rascunho.");
@@ -216,16 +200,14 @@ export default function VideoStudio() {
 
   function openProject(id) {
     setActiveProjectId(id);
-    setExpandedProjectIds((current) => Array.from(new Set([...(current || []), id])));
     setError("");
   }
 
-  function toggleProject(id) {
-    setExpandedProjectIds((current) => {
-      const opened = new Set(current || []);
-      if (opened.has(id)) opened.delete(id);
-      else opened.add(id);
-      return [...opened];
+  function updatePreference(key, value) {
+    if (!project) return;
+    patchProject({
+      preferences: { ...(project.preferences || {}), [key]: value },
+      outputs: markAllStagesStale(project.outputs || {}),
     });
   }
 
@@ -273,7 +255,8 @@ export default function VideoStudio() {
       idea: sourceProject.idea,
       outputs: sourceProject.outputs,
       engine: sourceProject.engine,
-      adjustment: sourceProject.adjustments[targetStage.id] || "",
+      adjustment: sourceProject.adjustments?.[targetStage.id] || "",
+      preferences: sourceProject.preferences || {},
     });
     const result = await generateVideoStudioStage({
       stage: targetStage.id,
@@ -368,39 +351,17 @@ export default function VideoStudio() {
         </div>
       </header>
 
-      <section aria-label="Projetos abertos" className="rounded-xl border border-slate-800 bg-slate-950/45 p-3">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="font-semibold text-white">Projetos abertos</h3>
-            <p className="mt-0.5 text-xs text-slate-500">Cada pacote é salvo automaticamente como rascunho. Expanda quantos projetos precisar e retome qualquer um sem perder as etapas.</p>
-          </div>
-          <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-300">{projects.length}</span>
-        </div>
-        <div className="grid gap-2 xl:grid-cols-2">
-          {projects.map((item) => {
-            const expanded = expandedProjectIds.includes(item.id);
-            const isActive = item.id === activeProjectId;
-            const completed = VIDEO_STUDIO_STAGES.filter((stageItem) => item.outputs?.[stageItem.id]?.text?.trim()).length;
-            return <article key={item.id} className={`rounded-lg border ${isActive ? "border-cyan-600 bg-cyan-950/25" : "border-slate-800 bg-slate-950/70"}`}>
-              <div className="flex items-center gap-2 p-3">
-                <button type="button" aria-label={`${expanded ? "Recolher" : "Expandir"} ${item.title || "projeto sem título"}`} aria-expanded={expanded} onClick={() => toggleProject(item.id)} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
-                  {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-                </button>
-                <button type="button" onClick={() => openProject(item.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-semibold text-white">{item.title || "Projeto sem título"}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">{completed}/{VIDEO_STUDIO_STAGES.length} etapas · salvo automaticamente</span>
-                </button>
-                {isActive && <span className="rounded-full bg-cyan-500/15 px-2 py-1 text-[10px] font-bold text-cyan-200">EM EDIÇÃO</span>}
-              </div>
-              {expanded && <div className="border-t border-slate-800 px-3 py-3">
-                <div className="flex items-start gap-2 text-xs leading-relaxed text-slate-400"><FileText size={15} className="mt-0.5 shrink-0 text-cyan-300" /><span>{item.idea?.trim() ? item.idea.trim().slice(0, 220) : "Sem ideia definida ainda. Abra o projeto para iniciar o roteiro."}</span></div>
-                <div className="mt-3 flex flex-wrap gap-1.5">{VIDEO_STUDIO_STAGES.map((stageItem, index) => <span key={stageItem.id} className={`rounded border px-1.5 py-0.5 text-[10px] ${item.outputs?.[stageItem.id]?.stale ? "border-amber-700/70 text-amber-200" : item.outputs?.[stageItem.id]?.text?.trim() ? "border-emerald-800 text-emerald-200" : "border-slate-700 text-slate-500"}`}>{index + 1}. {stageItem.label}</span>)}</div>
-                {!isActive && <button type="button" onClick={() => openProject(item.id)} className="mt-3 rounded-md border border-cyan-700 px-2.5 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-950/50">Editar este projeto</button>}
-              </div>}
-            </article>;
-          })}
-        </div>
-      </section>
+      <nav aria-label="Guias dos projetos de vídeo" className="flex items-center gap-1.5 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/55 px-2 py-1.5">
+        {projects.map((item) => {
+          const selected = item.id === activeProjectId;
+          const completed = VIDEO_STUDIO_STAGES.filter((entry) => item.outputs?.[entry.id]?.text?.trim()).length;
+          return <button key={item.id} type="button" role="tab" aria-selected={selected} title={`${item.title || "Projeto sem título"} · ${completed}/8 etapas`} onClick={() => openProject(item.id)} disabled={busy} className={`max-w-52 shrink-0 truncate rounded-md border px-3 py-1.5 text-xs font-semibold transition ${selected ? "border-cyan-500 bg-cyan-950/60 text-cyan-100" : "border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-white"}`}>
+            {item.title || "Projeto sem título"}
+          </button>;
+        })}
+        <button type="button" onClick={createProject} disabled={busy} aria-label="Adicionar guia de projeto" title="Novo projeto" className="shrink-0 rounded-md border border-dashed border-slate-700 p-1.5 text-cyan-300 hover:border-cyan-400 disabled:opacity-40"><Plus size={15}/></button>
+        <span className="ml-auto shrink-0 text-[10px] text-slate-500">{projects.length} projeto(s)</span>
+      </nav>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,.8fr)]">
         <label className="text-xs font-semibold text-slate-300">
@@ -409,11 +370,6 @@ export default function VideoStudio() {
           <span className="mt-1 block font-normal text-slate-500">Até 200 mil caracteres. O progresso fica salvo como rascunho neste navegador e nesta empresa.</span>
         </label>
         <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-          <label className="block text-xs font-semibold">Projeto
-            <select aria-label="Projeto de vídeo" className={`${field} mt-2`} value={activeProjectId} disabled={busy || !projects.length} onChange={(event) => setActiveProjectId(event.target.value)}>
-              {projects.map((item) => <option key={item.id} value={item.id}>{item.title || "Projeto sem título"}</option>)}
-            </select>
-          </label>
           {companies.length > 1 && <label className="block text-xs font-semibold">Empresa da conexão
             <select aria-label="Empresa da conexão" className={`${field} mt-2`} value={companyId} disabled={busy} onChange={(event) => setCompanyId(event.target.value)}>
               {companies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -442,6 +398,29 @@ export default function VideoStudio() {
         <input aria-label="Nome do projeto" className={`${field} mt-2`} disabled={busy} value={project.title} onChange={(event) => patchProject({ title: event.target.value })} />
       </label>}
 
+      {project && <section className="rounded-xl border border-slate-800 bg-slate-950/45 p-3">
+        <button type="button" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((value) => !value)} className="flex w-full items-center justify-between text-left text-sm font-semibold text-cyan-200"><span className="inline-flex items-center gap-2"><SlidersHorizontal size={16}/> Direcionamento opcional · formato, público, referências e materiais</span><span>{showAdvanced ? "Recolher −" : "Expandir +"}</span></button>
+        <p className="mt-1 text-xs text-slate-500">Basta escrever a ideia ou colar o roteiro. Os campos abaixo são opcionais e ajudam a direcionar a IA quando houver uma conexão ativa.</p>
+        {showAdvanced && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            ["format", "Formato", "select", ["16:9", "9:16", "1:1", "4:5", "Outro / livre"]],
+            ["duration", "Duração planejada", "select", ["", "15 segundos", "30 segundos", "60 segundos", "2 minutos", "5 minutos", "10 minutos", "Livre"]],
+            ["language", "Idioma", "select", ["Português (Brasil)", "Inglês", "Espanhol", "Outro / conforme a ideia"]],
+            ["niche", "Nicho / tema", "text"],
+            ["audience", "Público-alvo / canal", "text"],
+            ["tone", "Estilo e tom da narração", "text"],
+            ["mediaStrategy", "Estratégia de mídia (própria, IA, mista)", "text"],
+            ["voice", "Narração / áudio / música", "text"],
+            ["visualReferences", "Referências visuais e links", "textarea"],
+            ["availableAssets", "Mídias e elementos disponíveis (descrição)", "textarea"],
+          ].map(([key, label, type, options]) => <label key={key} className={`text-xs font-semibold text-slate-300 ${type === "textarea" ? "sm:col-span-2 xl:col-span-3" : ""}`}>
+            {label}
+            {type === "select" ? <select className={`${field} mt-1`} value={project.preferences?.[key] ?? (key === "format" ? "16:9" : key === "language" ? "Português (Brasil)" : "")} onChange={(event) => updatePreference(key, event.target.value)} disabled={busy}>{options.map((option) => <option key={option} value={option}>{option || "Não definido"}</option>)}</select> : type === "textarea" ? <textarea className={`${field} mt-1 min-h-16`} value={project.preferences?.[key] || ""} onChange={(event) => updatePreference(key, event.target.value)} disabled={busy} placeholder="Opcional; não é necessário preencher para começar"/> : <input className={`${field} mt-1`} value={project.preferences?.[key] || ""} onChange={(event) => updatePreference(key, event.target.value)} disabled={busy} placeholder="Opcional"/>}
+          </label>)}
+          <p className="text-xs text-slate-500 sm:col-span-2 xl:col-span-3">Referências textuais e links são incluídos no prompt, mas ainda não são enviados como arquivos multimodais. A importação real de mídias requer integração específica, que não está simulada nesta etapa.</p>
+        </div>}
+      </section>}
+
       <nav aria-label="Etapas do Video Studio" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {VIDEO_STUDIO_STAGES.map((item, index) => {
           const result = project?.outputs[item.id];
@@ -459,10 +438,10 @@ export default function VideoStudio() {
             <span className="text-xs text-slate-400">{completeCount}/{VIDEO_STUDIO_STAGES.length} etapas com conteúdo</span>
           </div>
           {stageNeedsRefresh && <p className="mb-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-2 text-xs text-amber-200">Uma etapa anterior foi alterada. Este resultado foi preservado, mas precisa ser revisto ou gerado novamente.</p>}
-          <textarea aria-label={`Resultado do ${stage.label.toLowerCase()}`} className={`${field} min-h-72 resize-y leading-relaxed`} disabled={!project || busy} value={project?.outputs[stage.id]?.text || ""} onChange={(event) => updateStageText(stage.id, event.target.value)} placeholder="O resultado da etapa aparecerá aqui e poderá ser editado." />
+          <textarea aria-label={`Resultado do ${stage.label.toLowerCase()}`} className={`${field} min-h-72 resize-y leading-relaxed`} disabled={!project || busy} value={project?.outputs?.[stage.id]?.text || ""} onChange={(event) => updateStageText(stage.id, event.target.value)} placeholder="O resultado da etapa aparecerá aqui e poderá ser editado." />
           {stage.id === "shot_list" && <button type="button" onClick={createEditableScenes} disabled={!project?.outputs?.shot_list?.text?.trim() || busy} className="mt-3 rounded-lg border border-cyan-700 px-3 py-2 text-sm font-semibold text-cyan-200 disabled:opacity-40">{project?.scenes?.length ? "Atualizar cenas editáveis" : "Criar cenas editáveis"}</button>}
           <label className="mt-3 block text-xs font-semibold text-slate-400">Orientação adicional para esta etapa
-            <textarea aria-label="Orientação adicional" className={`${field} mt-2 min-h-20 resize-y`} disabled={!project || busy} value={project?.adjustments[stage.id] || ""} onChange={(event) => patchProject({ adjustments: { ...project.adjustments, [stage.id]: event.target.value } })} placeholder="Peça uma mudança específica sem perder o restante do trabalho." />
+            <textarea aria-label="Orientação adicional" className={`${field} mt-2 min-h-20 resize-y`} disabled={!project || busy} value={project?.adjustments?.[stage.id] || ""} onChange={(event) => patchProject({ adjustments: { ...project.adjustments, [stage.id]: event.target.value } })} placeholder="Peça uma mudança específica sem perder o restante do trabalho." />
           </label>
         </section>
 
@@ -481,7 +460,7 @@ export default function VideoStudio() {
         </aside>
       </div>
 
-      {project?.scenes?.length > 0 && ["shot_list", "storyboard", "prompts", "multiplanos"].includes(stage.id) && <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4" aria-label="Montagem e prévia da produção"><div><h3 className="font-semibold text-white">Timeline de produção</h3><p className="mt-1 text-xs text-slate-400">As cenas da decupagem, mídias, narração e prévia ficam dentro do mesmo fluxo e são salvas no rascunho.</p></div><VideoWorkspace scenes={project.scenes} setScenes={updateScenes} format={project.format || "16:9"} label="PRÉVIA DA PRODUÇÃO" /></section>}
+      {project?.scenes?.length > 0 && ["shot_list", "storyboard", "prompts", "multiplanos"].includes(stage.id) && <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4" aria-label="Montagem e prévia da produção"><div><h3 className="font-semibold text-white">Timeline de produção</h3><p className="mt-1 text-xs text-slate-400">As cenas da decupagem, mídias, narração e prévia ficam dentro do mesmo fluxo e são salvas no rascunho.</p></div><VideoWorkspace scenes={project.scenes} setScenes={updateScenes} format={project.preferences?.format || "16:9"} label="PRÉVIA DA PRODUÇÃO" /></section>}
     </section>
   );
 }
