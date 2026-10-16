@@ -46,7 +46,18 @@ function projectLabel(project) {
 
 export default function ClipsFree() {
   const [savedSession, setSession] = useWorkDraftState("clipsfree-session", EMPTY_SESSION);
-  const session = { ...EMPTY_SESSION, ...savedSession };
+  // Drafts written by older ClipsFree versions may not include caption arrays.
+  // Normalize persisted data before rendering so a legacy draft cannot crash React.
+  const mergedSession = { ...EMPTY_SESSION, ...(savedSession || {}) };
+  const session = {
+    ...mergedSession,
+    suggestions: Array.isArray(mergedSession.suggestions)
+      ? mergedSession.suggestions.filter(Boolean).map((item) => ({
+          ...item,
+          captions: Array.isArray(item.captions) ? item.captions : [],
+        }))
+      : [],
+  };
   const projetos = useProducaoProjetos();
   const [sourceFile, setSourceFile] = useState(null);
   const [analysing, setAnalysing] = useState(false);
@@ -189,7 +200,7 @@ export default function ClipsFree() {
         analysis_candidates: session.suggestions,
         analysis_status: session.analysisStatus,
         source_project_id: session.sourceProject?.id || null,
-        legendas: item.captions.map((caption, index) => ({
+        legendas: (Array.isArray(item.captions) ? item.captions : []).map((caption, index) => ({
           id: `caption-${item.id}-${index}`,
           start_ms: Math.round(caption.start * 1000),
           end_ms: Math.round(caption.end * 1000),
@@ -324,7 +335,7 @@ export default function ClipsFree() {
             </div>
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-100">{item.title}</p><p className="mt-1 text-xs text-slate-400">{formatTime(item.start)} — {formatTime(item.end)} · {session.format}</p></div><span className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-300" title="Nota heurística baseada nas dimensões fornecidas pela IA; não prevê visualizações">{item.score}/100</span></div>
             <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">{item.notes}</p>
-            <p className="mt-3 text-xs text-slate-400">{item.captions.length} legenda{item.captions.length === 1 ? " temporizada" : "s temporizadas"}</p>
+            <p className="mt-3 text-xs text-slate-400">{item.captions?.length ?? 0} legenda{(item.captions?.length ?? 0) === 1 ? " temporizada" : "s temporizadas"}</p>
             <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" aria-label={`Revisar trecho ${formatTime(item.start)} a ${formatTime(item.end)}`} onClick={() => reviewSuggestion(item)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-violet-400 hover:bg-slate-800"><Play size={14} /> Revisar</button><button type="button" onClick={() => openEditor(item)} className="flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-violet-300"><Clapperboard size={14} /> Editor</button></div>
           </article>)}
         </div>
