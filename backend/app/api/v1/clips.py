@@ -3,7 +3,7 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
@@ -30,6 +30,15 @@ DbSession = Annotated[Session, Depends(get_session)]
 class StartAnalysisBody(BaseModel):
     asset_id: UUID
     connection_id: str | None = None
+    minimum: int = Field(default=20, ge=15, le=60)
+    maximum: int = Field(default=60, ge=15, le=60)
+    editorial_prompt: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def check_duration(self):
+        if self.minimum > self.maximum:
+            raise ValueError("A duração mínima não pode superar a máxima.")
+        return self
 
 
 def serialize_analysis(analysis: dict) -> dict:
@@ -49,7 +58,7 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         configured_connection_id = configuration.get("tool_connections", {}).get(
             "auto-clips", configuration.get("default_connection_id")
         )
-        connection_id = configured_connection_id or body.connection_id
+        connection_id = (configured_connection_id if configuration.get("tool_connections", {}).get("auto-clips") else body.connection_id or configured_connection_id)
         if connection_id:
             connection = next(
                 (
@@ -73,8 +82,13 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
     except LookupError as error:
         raise PublicError(404, "ASSET_NOT_FOUND", "Mídia não encontrada.") from error
 
-    if connection:
-        record.data = {**record.data, "connection_id": connection["id"]}
+    record.data = {
+        **record.data,
+        "minimum": body.minimum,
+        "maximum": body.maximum,
+        "editorial_prompt": body.editorial_prompt,
+        **({"connection_id": connection["id"]} if connection else {}),
+    }
 
     try:
         # Resolve only the tenant-owned asset key, never a browser-provided path.
@@ -85,10 +99,15 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         if connection:
             api_key = decrypt_ai_key(connection)
             segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
-            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(segments)
+            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(segments, minimum=body.minimum, maximum=body.maximum, editorial_prompt=body.editorial_prompt)
         else:
             segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
             candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
+        # Duration constraints are enforced server-side, including command-based providers.
+        candidates = [
+            candidate for candidate in candidates
+            if body.minimum <= candidate.duration <= body.maximum
+        ]
         service.save_transcript(record.id, membership.tenant_id, segments)
         service.save_candidates(
             record.id,
