@@ -30,7 +30,7 @@ const statusStyle={queued:'text-amber-300',submitted:'text-sky-300',completed:'t
 export default function UniversalCopilot(){
  const location=useLocation(); const group=detectGroup(location);const catalogue=GROUPS[group];
  const [showContext,setShowContext]=useState(true); const [showMcp,setShowMcp]=useState(true); const [projectOptions,setProjectOptions]=useState([]);const [mediaOptions,setMediaOptions]=useState([]);const [assetPicker,setAssetPicker]=useState(false);const [toolSettings,setToolSettings]=useState({});
- const [open,setOpen]=useState(()=>{try{return localStorage.getItem('mm_copilot_open')==='1'}catch{return false}});
+ const [open,setOpen]=useState(()=>{try{return localStorage.getItem('mm_copilot_open')!=='0'}catch{return false}});
  const [tab,setTab]=useState('execute');const [data,setData]=useState(restore);const [input,setInput]=useState('');const [toolList,setToolList]=useState([]);const [status,setStatus]=useState('');const [expanded,setExpanded]=useState('');const [busy,setBusy]=useState(false);const [contextItem,setContextItem]=useState(null);
  const queue=data.queues.find(q=>q.id===data.active)||data.queues[0];
  useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(data))}catch{setStatus('Armazenamento local indisponível ou cheio.')}} ,[data]);

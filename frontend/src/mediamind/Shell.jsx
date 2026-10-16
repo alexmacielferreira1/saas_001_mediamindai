@@ -35,6 +35,7 @@ import QuickActionsButton from "./components/QuickActionsButton";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import MCPDock from "./components/mcp/MCPDock";
 import MCPExpress from "./components/mcp/MCPExpress";
+import UniversalCopilot from "./components/copilot/UniversalCopilot";
 
 export const NAV_GROUPS = [
   {
@@ -156,8 +157,7 @@ export const NAV_GROUPS = [
     group: "IA",
     items: [
       { to: "/estudio-de-arte", label: "Estúdio de Arte", icon: Palette },
-      { to: "/video-estudio", label: "VIDEO_ESTUDIO", icon: Clapperboard },
-      { to: "/agencia-video", label: "Agência de Vídeo", icon: Layers3 },
+      { to: "/geracao-de-video", label: "Geração de vídeo", icon: Clapperboard },
       {
         to: "/ferramentas-graficas",
         label: "Ferramentas Gráficas",
@@ -445,6 +445,8 @@ export default function Shell({ children, persistentPath }) {
         onClose={() => setPaletteOpen(false)}
       />
       <MCPDock />
+      {/* Copiloto global: disponível em todas as páginas renderizadas pelo Shell */}
+      <UniversalCopilot />
     </div>
   );
 }
