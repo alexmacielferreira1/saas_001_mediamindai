@@ -4,24 +4,71 @@ import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightb
 import { createMCPQueue, listMCPTools } from '../../lib/mcpApi';
 
 // Catálogo visual: operações só executam se o backend anunciar ferramenta disponível.
+// Catálogo contextual extensível: cada tela/subguia recebe comandos adequados.
+// Sem executor real: a ação fica explicitamente pendente; nunca simula resultado.
 const GROUPS = {
-  edit: { label:'Edição e timeline',module:'mmfilm', cards:['Ler timeline','Cortar trechos (IN / OUT)','Criar legendas automáticas','Ajustar áudio e normalização','Ajustar cor e exposição','Preparar exportação'] },
-  video: {label:'Geração de vídeo',module:'ai-tools',cards:['Sugerir roteiro','Gerar imagem','Gerar vídeo','Transcrever','Gerar cortes','Exportar resultados']},
-  image: {label:'Arte e thumbnails',module:'mmphoto',cards:['Recortar','Remover fundo','Ajustar luz e cor','Criar thumbnail','Inserir textos','Exportar e salvar']},
-  audio: {label:'Áudio',module:'mmsom',cards:['Limpar ruído','Normalizar loudness','Equalizar','Separar voz e música','Masterizar','Exportar áudio']},
-  office: {label:'Documentos e produtividade',module:'ai-tools',cards:['Gerar roteiro','Resumir conteúdo','Revisar texto','Organizar dados','Gerar gráficos','Exportar resultados']},
-  agency: {label:'Agência de Vídeo',module:'ai-tools',cards:['Planejar missão','Qualificar lead','Preparar proposta','Criar campanha','Revisar projeto','Preparar entrega']},
-  media: {label:'Acervo e produção',module:'ai-tools',cards:['Pesquisar mídias','Transcrever','Classificar mídia','Selecionar melhores cenas','Verificar versões','Exportar resultados']},
+ dashboard: { label:'Início e indicadores',module:'ai-tools',cards:['Resumir pendências','Localizar tarefas atrasadas','Abrir projetos recentes','Conferir aprovações','Organizar prioridades','Preparar relatório'] },
+ ingest: {label:'Ingestão',module:'ai-tools',cards:['Selecionar mídias','Verificar formato','Identificar duplicados','Transcrever arquivos','Organizar metadados','Iniciar processamento']},
+ search: {label:'Pesquisa e acervo',module:'ai-tools',cards:['Pesquisar por descrição','Filtrar por período','Encontrar trechos','Comparar versões','Classificar mídias','Preparar seleção']},
+ workspace: {label:'Workspace audiovisual',module:'mmfilm',cards:['Selecionar timeline','Adicionar mídia','Marcar IN / OUT','Organizar sequência','Sincronizar áudio','Exportar seleção']},
+ script: {label:'Roteiros e rascunhos',module:'ai-tools',cards:['Criar roteiro','Resumir briefing','Revisar texto','Gerar pauta','Vincular mídias','Enviar para edição']},
+ recording: {label:'Gravações',module:'mmfilm',cards:['Preparar gravação','Selecionar programa','Conferir mídias','Criar marcadores','Transcrever gravação','Enviar para edição']},
+ edit: {label:'Edição e timeline',module:'mmfilm',cards:['Ler timeline','Cortar trechos (IN / OUT)','Criar legendas automáticas','Ajustar áudio e normalização','Ajustar cor e exposição','Preparar exportação']},
+ review: {label:'Revisão e aprovação',module:'mmfilm',cards:['Abrir versão','Marcar comentário no tempo','Comparar versões','Solicitar ajuste','Preparar aprovação','Encaminhar correção']},
+ publication: {label:'Publicação',module:'ai-tools',cards:['Preparar legenda','Criar título','Adaptar formato','Conferir miniatura','Montar calendário','Preparar publicação']},
+ analytics: {label:'Analytics',module:'ai-tools',cards:['Filtrar resultados','Comparar períodos','Analisar desempenho','Criar relatório','Localizar oportunidades','Exportar dados']},
+ video: {label:'Geração de vídeo',module:'ai-tools',cards:['Sugerir roteiro','Criar storyboard','Gerar imagem','Gerar vídeo','Montar cenas','Preparar exportação']},
+ clips: {label:'ClipsFree',module:'mmfilm',cards:['Transcrever vídeo','Detectar melhores trechos','Marcar IN / OUT','Gerar legendas','Reenquadrar corte','Exportar cortes']},
+ image: {label:'Arte e thumbnails',module:'mmphoto',cards:['Recortar pessoa','Remover fundo','Aplicar identidade visual','Inserir título','Criar variações','Exportar arte']},
+ graphics: {label:'Ferramentas gráficas',module:'mmphoto',cards:['Abrir prancheta','Selecionar camadas','Remover fundo','Aplicar efeito','Ajustar cores','Exportar composição']},
+ audio: {label:'Áudio',module:'mmsom',cards:['Limpar ruído','Normalizar loudness','Equalizar','Sincronizar trilhas','Masterizar','Exportar áudio']},
+ office: {label:'Documentos e produtividade',module:'ai-tools',cards:['Gerar documento','Resumir conteúdo','Revisar texto','Organizar dados','Gerar gráficos','Exportar resultado']},
+ admin: {label:'Administração',module:'ai-tools',cards:['Pesquisar usuários','Conferir permissões','Revisar atividades','Analisar falhas','Gerar auditoria','Preparar relatório']},
+ agency_command: {label:'Agência · Comando',module:'ai-tools',cards:['Planejar a semana','Revisar missões','Conferir pendências','Consultar indicadores','Distribuir tarefas','Preparar decisão']},
+ agency_planning: {label:'Agência · Planejamento',module:'ai-tools',cards:['Definir nicho','Escolher território','Definir orçamento','Criar missão','Planejar calendário','Revisar metas']},
+ agency_radar: {label:'Agência · Radar',module:'ai-tools',cards:['Pesquisar empresas','Qualificar lead','Verificar duplicatas','Analisar presença digital','Encontrar campanha compatível','Preparar prospecção']},
+ agency_prospect: {label:'Agência · Prospecção',module:'ai-tools',cards:['Preparar mensagem','Conferir elegibilidade','Revisar abordagem','Registrar retorno','Organizar follow-up','Encaminhar para CRM']},
+ agency_crm: {label:'Agência · CRM',module:'ai-tools',cards:['Criar oportunidade','Consultar cliente','Atualizar etapa','Preparar proposta','Registrar contato','Analisar negociação']},
+ agency_campaign: {label:'Agência · Campanhas',module:'ai-tools',cards:['Criar conceito','Pesquisar campanhas','Vincular mídias','Verificar exclusividade','Adaptar identidade','Gerar proposta']},
+ agency_project: {label:'Agência · Projetos',module:'ai-tools',cards:['Criar projeto','Selecionar entregáveis','Atualizar briefing','Organizar produção','Conferir prazos','Preparar revisão']},
+ agency_production: {label:'Agência · Produção',module:'mmfilm',cards:['Selecionar projeto','Abrir timeline','Adicionar mídia','Gerar cortes','Criar legenda','Preparar exportação']},
+ agency_approval: {label:'Agência · Aprovação',module:'ai-tools',cards:['Conferir entregáveis','Abrir revisão','Solicitar ajustes','Preparar pacote','Registrar aceite','Preparar entrega']},
+ agency_finance: {label:'Agência · Financeiro',module:'ai-tools',cards:['Consultar pagamentos','Conferir cobrança','Revisar custos','Verificar conciliação','Preparar relatório','Sinalizar pendências']},
+ agency_client: {label:'Agência · Clientes',module:'ai-tools',cards:['Abrir cliente','Consultar histórico','Revisar entregas','Preparar suporte','Registrar feedback','Sugerir oferta']},
+ agency_agents: {label:'Agência · Agentes',module:'ai-tools',cards:['Criar missão','Consultar fila','Conferir falhas','Pausar tarefa','Revisar permissões','Ver execuções']},
 };
+const AGENCY_GUIDES={comando:'agency_command',planejamento:'agency_planning',radar:'agency_radar',prospeccao:'agency_prospect',crm:'agency_crm',campanhas:'agency_campaign',projetos:'agency_project',geracao:'video',edicao:'agency_production',aprovacao:'agency_approval',publicacao:'publication',financeiro:'agency_finance',clientes:'agency_client',agentes:'agency_agents'};
 const detectGroup=(location)=>{
- const path=location.pathname.toLowerCase(), q=new URLSearchParams(location.search), sub=(q.get('sub')||'').toLowerCase(), tool=(q.get('tool')||'').toLowerCase();
- if(path.includes('agencia-video'))return 'agency';
- if(path.includes('thumb')||path.includes('arte')||/photo|vector/.test(tool))return 'image';
- if(path.includes('geracao-de-video')||path.includes('video-estudio')||path.includes('clipsfree'))return 'video';
+ const path=location.pathname.toLowerCase();
+ const q=new URLSearchParams(location.search);
+ const sub=(q.get('sub')||'').toLowerCase();
+ const tab=(q.get('tab')||'').toLowerCase();
+ const tool=(q.get('tool')||'').toLowerCase();
+ if(path.includes('agencia-video'))return AGENCY_GUIDES[q.get('guia')]||'agency_command';
+ if(path.includes('administration'))return 'admin';
+ if(path.includes('thumb')||path.includes('estudio-de-arte'))return 'image';
+ if(path.includes('ferramentas-graficas'))return 'graphics';
+ if(path.includes('clipsfree'))return 'clips';
+ if(path.includes('geracao-de-video')||path.includes('video-estudio'))return 'video';
+ if(path.includes('ferramentas-ia'))return 'video';
  if(tool.includes('som')||tool.includes('audition'))return 'audio';
- if(/film|effect|premiere/.test(tool)||/em_edicao|workspace|edicao|gravacoes/.test(sub))return 'edit';
  if(/word|excel|powerpoint/.test(tool))return 'office';
- return 'media';
+ if(/photo|vector/.test(tool))return 'graphics';
+ if(/film|effect|premiere|fusion|color/.test(tool))return 'edit';
+ if(path==='/corp'){
+  if(sub==='ingest')return 'ingest';
+  if(sub==='pesquisa')return 'search';
+  if(sub==='workspace')return 'workspace';
+  if(sub==='rascunhos')return 'script';
+  if(sub==='gravacoes'||sub==='agendamentos')return 'recording';
+  if(['em_edicao','para_editar'].includes(sub))return 'edit';
+  if(['aguardando_aprovacao','em_aprovacao','finalizado'].includes(sub))return 'review';
+  if(['redes_sociais','para_publicar','publicado'].includes(sub))return 'publication';
+  if(sub==='analytics')return 'analytics';
+  return 'dashboard';
+ }
+ if(path.includes('assistente'))return 'office';
+ return 'dashboard';
 };
 const key='mm_universal_copilot_v1';
 const newQueue=(id,group)=>({id,name:`Fila ${String(id).padStart(2,'0')}`,context:group,projectMode:'current',projectName:'',targetMode:'selected',targetName:'',assets:[],operations:[]});
@@ -59,8 +106,8 @@ export default function UniversalCopilot(){
  function chatSubmit(e){e.preventDefault();if(!input.trim())return;const message=input.trim();setData(s=>({...s,chat:[...s.chat,{role:'user',text:message,context:contextItem,at:new Date().toISOString()},{role:'system',text:'Comando registrado como rascunho. Este painel ainda não possui modelo de linguagem conectado; nenhuma alteração foi feita.',at:new Date().toISOString()}].slice(-150)}));history({title:'Comando de conversa',state:'queued',details:message});setInput('');}
  function discuss(entry){setContextItem(entry);setInput(`Conferir e corrigir: ${entry.title}. ${entry.details||''}`);setTab('execute');}
  const items=useMemo(()=>[...new Set([...catalogue.cards,...toolList.filter(t=>t.available&&t.module===catalogue.module).map(t=>t.title).filter(Boolean)])].slice(0,14),[catalogue,toolList]);
- if(!open)return <button type="button" onClick={()=>setOpen(true)} className="fixed bottom-5 right-5 z-[56] flex items-center gap-2 rounded-full bg-sky-600 px-4 py-3 text-sm font-bold text-white shadow-xl hover:bg-sky-500"><Bot size={18}/> Copiloto IA + MCP</button>;
- return <aside aria-label="Copiloto IA universal" className="fixed right-3 top-16 bottom-3 z-[56] flex w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-sky-700/60 bg-slate-950 text-slate-100 shadow-2xl">
+ if(!open)return <button type="button" onClick={()=>setOpen(true)} className="fixed bottom-5 left-[max(12px,18vw)] z-[56] flex items-center gap-2 rounded-full bg-sky-600 px-4 py-3 text-sm font-bold text-white shadow-xl hover:bg-sky-500"><Bot size={18}/> Copiloto IA + MCP</button>;
+ return <aside aria-label="Copiloto IA universal" className="fixed left-[max(12px,18vw)] top-16 bottom-3 z-[56] flex w-[min(380px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-sky-700/60 bg-slate-950 text-slate-100 shadow-2xl">
    <div className="flex items-center gap-2 border-b border-slate-800 p-3"><Bot className="text-sky-400" size={21}/><div className="min-w-0 flex-1"><h2 className="text-sm font-bold">Copiloto IA + MCP</h2><p className="truncate text-[11px] text-slate-400">{catalogue.label} · {location.pathname}</p></div><button onClick={()=>setOpen(false)} title="Recolher" className="rounded-lg p-2 hover:bg-slate-800"><ChevronRight size={18}/></button></div>
    <div className="flex border-b border-slate-800 text-xs">{[['suggest','Sugestões',Lightbulb],['execute','Executar',MessageSquare],['history','Executado',History]].map(([value,label,Icon])=><button key={value} onClick={()=>setTab(value)} className={`flex flex-1 items-center justify-center gap-1 py-2 ${tab===value?'border-b-2 border-sky-400 bg-slate-800':'text-slate-400'}`}><Icon size={13}/>{label}</button>)}</div>
    <div className="flex-1 overflow-y-auto p-3 space-y-3">
