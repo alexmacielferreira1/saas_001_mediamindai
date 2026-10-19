@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, LoaderCircle, Plus, Sparkles, SlidersHorizontal, Trash2, ImagePlus } from "lucide-react";
 import {
   generateVideoStudioStage,
@@ -21,15 +21,16 @@ const field =
   "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500";
 const engines = ["Kling 3.0", "Seedance 2.0", "Minimax H3", "Outro motor"];
 
-function newProject() {
+function newProject(initialDraft = null) {
   return {
     id: crypto.randomUUID(),
-    title: "Novo projeto de vídeo",
-    idea: "",
+    title: initialDraft?.title || "Novo projeto de vídeo",
+    idea: initialDraft?.topic || "",
+    darkScriptId: initialDraft?.id || null,
     engine: engines[0],
     connectionId: "",
-    preferences: { format: "16:9", duration: "", language: "Português (Brasil)", audience: "", niche: "", tone: "", mediaStrategy: "", voice: "", visualReferences: "", availableAssets: "" },
-    outputs: {},
+    preferences: { format: initialDraft?.format === "shorts" ? "9:16" : "16:9", duration: "", language: initialDraft?.language === "pt-BR" ? "Português (Brasil)" : initialDraft?.language || "Português (Brasil)", audience: initialDraft?.channelAudience || initialDraft?.channelName || "", niche: initialDraft?.niche || "", tone: "", mediaStrategy: "", voice: "", visualReferences: "", availableAssets: initialDraft?.availableAssets || "" },
+    outputs: initialDraft?.script?.trim() ? { roteiro: { text: initialDraft.script, stale: false } } : {},
     adjustments: {},
     updatedAt: new Date().toISOString(),
   };
@@ -44,7 +45,7 @@ function downloadFile(name, content, type) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function VideoStudio() {
+export default function VideoStudio({ initialDraft = null, onDraftChange = null, workspaceKey = null, productLabel = "MediaMind · produção audiovisual com IA" } = {}) {
   const { currentEmpresa } = useEmpresa();
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState(currentEmpresa?.id || "");
@@ -52,12 +53,13 @@ export default function VideoStudio() {
   const [assignedConnectionId, setAssignedConnectionId] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("loading");
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const draftNamespace = workspaceKey || "components/ai-tools/VideoStudio.jsx";
   const [projects, setProjects] = useWorkDraftState(
-    `components/ai-tools/VideoStudio.jsx:projects:${companyId || "select"}`,
+    `${draftNamespace}:projects:${companyId || "select"}`,
     [],
   );
   const [activeProjectId, setActiveProjectId] = useWorkDraftState(
-    `components/ai-tools/VideoStudio.jsx:active:${companyId || "select"}`,
+    `${draftNamespace}:active:${companyId || "select"}`,
     "",
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -67,6 +69,8 @@ export default function VideoStudio() {
   const [status, setStatus] = useState("");
   const [assetUrls, setAssetUrls] = useState({});
   const [assetError, setAssetError] = useState("");
+  const seededDraftId = useRef(null);
+  const syncedDarkDraft = useRef("");
 
   useEffect(() => {
     let active = true;
@@ -141,13 +145,55 @@ export default function VideoStudio() {
 
   useEffect(() => {
     if (!projects.length) {
-      const initial = newProject();
+      const initial = newProject(initialDraft);
       setProjects([initial]);
       setActiveProjectId(initial.id);
+      seededDraftId.current = initialDraft?.id || null;
+    } else if (initialDraft?.id) {
+      const linked = projects.find((item) => item.darkScriptId === initialDraft.id);
+      if (linked) {
+        setActiveProjectId((current) => current === linked.id ? current : linked.id);
+        const signature = JSON.stringify([
+          initialDraft.id, initialDraft.title, initialDraft.topic, initialDraft.script,
+          initialDraft.format, initialDraft.language, initialDraft.channelName,
+          initialDraft.channelAudience, initialDraft.niche, initialDraft.availableAssets,
+        ]);
+        if (syncedDarkDraft.current !== signature) {
+          const preferences = {
+            ...(linked.preferences || {}),
+            format: initialDraft.format === "shorts" ? "9:16" : "16:9",
+            language: initialDraft.language === "pt-BR" ? "Português (Brasil)" : initialDraft.language || linked.preferences?.language || "Português (Brasil)",
+            audience: initialDraft.channelAudience || initialDraft.channelName || "",
+            niche: initialDraft.niche || "",
+            availableAssets: initialDraft.availableAssets || "",
+          };
+          let outputs = linked.outputs || {};
+          if (typeof initialDraft.script === "string" && outputs.roteiro?.text !== initialDraft.script) {
+            outputs = markDownstreamStale(outputs, "roteiro");
+            outputs = { ...outputs, roteiro: { ...(outputs.roteiro || {}), text: initialDraft.script, stale: false, updatedFromChannelAt: new Date().toISOString() } };
+          }
+          const updated = {
+            ...linked,
+            title: initialDraft.title || linked.title,
+            idea: initialDraft.topic ?? linked.idea,
+            preferences,
+            outputs,
+          };
+          if (JSON.stringify(updated) !== JSON.stringify(linked)) updateProject(updated);
+          syncedDarkDraft.current = signature;
+        }
+        seededDraftId.current = initialDraft.id;
+      } else if (seededDraftId.current !== initialDraft.id) {
+        seededDraftId.current = initialDraft.id;
+        syncedDarkDraft.current = "";
+        const initial = newProject(initialDraft);
+        setProjects((items) => [initial, ...items]);
+        setActiveProjectId(initial.id);
+      }
     } else if (!projects.some((item) => item.id === activeProjectId)) {
       setActiveProjectId(projects[0].id);
     }
-  }, [projects, activeProjectId, setProjects, setActiveProjectId]);
+  }, [projects, activeProjectId, setProjects, setActiveProjectId, initialDraft]);
 
   const project = projects.find((item) => item.id === activeProjectId) || null;
   const assets = project?.assets || [];
@@ -158,7 +204,7 @@ export default function VideoStudio() {
       const resolved = {};
       for (const asset of assets) {
         try {
-          const entry = await getVideoAsset(asset.id);
+          const entry = await getVideoAsset(asset.id, workspaceKey);
           if (!entry?.blob) continue;
           const url = URL.createObjectURL(entry.blob);
           urls.push(url);
@@ -170,14 +216,14 @@ export default function VideoStudio() {
     setAssetUrls({});
     load();
     return () => { cancelled = true; urls.forEach((url) => URL.revokeObjectURL(url)); };
-  }, [project?.id, project?.assets]);
+  }, [project?.id, project?.assets, workspaceKey]);
   async function addAssets(files) {
     if (!project) return;
     setAssetError("");
     const additions = [];
     try {
       for (const file of Array.from(files || [])) {
-        additions.push(await putVideoAsset(file, project.id));
+        additions.push(await putVideoAsset(file, project.id, workspaceKey));
       }
       if (additions.length) {
         patchProject({ assets: [...assets, ...additions] });
@@ -192,7 +238,7 @@ export default function VideoStudio() {
     if (!project) return;
     const updatedScenes = (project.scenes || []).map((scene) => scene.assetId === id ? { ...scene, assetId: null, media: null, mediaType: null } : scene);
     patchProject({ assets: assets.filter((asset) => asset.id !== id), scenes: updatedScenes });
-    try { await deleteVideoAsset(id); } catch { setAssetError("Referência removida, mas não foi possível apagar o arquivo local."); }
+    try { await deleteVideoAsset(id, workspaceKey); } catch { setAssetError("Referência removida, mas não foi possível apagar o arquivo local."); }
   }
   function assignAsset(sceneId, assetId) {
     if (!project) return;
@@ -280,6 +326,7 @@ export default function VideoStudio() {
 
   function updateRoteiroUnificado(text) {
     if (!project) return;
+    onDraftChange?.(text);
     const existing = project.outputs?.roteiro?.text?.trim();
     if (existing) {
       const outputs = markDownstreamStale(project.outputs || {}, "roteiro");
@@ -348,6 +395,7 @@ export default function VideoStudio() {
       updatedAt: new Date().toISOString(),
     };
     updateProject(updated);
+    if (targetStage.id === "roteiro") onDraftChange?.(result.text);
     return updated;
   }
 
@@ -405,7 +453,7 @@ export default function VideoStudio() {
     <section className="space-y-3 rounded-2xl border border-slate-800 bg-[#0b1220] p-4 text-slate-200 md:p-6" aria-label="Video Studio">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-2">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">MediaMind · produção audiovisual com IA</p>
+          <p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">{productLabel}</p>
           <h2 className="mt-1 text-2xl font-black text-white">Video Studio</h2>
           <p className="mt-1 text-sm text-slate-400">Da ideia à bíblia visual, decupagem, storyboard e prompts prontos para o motor de vídeo.</p>
         </div>

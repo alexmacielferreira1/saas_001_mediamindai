@@ -14,6 +14,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Test expectations use the same-origin API; local .env files must not alter them.
+    env: { VITE_API_URL: '' },
     // Canvas/editor DOM suites compete heavily for CPU under V8 instrumentation.
     maxWorkers: 1,
     testTimeout: 20000,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles, Play, Check, Star, X, AlertTriangle, Loader2, Info,
-  Wand2, FileVideo, ChevronDown, ChevronUp, RefreshCw, CornerUpRight,
+  Wand2, FileVideo, RefreshCw, CornerUpRight,
 } from 'lucide-react';
 import { fmt } from './clipModel';
 import { useEmpresa } from '../../../lib/empresaContext';
@@ -55,7 +55,7 @@ function CandidateCard({ c, clip, seekTo, onToggle, onFav, onReject, onApplySugg
   return (
     <div className={`rounded-lg border p-3 transition ${c.rejected ? 'border-slate-800 bg-slate-950/30 opacity-50' : c.selected ? 'border-violet-600 bg-violet-950/30' : 'border-slate-800 bg-slate-950/40 hover:border-slate-600'}`}>
       <div className="flex items-start gap-2.5">
-        <span className={`mm-badge ${scoreTone(c.overall_score)}`}>{Math.round(c.overall_score)}</span>
+        <button type="button" aria-label={`Detalhes da nota ${Math.round(c.overall_score)} de ${c.title}`} aria-expanded={showWhy} onClick={() => setShowWhy((s) => !s)} title="Ver detalhes da nota" className={`mm-badge ${scoreTone(c.overall_score)}`}>{Math.round(c.overall_score)}</button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-slate-200">{c.title}</p>
           <p className="text-[10px] text-slate-500">{fmt(c.start_ms)} – {fmt(c.end_ms)} · {((c.end_ms - c.start_ms) / 1000).toFixed(1)}s · rank #{c.rank}</p>
@@ -65,14 +65,14 @@ function CandidateCard({ c, clip, seekTo, onToggle, onFav, onReject, onApplySugg
       </div>
 
       {/* Dimensões com tooltip */}
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+      {showWhy && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
         {DIMENSIONS.map((d) => (
           <div key={d.key} className="flex items-center gap-1">
             <span className="text-[9px] uppercase text-slate-500" title={d.tip}>{d.label}</span>
             <Grade grade={c[`${d.key}_grade`]} explanation={c[`${d.key}_explanation`]} />
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Ações */}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -80,14 +80,11 @@ function CandidateCard({ c, clip, seekTo, onToggle, onFav, onReject, onApplySugg
         <button onClick={() => onToggle(c)} className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ${c.selected ? 'bg-violet-500 text-slate-950' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}><Check size={11} /> {c.selected ? 'Selecionado' : 'Selecionar'}</button>
         <button onClick={() => setShowSugg((s) => !s)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="Aplicar IN/OUT sugeridos pela IA"><Wand2 size={11} /> Melhorar</button>
         <button onClick={() => onPromote(c)} disabled={promoting} className="flex items-center gap-1 rounded-md border border-sky-700 px-2 py-1 text-[10px] text-sky-300 hover:bg-sky-950/40 disabled:opacity-50"><CornerUpRight size={11} /> {promoting ? 'Salvando...' : 'Promover a Clip'}</button>
-        <button onClick={() => setShowWhy((s) => !s)} className="ml-auto flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300">
-          Por que este trecho? {showWhy ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-        </button>
       </div>
 
-      {showWhy && (c.reason || c.summary) && (
+      {showWhy && (
         <div className="mt-2 rounded-md border border-slate-800 bg-slate-950/60 p-2 text-[10px] leading-relaxed text-slate-400">
-          {c.reason || c.summary}
+          {c.reason || c.summary || 'Nenhuma justificativa disponível.'}
           {c.keywords && <p className="mt-1 text-slate-500">Palavras-chave: {c.keywords}</p>}
         </div>
       )}
@@ -161,9 +158,10 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
   }
   async function toggle(c) {
     const next = !c.selected;
-    patchLocal(c.id, { selected: next });
+    const updated = candidates.map((item) => item.id === c.id ? { ...item, selected: next } : item);
+    setCandidates(updated);
+    syncViral(updated);
     if (c.id) { try { await updateCandidate(c.id, { selected: next }); } catch {} }
-    syncViral();
   }
   async function fav(c) {
     const next = !c.favorite;
@@ -172,9 +170,10 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
   }
   async function reject(c) {
     const next = !c.rejected;
-    patchLocal(c.id, { rejected: next, selected: next ? false : c.selected });
+    const updated = candidates.map((item) => item.id === c.id ? { ...item, rejected: next, selected: next ? false : item.selected } : item);
+    setCandidates(updated);
+    syncViral(updated);
     if (c.id) { try { await updateCandidate(c.id, { rejected: next, selected: next ? false : c.selected }); } catch {} }
-    syncViral();
   }
   function applySuggestion(c) {
     const start = c.suggested_in_ms || c.start_ms;
@@ -197,8 +196,8 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
   }
 
   // Sincroniza selecionados no formato esperado pela etapa de legendas (clip.viral).
-  function syncViral() {
-    const viral = candidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, summary: c.summary || c.reason || '', texto: c.transcript || c.summary || '', selected: true, score: c.overall_score }));
+  function syncViral(updatedCandidates) {
+    const viral = updatedCandidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, summary: c.summary || c.reason || '', texto: c.transcript || '', selected: true, score: c.overall_score }));
     onChange({ viral });
   }
 

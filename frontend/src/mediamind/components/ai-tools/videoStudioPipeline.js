@@ -80,7 +80,14 @@ export function buildVideoStudioPrompt(stageId, { idea, outputs = {}, engine = "
       return `\n--- ${dependency.label} ---\n${outputs[id].text}`;
     })
     .join("\n");
-  const source = stage.id === "roteiro" ? `\nIDEIA DO PROJETO:\n${String(idea).trim()}` : context;
+  const source = stage.id === "roteiro"
+    ? [
+        `\nIDEIA DO PROJETO:\n${String(idea).trim()}`,
+        outputs.roteiro?.text?.trim()
+          ? `\nROTEIRO BASE JÁ SALVO — preserve o conteúdo válido e desenvolva-o sem apagar informações:\n${outputs.roteiro.text.trim()}`
+          : "",
+      ].filter(Boolean).join("\n")
+    : context;
   return [
     `PIPELINE DE PRÉ-PRODUÇÃO AUDIOVISUAL · ${stage.label.toUpperCase()}`,
     "Você é uma equipe profissional de roteiro, direção, fotografia e produção audiovisual.",

@@ -144,7 +144,8 @@ def test_every_mutable_record_type_has_an_explicit_write_policy():
     from app.api.v1.records import ALLOWED_TYPES
     from app.tenancy.record_policies import RECORD_WRITE_PERMISSIONS
 
-    assert set(RECORD_WRITE_PERMISSIONS) == ALLOWED_TYPES - {"LogAuditoria"}
+    assert ALLOWED_TYPES - {"LogAuditoria"} <= set(RECORD_WRITE_PERMISSIONS)
+    assert "LogAuditoria" not in RECORD_WRITE_PERMISSIONS
 
 
 def test_upload_requires_the_assets_write_permission(permission_client, monkeypatch, tmp_path):

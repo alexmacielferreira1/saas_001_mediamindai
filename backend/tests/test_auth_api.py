@@ -104,6 +104,80 @@ def test_login_cookie_is_secure_for_cross_origin_https(auth_client, monkeypatch)
     assert "SameSite=none" in cookie
 
 
+def test_demo_login_fails_closed_when_server_password_is_not_configured(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr(
+        "app.api.v1.auth.get_settings",
+        lambda: SimpleNamespace(environment="test", demo_password=None),
+    )
+
+    response = client.post(
+        "/api/v1/auth/demo",
+        json={"email": "alexmacielferreira@gmail.com"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "DEMO_NOT_CONFIGURED"
+    assert "mediamind_session=" not in response.headers.get("set-cookie", "")
+
+
+def test_demo_login_is_hidden_outside_local_and_test_environments(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr(
+        "app.api.v1.auth.get_settings",
+        lambda: SimpleNamespace(environment="production", demo_password=None),
+    )
+
+    response = client.post(
+        "/api/v1/auth/demo",
+        json={"email": "alexmacielferreira@gmail.com"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "NOT_FOUND"
+    assert "mediamind_session=" not in response.headers.get("set-cookie", "")
+
+
+def test_demo_login_rejects_emails_outside_the_allowlist(auth_client, monkeypatch):
+    client, _ = auth_client
+    monkeypatch.setattr(
+        "app.api.v1.auth.get_settings",
+        lambda: SimpleNamespace(environment="test", demo_password=None),
+    )
+
+    response = client.post(
+        "/api/v1/auth/demo",
+        json={"email": "unlisted@example.com"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "DEMO_ACCOUNT_DENIED"
+    assert "mediamind_session=" not in response.headers.get("set-cookie", "")
+
+
+def test_demo_login_uses_configured_server_password(auth_client, monkeypatch):
+    client, _ = auth_client
+    settings = SimpleNamespace(
+        environment="test",
+        demo_password=SimpleNamespace(get_secret_value=lambda: PASSWORD),
+        session_cookie_secure=False,
+        session_hours=8,
+        login_max_attempts=5,
+        login_lockout_minutes=15,
+    )
+    monkeypatch.setattr("app.api.v1.auth.get_settings", lambda: settings)
+
+    response = client.post(
+        "/api/v1/auth/demo",
+        json={"email": "alexmacielferreira@gmail.com"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["email"] == "alexmacielferreira@gmail.com"
+    assert "mediamind_session=" in response.headers["set-cookie"]
+    assert PASSWORD not in response.text
+
+
 @pytest.mark.parametrize(
     ("email", "password"),
     [

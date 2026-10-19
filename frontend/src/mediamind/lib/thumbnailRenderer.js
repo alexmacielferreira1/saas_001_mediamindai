@@ -32,6 +32,15 @@ export function loadThumbnailImage(url) {
 
 export function thumbnailLayers(draft, format) {
   const vertical = format === 'vertical';
+  if (draft.brandMode === 'dark') {
+    const people = (draft.people || []).filter((p) => p.visible && p.photo);
+    const darkLayers = [];
+    if (draft.channelName) darkLayers.push({ id: 'channel', label: 'Nome do canal', x: 6, y: 7, w: 86, h: 10, type: 'text', color: draft.colors.accent });
+    darkLayers.push({ id: 'headline', label: 'Título da thumb', x: vertical ? 7 : 5, y: vertical ? 18 : 38, w: vertical ? 86 : 57, h: vertical ? 24 : 34, type: 'text' });
+    people.forEach((person, index) => darkLayers.push({ id: `person:${person.id}`, label: person.name || 'Imagem', type: 'portrait', person, url: person.photo,
+      x: vertical ? 2 : 60, y: vertical ? 55 : 12, w: vertical ? 96 : 39, h: vertical ? 43 : 82 }));
+    return darkLayers.map((layer, index) => ({ ...layer, order: layer.type === 'portrait' ? index - 20 : index, rotation: 0, opacity: 1, hidden: false, locked: false, ...(draft.layouts?.[format]?.[layer.id] || {}) }));
+  }
   if (draft.pieceType && draft.pieceType !== 'thumb') {
     const creative = [];
     if (draft.pieceType === 'single' && draft.artReferenceUrl) creative.push({ id: 'art-photo', label: 'Foto do modelo', x: 0, y: 0, w: 100, h: 48, type: 'art-background', url: draft.artReferenceUrl, locked: true });
@@ -145,10 +154,10 @@ function recolorLogo(image, color) {
   const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0); ctx.globalCompositeOperation = 'source-in'; ctx.fillStyle = color; ctx.fillRect(0, 0, canvas.width, canvas.height); return canvas;
 }
 
-export async function renderThumbnail(canvas, draft, format, { simers = true, referenceUrl = '', cancelled = () => false } = {}) {
+export async function renderThumbnail(canvas, draft, format, { simers = true, referenceUrl = '', dimensions, cancelled = () => false } = {}) {
   await loadThumbnailFonts();
   const creative45 = ['single', 'carousel'].includes(draft.pieceType);
-  const width = creative45 ? 1080 : format === 'vertical' ? 1080 : 1920; const height = creative45 ? 1350 : format === 'vertical' ? 1920 : 1080;
+  const width = creative45 ? 1080 : dimensions?.width || (format === 'vertical' ? 1080 : 1920); const height = creative45 ? 1350 : dimensions?.height || (format === 'vertical' ? 1920 : 1080);
   const layers = thumbnailLayers(draft, format);
   const urls = [...new Set([...layers.filter((l) => !l.hidden).map((l) => l.url), !simers && referenceUrl].filter(Boolean))];
   const images = new Map(await Promise.all(urls.map(async (url) => [url, await loadThumbnailImage(url)])));
@@ -214,7 +223,7 @@ export async function renderThumbnail(canvas, draft, format, { simers = true, re
     } else {
       const vertical = format === 'vertical';
       const names = (draft.people || []).filter((p) => p.showName).map((p) => p.name).join(' • ');
-      const text = layer.id === 'headline' ? (draft.highlight ?? draft.title ?? 'SUA CHAMADA PRINCIPAL').toUpperCase() : layer.id === 'body' ? draft.description : layer.id === 'names' ? names : layer.id === 'program' ? draft.program : [draft.program?.toUpperCase(), formatEpisode(draft.episode)].filter(Boolean).join(' • ');
+      const text = layer.id === 'headline' ? (draft.highlight ?? draft.title ?? 'SUA CHAMADA PRINCIPAL').toUpperCase() : layer.id === 'channel' && draft.brandMode === 'dark' ? String(draft.channelName || '').toUpperCase() : layer.id === 'body' ? draft.description : layer.id === 'names' ? names : layer.id === 'program' ? draft.program : [draft.program?.toUpperCase(), formatEpisode(draft.episode)].filter(Boolean).join(' • ');
       const size = layer.fontSize || width * (layer.id === 'headline' ? vertical ? 0.12 : 0.066 : layer.id === 'program' ? vertical ? 0.055 : 0.032 : layer.id === 'names' ? vertical ? 0.044 : 0.026 : vertical ? 0.028 : 0.018) * (layer.id === 'headline' ? style.fontScale : 1);
       if (draft.pieceType === 'carousel' && draft.modelName === 'Giro da Semana' && layer.id === 'headline') drawGiroHeadline(ctx, box, text, draft.colors);
       else drawText(ctx, box, text, { font: layer.font || (['headline', 'program'].includes(layer.id) ? style.headlineFont : style.bodyFont), size, color: layer.color || draft.colors.text, accentColor: layer.id === 'headline' && !layer.color ? (['Prontuário Jurídico', 'Sala de Prescrição'].includes(draft.program) ? '#FFFFFF' : draft.colors.accent) : null, weight: layer.id === 'headline' ? '' : '600', align: layer.align || (layer.id === 'program' ? 'center' : 'left'), lineHeight: layer.id === 'headline' ? style.lineHeight : 1.15, spacing: style.letterSpacing });

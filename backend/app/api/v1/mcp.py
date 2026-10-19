@@ -31,8 +31,10 @@ def inspect_assets(session: Session, tenant_id: UUID, arguments: dict, *, operat
     for value in arguments.get("asset_ids") or []:
         try:
             asset_ids.append(UUID(str(value)))
-        except (TypeError, ValueError):
-            continue
+        except (TypeError, ValueError) as error:
+            raise PublicError(
+                422, "MCP_INVALID_ASSET_ID", "Identificador de mídia inválido."
+            ) from error
     query = select(TenantRecord).where(
         TenantRecord.tenant_id == tenant_id,
         TenantRecord.entity_type == "Asset",
@@ -145,6 +147,8 @@ async def call_mcp_tool(
     tool = tool_by_name(tool_name)
     if tool is None:
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
+    if membership.role == "viewer" and tool["effect"] != "read":
+        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
     result = await run_tool(session, membership.tenant_id, tool_name, body.arguments, current.user.id)
     correlation_id = getattr(request.state, "correlation_id", str(uuid4()))
     add_audit(
@@ -226,6 +230,8 @@ async def create_mcp_queue(body: MCPQueueCreate, current: Authenticated, session
 @router.post("/queues/{queue_id}/execute")
 async def execute_mcp_queue(queue_id: UUID, current: Authenticated, session: DbSession):
     membership = require_membership(current)
+    if membership.role == "viewer":
+        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
     record = session.scalar(
         select(TenantRecord).where(
             TenantRecord.id == queue_id,

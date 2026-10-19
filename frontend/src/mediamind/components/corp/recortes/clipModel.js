@@ -78,8 +78,7 @@ export function gerarVirais(clip) {
 }
 
 export function gerarLegendas(clip) {
-  const virais = (clip.viral || []).filter((v) => v.selected);
-  const base = virais.length ? virais : [{ start_ms: clip.in_ms, end_ms: clip.out_ms }];
+  const base = (clip.viral || []).filter((v) => v.selected && v.texto);
   const out = [];
   let k = 0;
   for (const v of base) {
@@ -87,7 +86,7 @@ export function gerarLegendas(clip) {
       id: `l-${Date.now()}-${k++}`,
       start_ms: Math.round(v.start_ms),
       end_ms: Math.round(v.end_ms),
-      texto: v.texto || v.summary || v.titulo || '',
+      texto: v.texto,
       cortar_audio: false,
     });
   }

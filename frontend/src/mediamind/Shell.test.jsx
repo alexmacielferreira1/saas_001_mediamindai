@@ -21,7 +21,9 @@ describe("production navigation", () => {
     expect(labels).toContain("Publicado");
     expect(labels).not.toContain("Criar Thumbs");
     expect(labels).toContain("Estúdio de Arte");
+    expect(labels).toContain("Canais Dark");
     expect(labels).toContain("Geração de vídeo");
+    expect(labels).not.toContain("VIDEO_ESTUDIO");
     expect(labels).not.toContain("Ferramentas IA");
     expect(labels).not.toContain("MMSOM");
     expect(labels).not.toContain("Ferramentas Office");

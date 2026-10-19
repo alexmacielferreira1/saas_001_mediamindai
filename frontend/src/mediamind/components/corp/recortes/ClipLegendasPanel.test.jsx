@@ -34,4 +34,23 @@ describe('ClipLegendasPanel', () => {
       cortes_video: [{ start_ms: 1000, end_ms: 4000 }],
     });
   });
+
+  it('applies a caption position to subsequent captions without changing earlier ones', () => {
+    const captions = [
+      { id: 'a', start_ms: 0, end_ms: 1000, texto: 'Antes', posicao: 'bottom' },
+      { id: 'b', start_ms: 1000, end_ms: 2000, texto: 'Atual', posicao: 'top' },
+      { id: 'c', start_ms: 2000, end_ms: 3000, texto: 'Depois', posicao: 'bottom' },
+    ];
+    const onChange = vi.fn();
+    render(<ClipLegendasPanel clip={{ ...clip, legendas: captions }} onChange={onChange} seekTo={vi.fn()} onSalvar={vi.fn()} onAvancar={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Aplicar posição daqui em diante' })[1]);
+    expect(onChange).toHaveBeenLastCalledWith({ legendas: [captions[0], captions[1], { ...captions[2], posicao: 'top' }] });
+  });
+
+  it('updates the timing of a caption without changing its text', () => {
+    const onChange = vi.fn();
+    render(<ClipLegendasPanel clip={clip} onChange={onChange} seekTo={vi.fn()} onSalvar={vi.fn()} onAvancar={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Início da legenda em milissegundos'), { target: { value: '1200' } });
+    expect(onChange).toHaveBeenLastCalledWith({ legendas: [{ ...clip.legendas[0], start_ms: 1200 }] });
+  });
 });

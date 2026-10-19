@@ -37,7 +37,7 @@ export default function MCPExpress() {
     return tools.find((tool) => tool.module === app.module && tool.available && tool.title.toLocaleLowerCase("pt-BR") === normalized)
       || (app.id === "mmfilm" && normalized.includes("timeline") ? tools.find((tool) => tool.name === "mmfilm.timeline" && tool.available) : null)
       || (app.id === "mmfilm" && normalized.includes("inspecionar") ? tools.find((tool) => tool.name === "mmfilm.inspect" && tool.available) : null)
-      || (app.id === "ai" ? tools.find((tool) => tool.name === "ai-tools.prompt" && tool.available) : null);
+      || (app.id === "ai" && normalized === "executar prompt com ia cadastrada" ? tools.find((tool) => tool.name === "ai-tools.prompt" && tool.available) : null);
   }
   async function executeOperation(operation) {
     const tool = matchingTool(operation.label);
@@ -50,7 +50,16 @@ export default function MCPExpress() {
     } catch (error) { setStatus(error?.message || `Não foi possível executar “${operation.label}”.`); return false; }
     finally { setRunning((current) => current.filter((id) => id !== operation.id)); }
   }
-  async function executeAll() { if (!enabledOperations.length) { setStatus("Ligue ao menos uma ação para executar."); return; } let executed = 0; for (const operation of enabledOperations) if (await executeOperation(operation)) executed += 1; setStatus(executed ? `${executed} ação(ões) enviada(s) sequencialmente pelo MCP Express.` : "Nenhuma ação ativa possui executor MCP disponível ainda."); }
+  async function executeAll() {
+    if (!enabledOperations.length) { setStatus("Ligue ao menos uma ação para executar."); return; }
+    let executed = 0;
+    for (const operation of enabledOperations) if (await executeOperation(operation)) executed += 1;
+    const notExecuted = enabledOperations.length - executed;
+    const missingNotice = notExecuted ? ` ${notExecuted} não executadas; verifique a conexão e a disponibilidade das ferramentas.` : "";
+    setStatus(executed
+      ? `${executed} ação(ões) enviada(s) sequencialmente pelo MCP Express.${missingNotice}`
+      : "Nenhuma ação foi enviada. Verifique a conexão e a disponibilidade das ferramentas MCP.");
+  }
   if (!["/ferramentas-graficas", "/ferramentas-ia"].includes(location.pathname)) return null;
   return <section aria-label="MCP Express" className="relative mb-4 rounded-xl border-2 border-sky-500/90 bg-gradient-to-r from-[#041a31] via-[#062748] to-[#041a31] p-2 shadow-lg shadow-sky-950/40">
     <div aria-hidden="true" className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-cyan-300" />

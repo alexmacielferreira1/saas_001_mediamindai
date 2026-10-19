@@ -1,0 +1,13 @@
+*
+!.gitignore
+!README.md
+!entrada/
+!organizados/
+!rascunhos-copiloto/
+entrada/*
+organizados/*
+rascunhos-copiloto/*
+!entrada/.gitkeep
+!organizados/.gitkeep
+!rascunhos-copiloto/.gitkeep
+!rascunhos-copiloto/README.md

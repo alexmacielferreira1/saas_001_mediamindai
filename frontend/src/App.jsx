@@ -29,7 +29,7 @@ import AssistenteIA from "./mediamind/pages/AssistenteIA";
 import ThumbnailStudio from "./mediamind/pages/ThumbnailStudio";
 import AITools from "./mediamind/pages/AITools";
 import VideoGeneration from "./mediamind/pages/VideoGeneration";
-import VideoEstudio from "./mediamind/pages/VideoEstudio";
+import DarkChannels from "./mediamind/pages/DarkChannels";
 import AgenciaVideo from "./mediamind/pages/AgenciaVideo";
 import GraphicTools from "./mediamind/pages/GraphicTools";
 import SoundCraft from "./mediamind/pages/SoundCraft";
@@ -108,7 +108,8 @@ function AuthenticatedApp() {
       <Route path="/thumbnails" element={<Navigate to="/estudio-de-arte" replace />} />
       <Route path="/ferramentas-ia" element={protectedPage(AITools, "ai_tools")} />
       <Route path="/geracao-de-video" element={protectedPage(VideoGeneration, "ai_tools")} />
-      <Route path="/video-estudio" element={protectedPage(VideoEstudio, "ai_tools")} />
+        <Route path="/canais-dark" element={protectedPage(DarkChannels, "ai_tools")} />
+        <Route path="/video-estudio" element={<Navigate to="/canais-dark" replace />} />
       <Route path="/agencia-video" element={protectedPage(AgenciaVideo, "ai_tools")} />
       <Route path="/ferramentas-graficas" element={protectedPage(GraphicTools, "ai_tools")} />
       <Route path="/soundcraft" element={<ModuleRoute moduleId="ai_tools"><></></ModuleRoute>} />

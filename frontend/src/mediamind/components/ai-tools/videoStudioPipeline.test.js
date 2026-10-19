@@ -40,6 +40,15 @@ describe("videoStudioPipeline", () => {
     expect(prompt).toContain("roteiro");
   });
 
+  it("preserves a saved channel script as source material when generating the roteiro stage", () => {
+    const prompt = buildVideoStudioPrompt("roteiro", {
+      idea: "Um farol abandonado",
+      outputs: { roteiro: { text: "Abertura aprovada pela equipe" } },
+    });
+    expect(prompt).toContain("Um farol abandonado");
+    expect(prompt).toContain("Abertura aprovada pela equipe");
+  });
+
   it("passes only required approved context to the next stage", () => {
     const prompt = buildVideoStudioPrompt("elementos", {
       idea: "Uma ideia que não deve substituir o roteiro",

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, CheckCircle2, Send, FileVideo, FileText, History, Loader2, Check } from 'lucide-react';
+import { Upload, CheckCircle2, Send, FileVideo, FileText, History, Loader2, Check, Download } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { exportMediaClip } from '../../../../api/media';
 import { useAuth } from '../../../auth';
 import { useEmpresa } from '../../../lib/empresaContext';
 import { baixarXmlPremiereClip, baixarSrtClip } from '../../../lib/premiereXml';
@@ -12,7 +13,7 @@ const isRealClipId = (id) => !!id && !String(id).startsWith('clip-');
 // Reimportar: exporta o corte (Premiere XML + SRT), recebe a versão editada e
 // versiona — cada reimport vira uma ClipVersion (não destrutiva). Sem id real
 // (clip de demonstração), opera só localmente.
-export default function ClipReimportPanel({ clip, onChange, onProsseguir }) {
+export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsureAsset }) {
   const { user } = useAuth();
   const { current: empresaId, isGlobal } = useEmpresa();
   const [url, setUrl] = useState(clip.edited_url || '');
@@ -20,6 +21,9 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir }) {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [download, setDownload] = useState(null);
   const eid = isGlobal ? '' : empresaId;
   const realId = isRealClipId(clip.id);
 
@@ -28,6 +32,21 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir }) {
     try { setVersions(await listVersions(clip.id)); } catch { /* silencioso */ }
   }
   useEffect(() => { loadVersions(); /* eslint-disable-next-line */ }, [clip.id]);
+  useEffect(() => () => { if (download?.url) URL.revokeObjectURL(download.url); }, [download]);
+
+  async function exportMp4() {
+    if ((!clip.source_asset_id && !onEnsureAsset) || clip.out_ms <= clip.in_ms) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const assetId = clip.source_asset_id || await onEnsureAsset();
+      if (!assetId) throw new Error('Não foi possível enviar o vídeo de origem.');
+      const result = await exportMediaClip({ asset_id: assetId, source_in: clip.in_ms / 1000, duration: (clip.out_ms - clip.in_ms) / 1000, properties: {} });
+      setDownload({ url: URL.createObjectURL(result.blob), filename: result.filename, clipId: clip.id, inMs: clip.in_ms, outMs: clip.out_ms });
+    } catch (error) {
+      setExportError(error.message || 'Não foi possível gerar o MP4.');
+    } finally { setExporting(false); }
+  }
 
   async function onFile(e) {
     const f = e.target.files?.[0];
@@ -70,8 +89,11 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir }) {
     <div className="flex h-full flex-col gap-4">
       {/* Exportação real */}
       <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-        <p className="text-xs text-slate-400">Exporte o corte com as decisões do workspace (IN/OUT, legendas, CGs). Abra no Premiere, reconecte a mídia master, edite e traga a versão editada de volta.</p>
+        <p className="text-xs text-slate-400">Exporte um projeto XML ou as legendas SRT para edição externa e reconecte a mídia master. Os intervalos removidos na prévia, o reenquadramento e a aparência das camadas ainda não estão garantidos no arquivo exportado; revise o resultado no editor externo.</p>
         <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={exportMp4} disabled={(!clip.source_asset_id && !onEnsureAsset) || clip.out_ms <= clip.in_ms || exporting} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"><Download size={12} /> {exporting ? 'Gerando MP4...' : 'Gerar MP4 do trecho'}</button>
+          {download && download.clipId === clip.id && download.inMs === clip.in_ms && download.outMs === clip.out_ms && <a href={download.url} download={download.filename} className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-[11px] font-bold text-emerald-300"><Download size={12} /> Baixar MP4 gerado</a>}
+          {clip.source_url && <a href={clip.source_url} download className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-300"><Download size={12} /> Baixar vídeo original</a>}
           <button
             onClick={() => baixarXmlPremiereClip(clip, { legendas: clip.legendas || [], cgs: clip.cgs || [] })}
             className="flex items-center gap-1.5 rounded-md border border-sky-700 px-3 py-1.5 text-[11px] font-bold text-sky-300 hover:bg-sky-950/40"
@@ -89,6 +111,9 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir }) {
             IN {fmt(clip.in_ms)} · OUT {fmt(clip.out_ms)} · {(clip.legendas || []).length} legenda(s) · {(clip.cgs || []).length} CG(s)
           </span>
         </div>
+        <p className="mt-2 text-[10px] text-amber-200">O MP4 gerado contém apenas o intervalo IN/OUT do vídeo original; ainda não incorpora cortes internos, legendas, camadas ou reenquadramento.</p>
+        {!clip.source_asset_id && <p className="mt-1 text-[10px] text-slate-400">{onEnsureAsset ? 'O vídeo será enviado ao MediaMind ao gerar o MP4.' : 'Selecione novamente o arquivo de origem para gerar o trecho.'}</p>}
+        {exportError && <p role="alert" className="mt-2 text-xs text-rose-300">{exportError}</p>}
       </div>
 
       {/* Reimportar versão editada */}

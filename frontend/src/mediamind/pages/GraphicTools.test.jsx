@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GraphicToolsContent as GraphicTools } from "./GraphicTools";
 
@@ -48,11 +48,14 @@ describe("GraphicTools", () => {
     const programs = screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" });
     fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(3)'));
     expect(screen.getByText("Ferramentas de documentos")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Word" })).toHaveAttribute("aria-selected", "true");
+    expect(within(programs).getByRole("tab", { name: "Word" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab", { name: "Word" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
     fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(2)'));
-    expect(screen.getByRole("tab", { name: "Excel" })).toHaveAttribute("aria-selected", "true");
+    expect(within(programs).getByRole("tab", { name: "Excel" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab", { name: "Excel" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
     fireEvent.click(programs.querySelector('[role="tab"]:last-child'));
-    expect(screen.getByRole("tab", { name: "PowerPoint" })).toHaveAttribute("aria-selected", "true");
+    expect(within(programs).getByRole("tab", { name: "PowerPoint" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tab", { name: "PowerPoint" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps the MM program switcher visible inside desktop editors", () => {

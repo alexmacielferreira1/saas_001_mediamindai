@@ -23,18 +23,78 @@ vi.mock('../lib/thumbnailExport', () => ({ exportThumbnailElement: vi.fn().mockR
 vi.mock('../lib/thumbnailRenderer', () => ({ renderThumbnail: vi.fn().mockResolvedValue([]), thumbnailLayers: () => [] }));
 vi.mock('../components/thumbnails/ThumbnailAISettings', () => ({ default: () => null }));
 vi.mock('../lib/thumbnailImage', () => ({ createLocalCutout: vi.fn().mockResolvedValue('blob:foto-recortada') }));
+vi.mock('@/api/generation', () => ({
+  getImageGenerationStatus: vi.fn().mockResolvedValue({ configured: true, provider: 'teste' }),
+  generateImage: vi.fn().mockResolvedValue({ images: [{ url: 'data:image/png;base64,aW1hZ2U=' }] }),
+}));
 
 import { exportThumbnailElement } from '../lib/thumbnailExport';
+import { renderThumbnail } from '../lib/thumbnailRenderer';
 import ThumbnailStudio from './ThumbnailStudio';
 
 function renderPage() {
   return render(<MemoryRouter><ThumbnailStudio /></MemoryRouter>);
 }
 
+function renderDarkPage() {
+  return render(<MemoryRouter><ThumbnailStudio darkChannelId="dark-1" darkScriptId="script-1" initialTitle="Mistérios do oceano" initialChannelName="Arquivo Oculto" workspaceKey={`test-dark-${Date.now()}`} thumbnailContext={{ channel: { name: 'Arquivo Oculto', niche: 'mistérios', audience: 'curiosos' }, folders: ['Casos antigos'], scripts: [{ title: 'Luzes no oceano', topic: 'Um farol desaparecido' }], selectedScript: { title: 'Mistérios do oceano', topic: 'Sons desconhecidos', script: 'Um sinal foi ouvido no fundo do mar.', materials: [{ title: 'Mapa da região', kind: 'imagem', reference: 'mapa.png' }] } }} /></MemoryRouter>);
+}
+
 describe('Criar Thumbs', () => {
   beforeEach(() => {
     exportThumbnailElement.mockClear();
     URL.createObjectURL = vi.fn(() => 'blob:foto-enviada');
+  });
+
+  it('provides Dark channel formats, destinations, image upload and configured AI generation without SIMERS fields', async () => {
+    const { generateImage } = await import('@/api/generation');
+    renderDarkPage();
+    expect(await screen.findByLabelText('Título da thumbnail')).toHaveValue('Mistérios do oceano');
+    expect(screen.queryByLabelText('Programa')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Episódio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/SIMERS|Simers/)).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Criação' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Criação Livre' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Usar Referência' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Foto de referência da thumbnail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Formato de saída')).toHaveValue('youtube');
+    expect(screen.getByRole('option', { name: /Instagram.*4:5/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /TikTok/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Largura personalizada (px)')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('YouTube')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('TikTok'));
+    expect(screen.getByLabelText('TikTok')).toBeChecked();
+    expect(screen.getByLabelText('Enviar imagem da thumbnail')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Usar Roteiro atual'));
+    fireEvent.click(screen.getByRole('button', { name: 'Inserir seleção no prompt' }));
+    expect(screen.getByLabelText('Prompt para imagem da thumbnail').value).toContain('Um sinal foi ouvido no fundo do mar.');
+    const prompt = screen.getByLabelText('Prompt para imagem da thumbnail').value;
+    fireEvent.change(screen.getByLabelText('Prompt para imagem da thumbnail'), { target: { value: `${prompt}\nUma biblioteca secreta cinematográfica, sem texto` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar e adicionar à thumb' }));
+    await waitFor(() => expect(generateImage).toHaveBeenCalled());
+    expect(generateImage.mock.calls.at(-1)[0]).toMatchObject({ aspect: '16:9', count: 1 });
+    expect(generateImage.mock.calls.at(-1)[0].prompt).toContain('Um sinal foi ouvido no fundo do mar.');
+    expect(await screen.findByText('Imagem gerada e adicionada à composição. Você pode movê-la e redimensioná-la na prévia.')).toBeInTheDocument();
+    expect(screen.getByText('Identidade do canal')).toBeInTheDocument();
+  });
+
+  it('exports Dark thumbnails with a selected network preset or custom dimensions', async () => {
+    renderDarkPage();
+    await screen.findByLabelText('Formato de saída');
+    fireEvent.change(screen.getByLabelText('Formato de saída'), { target: { value: 'instagram-feed' } });
+    expect(screen.getByText(/Instagram · Retrato 4:5 · 1080 × 1350 px/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Formato de saída'), { target: { value: 'custom' } });
+    expect(screen.getByLabelText('Largura personalizada (px)')).toHaveValue(1280);
+    expect(screen.getByLabelText('Altura personalizada (px)')).toHaveValue(720);
+    fireEvent.change(screen.getByLabelText('Largura personalizada (px)'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Altura personalizada (px)'), { target: { value: '1000' } });
+    await waitFor(() => expect(renderThumbnail).toHaveBeenLastCalledWith(
+      expect.anything(), expect.anything(), 'horizontal', expect.objectContaining({ dimensions: { width: 1000, height: 1000 } }),
+    ));
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar PNG 1000 × 1000' }));
+    await waitFor(() => expect(exportThumbnailElement).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ width: 1000, height: 1000, filename: expect.stringMatching(/1000x1000\.png$/) }),
+    ));
   });
 
   it('opens on Padrão SIMERS and exposes all functional modes', async () => {

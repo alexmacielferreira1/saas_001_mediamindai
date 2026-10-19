@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mediaApi, clipsApi } = vi.hoisted(() => ({
-  mediaApi: { uploadMediaAsset: vi.fn() },
+  mediaApi: { uploadMediaAsset: vi.fn(), listMediaAssets: vi.fn(() => Promise.resolve([])), resolveMediaUrl: (url) => url },
   clipsApi: { startClipAnalysis: vi.fn() },
 }));
 const aiApi = vi.hoisted(() => ({ getAIConnections: vi.fn() }));
@@ -22,6 +22,7 @@ import ClipsFree from "./ClipsFree";
 
 describe("CLIPSFREE", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     URL.createObjectURL = vi.fn(() => "blob:clipsfree-source");
     URL.revokeObjectURL = vi.fn();
     mediaApi.uploadMediaAsset.mockResolvedValue({ id: "asset-real", stream_url: "/api/v1/media/assets/asset-real/stream" });
@@ -61,7 +62,11 @@ describe("CLIPSFREE", () => {
     fireEvent.click(screen.getByRole("button", { name: "Abrir editor manual" }));
     expect(screen.getByRole("heading", { name: "Corte manual" })).toBeInTheDocument();
     expect(mediaApi.uploadMediaAsset).toHaveBeenCalledWith(video, { origin: "clipsfree" });
-    expect(clipsApi.startClipAnalysis).toHaveBeenCalledWith("asset-real", "credits-ai");
+    expect(clipsApi.startClipAnalysis).toHaveBeenCalledWith("asset-real", "credits-ai", {
+      editorial_prompt: "Encontre trechos claros, completos e interessantes para vídeo curto.",
+      minimum: 20,
+      maximum: 60,
+    });
   });
 
   it("lists finished productions on the left without pretending an unlinked master is playable", () => {
@@ -83,6 +88,47 @@ describe("CLIPSFREE", () => {
     expect(screen.getByRole("button", { name: /Usar projeto finalizado/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Enviar arquivo/ })).toBeInTheDocument();
     expect(screen.getByLabelText("URL do vídeo")).toBeInTheDocument();
+  });
+
+  it("shows labeled example thumbnails and scores immediately, without creating an analysis", () => {
+    render(<ClipsFree />);
+
+    expect(screen.getByRole("heading", { name: "Cortes de exemplo" })).toBeInTheDocument();
+    expect(screen.getByText("Exemplo · 88/100")).toBeInTheDocument();
+    expect(screen.getByText("Exemplo · 79/100")).toBeInTheDocument();
+    expect(screen.getByText("Exemplo · 71/100")).toBeInTheDocument();
+    expect(screen.getAllByText("Selecione um vídeo para visualizar")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Editor" })[0]).toBeDisabled();
+    expect(clipsApi.startClipAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("reveals the explanation by clicking a cut score", () => {
+    render(<ClipsFree />);
+    const score = screen.getByRole("button", { name: /Detalhes da nota.*88/ });
+    expect(score).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(score);
+    expect(score).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Nota ilustrativa, sem análise de IA.")).toBeVisible();
+  });
+
+  it("uses the selected video for example thumbnails and allows opening an example", () => {
+    render(<ClipsFree />);
+    fireEvent.change(screen.getByLabelText("Selecionar vídeo"), { target: { files: [new File(["video"], "exemplo.mp4", { type: "video/mp4" })] } });
+
+    expect(screen.getByLabelText("Prévia do corte Corte de exemplo 1")).toHaveAttribute("src", "blob:clipsfree-source");
+    expect(screen.getAllByRole("button", { name: "Editor" })[0]).toBeEnabled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Editor" })[0]);
+    expect(screen.getByRole("heading", { name: "Corte de exemplo 1" })).toBeInTheDocument();
+    expect(clipsApi.startClipAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("opens explicitly labeled example suggestions without sending video or presenting them as AI results", async () => {
+    render(<ClipsFree />);
+    fireEvent.change(screen.getByLabelText("Selecionar vídeo"), { target: { files: [new File(["video"], "exemplo.mp4", { type: "video/mp4" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Ver cortes de exemplo" }));
+    expect(screen.getByText(/exemplos ilustrativos.*não foram analisados/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Editor" }).length).toBeGreaterThan(0);
+    expect(clipsApi.startClipAnalysis).not.toHaveBeenCalled();
   });
 
   it("shows returned suggestions as reviewable cuts before opening the editor", async () => {
