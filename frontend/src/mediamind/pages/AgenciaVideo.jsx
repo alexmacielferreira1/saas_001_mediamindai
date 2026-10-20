@@ -67,7 +67,7 @@ export default function AgenciaVideo({ embedded = false }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-md border border-amber-800 bg-amber-950/30 px-2 py-1 text-xs text-amber-300">Validação · dados locais</span>
-        {!embedded && <Link to="/video-estudio" className="text-xs text-cyan-300 underline">Abrir VIDEO_ESTUDIO</Link>}
+        {!embedded && <Link to="/geracao-de-video" className="text-xs text-cyan-300 underline">Abrir Geração de Vídeo</Link>}
       </div>
     </header>
     <nav className="flex gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70 p-1.5" role="tablist" aria-label="Guias da agência">

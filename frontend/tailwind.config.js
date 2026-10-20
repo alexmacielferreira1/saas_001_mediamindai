@@ -1,3 +1,5 @@
+const { accentSurfaceColors, slateColors, surfaceColors, textColors, themePlugin } = require('./theme/palette.cjs');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
     darkMode: ["class"],
@@ -10,7 +12,11 @@ module.exports = {
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
   		},
+  		textColor: textColors(),
   		colors: {
+  			slate: slateColors(),
+  			...accentSurfaceColors(),
+  			...surfaceColors(),
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -92,5 +98,5 @@ module.exports = {
   		}
   	}
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require("tailwindcss-animate"), themePlugin],
 }

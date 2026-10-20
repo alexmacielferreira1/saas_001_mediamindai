@@ -52,8 +52,8 @@ export default function QualidadePage() {
                   </div>
                   {q.status === 'pendente' && (
                     <div className="mt-2 flex gap-1.5">
-                      <button className="rounded-md bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-emerald-400">Aprovar</button>
-                      <button className="rounded-md border border-rose-800 px-2.5 py-1 text-[10px] font-bold text-rose-300 hover:bg-rose-950/40">Reprovar</button>
+                      <button type="button" disabled title="Ainda não disponível" className="rounded-md bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">Aprovar</button>
+                      <button type="button" disabled title="Ainda não disponível" className="rounded-md border border-rose-800 px-2.5 py-1 text-[10px] font-bold text-rose-300 hover:bg-rose-950/40 disabled:cursor-not-allowed disabled:opacity-60">Reprovar</button>
                     </div>
                   )}
                 </div>

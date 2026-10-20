@@ -19,6 +19,22 @@ Os dois fluxos devem usar os mesmos recursos disponíveis, mas ser **independent
 - Conferir a execução sequencial e seus resultados em caso de falha ou operação indisponível; não informar sucesso para tarefas não executadas. Validar com mídia e projetos de teste reais, seleção de IA autorizada e testes de interface, integração e regressão. O painel completo também precisa ser verificado quanto a múltiplos projetos, timelines e filas.
 - Há outras alterações locais de trabalhos paralelos. Não sobrescrevê-las nem presumir que todos os arquivos pertencem a este bloco. Comparar o estado recebido, os testes e os relatórios antes de prosseguir. O estado de M0 e a situação da bateria descritos abaixo não foram atualizados por este registro.
 
+## Atualização — 20/10/2026 madrugada
+
+Relatório consolidado do bloco (Ferramentas Gráficas, MMFig, ClipsFree, Timeline 2, QA, resultados da bateria `20261020-010318-974` e pendências): `docs/RELATORIO_2026-10-20.md`.
+
+## Atualização — 19/10/2026 noite, branch `fix/pendencias-2026-10-19` (sem commit)
+
+- **MCP — execução:** `execute_queue_record` registra falha por alvo (`status: failed` com `error`) sem interromper os demais; fila termina `completed`, `partial` ou `failed`. Ferramenta inexistente, indisponível ou de outro módulo é recusada antes de persistir (404/409/422). Express, painel e Copiloto exibem esses estados sem anunciar sucesso.
+- **MCP — alvo real:** `frontend/src/mediamind/lib/mcpTargetContext.js` publica a timeline realmente aberta no MMFilm (nome e IDs de mídia do Acervo). Express, painel e Copiloto usam esse alvo; rótulos fixos ("Corte principal", "Projeto aberto") foram removidos. Sem mídia do Acervo a execução é bloqueada, porque `mmfilm.inspect/timeline` com lista vazia lê o Acervo inteiro da empresa. Verificado no navegador (porta 5175): bloqueio exibido e nenhuma requisição enviada.
+- **Atenção:** desde 16/10 o `Shell.jsx` não exibe MCPExpress nem MCPDock; o MCP visível é o Copiloto (`UniversalCopilot.jsx`). Decisão pendente de Alex sobre reexibir Express/painel.
+- **Administração — isolamento:** suspender um usuário alterava `User.account_status`/`is_active` (global) e o bloqueava em todas as empresas. Agora a suspensão desativa só o `Membership` da empresa e revoga as sessões abertas nela. Novos endpoints `POST /admin/users/{id}/reactivate` e `/revoke-sessions` (só sessões da empresa; não permite revogar a própria). Suspensões antigas gravadas na conta são desfeitas pela reativação. Botões no detalhe do usuário, com confirmação e erro visível.
+- **Ambiente de testes:** este computador usa Node 26. O `localStorage` nativo do Node ≥25 sobrepunha o do jsdom (centenas de falhas); `vite.config.js` passa `--no-experimental-webstorage` aos workers nessas versões e `src/test/setup.js` corrige o `TextEncoder` de outro realm (quebrava o `fflate`). Nenhuma mudança de produção.
+- **Lint backend:** limpo fora do escopo de IA; `ai.py`, `ai_usage.py` e `test_ai_api.py` continuam com 47 erros de lint/formatação e pertencem ao outro chat.
+- **Bateria `20261019-230853-932` (antes da correção de Administração):** backend aprovado, cobertura 95,68%; qualidade frontend aprovada; qualidade backend falhou só nos arquivos de IA; frontend 607/608 — a falha é timeout de 20 s em `GraphicTools.test.jsx > uses the active creation tool…` com cobertura ligada e outro servidor ativo; isolado passa em 4,6 s. Inconclusivo, não regressão. Depois: backend 380 testes aprovados; testes de Administração/MCP/Copiloto aprovados.
+- **Não verificado:** o servidor de API em 8000 pertence a outro chat e roda código antigo; os novos estados do MCP e as ações de Administração só aparecem no app após reiniciá-lo.
+- **Auditoria das Ferramentas Gráficas:** `docs/AUDITORIA_FERRAMENTAS_GRAFICAS_2026-10-19.md`.
+
 ## Atualização de handoff — 19/10/2026
 
 - O teste direcionado de `DarkChannels.test.jsx` passou com **13/13 testes** depois de alinhar as expectativas ao comportamento implementado: roteiros isolados por canal, criação no canal selecionado, cortes com contexto próprio e persistência de data em UTC. Isso não substitui a suíte completa.

@@ -28,11 +28,13 @@ import {
   Activity,
 } from "lucide-react";
 import { useAuth } from "./auth";
+import { canAccessModule } from "./lib/moduleAccess";
 import { useEmpresa } from "./lib/empresaContext";
 import WorkProtection from "./lib/workProtection";
 import EmpresaSwitcher from "./components/EmpresaSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import QuickActionsButton from "./components/QuickActionsButton";
+import ThemeToggle from "./components/ThemeToggle";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import MCPDock from "./components/mcp/MCPDock";
 import MCPExpress from "./components/mcp/MCPExpress";
@@ -191,6 +193,17 @@ export function navigationForRole(role) {
   })).filter((group) => group.items.length > 0);
 }
 
+// Sino oculto até existir um sistema real de notificações (sem backend nem dados hoje);
+// o indicador de "não lidas" não deve aparecer sem notificações de verdade.
+export const NOTIFICATIONS_AVAILABLE = false;
+
+// Engrenagem do topo: abre a área de configuração que o papel pode acessar.
+export function settingsPathForRole(role) {
+  if (canAccessModule(role, "management")) return "/administration2";
+  if (canAccessModule(role, "ai_tools")) return "/configuracoes/ia";
+  return null;
+}
+
 export default function Shell({ children, persistentPath }) {
   const { user, logout, roleLabels } = useAuth();
   const navigate = useNavigate();
@@ -199,6 +212,7 @@ export default function Shell({ children, persistentPath }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const role = user?.role || "default";
   const navGroups = navigationForRole(role);
+  const settingsPath = settingsPathForRole(user?.role);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
       return Number(localStorage.getItem(`mm_sidebar_width__${role}`)) || 240;
@@ -427,13 +441,23 @@ export default function Shell({ children, persistentPath }) {
           <div className="ml-auto flex items-center gap-1.5">
             <QuickActionsButton />
             <EmpresaSwitcher />
-            <button className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
-              <Bell size={18} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
-            </button>
-            <button className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+            {NOTIFICATIONS_AVAILABLE && (
+              <button className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+                <Bell size={18} />
+                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
+              </button>
+            )}
+            <button
+              type="button"
+              className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200"
+              aria-label="Configurações"
+              title="Configurações"
+              disabled={!settingsPath}
+              onClick={() => settingsPath && navigate(settingsPath)}
+            >
               <Settings size={18} />
             </button>
+            <ThemeToggle />
           </div>
         </header>
 

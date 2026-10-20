@@ -122,8 +122,21 @@ describe('Workspace 2 flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar projeto' }));
     expect(localStorage.getItem('mm_workspace2_draft')).toContain('selectedIds');
     expect(screen.getByRole('status')).toHaveTextContent(/salvo localmente/i);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Resetar projeto' }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status')).toHaveTextContent(/salvo localmente/i);
+    expect(localStorage.getItem('mm_workspace2_draft')).toContain('selectedIds');
     fireEvent.click(screen.getByRole('button', { name: 'Resetar projeto' }));
     expect(screen.getByRole('status')).toHaveTextContent(/restaurado/i);
+    confirm.mockRestore();
+  });
+
+  it('labels the deferred save action honestly', () => {
+    localStorage.clear();
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: /Salvar e continuar depois/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Salvar e não continuar/)).not.toBeInTheDocument();
   });
 
   it('prepares the shared project and opens Timeline 2', () => {

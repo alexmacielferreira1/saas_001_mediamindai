@@ -22,10 +22,10 @@ export default function CorpProductionsList({ selectedId, onSelect, statuses }) 
             className="w-full rounded-md border border-slate-700 bg-slate-950 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-sky-500"
           />
         </div>
-        <button className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800">
+        <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1.5 text-[10px] text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
           Status <ChevronDown size={11} />
         </button>
-        <button className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1.5 text-[10px] font-bold text-slate-950 hover:bg-sky-400">
+        <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1.5 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60">
           <Plus size={11} /> Nova
         </button>
       </div>

@@ -1,8 +1,8 @@
 # ruff: noqa: F811
 
-from app.models.identity import TenantRecord
 from app.clips.contracts import CandidateDimensions, TranscriptSegment, TranscriptWord
 from app.clips.scoring import build_candidate
+from app.models.identity import TenantRecord
 from test_media_api import login, permission_client  # noqa: F401
 
 

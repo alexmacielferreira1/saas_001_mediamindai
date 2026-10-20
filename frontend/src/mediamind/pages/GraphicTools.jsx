@@ -4,6 +4,7 @@ import {
   Camera,
   Clapperboard,
   FileText,
+  Frame,
   Image,
   Layers3,
   LayoutTemplate,
@@ -18,6 +19,7 @@ import CraftLibraryWorkspace from "../components/graphic-tools/CraftLibraryWorks
 import DesignCraftWorkspace from "../components/graphic-tools/DesignCraftWorkspace";
 import EffectCraftWorkspace from "../components/graphic-tools/EffectCraftWorkspace";
 import FilmCraftWorkspace from "../components/graphic-tools/FilmCraftWorkspace";
+import FigCraftWorkspace from "../components/graphic-tools/FigCraftWorkspace";
 import PhotoCraftWorkspace from "../components/graphic-tools/PhotoCraftWorkspace";
 import {
   LightCraftWorkspace,
@@ -121,6 +123,19 @@ const tools = [
       "Quadros e matérias encadeadas",
       "Estilos, amostras e contorno de texto",
       "PDF para impressão, CMYK e sangria",
+    ],
+  },
+  {
+    id: "figcraft",
+    label: "MMFig",
+    icon: Frame,
+    subtitle: "Figma · interface",
+    accept: ".json,application/json",
+    panels: [
+      "Frames, componentes e instâncias",
+      "Auto layout e restrições",
+      "Protótipo com navegação",
+      "Exportação PNG/SVG",
     ],
   },
   {
@@ -305,6 +320,8 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
           onSelect={setSelected}
           onOpenFiles={openFiles}
         />
+      ) : id === "figcraft" ? (
+        <FigCraftWorkspace />
       ) : id === "threecraft" ? (
         <ThreeDCraftWorkspace />
       ) : id === "craft-libs" ? (

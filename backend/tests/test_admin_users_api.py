@@ -1,9 +1,19 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from app.db.session import Base, get_session
 from app.main import create_app
-from app.models.identity import Membership, Permission, PermissionGroup, Tenant, TenantRecord, User
+from app.models.identity import (
+    AuthSession,
+    Membership,
+    Permission,
+    PermissionGroup,
+    Tenant,
+    TenantRecord,
+    User,
+)
+from app.repositories.identity import get_active_membership
 from app.security.passwords import hash_password
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -75,6 +85,8 @@ def admin_users_client():
         )
         session.commit()
         ids = {
+            "tenant": tenant.id,
+            "other_tenant": other.id,
             "target": target.id,
             "outsider": outsider.id,
             "session_factory": testing_session,
@@ -172,14 +184,16 @@ def test_admin_can_suspend_user_and_server_appends_audit_event(admin_users_clien
     assert response.json()["status"] == "suspended"
     with ids["session_factory"]() as session:
         user = session.get(User, ids["target"])
-        assert user.account_status == "suspended"
+        membership = session.scalar(select(Membership).where(Membership.user_id == user.id))
+        assert membership.is_active is False
+        assert user.account_status == "active" and user.is_active is True
         event = session.scalar(
             select(TenantRecord).where(TenantRecord.entity_type == "LogAuditoria")
         )
         assert event is not None
         assert event.data["action"] == "user.suspended"
         assert event.data["entity_id"] == str(ids["target"])
-        assert event.data["details"] == {"reason": "Afastamento temporário"}
+        assert event.data["details"] == {"reason": "Afastamento temporário", "revoked_sessions": 0}
 
 
 def test_admin_user_actions_reject_unknown_user_or_invalid_transition(admin_users_client):
@@ -241,3 +255,130 @@ def test_admin_settings_are_tenant_scoped_validated_persisted_and_audited(admin_
         )
         assert setting.data["timezone"] == "America/Recife"
         assert audit is not None
+
+
+def _open_session(session, user_id, tenant_id):
+    row = AuthSession(
+        user_id=user_id,
+        token_hash=uuid4().hex + uuid4().hex,
+        selected_tenant_id=tenant_id,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session.add(row)
+    return row
+
+
+def test_suspension_only_affects_the_suspending_company(admin_users_client):
+    client, ids = admin_users_client
+    with ids["session_factory"]() as session:
+        session.add(Membership(user_id=ids["target"], tenant_id=ids["other_tenant"], role="editor"))
+        here = _open_session(session, ids["target"], ids["tenant"])
+        elsewhere = _open_session(session, ids["target"], ids["other_tenant"])
+        session.commit()
+        here_id, elsewhere_id = here.id, elsewhere.id
+    login(client)
+
+    response = client.post(
+        f"/api/v1/admin/users/{ids['target']}/suspend", json={"reason": "Afastamento"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "suspended"
+    with ids["session_factory"]() as session:
+        assert get_active_membership(session, ids["target"], ids["tenant"]) is None
+        assert get_active_membership(session, ids["target"], ids["other_tenant"]) is not None
+        assert session.get(User, ids["target"]).is_active is True
+        assert session.get(AuthSession, here_id).revoked_at is not None
+        assert session.get(AuthSession, elsewhere_id).revoked_at is None
+    listed = client.get("/api/v1/admin/users?status=suspended").json()["items"]
+    assert [item["id"] for item in listed] == [str(ids["target"])]
+    assert all(
+        item["id"] != str(ids["target"])
+        for item in client.get("/api/v1/admin/users?status=active").json()["items"]
+    )
+
+
+def test_admin_reactivates_suspended_user_with_audit(admin_users_client):
+    client, ids = admin_users_client
+    login(client)
+    not_suspended = client.post(
+        f"/api/v1/admin/users/{ids['target']}/reactivate", json={"reason": "Retorno"}
+    )
+    client.post(f"/api/v1/admin/users/{ids['target']}/suspend", json={"reason": "Pausa"})
+
+    response = client.post(
+        f"/api/v1/admin/users/{ids['target']}/reactivate", json={"reason": "Retorno"}
+    )
+
+    assert not_suspended.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["status"] == "active"
+    with ids["session_factory"]() as session:
+        assert get_active_membership(session, ids["target"], ids["tenant"]) is not None
+        actions = [
+            row.data["action"]
+            for row in session.scalars(
+                select(TenantRecord).where(TenantRecord.entity_type == "LogAuditoria")
+            )
+        ]
+    assert "user.reactivated" in actions
+
+
+def test_reactivation_clears_legacy_account_level_suspension(admin_users_client):
+    client, ids = admin_users_client
+    with ids["session_factory"]() as session:
+        user = session.get(User, ids["target"])
+        user.account_status = "suspended"
+        user.is_active = False
+        session.commit()
+    login(client)
+
+    response = client.post(
+        f"/api/v1/admin/users/{ids['target']}/reactivate", json={"reason": "Retorno"}
+    )
+
+    assert response.status_code == 200
+    with ids["session_factory"]() as session:
+        user = session.get(User, ids["target"])
+        assert user.account_status == "active" and user.is_active is True
+
+
+def test_revoke_sessions_is_scoped_to_company_and_denies_self(admin_users_client):
+    client, ids = admin_users_client
+    with ids["session_factory"]() as session:
+        session.add(Membership(user_id=ids["target"], tenant_id=ids["other_tenant"], role="editor"))
+        first = _open_session(session, ids["target"], ids["tenant"])
+        second = _open_session(session, ids["target"], ids["tenant"])
+        elsewhere = _open_session(session, ids["target"], ids["other_tenant"])
+        session.commit()
+        first_id, second_id, elsewhere_id = first.id, second.id, elsewhere.id
+    login(client)
+    me = client.get("/api/v1/admin/users?search=admin%40mediamind.ai").json()["items"][0]
+
+    response = client.post(
+        f"/api/v1/admin/users/{ids['target']}/revoke-sessions", json={"reason": "Troca"}
+    )
+    own = client.post(
+        f"/api/v1/admin/users/{me['id']}/revoke-sessions", json={"reason": "Minha sessão"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"revoked_sessions": 2}
+    assert own.status_code == 409
+    assert own.json()["error_code"] == "SELF_SESSION_REVOKE"
+    with ids["session_factory"]() as session:
+        assert session.get(AuthSession, first_id).revoked_at is not None
+        assert session.get(AuthSession, second_id).revoked_at is not None
+        assert session.get(AuthSession, elsewhere_id).revoked_at is None
+
+
+def test_new_user_actions_cannot_reach_other_company_users(admin_users_client):
+    client, ids = admin_users_client
+    login(client)
+    for action in ("reactivate", "revoke-sessions"):
+        response = client.post(
+            f"/api/v1/admin/users/{ids['outsider']}/{action}", json={"reason": "Tentativa"}
+        )
+        assert response.status_code == 404
+    with ids["session_factory"]() as session:
+        assert get_active_membership(session, ids["outsider"], ids["other_tenant"]) is not None

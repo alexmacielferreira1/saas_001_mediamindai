@@ -70,6 +70,7 @@ export default function Workspace2() {
     setNotice('Projeto salvo localmente · Última alteração: agora');
   };
   const resetProject = () => {
+    if (!window.confirm('Resetar o projeto? As mídias selecionadas, o roteiro e o rascunho salvo neste navegador serão descartados.')) return;
     setActiveStep('create'); setSelectedIds([]);
     setPreviewAssetId(assets[0]?.id || null); setBlocks([]); setProject(initialProject);
     localStorage.removeItem(storagePrefix + 'mm_workspace2_draft'); setNotice('Projeto restaurado ao padrão');
@@ -161,7 +162,7 @@ export default function Workspace2() {
   };
 
   return (
-    <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-[#020817] p-4 text-slate-100">
+    <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-mm-page p-4 text-slate-100">
       <div className="mb-4 flex items-start gap-5">
         <div className="min-w-64">
           <h1 className="text-2xl font-bold">Workspace</h1>

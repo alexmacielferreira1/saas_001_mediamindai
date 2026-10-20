@@ -335,9 +335,7 @@ def test_mcp_video_studio_prompt_uses_its_assigned_connection(permission_client,
 
         def json(self):
             return {
-                "choices": [
-                    {"finish_reason": "stop", "message": {"content": "Roteiro do vídeo"}}
-                ]
+                "choices": [{"finish_reason": "stop", "message": {"content": "Roteiro do vídeo"}}]
             }
 
     class FakeClient:
@@ -436,3 +434,92 @@ def test_mcp_queue_validates_role_module_and_queue_id(permission_client):
     assert invalid_module.status_code == 404
     missing = client.post("/api/v1/mcp/queues/00000000-0000-0000-0000-000000000001/execute")
     assert missing.status_code == 404
+
+
+def test_mcp_queue_records_partial_failure_without_simulating_success(permission_client):
+    client, ids = permission_client
+    with ids["session_factory"]() as session:
+        asset = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="Asset",
+            data={"filename": "ok.mp4", "asset_type": "video"},
+        )
+        session.add(asset)
+        session.commit()
+        asset_id = str(asset.id)
+    login(client)
+
+    response = client.post(
+        "/api/v1/mcp/queues",
+        json={
+            "name": "Lote com falha",
+            "module": "mmfilm",
+            "tool_name": "mmfilm.inspect",
+            "instruction": "Inspecionar.",
+            "output_mode": "internal",
+            "execution_mode": "immediate",
+            "targets": [
+                {"id": "EP01", "name": "EP01", "asset_ids": [asset_id]},
+                {"id": "EP02", "name": "EP02", "asset_ids": ["nao-e-uuid"]},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["status"] == "partial"
+    ok, failed = payload["results"]
+    assert ok["status"] == "completed" and ok["asset_count"] == 1
+    assert failed["status"] == "failed"
+    assert failed["target_name"] == "EP02"
+    assert failed["error"]["code"] == "MCP_INVALID_ASSET_ID"
+    assert "asset_count" not in failed
+    persisted = client.get("/api/v1/mcp/queues").json()["queues"]
+    assert persisted[0]["status"] == "partial"
+
+
+def test_mcp_queue_marks_failed_when_every_target_fails(permission_client):
+    client, _ = permission_client
+    login(client)
+    response = client.post(
+        "/api/v1/mcp/queues",
+        json={
+            "name": "Tudo falha",
+            "module": "mmfilm",
+            "tool_name": "mmfilm.inspect",
+            "instruction": "Inspecionar.",
+            "output_mode": "internal",
+            "execution_mode": "immediate",
+            "targets": [{"id": "EP01", "name": "EP01", "asset_ids": ["x"]}],
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["status"] == "failed"
+    assert response.json()["results"][0]["status"] == "failed"
+
+
+def test_mcp_queue_rejects_unavailable_or_foreign_tool_before_persisting(permission_client):
+    client, _ = permission_client
+    login(client)
+    base = {
+        "name": "Inválida",
+        "instruction": "Executar.",
+        "output_mode": "internal",
+        "execution_mode": "immediate",
+    }
+    unavailable = client.post(
+        "/api/v1/mcp/queues", json={**base, "module": "mmphoto", "tool_name": "mmphoto.inspect"}
+    )
+    unknown = client.post(
+        "/api/v1/mcp/queues", json={**base, "module": "mmfilm", "tool_name": "mmfilm.nao_existe"}
+    )
+    foreign = client.post(
+        "/api/v1/mcp/queues",
+        json={**base, "module": "mmfilm", "tool_name": "system.capabilities"},
+    )
+
+    assert unavailable.status_code == 409
+    assert unknown.status_code == 404
+    assert foreign.status_code == 422
+    assert foreign.json()["error_code"] == "MCP_TOOL_MODULE_MISMATCH"
+    assert client.get("/api/v1/mcp/queues").json()["queues"] == []

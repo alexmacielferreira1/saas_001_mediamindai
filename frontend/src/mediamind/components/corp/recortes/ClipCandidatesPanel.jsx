@@ -18,12 +18,29 @@ const DIMENSIONS = [
   { key: 'trend', label: 'Trend', tip: 'Potencial de aproveitamento de tendência atual (estimativa editorial, não garantia de views).' },
 ];
 
-const DEMO_CANDIDATES = [
-  { id:'demo-1', title:'Melhorar a mobilidade e a qualidade de vida', start_ms:24000, end_ms:32000, overall_score:85, rank:1, selected:true, favorite:true, transcript:'Isso vai melhorar a mobilidade e a qualidade de vida da população.', summary:'Boa retenção, tema relevante e mensagem clara.', hook_grade:'A', flow_grade:'A', value_grade:'A', trend_grade:'B' },
-  { id:'demo-2', title:'Estamos com várias obras em andamento', start_ms:18000, end_ms:28000, overall_score:72, rank:2, selected:false, transcript:'Estamos com várias obras em andamento nos principais bairros.', summary:'Informação objetiva com potencial local.', hook_grade:'B', flow_grade:'A', value_grade:'B', trend_grade:'B' },
-  { id:'demo-3', title:'A cidade está avançando', start_ms:31000, end_ms:46000, overall_score:68, rank:3, selected:false, transcript:'A cidade está avançando e queremos entregar mais resultados.', summary:'Mensagem institucional clara.', hook_grade:'B', flow_grade:'B', value_grade:'B', trend_grade:'C' },
-  { id:'demo-4', title:'Planejamento e parceria', start_ms:52000, end_ms:65000, overall_score:54, rank:4, selected:false, transcript:'É um trabalho que exige planejamento e parceria.', summary:'Trecho complementar.', hook_grade:'C', flow_grade:'B', value_grade:'C', trend_grade:'C' },
-];
+// Converte candidatos reais da análise do CLIPSFREE (/clips/analyses) para o formato do painel.
+// As dimensões vêm do servidor (0–25 cada); nada é preenchido quando ausente.
+export function fromClipsAnalysis(candidate, index) {
+  const dims = candidate.dimensions || {};
+  const grade = (value) => (Number.isFinite(Number(value)) ? `${Number(value)}/25` : '');
+  return {
+    id: candidate.id,
+    title: candidate.quote || 'Trecho analisado',
+    start_ms: Math.round(Number(candidate.start) * 1000),
+    end_ms: Math.round(Number(candidate.end) * 1000),
+    overall_score: Number(candidate.score) || 0,
+    rank: index + 1,
+    selected: false,
+    transcript: candidate.quote || '',
+    reason: candidate.rationale || '',
+    evidence: candidate.evidence || [],
+    hook_grade: grade(dims.hook), hook_explanation: 'Gancho: força dos primeiros segundos, avaliada sobre a transcrição.',
+    flow_grade: grade(dims.flow), flow_explanation: 'Fluxo: continuidade do raciocínio dentro do trecho.',
+    value_grade: grade(dims.value), value_explanation: 'Valor: densidade de informação útil.',
+    trend_grade: grade(dims.shareability), trend_explanation: 'Compartilhamento: potencial de o público repassar o trecho (estimativa editorial, não garantia de alcance).',
+    source: 'clipsfree',
+  };
+}
 
 function Grade({ grade, explanation }) {
   const [open, setOpen] = useState(false);
@@ -78,8 +95,9 @@ function CandidateCard({ c, clip, seekTo, onToggle, onFav, onReject, onApplySugg
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <button onClick={() => seekTo(c.start_ms)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"><Play size={11} /> Reproduzir</button>
         <button onClick={() => onToggle(c)} className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold ${c.selected ? 'bg-violet-500 text-slate-950' : 'border border-slate-700 text-slate-300 hover:bg-slate-800'}`}><Check size={11} /> {c.selected ? 'Selecionado' : 'Selecionar'}</button>
-        <button onClick={() => setShowSugg((s) => !s)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="Aplicar IN/OUT sugeridos pela IA"><Wand2 size={11} /> Melhorar</button>
-        <button onClick={() => onPromote(c)} disabled={promoting} className="flex items-center gap-1 rounded-md border border-sky-700 px-2 py-1 text-[10px] text-sky-300 hover:bg-sky-950/40 disabled:opacity-50"><CornerUpRight size={11} /> {promoting ? 'Salvando...' : 'Promover a Clip'}</button>
+        <button onClick={() => setShowSugg((s) => !s)} disabled={!hasSuggestion} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-40" title={hasSuggestion ? 'Aplicar IN/OUT sugeridos pela IA' : 'A IA não sugeriu ajuste de IN/OUT para este trecho'}><Wand2 size={11} /> Melhorar</button>
+        {c.source === 'clipsfree' && <button type="button" onClick={() => onApplySuggestion({ ...c, suggested_in_ms: c.start_ms, suggested_out_ms: c.end_ms })} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800" title="Usar este trecho como IN/OUT do corte">Usar como IN/OUT</button>}
+        {c.source !== 'clipsfree' && <button onClick={() => onPromote(c)} disabled={promoting} className="flex items-center gap-1 rounded-md border border-sky-700 px-2 py-1 text-[10px] text-sky-300 hover:bg-sky-950/40 disabled:opacity-50"><CornerUpRight size={11} /> {promoting ? 'Salvando...' : 'Promover a Clip'}</button>}
       </div>
 
       {showWhy && (
@@ -112,17 +130,27 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
   const [error, setError] = useState('');
   const [promotingId, setPromotingId] = useState(null);
   const assetId = clip.source_asset_id;
+  const analysisMode = Array.isArray(clip.analysis_candidates) && clip.analysis_candidates.length > 0;
   const eid = isGlobal ? '' : empresaId;
 
   async function load() {
+    if (analysisMode) {
+      const selectedIds = new Set((clip.viral || []).map((item) => item.id));
+      setCandidates(clip.analysis_candidates.map(fromClipsAnalysis).map((item) => ({ ...item, selected: selectedIds.has(item.id) })));
+      return;
+    }
     if (!assetId) return;
     try {
       const list = await listCandidates(assetId);
       setCandidates(list);
-    } catch (e) { setCandidates(DEMO_CANDIDATES); }
+    } catch {
+      // Sem candidatos persistidos não exibimos exemplos como se fossem análise.
+      setCandidates([]);
+      setError('Não foi possível carregar os candidatos salvos deste vídeo.');
+    }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [assetId]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [assetId, analysisMode]);
 
   const selectedCount = candidates.filter((c) => c.selected).length;
 
@@ -145,8 +173,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
       setCandidates(cs);
       setStep('');
     } catch (e) {
-      setCandidates(DEMO_CANDIDATES);
-      setError('Serviço de IA indisponível: exibindo candidatos demonstrativos editáveis.');
+      setError(`Serviço de IA indisponível: nenhum candidato foi gerado.${e?.message ? ` (${e.message})` : ''}`);
     } finally {
       setLoading(false);
       setStep('');
@@ -161,19 +188,19 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
     const updated = candidates.map((item) => item.id === c.id ? { ...item, selected: next } : item);
     setCandidates(updated);
     syncViral(updated);
-    if (c.id) { try { await updateCandidate(c.id, { selected: next }); } catch {} }
+    if (c.id && c.source !== 'clipsfree') { try { await updateCandidate(c.id, { selected: next }); } catch {} }
   }
   async function fav(c) {
     const next = !c.favorite;
     patchLocal(c.id, { favorite: next });
-    if (c.id) { try { await updateCandidate(c.id, { favorite: next }); } catch {} }
+    if (c.id && c.source !== 'clipsfree') { try { await updateCandidate(c.id, { favorite: next }); } catch {} }
   }
   async function reject(c) {
     const next = !c.rejected;
     const updated = candidates.map((item) => item.id === c.id ? { ...item, rejected: next, selected: next ? false : item.selected } : item);
     setCandidates(updated);
     syncViral(updated);
-    if (c.id) { try { await updateCandidate(c.id, { rejected: next, selected: next ? false : c.selected }); } catch {} }
+    if (c.id && c.source !== 'clipsfree') { try { await updateCandidate(c.id, { rejected: next, selected: next ? false : c.selected }); } catch {} }
   }
   function applySuggestion(c) {
     const start = c.suggested_in_ms || c.start_ms;
@@ -197,7 +224,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
 
   // Sincroniza selecionados no formato esperado pela etapa de legendas (clip.viral).
   function syncViral(updatedCandidates) {
-    const viral = updatedCandidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, summary: c.summary || c.reason || '', texto: c.transcript || '', selected: true, score: c.overall_score }));
+    const viral = updatedCandidates.filter((c) => c.selected && !c.rejected).map((c) => ({ id: c.id, start_ms: c.start_ms, end_ms: c.end_ms, titulo: c.title, summary: c.summary || c.reason || '', texto: c.transcript || '', evidence: c.evidence || [], selected: true, score: c.overall_score }));
     onChange({ viral });
   }
 
@@ -217,9 +244,9 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-slate-400">Asset #{assetId.slice(-6)} · trecho {fmt(clip.in_ms)}–{fmt(clip.out_ms)}</p>
-        <button onClick={processar} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-violet-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-violet-400 disabled:opacity-50">
+        {analysisMode ? <span className="text-[10px] text-slate-500">Candidatos da análise desta sessão. Para reanalisar, use "Gerar sugestões".</span> : <button onClick={processar} disabled={loading} className="flex items-center gap-1.5 rounded-md bg-violet-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-violet-400 disabled:opacity-50">
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {loading ? (step || 'Processando...') : (candidates.length ? 'Reprocessar IA' : 'Processar IA')}
-        </button>
+        </button>}
       </div>
 
       {error && (

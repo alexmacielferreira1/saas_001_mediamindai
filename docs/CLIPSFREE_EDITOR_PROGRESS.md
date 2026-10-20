@@ -1,5 +1,14 @@
 # CLIPSFREE — progresso do editor
 
+## Legendas, reenquadramento e exportação — 20/10/2026
+
+Fluxo, telas e etapas preservados; recursos adicionados dentro dos painéis existentes. Não publicado.
+
+- Legendas: geração a partir das palavras temporizadas reais da análise (evidence) dentro do IN/OUT; destaque palavra a palavra (modelos Karaokê/Neon); seis modelos de estilo, "Aplicar modelo a todas", tamanho, cores, máximo de caracteres por linha, palavras em destaque e emojis opcionais (prévia/SRT/VTT); dividir sem duplicar texto; unir com a próxima; edição de texto preserva tempos por palavra quando a contagem não muda; importar SRT/VTT e exportar SRT/VTT (tempos relativos ao IN); verificação não bloqueante (tempo, sobreposição, linhas, leitura, fora do IN/OUT, área segura 9:16).
+- Corte: seletor 9:16/1:1/16:9 e foco horizontal na barra do editor; guia de enquadramento/área segura opcional no player; predefinições de duração (sessão e a partir do IN); avisos de IN/OUT inválido; composição da nota (4 dimensões do servidor) nos cartões; painel de candidatos usa a análise da sessão e não exibe mais candidatos demonstrativos em falha.
+- Exportação: `properties.clip_render` em `/media/exports/clip` (módulo `backend/app/media/clip_render.py`) aplica formato com recorte/letterbox e foco, legendas gravadas via ASS (escapadas), títulos/gancho e cortes internos. Sem `clip_render` o comportamento anterior (1280×720) é mantido. Exportação em lote das sugestões na tela inicial.
+- Não verificado: renderização real com FFmpeg (não instalado nesta máquina; testes simulam o subprocesso). Gravação de legendas exige FFmpeg com libass. Imagens, GC animado e emojis não entram no MP4. Detecção automática de rosto/sujeito não existe; o reenquadramento é por foco manual.
+
 ## Retomada em outro computador — GC e biblioteca de assets — 19/10/2026
 
 **Estado: trabalho em andamento, não concluído nem validado ponta a ponta.** Alex pediu para interromper a implementação e registrar esta pendência antes de levar o projeto para outro computador. Não houve publicação neste bloco.

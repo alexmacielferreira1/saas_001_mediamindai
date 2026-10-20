@@ -14,6 +14,7 @@ import { useMamData } from '../lib/mamData';
 import { useAuth } from '../auth';
 import { readLocalDemoSession } from '../lib/demoAccess';
 import { DATA_SOURCE } from '../lib/dataOrigin';
+import { getGreeting } from '../lib/greeting';
 
 export function canViewProfiles(user) {
   return user?.role === 'superadmin';
@@ -27,12 +28,6 @@ export function resolveDashboardState(dashboard, error, localDemo, demoKpis = []
   return { source: kpis.length ? DATA_SOURCE.REAL : DATA_SOURCE.EMPTY, kpis };
 }
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Bom dia';
-  if (h < 18) return 'Boa tarde';
-  return 'Boa noite';
-}
 
 export default function Home() {
   const { user } = useAuth();

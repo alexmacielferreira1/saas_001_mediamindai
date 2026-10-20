@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV_GROUPS, navigationForRole } from "./Shell";
+import { NAV_GROUPS, NOTIFICATIONS_AVAILABLE, navigationForRole, settingsPathForRole } from "./Shell";
+
+describe("notifications bell", () => {
+  it("stays hidden while there is no real notification system", () => {
+    expect(NOTIFICATIONS_AVAILABLE).toBe(false);
+  });
+});
+
+describe("settings shortcut", () => {
+  it("opens Administração for administrators", () => {
+    expect(settingsPathForRole("admin")).toBe("/administration2");
+    expect(settingsPathForRole("superadmin")).toBe("/administration2");
+  });
+
+  it("opens the AI settings for other roles that can reach them", () => {
+    expect(settingsPathForRole("editor")).toBe("/configuracoes/ia");
+  });
+
+  it("has no destination for roles without a settings area", () => {
+    expect(settingsPathForRole("mvp")).toBeNull();
+    expect(settingsPathForRole(undefined)).toBeNull();
+  });
+});
 
 describe("production navigation", () => {
   it("shows only the approved operational workflow", () => {

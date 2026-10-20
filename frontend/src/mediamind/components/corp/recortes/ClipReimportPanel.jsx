@@ -4,9 +4,10 @@ import { base44 } from '@/api/base44Client';
 import { exportMediaClip } from '../../../../api/media';
 import { useAuth } from '../../../auth';
 import { useEmpresa } from '../../../lib/empresaContext';
-import { baixarXmlPremiereClip, baixarSrtClip } from '../../../lib/premiereXml';
+import { baixarXmlPremiereClip, baixarSrtClip, baixarTexto } from '../../../lib/premiereXml';
 import { createVersion, listVersions, setCurrentVersion } from '../../../lib/clipEngineService';
 import { fmt } from './clipModel';
+import { EXPORT_PRESETS, buildClipRenderOptions, captionsToVtt, DEFAULT_CAPTION_SETTINGS } from '../../../lib/captionTools';
 
 const isRealClipId = (id) => !!id && !String(id).startsWith('clip-');
 
@@ -24,6 +25,10 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [download, setDownload] = useState(null);
+  const [aspect, setAspect] = useState(clip.formato || '');
+  const [burnCaptions, setBurnCaptions] = useState((clip.legendas || []).length > 0);
+  const [burnTitles, setBurnTitles] = useState((clip.cgs || []).some((layer) => layer.tipo === 'titulo'));
+  const [applyCuts, setApplyCuts] = useState((clip.cortes_video || []).length > 0);
   const eid = isGlobal ? '' : empresaId;
   const realId = isRealClipId(clip.id);
 
@@ -41,8 +46,9 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
     try {
       const assetId = clip.source_asset_id || await onEnsureAsset();
       if (!assetId) throw new Error('Não foi possível enviar o vídeo de origem.');
-      const result = await exportMediaClip({ asset_id: assetId, source_in: clip.in_ms / 1000, duration: (clip.out_ms - clip.in_ms) / 1000, properties: {} });
-      setDownload({ url: URL.createObjectURL(result.blob), filename: result.filename, clipId: clip.id, inMs: clip.in_ms, outMs: clip.out_ms });
+      const renderOptions = buildClipRenderOptions(clip, { aspect, burnCaptions, burnTitles, applyCuts });
+      const result = await exportMediaClip({ asset_id: assetId, source_in: clip.in_ms / 1000, duration: (clip.out_ms - clip.in_ms) / 1000, properties: renderOptions ? { clip_render: renderOptions } : {} });
+      setDownload({ url: URL.createObjectURL(result.blob), filename: result.filename, clipId: clip.id, inMs: clip.in_ms, outMs: clip.out_ms, optionsKey: JSON.stringify(renderOptions) });
     } catch (error) {
       setExportError(error.message || 'Não foi possível gerar o MP4.');
     } finally { setExporting(false); }
@@ -85,14 +91,24 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
     } catch { /* */ }
   }
 
+  const currentOptionsKey = JSON.stringify(buildClipRenderOptions(clip, { aspect, burnCaptions, burnTitles, applyCuts }));
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Exportação real */}
       <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
         <p className="text-xs text-slate-400">Exporte um projeto XML ou as legendas SRT para edição externa e reconecte a mídia master. Os intervalos removidos na prévia, o reenquadramento e a aparência das camadas ainda não estão garantidos no arquivo exportado; revise o resultado no editor externo.</p>
+        <div className="mt-3 grid gap-2 text-[10px] text-slate-400 md:grid-cols-2" aria-label="Opções do MP4">
+          <label>Formato do MP4<select aria-label="Formato do MP4" value={aspect} onChange={(e) => setAspect(e.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-slate-200"><option value="">Original (1280×720)</option>{EXPORT_PRESETS.map((preset) => <option key={preset.id} value={preset.aspect}>{preset.label}</option>)}</select></label>
+          <div className="flex flex-col justify-end gap-1">
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={burnCaptions} disabled={!(clip.legendas || []).length} onChange={(e) => setBurnCaptions(e.target.checked)} />Gravar legendas no vídeo</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={burnTitles} disabled={!(clip.cgs || []).some((layer) => layer.tipo === 'titulo')} onChange={(e) => setBurnTitles(e.target.checked)} />Gravar textos/título de gancho</label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={applyCuts} disabled={!(clip.cortes_video || []).length} onChange={(e) => setApplyCuts(e.target.checked)} />Aplicar cortes internos</label>
+          </div>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" onClick={exportMp4} disabled={(!clip.source_asset_id && !onEnsureAsset) || clip.out_ms <= clip.in_ms || exporting} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"><Download size={12} /> {exporting ? 'Gerando MP4...' : 'Gerar MP4 do trecho'}</button>
-          {download && download.clipId === clip.id && download.inMs === clip.in_ms && download.outMs === clip.out_ms && <a href={download.url} download={download.filename} className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-[11px] font-bold text-emerald-300"><Download size={12} /> Baixar MP4 gerado</a>}
+          {download && download.clipId === clip.id && download.inMs === clip.in_ms && download.outMs === clip.out_ms && download.optionsKey === currentOptionsKey && <a href={download.url} download={download.filename} className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-[11px] font-bold text-emerald-300"><Download size={12} /> Baixar MP4 gerado</a>}
           {clip.source_url && <a href={clip.source_url} download className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-300"><Download size={12} /> Baixar vídeo original</a>}
           <button
             onClick={() => baixarXmlPremiereClip(clip, { legendas: clip.legendas || [], cgs: clip.cgs || [] })}
@@ -107,11 +123,19 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
           >
             <FileText size={12} /> Legendas (SRT)
           </button>
+          <button
+            type="button"
+            onClick={() => baixarTexto(`${(clip.titulo || clip.title || 'corte').replace(/[^a-z0-9-_]+/gi, '_')}.vtt`, captionsToVtt(clip.legendas || [], { inMs: clip.in_ms || 0, maxChars: { ...DEFAULT_CAPTION_SETTINGS, ...(clip.legenda_config || {}) }.maxChars }), 'text/vtt')}
+            disabled={!(clip.legendas || []).length}
+            className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+          >
+            <FileText size={12} /> Legendas (VTT)
+          </button>
           <span className="self-center text-[10px] text-slate-500">
             IN {fmt(clip.in_ms)} · OUT {fmt(clip.out_ms)} · {(clip.legendas || []).length} legenda(s) · {(clip.cgs || []).length} CG(s)
           </span>
         </div>
-        <p className="mt-2 text-[10px] text-amber-200">O MP4 gerado contém apenas o intervalo IN/OUT do vídeo original; ainda não incorpora cortes internos, legendas, camadas ou reenquadramento.</p>
+        <p className="mt-2 text-[10px] text-amber-200">O MP4 usa o intervalo IN/OUT e aplica somente as opções marcadas acima (formato com reenquadramento Preencher/Ajustar e foco horizontal, legendas com o modelo global, textos e cortes internos). Imagens, GCs animados e emojis não são gravados. A gravação de legendas depende do FFmpeg do servidor com suporte a legendas (libass).</p>
         {!clip.source_asset_id && <p className="mt-1 text-[10px] text-slate-400">{onEnsureAsset ? 'O vídeo será enviado ao MediaMind ao gerar o MP4.' : 'Selecione novamente o arquivo de origem para gerar o trecho.'}</p>}
         {exportError && <p role="alert" className="mt-2 text-xs text-rose-300">{exportError}</p>}
       </div>

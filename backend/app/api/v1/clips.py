@@ -58,7 +58,11 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         configured_connection_id = configuration.get("tool_connections", {}).get(
             "auto-clips", configuration.get("default_connection_id")
         )
-        connection_id = (configured_connection_id if configuration.get("tool_connections", {}).get("auto-clips") else body.connection_id or configured_connection_id)
+        connection_id = (
+            configured_connection_id
+            if configuration.get("tool_connections", {}).get("auto-clips")
+            else body.connection_id or configured_connection_id
+        )
         if connection_id:
             connection = next(
                 (
@@ -95,17 +99,23 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         from app.api.v1.media import find_asset
 
         asset = find_asset(session, membership.tenant_id, body.asset_id)
-        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data["storage_key"])
+        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data.get("storage_key"))
         if connection:
             api_key = decrypt_ai_key(connection)
             segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
-            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(segments, minimum=body.minimum, maximum=body.maximum, editorial_prompt=body.editorial_prompt)
+            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(
+                segments,
+                minimum=body.minimum,
+                maximum=body.maximum,
+                editorial_prompt=body.editorial_prompt,
+            )
         else:
             segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
             candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         # Duration constraints are enforced server-side, including command-based providers.
         candidates = [
-            candidate for candidate in candidates
+            candidate
+            for candidate in candidates
             if body.minimum <= candidate.duration <= body.maximum
         ]
         service.save_transcript(record.id, membership.tenant_id, segments)

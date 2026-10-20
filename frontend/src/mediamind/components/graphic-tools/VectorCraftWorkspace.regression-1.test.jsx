@@ -226,7 +226,18 @@ describe("MMVector direct manipulation", () => {
     const paths = screen
       .getAllByRole("button", { name: /Traçado \d+ na prancheta/ })
       .map((element) => element.querySelector("path")?.getAttribute("d"));
-    expect(new Set(paths).size).toBe(4);
+    // Comportamento real: Caneta e Curvatura iniciam um caminho no ponto clicado; Pincel e
+    // Lápis registram o trajeto do ponteiro (e não uma forma pronta).
+    expect(paths).toHaveLength(4);
+    const [pen, brush, pencil, curvature] = [10, 11, 12, 13].map((index) =>
+      screen.getByRole("button", { name: `Traçado ${index} na prancheta` }).querySelector("path"),
+    );
+    expect(pen.getAttribute("d")).toBe("M0 0");
+    expect(curvature.getAttribute("d")).toBe("M0 0");
+    expect(brush.getAttribute("d")).toBe("M0 0 L166.67 83.33");
+    expect(brush.getAttribute("stroke-width")).toBe("12");
+    expect(pencil.getAttribute("d")).toBe("M0 0 L166.67 83.33");
+    expect(pencil.getAttribute("stroke-width")).toBe("6");
 
     fireEvent.click(screen.getByRole("button", { name: "Texto (T)" }));
     fireEvent.pointerDown(artboard, { clientX: 220, clientY: 220 });

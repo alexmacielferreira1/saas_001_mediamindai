@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { createMCPQueue, executeMCPQueue, listMCPQueues, listMCPTools } from "../../lib/mcpApi";
+import { useMCPContext } from "../../lib/mcpTargetContext";
 import { useProducaoProjetos } from "../../lib/producaoStore";
 import { listMediaAssets, mediaStreamUrl } from "../../../api/media";
 import MCPCenter from "../ai-tools/MCPCenter";
@@ -22,6 +23,16 @@ const APPS = [
   { id: "powerpoint", module: "powerpoint", short: "P", label: "PowerPoint", title: "PowerPoint", icon: Presentation, color: "orange", href: "/ferramentas-graficas?tool=powerpoint" },
 ];
 
+const QUEUE_STATUS_LABELS = { completed: "Concluída", partial: "Concluída em parte", failed: "Falhou", draft: "Rascunho", running: "Em execução" };
+const queueStatusLabel = (status) => QUEUE_STATUS_LABELS[status] || "Estado desconhecido";
+function queueOutcomeMessage(queue) {
+  const results = queue.results || [];
+  const failed = results.filter((item) => item.status === "failed");
+  if (queue.status === "completed") return `Execução concluída: ${results.length} resultado(s).`;
+  if (queue.status === "partial") return `Execução parcial: ${results.length - failed.length} de ${results.length} alvo(s) concluído(s). ${failed[0]?.error?.message || ""}`.trim();
+  if (queue.status === "failed") return `A execução falhou. ${failed[0]?.error?.message || ""}`.trim();
+  return "Fila MCP criada como rascunho.";
+}
 const BASE_COMMANDS = {
   mmfilm: ["Montar sequência", "Cortar trechos (IN / OUT)", "Criar legendas automáticas", "Ajustar áudio e normalização", "Aplicar transições e efeitos", "Preparar exportação"],
   mmeffects: ["Criar composição", "Animar elementos", "Aplicar efeitos", "Preparar renderização"],
@@ -141,7 +152,7 @@ export default function MCPDock() {
       </header>
       <div className="flex border-b border-slate-800 px-4"><button onClick={() => setTab("commands")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "commands" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Comandos</button><button onClick={() => setTab("history")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "history" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Histórico</button></div>
       <div className="flex-1 overflow-y-auto p-4">
-        {tab === "history" ? (historyQueues.length ? <div className="space-y-2">{historyQueues.map((queue) => <article key={queue.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs"><strong className="text-slate-200">{queue.name}</strong><p className="mt-1 text-sky-300">{queue.status === "completed" ? "Concluída" : "Rascunho"} · {queue.results?.length || 0} resultado(s)</p></article>)}</div> : <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-slate-800 p-6 text-center"><div><History className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">Nenhuma execução registrada.</p><p className="mt-1 text-xs text-slate-600">Resultados e pedidos de confirmação aparecerão aqui.</p></div></div>) : <>
+        {tab === "history" ? (historyQueues.length ? <div className="space-y-2">{historyQueues.map((queue) => <article key={queue.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs"><strong className="text-slate-200">{queue.name}</strong><p className="mt-1 text-sky-300">{queueStatusLabel(queue.status)} · {queue.results?.length || 0} resultado(s)</p></article>)}</div> : <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-slate-800 p-6 text-center"><div><History className="mx-auto text-slate-600" /><p className="mt-3 text-sm text-slate-400">Nenhuma execução registrada.</p><p className="mt-1 text-xs text-slate-600">Resultados e pedidos de confirmação aparecerão aqui.</p></div></div>) : <>
           <MCPActionPlanner module={app.module} appId={app.id} label={app.label} commands={commands} tools={authorizedTools} connected={connected} expressDraft={expressDraft} />
           <h3 className="mt-5 text-xs font-bold text-white">Projeto conectado</h3><div className="mt-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs"><p className="font-semibold text-slate-300">Nenhum projeto MM conectado</p><p className="mt-1 text-slate-600">A ponte local identificará o projeto e a sequência ativos.</p></div>
           <button onClick={() => toggle("settings")} className="mt-4 flex w-full items-center justify-between rounded-xl border border-slate-800 p-3 text-xs text-slate-400"><span className="flex items-center gap-2"><Settings size={14}/>Configurações e preferências</span><ChevronDown size={14}/></button>
@@ -180,6 +191,11 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
   const [selectedAssetIds, setSelectedAssetIds] = useState([]);
   const isAiPrompt = module === "ai-tools";
   const supportsTimeline = appId === "mmfilm";
+  const mcpContext = useMCPContext();
+  const openTimeline = supportsTimeline && mcpContext?.kind === "timeline" ? mcpContext : null;
+  const timelineIssue = !openTimeline ? "Abra uma timeline no MMFilm para usá-la como alvo."
+    : openTimeline.asset_ids.length ? "" : "A timeline aberta não tem mídias do Acervo que o MCP possa ler.";
+  const timelineTarget = (text) => ({ id: openTimeline.id, name: `Timeline aberta · ${openTimeline.name}`, kind: "timeline", instruction: text, asset_ids: openTimeline.asset_ids });
 
   useEffect(() => { listMCPQueues().then((data) => setQueues(data.queues || [])).catch(() => setQueues([])); }, []);
   useEffect(() => {
@@ -193,12 +209,8 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     const next = [expressDraft.prompt?.trim(), ...selected].filter(Boolean).join("\n");
     if (next) setInstruction(next);
     if (expressDraft.target === "timeline" && appId === "mmfilm") {
-      setTargets((current) => current.some((target) => target.id === "timeline-active") ? current : [...current, {
-        id: "timeline-active",
-        name: "Timeline aberta · Corte principal",
-        kind: "timeline",
-        instruction: next,
-      }]);
+      if (timelineIssue) setMessage(timelineIssue);
+      else setTargets((current) => current.some((target) => target.kind === "timeline") ? current : [...current, timelineTarget(next)]);
     }
     if (expressDraft.quickOperation) {
       setPage(0);
@@ -239,16 +251,14 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
         targets: (isAiPrompt && !targets.length ? [{ id: "assistant", name: "Assistente IA", kind: "virtual", instruction: requestInstruction }] : targets).map((target) => ({
           ...target,
           instruction: target.instruction.trim() || requestInstruction,
-          asset_ids: selectedAssetIds,
+          asset_ids: target.asset_ids?.length ? target.asset_ids : selectedAssetIds,
         })),
         export_name: output === "external" ? exportName.trim() : null,
         export_destination: output === "external" ? exportDestination : null,
       });
       setQueues((current) => [created, ...current]); setInstruction(""); setTargets([]);
       window.dispatchEvent(new CustomEvent("mm:mcp-result", { detail: created }));
-      setMessage(created.status === "completed"
-        ? `Execução concluída: ${created.results?.length || 0} resultado(s).`
-        : "Fila MCP criada como rascunho.");
+      setMessage(queueOutcomeMessage(created));
     } catch (error) { setMessage(error?.message || "Não foi possível salvar o pedido MCP."); }
     finally { setSaving(false); }
   }
@@ -265,13 +275,9 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     setNewProject("");
   }
   function addActiveTimeline() {
-    if (targets.some((target) => target.id === "timeline-active")) return;
-    setTargets((current) => [...current, {
-      id: "timeline-active",
-      name: "Timeline aberta · Corte principal",
-      kind: "timeline",
-      instruction,
-    }]);
+    if (timelineIssue) { setMessage(timelineIssue); return; }
+    if (targets.some((target) => target.kind === "timeline")) return;
+    setTargets((current) => [...current, timelineTarget(instruction)]);
   }
   function updateTarget(id, patch) {
     setTargets((current) => current.map((target) => target.id === id ? { ...target, ...patch } : target));
@@ -292,8 +298,9 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
   async function execute(queue) {
     setMessage("");
     try {
-      await executeMCPQueue(queue.id);
-      setMessage("A fila MCP foi enviada para execução.");
+      const executed = await executeMCPQueue(queue.id);
+      setQueues((current) => current.map((item) => item.id === executed.id ? executed : item));
+      setMessage(queueOutcomeMessage(executed));
     } catch (error) {
       setMessage(error?.message || "A ponte local ainda não está disponível para executar esta fila.");
     }
@@ -304,7 +311,7 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     <h3 className="text-sm font-bold text-white">Pedir ao MCP · {label}</h3><p className="mt-1 text-xs text-slate-400">Fluxo de quatro etapas. Veja duas por vez e avance quando estiver pronto.</p>
     <div className="mt-3 grid grid-cols-4 gap-1">{steps.map((step, index) => <button key={step} onClick={() => setPage(index < 2 ? 0 : 1)} className={`rounded-lg border p-2 text-left text-[10px] ${((page === 0 && index < 2) || (page === 1 && index > 1)) ? "border-sky-600 bg-sky-950/60 text-sky-100" : "border-slate-800 text-slate-500"}`}><span className="mr-1 inline-grid h-4 w-4 place-items-center rounded-full bg-sky-500 text-[9px] font-bold text-slate-950">{index + 1}</span>{step}</button>)}</div>
     {page === 0 && <div className="mt-3 grid grid-cols-2 gap-3">
-      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. {isAiPrompt ? "Contexto" : "Projeto e mídias"}</p>{isAiPrompt ? <p className="mt-1 text-[11px] text-slate-500">O Assistente usa o pedido informado. Adicione contexto no prompt; não é necessário escolher um projeto.</p> : <><p className="mt-1 text-[11px] text-slate-500">Defina primeiro onde o MCP deve trabalhar. A timeline aberta é um alvo direto e visível.</p>{supportsTimeline && <button type="button" aria-pressed={targets.some((target) => target.id === "timeline-active")} onClick={addActiveTimeline} className="mt-3 flex w-full items-center justify-between rounded-lg border border-sky-700 bg-sky-950/40 px-3 py-2 text-left text-xs text-sky-100 hover:bg-sky-900/60"><span><strong className="block">Usar timeline aberta</strong><small className="text-sky-300">Corte principal · pronta para inspeção e ações</small></span><Video size={16}/></button>}<div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><div className="mt-3"><div className="flex items-center justify-between text-[11px]"><strong className="text-slate-200">Mídias do Acervo</strong><span className="text-sky-300">{selectedAssetIds.length} selecionada(s)</span></div><div className="mt-2 grid max-h-36 grid-cols-3 gap-1 overflow-y-auto">{assets.slice(0, 12).map((asset) => { const id = String(asset.id); const selected = selectedAssetIds.includes(id); const url = mediaStreamUrl(asset); return <button key={id} type="button" aria-pressed={selected} aria-label={`Selecionar mídia ${asset.title || asset.filename || id}`} onClick={() => toggleAsset(id)} className={`overflow-hidden rounded border text-left ${selected ? "border-sky-400 ring-1 ring-sky-400" : "border-slate-700"}`}><div className="aspect-video bg-slate-900">{url && <video src={url} muted preload="metadata" className="h-full w-full object-cover" />}</div><span className="block truncate p-1 text-[9px] text-slate-300">{asset.title || asset.filename || "Mídia"}</span></button>; })}</div>{!assets.length && <p className="mt-2 text-[11px] text-slate-600">Nenhuma mídia persistida foi encontrada no Acervo.</p>}</div><p className="mt-3 text-[11px] text-slate-500">{targets.length} alvo(s) selecionado(s)</p></>}</section>
+      <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">1. {isAiPrompt ? "Contexto" : "Projeto e mídias"}</p>{isAiPrompt ? <p className="mt-1 text-[11px] text-slate-500">O Assistente usa o pedido informado. Adicione contexto no prompt; não é necessário escolher um projeto.</p> : <><p className="mt-1 text-[11px] text-slate-500">Defina primeiro onde o MCP deve trabalhar. A timeline aberta é um alvo direto e visível.</p>{supportsTimeline && <button type="button" aria-pressed={targets.some((target) => target.kind === "timeline")} onClick={addActiveTimeline} className="mt-3 flex w-full items-center justify-between rounded-lg border border-sky-700 bg-sky-950/40 px-3 py-2 text-left text-xs text-sky-100 hover:bg-sky-900/60"><span><strong className="block">Usar timeline aberta</strong><small className={timelineIssue ? "text-amber-300" : "text-sky-300"}>{timelineIssue || `${openTimeline.name} · ${openTimeline.asset_ids.length} mídia(s) do Acervo`}</small></span><Video size={16}/></button>}<div className="mt-3 flex gap-2"><select aria-label="Selecionar projeto existente" value={projectId} onChange={(event) => setProjectId(event.target.value)} className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"><option value="">Selecionar projeto existente</option>{availableProjects.map((project) => <option key={project._entityId || project.id} value={String(project._entityId || project.id)}>{project.titulo || project.title}</option>)}</select><button onClick={addExisting} className="rounded border border-sky-700 px-2 text-xs text-sky-200">+ Adicionar</button></div><div className="mt-2 flex gap-2"><input aria-label="Nome do novo projeto" value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Novo projeto" className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><button onClick={addNew} className="rounded border border-violet-700 px-2 text-xs text-violet-200">+ Novo</button></div><div className="mt-3"><div className="flex items-center justify-between text-[11px]"><strong className="text-slate-200">Mídias do Acervo</strong><span className="text-sky-300">{selectedAssetIds.length} selecionada(s)</span></div><div className="mt-2 grid max-h-36 grid-cols-3 gap-1 overflow-y-auto">{assets.slice(0, 12).map((asset) => { const id = String(asset.id); const selected = selectedAssetIds.includes(id); const url = mediaStreamUrl(asset); return <button key={id} type="button" aria-pressed={selected} aria-label={`Selecionar mídia ${asset.title || asset.filename || id}`} onClick={() => toggleAsset(id)} className={`overflow-hidden rounded border text-left ${selected ? "border-sky-400 ring-1 ring-sky-400" : "border-slate-700"}`}><div className="aspect-video bg-slate-900">{url && <video src={url} muted preload="metadata" className="h-full w-full object-cover" />}</div><span className="block truncate p-1 text-[9px] text-slate-300">{asset.title || asset.filename || "Mídia"}</span></button>; })}</div>{!assets.length && <p className="mt-2 text-[11px] text-slate-600">Nenhuma mídia persistida foi encontrada no Acervo.</p>}</div><p className="mt-3 text-[11px] text-slate-500">{targets.length} alvo(s) selecionado(s)</p></>}</section>
       <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3"><p className="text-xs font-semibold text-white">2. Operações e prompt</p><label className="mt-2 block text-xs text-slate-300">Operações e prompt<textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder={`Descreva o que o ${label} deve fazer.`} className="mt-1 h-24 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white outline-none focus:border-sky-500"/></label><div className="mt-2 space-y-1">{commands.map((command) => <div key={command} className={`flex items-center gap-1 rounded-lg border p-1 ${instruction.includes(command) ? "border-sky-400 bg-sky-950/60" : "border-slate-700"}`}><button onClick={() => setInstruction((current) => current.includes(command) ? current.replace(command, "").replace(/^\s*\n|\n\s*$/g, "") : [current, command].filter(Boolean).join("\n"))} className="min-w-0 flex-1 truncate px-1.5 py-1 text-left text-[11px] text-slate-200">{instruction.includes(command) ? "✓ " : "+ "}{command}</button><button aria-label={`Executar individualmente ${command}`} onClick={() => prepareQuick(command)} className="rounded border border-sky-700 p-1 text-sky-200 hover:bg-sky-950">▶</button></div>)}</div></section>
     </div>}
     {page === 1 && <div className="mt-3 grid grid-cols-2 gap-3">
@@ -314,6 +321,6 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     {targets.length > 0 && <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs font-semibold text-white">Projetos selecionados</p>{targets.map((target) => <div key={target.id} className="mt-2 rounded-lg border border-slate-700 bg-slate-950/60 p-2"><div className="flex items-center justify-between text-xs"><strong className="text-slate-200">{target.name}</strong><button onClick={() => setTargets((current) => current.filter((item) => item.id !== target.id))} className="text-rose-300">Remover</button></div><textarea value={target.instruction} onChange={(event) => updateTarget(target.id, { instruction: event.target.value })} placeholder="O que aplicar neste projeto?" className="mt-2 h-14 w-full resize-none rounded border border-slate-700 bg-slate-900 p-2 text-xs text-white"/></div>)}</div>}
     <div className="mt-3 flex justify-between gap-2"><button disabled={page === 0} onClick={() => setPage(0)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 disabled:opacity-40">← Etapas 1 e 2</button><button disabled={page === 1} onClick={() => setPage(1)} className="rounded-lg border border-sky-700 px-3 py-2 text-xs text-sky-200 disabled:opacity-40">Etapas 3 e 4 →</button></div>
     {message && <p role="status" className="mt-2 text-xs text-sky-200">{message}</p>}
-    {queues.length > 0 && <div className="mt-4 border-t border-violet-900 pt-3"><h4 className="text-xs font-bold text-white">Filas e pedidos MCP</h4>{queues.slice(0, 5).map((queue) => <div key={queue.id} className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-xs"><strong className="text-slate-200">{queue.name}</strong><span className="ml-2 text-sky-300">{queue.status === "draft" ? "Rascunho" : "Aguardando confirmação"}</span><p className="mt-1 text-slate-500">{queue.target_projects.length + queue.create_projects.length} projeto(s) · {queue.output_mode === "internal" ? "interno" : "arquivo final"}</p>{queue.status === "draft" && <button onClick={() => execute(queue)} className="mt-2 rounded border border-sky-700 px-2 py-1 text-[11px] font-semibold text-sky-200 hover:bg-sky-950">Executar fila</button>}</div>)}</div>}
+    {queues.length > 0 && <div className="mt-4 border-t border-violet-900 pt-3"><h4 className="text-xs font-bold text-white">Filas e pedidos MCP</h4>{queues.slice(0, 5).map((queue) => <div key={queue.id} className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-xs"><strong className="text-slate-200">{queue.name}</strong><span className="ml-2 text-sky-300">{queueStatusLabel(queue.status)}</span><p className="mt-1 text-slate-500">{queue.target_projects.length + queue.create_projects.length} projeto(s) · {queue.output_mode === "internal" ? "interno" : "arquivo final"}</p>{queue.status === "draft" && <button onClick={() => execute(queue)} className="mt-2 rounded border border-sky-700 px-2 py-1 text-[11px] font-semibold text-sky-200 hover:bg-sky-950">Executar fila</button>}</div>)}</div>}
   </section>;
 }
