@@ -44,6 +44,8 @@ describe("production navigation", () => {
     expect(labels).not.toContain("Criar Thumbs");
     expect(labels).toContain("Estúdio de Arte");
     expect(labels).toContain("Canais Dark");
+    expect(labels).toContain("Canais Dark 2");
+    expect(labels.indexOf("Canais Dark 2")).toBe(labels.indexOf("Canais Dark") + 1);
     expect(labels).toContain("Geração de vídeo");
     expect(labels).not.toContain("VIDEO_ESTUDIO");
     expect(labels).not.toContain("Ferramentas IA");
