@@ -2,6 +2,7 @@
 // Adaptado de OpenCut (MIT) — ver THIRD_PARTY_NOTICES.md (AudioManager: âncora relógio de áudio ↔ timeline,
 // agendamento com compensação de início atrasado, decodificação com cache por fonte e picos de forma de onda).
 // Semântica de mixer (fader em dB com mínimo = silêncio, pan −100..100, solo exclusivo) segue o FilmCraft (Apache-2.0).
+import { keyValueAt } from "../../lib/mmfilmEdits";
 
 export const AUDIO_TRACKS = ["A1", "A2", "A3"];
 export const MIXER_STRIPS = [...AUDIO_TRACKS, "Mix"];
@@ -96,9 +97,29 @@ export function planAudioSegments({ clips, trackState, from = 0, until = Infinit
         playbackRate: speed * rate,
         gain: (clip.volume ?? 100) / 100,
         pan: panValue(clip.pan),
+        clipStart: clip.start,
+        gainKeys: clip.gainKeys?.length ? clip.gainKeys : undefined,
       },
     ];
   });
+}
+
+/**
+ * Curva de volume do clipe (ex.: ducking, em dB no tempo local) agendada no AudioParam entre `when` e `stopAt`.
+ * Sem curva ou sem automação no navegador, o ganho fica fixo.
+ */
+export function scheduleGainCurve(param, segment, anchor, when, stopAt) {
+  const keys = segment.gainKeys;
+  if (!keys?.length || typeof param.setValueAtTime !== "function" || typeof param.linearRampToValueAtTime !== "function") return;
+  const rate = anchor.rate || 1;
+  const localAt = (contextTime) => anchor.timelineTime + (contextTime - anchor.contextTime) * rate - segment.clipStart;
+  const contextAt = (local) => anchor.contextTime + (segment.clipStart + local - anchor.timelineTime) / rate;
+  const from = localAt(when);
+  const until = localAt(stopAt);
+  param.setValueAtTime(segment.gain * dbToGain(keyValueAt(keys, from)), when);
+  keys
+    .filter(([time]) => time > from && time < until)
+    .forEach(([time, db]) => param.linearRampToValueAtTime(segment.gain * dbToGain(db), contextAt(time)));
 }
 
 /**
@@ -305,6 +326,7 @@ export class FilmcraftAudioEngine {
     node.playbackRate.value = segment.playbackRate;
     const gain = context.createGain();
     gain.gain.value = segment.gain;
+    scheduleGainCurve(gain.gain, segment, this.anchor, when, stopAt);
     const pan = context.createStereoPanner ? context.createStereoPanner() : null;
     node.connect(gain);
     if (pan) {

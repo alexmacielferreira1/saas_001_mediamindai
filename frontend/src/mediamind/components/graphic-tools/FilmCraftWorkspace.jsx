@@ -1,5 +1,9 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { leftPart, placeClip, rightPart } from "../../lib/mmfilmEdits";
+import { animatedClip } from "../../lib/mmfilmMotion";
+import { mmfilmCatalogue, runMMFilmTool } from "./mmfilmMcpTools";
 import { useEffect, useRef, useState } from "react";
 import { useTextPrompt } from "./FilmCraftTextPrompt";
 import {
@@ -172,58 +176,6 @@ function parseCaptions(text) {
     })
     .filter(Boolean);
 }
-// Parte esquerda de um corte: mesmo id, mesma origem, termina em `at`.
-function leftPart(clip, at) {
-  const offset = at - clip.start;
-  return {
-    ...clip,
-    duration: offset,
-    keyframes: (clip.keyframes || []).filter((time) => time < offset - EPSILON),
-  };
-}
-// Parte direita de um corte: começa em `at` e avança a origem pelo trecho consumido (respeitando a velocidade).
-function rightPart(clip, at, id = crypto.randomUUID()) {
-  const offset = at - clip.start;
-  return {
-    ...clip,
-    id,
-    start: at,
-    duration: clipEnd(clip) - at,
-    sourceIn: (clip.sourceIn || 0) + offset * speedFactor(clip),
-    keyframes: (clip.keyframes || [])
-      .filter((time) => time > offset + EPSILON)
-      .map((time) => time - offset),
-    transition: undefined,
-  };
-}
-// Insere (empurra o que vem depois) ou sobrescreve (apara o que estiver embaixo) um clipe na faixa.
-function placeClip(clips, item, mode) {
-  const start = item.start;
-  const end = clipEnd(item);
-  const next = clips.flatMap((clip) => {
-    if (clip.track !== item.track) return [clip];
-    if (mode === "insert") {
-      if (clip.start >= start - EPSILON)
-        return [{ ...clip, start: clip.start + item.duration }];
-      if (clipEnd(clip) > start + EPSILON) {
-        const right = rightPart(clip, start);
-        return [
-          leftPart(clip, start),
-          { ...right, start: right.start + item.duration },
-        ];
-      }
-      return [clip];
-    }
-    if (clip.start >= end - EPSILON || clipEnd(clip) <= start + EPSILON)
-      return [clip];
-    const pieces = [];
-    if (clip.start < start - EPSILON) pieces.push(leftPart(clip, start));
-    if (clipEnd(clip) > end + EPSILON)
-      pieces.push(rightPart(clip, end, pieces.length ? undefined : clip.id));
-    return pieces;
-  });
-  return [...next, item];
-}
 const KEYBOARD_HELP =
   "Atalhos: V seleção · A selecionar faixa · B ripple · R rate stretch · C navalha · Y slip (Shift+arrastar = slide) · P caneta · H mão · T texto · Espaço reproduzir · J/K/L · I/O entrada/saída · M marcador · Q/W ripple no cursor · Ctrl+K cortar · Ctrl+C/X/V copiar/recortar/colar · Ctrl+S salvar · Ctrl+Z desfazer · Ctrl+Shift+Z refazer · +/- zoom";
 
@@ -273,6 +225,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const [insertMode, setInsertMode] = useGraphicDraftState("FilmCraftWorkspace.jsx:insertMode", false);
   const [showClipInfo, setShowClipInfo] = useGraphicDraftState("FilmCraftWorkspace.jsx:showClipInfo", true);
   const [mixer, setMixer] = useGraphicDraftState("FilmCraftWorkspace.jsx:mixer", emptyMixer);
+  // Comprimento da timeline: mínimo de 60 s, crescendo com o conteúdo (+10 s de folga, em blocos de 5 s).
+  const timelineSeconds = Math.max(60, Math.ceil((clips.reduce((end, clip) => Math.max(end, clip.start + clip.duration), 0) + 10) / 5) * 5);
   const clipboard = useRef([]);
   const noticeTimer = useRef(null);
   const workspaceRoot = useRef(null);
@@ -328,17 +282,69 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     publishMCPContext(timelineContext({ source: "mmfilm", sequenceName, clips }));
   }, [active, sequenceName, clips]);
   useEffect(() => () => clearMCPContext("mmfilm"), []);
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): leem o estado atual e aplicam via commit (desfazer).
+  const toolState = useRef(null);
+  toolState.current = {
+    clips,
+    markers,
+    trackState,
+    media,
+    selectedIds: selectedIds.length ? selectedIds : selected ? [selected] : [],
+  };
+  const toolActions = useRef(null);
+  toolActions.current = { commit, undo, setMarkers, notify, canUndo: history.length > 0 };
+  useEffect(() => {
+    if (!active) return undefined;
+    const env = { loadBuffers: loadToolBuffers };
+    const strip = ({ clips: _clips, markers: _markers, ...result }) => result;
+    return registerMCPActions({
+      source: "mmfilm",
+      label: "MMFilm",
+      catalogue: () => mmfilmCatalogue(toolState.current),
+      analyze: async (toolId, params) => {
+        const result = await runMMFilmTool(toolId, toolState.current, params, env);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = await runMMFilmTool(toolId, toolState.current, params, env);
+        if (result.ok && result.clips) {
+          // Atualiza já o estado lido pela próxima operação de uma fila, antes do React redesenhar.
+          toolState.current = { ...toolState.current, clips: result.clips, markers: result.markers || toolState.current.markers };
+          toolActions.current.commit(result.clips);
+          if (result.markers) toolActions.current.setMarkers(result.markers);
+          toolActions.current.canUndo = true;
+          toolActions.current.notify(`MCP · ${result.summary}`, 5000);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        if (!toolActions.current.canUndo) return false;
+        toolActions.current.undo();
+        return true;
+      },
+      canUndo: () => toolActions.current.canUndo,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  async function loadToolBuffers(list) {
+    const engine = audioEngine.current;
+    if (!engine.ensure()) throw new Error("Este navegador não tem Web Audio: a análise de áudio não está disponível.");
+    const entries = await Promise.all(
+      [...new Set(list.map((clip) => clip.url))].map(async (url) => [url, await engine.buffer(url)]),
+    );
+    return new Map(entries.filter(([, buffer]) => buffer));
+  }
   useEffect(() => {
     if (!playing || !active) return;
     const timer = setInterval(() => {
       // Com áudio tocando, o relógio do AudioContext manda no indicador (sem deriva entre som e imagem).
       const audioTime = audioEngine.current?.currentTime();
       setPlayhead((value) =>
-        Math.max(0, Math.min(60, audioTime ?? value + 0.1 * playbackRate)),
+        Math.max(0, Math.min(timelineSeconds, audioTime ?? value + 0.1 * playbackRate)),
       );
     }, 100);
     return () => clearInterval(timer);
-  }, [playing, playbackRate, active]);
+  }, [playing, playbackRate, active, timelineSeconds]);
   useEffect(() => {
     function shortcuts(event) {
       if (!active) return;
@@ -384,7 +390,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         setZoom((value) => Math.min(28, value + 1));
       if (key === "-") setZoom((value) => Math.max(6, value - 1));
       if (key === "home") setPlayhead(0);
-      if (key === "end") setPlayhead(60);
+      if (key === "end") setPlayhead(timelineSeconds);
       const toolByKey = Object.fromEntries(
         EDIT_TOOLS.map(([shortcut, name]) => [shortcut.toLowerCase(), name]),
       );
@@ -397,7 +403,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         );
       if (key === "arrowright")
         setPlayhead((value) =>
-          Math.min(60, value + (event.shiftKey ? 1 : 1 / 30)),
+          Math.min(timelineSeconds, value + (event.shiftKey ? 1 : 1 / 30)),
         );
       if ((event.ctrlKey || event.metaKey) && key === "z")
         event.shiftKey ? redo() : undo();
@@ -466,8 +472,29 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     setMedia(linkedMedia);
     if (linkedClips !== clips) commit(linkedClips);
     if (next[0]) setSource(next[0]);
+    next.forEach((item, index) => probeDuration(item, index === 0));
     if (next.length)
       setCommandNotice(`${next.length} mídia(s) importada(s) ou religada(s)`);
+  }
+  // Duração real do arquivo do computador (a importação começa com 8 s provisórios). A mídia aberta na
+  // Origem fica com IN no início e OUT no fim, como no Premiere.
+  function probeDuration(item, openInSource) {
+    if (item.type.startsWith("image")) return;
+    const element = document.createElement(item.type.startsWith("audio") ? "audio" : "video");
+    element.preload = "metadata";
+    element.onloadedmetadata = () => {
+      const duration = element.duration;
+      element.removeAttribute("src");
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      setMedia((items) => items.map((asset) => (asset.url === item.url ? { ...asset, duration } : asset)));
+      setClips((items) => items.map((clip) => (clip.url === item.url ? { ...clip, mediaDuration: duration } : clip)));
+      setSource((current) => (current?.url === item.url ? { ...current, duration } : current));
+      if (openInSource) {
+        setSourceIn(0);
+        setSourceOut(Math.round(duration * 100) / 100);
+      }
+    };
+    element.src = item.url;
   }
   function relink(files) {
     const candidates = [...files]
@@ -672,7 +699,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const lane =
       event.currentTarget?.closest?.("[data-track-id]") || event.currentTarget;
     const left = lane?.getBoundingClientRect?.().left ?? 0;
-    return timelineTimeFromPointer(event.clientX ?? 0, left, zoom, 60);
+    return timelineTimeFromPointer(event.clientX ?? 0, left, zoom, timelineSeconds);
   }
   // Ímã: encaixa no indicador ou em marcadores próximos (6 px); senão, no quadro mais próximo.
   function snapTime(time) {
@@ -1515,7 +1542,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       0;
     const update = (pointerEvent) =>
       setPlayhead(
-        timelineTimeFromPointer(pointerEvent.clientX, left, zoom, 60),
+        timelineTimeFromPointer(pointerEvent.clientX, left, zoom, timelineSeconds),
       );
     update(event);
     const stop = () => {
@@ -1536,7 +1563,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       event.clientX,
       area.left,
       zoom,
-      60,
+      timelineSeconds,
     );
     const startY = event.clientY;
     let moved = false;
@@ -1559,7 +1586,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
           pointerEvent.clientX,
           area.left,
           zoom,
-          60,
+          timelineSeconds,
         ),
         startTrack,
         endTrack: TRACKS[trackIndex][0],
@@ -1572,7 +1599,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       window.removeEventListener("pointerup", stop);
       if (!moved) {
         setPlayhead(
-          timelineTimeFromPointer(pointerEvent.clientX, area.left, zoom, 60),
+          timelineTimeFromPointer(pointerEvent.clientX, area.left, zoom, timelineSeconds),
         );
         setSelected(null);
         setSelectedIds([]);
@@ -2296,7 +2323,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <div
                 ref={timelineTracks}
                 className="relative"
-                style={{ width: Math.max(900, 62 * zoom) }}
+                style={{ width: Math.max(900, (timelineSeconds + 2) * zoom) }}
               >
                 <div className="flex h-[74px] border-b border-black bg-[#202020]">
                   <div className="sticky left-0 z-30 w-36 shrink-0 border-r border-black px-2 py-1">
@@ -2351,7 +2378,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     onPointerDown={beginPlayheadDrag}
                     className="flex flex-1 cursor-ew-resize items-end"
                   >
-                    {Array.from({ length: 13 }, (_, index) => (
+                    {Array.from({ length: timelineSeconds / 5 + 1 }, (_, index) => (
                       <button
                         key={index}
                         onClick={() => setPlayhead(index * 5)}
@@ -2692,8 +2719,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               </div>
               {chosen ? (
                 [
-                  ["Posição", "start", 0, 60, 0.1],
-                  ["Duração", "duration", 0.5, 60, 0.1],
+                  ["Posição", "start", 0, timelineSeconds, 0.1],
+                  ["Duração", "duration", 0.5, timelineSeconds, 0.1],
                   ["Velocidade", "speed", 25, 400, 1],
                   ["Opacidade", "opacity", 0, 100, 1],
                   ["Volume", "volume", 0, 200, 1],
@@ -3626,7 +3653,8 @@ function ProgramLayer({ clip, zIndex, frameScale, playing, playhead, mediaRef, a
     if (playing) video.play?.()?.catch?.(() => {});
     else video.pause?.();
   }, [clip, playhead, playing, audioMuted, mediaRef]);
-  const style = { ...layerVisualStyle(clip, frameScale), zIndex };
+  // Movimentos das ferramentas (zoom, shake, pan…) entram no quadro do instante atual.
+  const style = { ...layerVisualStyle(animatedClip(clip, playhead), frameScale), zIndex };
   if (clip.type === TITLE_TYPE)
     return (
       <div style={style} className="col-start-1 row-start-1 whitespace-pre-wrap px-6 text-center text-3xl font-bold text-white">

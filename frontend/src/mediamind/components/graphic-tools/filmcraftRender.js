@@ -3,6 +3,7 @@
 // scene-exporter: laço de quadros com progresso e cancelamento). Sem dependências: canvas.captureStream +
 // MediaRecorder gravam o canvas e a mixagem do Web Audio em tempo real.
 import { clipMediaTime } from "../../lib/mmfilmTimeline";
+import { animatedClip } from "../../lib/mmfilmMotion";
 import { FilmcraftAudioEngine, audioContextClass, planAudioSegments } from "./filmcraftAudio";
 
 export const SEQUENCE_WIDTH = 1920;
@@ -99,14 +100,16 @@ function sourceSize(element) {
 }
 
 /** Desenha um quadro do Programa: fundo preto (buracos ficam pretos) e camadas de baixo para cima. */
-export function drawProgramFrame(context, { layers, sources = new Map(), width, height, fit = "Ajustar ao quadro" }) {
+export function drawProgramFrame(context, { layers, sources = new Map(), width, height, fit = "Ajustar ao quadro", time }) {
   context.save();
   context.globalAlpha = 1;
   context.filter = "none";
   context.fillStyle = "#000";
   context.fillRect(0, 0, width, height);
   context.restore();
-  layers.forEach((clip) => {
+  layers.forEach((layer) => {
+    // Movimentos das ferramentas (zoom, shake, pan…) avaliados no instante do quadro.
+    const clip = time === undefined ? layer : animatedClip(layer, time);
     const transform = layerTransform(clip, width, height);
     context.save();
     context.globalAlpha = transform.opacity;
@@ -340,7 +343,7 @@ export async function renderTimelineToWebm({
     const draw = (time) => {
       const layers = programLayers(clips, time, trackState);
       syncVideos(clips, sources, layers, time);
-      drawProgramFrame(context, { layers, sources, width, height, fit });
+      drawProgramFrame(context, { layers, sources, width, height, fit, time });
       videoTrack?.requestFrame?.();
     };
     draw(range.start);

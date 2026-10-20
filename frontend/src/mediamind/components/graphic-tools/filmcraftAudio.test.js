@@ -12,6 +12,7 @@ import {
   gainToDb,
   masterGain,
   planAudioSegments,
+  scheduleGainCurve,
   segmentContextTimes,
   trackGain,
 } from "./filmcraftAudio";
@@ -112,6 +113,18 @@ describe("agendamento de trechos", () => {
     expect(planAudioSegments({ clips, trackState: {} }).find((item) => item.clipId === "v2").bus).toBe("V");
   });
 
+  it("leva o início do clipe e a curva de volume (ducking) para o trecho", () => {
+    const keys = [[0, -6], [1, 0]];
+    const [withKeys, withoutKeys, emptyKeys] = planAudioSegments({
+      clips: [clip({ id: "a", start: 2, gainKeys: keys }), clip({ id: "b", start: 3 }), clip({ id: "c", start: 4, gainKeys: [] })],
+      from: 2.5,
+    });
+    expect(withKeys).toMatchObject({ clipStart: 2, gainKeys: keys, timelineStart: 2.5 });
+    expect(withoutKeys.clipStart).toBe(3);
+    expect(withoutKeys.gainKeys).toBeUndefined();
+    expect(emptyKeys.gainKeys).toBeUndefined();
+  });
+
   it("velocidade de reprodução negativa não toca áudio", () => {
     expect(planAudioSegments({ clips: [clip({})], rate: -1 })).toEqual([]);
   });
@@ -123,6 +136,42 @@ describe("agendamento de trechos", () => {
     expect(late.when).toBe(11.5);
     expect(late.offset).toBeCloseTo(0.5);
     expect(late.stopAt).toBe(13);
+  });
+});
+
+describe("curva de volume agendada", () => {
+  const automatedParam = () => ({ setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() });
+  const segment = { gain: 0.5, clipStart: 10, gainKeys: [[0, 0], [1, -12], [2, -12], [3, 0]] };
+
+  it("sem curva ou sem automação no navegador o ganho fica fixo", () => {
+    const param = automatedParam();
+    scheduleGainCurve(param, { gain: 1, clipStart: 0 }, { contextTime: 0, timelineTime: 0 }, 0, 1);
+    scheduleGainCurve(param, { gain: 1, clipStart: 0, gainKeys: [] }, { contextTime: 0, timelineTime: 0 }, 0, 1);
+    expect(param.setValueAtTime).not.toHaveBeenCalled();
+    expect(param.linearRampToValueAtTime).not.toHaveBeenCalled();
+    expect(() => scheduleGainCurve({ value: 1 }, segment, { contextTime: 0, timelineTime: 0 }, 0, 1)).not.toThrow();
+    const onlySet = { setValueAtTime: vi.fn() };
+    scheduleGainCurve(onlySet, segment, { contextTime: 0, timelineTime: 0 }, 0, 1);
+    expect(onlySet.setValueAtTime).not.toHaveBeenCalled();
+  });
+
+  it("parte do valor da curva em `when` e faz rampas até as chaves dentro da janela", () => {
+    const param = automatedParam();
+    scheduleGainCurve(param, segment, { contextTime: 100, timelineTime: 10 }, 100.5, 102.5);
+    expect(param.setValueAtTime).toHaveBeenCalledTimes(1);
+    expect(param.setValueAtTime.mock.calls[0][0]).toBeCloseTo(0.5 * dbToGain(-6));
+    expect(param.setValueAtTime.mock.calls[0][1]).toBe(100.5);
+    expect(param.linearRampToValueAtTime.mock.calls).toEqual([
+      [0.5 * dbToGain(-12), 101],
+      [0.5 * dbToGain(-12), 102],
+    ]);
+  });
+
+  it("respeita a velocidade da âncora ao converter o tempo local", () => {
+    const param = automatedParam();
+    scheduleGainCurve(param, segment, { contextTime: 100, timelineTime: 10, rate: 2 }, 100, 101);
+    expect(param.setValueAtTime).toHaveBeenCalledWith(0.5, 100);
+    expect(param.linearRampToValueAtTime.mock.calls).toEqual([[0.5 * dbToGain(-12), 100.5]]);
   });
 });
 

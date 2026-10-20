@@ -90,6 +90,20 @@ describe("composição do Programa", () => {
     expect(context.filter).toBe("brightness(100%) contrast(100%) saturate(100%)");
   });
 
+  it("com `time`, aplica os movimentos do clipe no instante do quadro; sem `time`, usa os valores fixos", () => {
+    const moving = clip({ id: "m", start: 2, duration: 4, scale: 100, x: 0, motion: { scale: [[0, 1], [4, 3]], x: [[0, 0], [4, 960]] } });
+    const scales = (context) => context.calls.filter(([name]) => name === "scale").map((call) => call[1]);
+    const translations = (context) => context.calls.filter(([name]) => name === "translate").map((call) => call[1]);
+    const animated = fakeContext();
+    drawProgramFrame(animated, { layers: [moving], width: 1920, height: 1080, time: 4 });
+    expect(scales(animated)).toEqual([2]);
+    expect(translations(animated)[0]).toBe(960 + 480);
+    const fixed = fakeContext();
+    drawProgramFrame(fixed, { layers: [moving], width: 1920, height: 1080 });
+    expect(scales(fixed)).toEqual([1]);
+    expect(translations(fixed)[0]).toBe(960);
+  });
+
   it("buraco na timeline resulta em quadro preto", () => {
     const context = fakeContext();
     drawProgramFrame(context, { layers: [], width: 640, height: 360 });
