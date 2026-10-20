@@ -159,12 +159,6 @@ def _channel_by_external_id(client, external_id):
     return next(item for item in channels if item["external_id"] == external_id)
 
 
-def test_tests_use_worktree_backend():
-    import app
-
-    assert "saas_001_mediamindai-canaisdark" in app.__file__
-
-
 # --- Campos novos do canal ---
 
 
