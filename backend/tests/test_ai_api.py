@@ -165,9 +165,7 @@ def test_video_studio_uses_selected_claude_connection_without_exposing_key(
             {
                 "model": "claude-sonnet-5-5",
                 "max_tokens": 4000,
-                "messages": [
-                    {"role": "user", "content": "Uma ideia de documentário"}
-                ],
+                "messages": [{"role": "user", "content": "Uma ideia de documentário"}],
             },
         )
     ]
@@ -239,11 +237,7 @@ def test_video_studio_reports_truncated_provider_output_without_leaking_secret(
             return None
 
         def json(self):
-            return {
-                "choices": [
-                    {"finish_reason": "length", "message": {"content": "incompleto"}}
-                ]
-            }
+            return {"choices": [{"finish_reason": "length", "message": {"content": "incompleto"}}]}
 
     class FakeClient:
         async def __aenter__(self):
