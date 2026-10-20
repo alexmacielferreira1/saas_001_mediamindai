@@ -93,7 +93,11 @@
 }
 
 @layer base {
-  :root {
+  /* Tema escuro: identidade original do MediaMind e padrão sem preferência salva. */
+  :root, .dark {
+    --app-body-bg: radial-gradient(circle at 15% 0%, #17325855, transparent 50%), hsl(213 50% 7%);
+    --app-scrollbar: #21374f;
+    --app-scrollbar-hover: #2a4a68;
     --background: 215 50% 7%;
     --foreground: 213 31% 91%;
     --card: 213 40% 12%;
@@ -127,6 +131,53 @@
     --sidebar-border: 215 35% 20%;
     --sidebar-ring: 191 83% 68%;
   }
+
+  /* Tema claro: mesma identidade (ciano + azul-marinho) sobre superfícies claras. */
+  .light {
+    --app-body-bg: radial-gradient(circle at 15% 0%, #bae6fd55, transparent 50%), hsl(210 40% 97%);
+    --app-scrollbar: #cbd5e1;
+    --app-scrollbar-hover: #94a3b8;
+    --background: 210 40% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 192 82% 34%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 93%;
+    --muted-foreground: 215 19% 35%;
+    --accent: 210 40% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 84%;
+    --input: 214 32% 84%;
+    --ring: 192 82% 34%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 192 82% 34%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 93%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 88%;
+    --sidebar-ring: 192 82% 34%;
+  }
+
+  /* Ilha escura: editores profissionais (cinzas fixos estilo NLE) continuam escuros no
+     tema claro; a classe .dark reaplica as variáveis do escuro dentro do contêiner. */
+  .light .dark {
+    color: hsl(var(--foreground));
+  }
+
+  /* Títulos brancos sem fundo próprio ficariam invisíveis no claro;
+     botões e selos coloridos (com classe bg-*) mantêm o texto branco. */
+  .light .text-white:not([class*="bg-"]):not(.dark .text-white),
+  .light .hover\:text-white:hover:not([class*="bg-"]):not(.dark .hover\:text-white) {
+    color: rgb(var(--mm-slate-50));
+  }
 }
 
 @keyframes mm-caption-pulse { 0% { scale: .86; opacity: .25; } 55% { scale: 1.1; opacity: 1; } 100% { scale: 1; opacity: 1; } }
@@ -153,13 +204,13 @@
   }
   body {
     @apply bg-background text-foreground font-body;
-    background: radial-gradient(circle at 15% 0%, #17325855, transparent 50%), hsl(213 50% 7%);
+    background: var(--app-body-bg);
     min-height: 100vh;
   }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #21374f; border-radius: 8px; }
-  ::-webkit-scrollbar-thumb:hover { background: #2a4a68; }
+  ::-webkit-scrollbar-thumb { background: var(--app-scrollbar); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--app-scrollbar-hover); }
 }
 
 @layer components {

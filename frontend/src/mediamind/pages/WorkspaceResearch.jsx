@@ -37,7 +37,7 @@ export default function WorkspaceResearch() {
   useEffect(() => { localStorage.setItem(SELECTION_KEY, JSON.stringify(selectedIds)); }, [selectedIds]);
   useEffect(() => { localStorage.setItem(SEARCH_KEY, JSON.stringify(mediaSearch)); }, [mediaSearch]);
 
-  return <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-[#020817] p-4 text-slate-100">
+  return <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-mm-page p-4 text-slate-100">
     <header className="mb-4"><h1 className="text-2xl font-bold">Pesquisa</h1><p className="text-sm text-slate-400">Pesquise o acervo, visualize e selecione mídias para usar no Workspace.</p></header>
     <Workspace2Search
       assets={assets}

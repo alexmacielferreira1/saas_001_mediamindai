@@ -528,7 +528,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
   ];
 
   return (
-    <div ref={rootRef} className={`${embedded ? 'min-h-[760px]' : '-m-4 min-h-[calc(100vh-4rem)]'} flex flex-col bg-[#020817] p-4 text-slate-100`}>
+    <div ref={rootRef} className={`${embedded ? 'min-h-[760px]' : '-m-4 min-h-[calc(100vh-4rem)]'} flex flex-col bg-mm-page p-4 text-slate-100`}>
       <header className="mb-3 flex flex-wrap items-center gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-sky-400">Editor não destrutivo · mídia local e acervo</p>

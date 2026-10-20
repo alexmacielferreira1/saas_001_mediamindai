@@ -162,7 +162,7 @@ export default function Workspace2() {
   };
 
   return (
-    <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-[#020817] p-4 text-slate-100">
+    <div className="workspace2 -m-4 min-h-[calc(100vh-4rem)] bg-mm-page p-4 text-slate-100">
       <div className="mb-4 flex items-start gap-5">
         <div className="min-w-64">
           <h1 className="text-2xl font-bold">Workspace</h1>
