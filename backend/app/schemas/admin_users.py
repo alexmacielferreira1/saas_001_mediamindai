@@ -36,6 +36,10 @@ class AdminUserStatusChange(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
 
 
+class AdminUserSessionsRevoked(BaseModel):
+    revoked_sessions: int
+
+
 class AdminSettingsResponse(BaseModel):
     organization_name: str
     locale: str

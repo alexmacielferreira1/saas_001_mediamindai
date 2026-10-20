@@ -647,3 +647,27 @@ def test_export_timeline_respects_sequence_in_and_out(permission_client, monkeyp
     assert invalid.status_code == 416
     assert invalid.headers["content-range"] == "bytes */10"
     get_settings.cache_clear()
+
+
+def test_stream_of_metadata_only_asset_returns_404_instead_of_500(
+    permission_client, monkeypatch, tmp_path
+):
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    record = TenantRecord(
+        id=uuid4(),
+        tenant_id=ids["tenant"],
+        entity_type="Asset",
+        data={"filename": "so-metadados.mp4", "asset_type": "video"},
+    )
+    with ids["session_factory"]() as session:
+        session.add(record)
+        session.commit()
+
+    response = client.get(f"/api/v1/media/assets/{record.id}/stream")
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "MEDIA_NOT_FOUND"
+    get_settings.cache_clear()

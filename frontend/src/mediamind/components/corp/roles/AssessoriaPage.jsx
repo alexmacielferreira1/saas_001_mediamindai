@@ -44,7 +44,7 @@ export default function AssessoriaPage() {
         )}
 
         {sub === 'releases' && (
-          <Panel title="Press releases" action={<button className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Novo release</button>}>
+          <Panel title="Press releases" action={<button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"><Plus size={11} /> Novo release</button>}>
             {loading ? <ListSkeleton rows={4} /> : releases.length === 0 ? (
               <EmptyState icon={FileText} title="Sem releases" description="Os press releases aparecem aqui." />
             ) : (

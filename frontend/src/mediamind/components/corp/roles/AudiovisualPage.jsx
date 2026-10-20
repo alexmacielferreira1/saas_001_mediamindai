@@ -72,8 +72,8 @@ export default function AudiovisualPage() {
                 <div key={ap.id} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-3">
                   <div><p className="text-sm font-medium text-slate-200">{ap.titulo}</p><p className="text-[11px] text-slate-500">Solicitado por {ap.solicitante} · {ap.tempo}</p></div>
                   <div className="flex gap-1.5">
-                    <button className="rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800">Recusar</button>
-                    <button className="rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400">Aprovar</button>
+                    <button type="button" disabled title="Ainda não disponível" className="rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">Recusar</button>
+                    <button type="button" disabled title="Ainda não disponível" className="rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">Aprovar</button>
                   </div>
                 </div>
               ))}

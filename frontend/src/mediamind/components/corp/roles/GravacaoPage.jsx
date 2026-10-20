@@ -24,7 +24,7 @@ export default function GravacaoPage() {
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-100"><Mic size={18} className="text-sky-400" /> Gravação de Podcast</h2>
           <p className="text-sm text-slate-400">Suas sessões de gravação — função separada por enquanto.</p>
         </div>
-        <button className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-400"><Plus size={13} /> Nova gravação</button>
+        <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"><Plus size={13} /> Nova gravação</button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

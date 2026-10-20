@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard, Clock3, Download, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
-import { uploadMediaAsset } from "../../api/media";
+import { exportMediaClip, uploadMediaAsset } from "../../api/media";
 import { startClipAnalysis } from "../../api/clips";
 import { downloadClipFcpxml } from "../lib/clipsfreeExport";
 import { getAIConnections } from "../../api/generation";
@@ -8,6 +8,26 @@ import { useWorkDraftState } from "../lib/workProtection";
 import { useProducaoProjetos } from "../lib/producaoStore";
 import ClipWorkspace from "../components/corp/recortes/ClipWorkspace";
 import { newClip } from "../components/corp/recortes/clipModel";
+import { SESSION_DURATION_PRESETS, buildClipRenderOptions, wordsInRange } from "../lib/captionTools";
+
+const DIMENSION_LABELS = [["hook", "Gancho"], ["flow", "Fluxo"], ["value", "Valor"], ["shareability", "Compartilhamento"]];
+
+function captionsForEditor(item) {
+  const words = wordsInRange(item.evidence || []);
+  return (Array.isArray(item.captions) ? item.captions : []).map((caption, index) => {
+    const start = Math.round(caption.start * 1000);
+    const end = Math.round(caption.end * 1000);
+    return {
+      id: `caption-${item.id}-${index}`,
+      start_ms: start,
+      end_ms: end,
+      texto: caption.text,
+      // Tempos por palavra reais da transcrição, usados no destaque palavra a palavra.
+      palavras: words.filter((word) => word.start_ms >= start && word.end_ms <= end),
+      cortar_audio: false,
+    };
+  });
+}
 
 const EMPTY_SESSION = {
   sourceName: "",
@@ -79,6 +99,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
   const [newCutOpen, setNewCutOpen] = useState(false);
   const [sourceUrlInput, setSourceUrlInput] = useState("");
   const [expandedScore, setExpandedScore] = useState(null);
+  const [batch, setBatch] = useState({ running: false, items: [] });
   const sourcePreviewRef = useRef(null);
   const clipPreviewRefs = useRef({});
   const finalizados = useMemo(() => projetos.filter((project) => project.etapa === "finalizado"), [projetos]);
@@ -158,6 +179,9 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
         score: candidate.score,
         notes: candidate.rationale || "Evidência retirada da transcrição.",
         captions: candidate.captions || [],
+        quote: candidate.quote || "",
+        dimensions: candidate.dimensions || null,
+        evidence: Array.isArray(candidate.evidence) ? candidate.evidence : [],
       }));
       update({
         sourceAssetId: asset.id,
@@ -233,13 +257,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
         analysis_candidates: item.example ? [] : session.suggestions,
         analysis_status: item.example ? "example" : session.analysisStatus,
         source_project_id: session.sourceProject?.id || null,
-        legendas: (Array.isArray(item.captions) ? item.captions : []).map((caption, index) => ({
-          id: `caption-${item.id}-${index}`,
-          start_ms: Math.round(caption.start * 1000),
-          end_ms: Math.round(caption.end * 1000),
-          texto: caption.text,
-          cortar_audio: false,
-        })),
+        legendas: captionsForEditor(item),
       },
     });
   }
@@ -275,6 +293,38 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
     const asset = await uploadMediaAsset(sourceFile, { origin: 'clipsfree' });
     setSession((current) => current.workspaceClip?.id === clipId ? { ...current, sourceAssetId: asset.id, workspaceClip: { ...current.workspaceClip, source_asset_id: asset.id } } : current);
     return asset.id;
+  }
+
+  // Exporta todas as sugestões reais em sequência; cada item mostra o próprio resultado.
+  async function exportAllSuggestions() {
+    const items = session.suggestions.filter((item) => !item.example && Number(item.end) > Number(item.start));
+    if (!items.length || batch.running) return;
+    batch.items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+    setBatch({ running: true, items: items.map((item) => ({ id: item.id, title: item.title, status: "Aguardando" })) });
+    let assetId = session.sourceAssetId;
+    try {
+      if (!assetId) {
+        if (!sourceFile) throw new Error("Selecione novamente o vídeo de origem.");
+        assetId = (await uploadMediaAsset(sourceFile, { origin: "clipsfree" })).id;
+        update({ sourceAssetId: assetId });
+      }
+    } catch (error) {
+      setBatch({ running: false, items: items.map((item) => ({ id: item.id, title: item.title, status: `Falhou: ${error.message || "envio do vídeo"}` })) });
+      return;
+    }
+    for (const item of items) {
+      setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: "Gerando MP4…" } : entry) }));
+      const clip = { in_ms: Math.round(item.start * 1000), out_ms: Math.round(item.end * 1000), legendas: captionsForEditor(item), cgs: [], cortes_video: [] };
+      const renderOptions = buildClipRenderOptions(clip, { aspect: session.format, burnCaptions: true });
+      try {
+        const result = await exportMediaClip({ asset_id: assetId, source_in: item.start, duration: item.end - item.start, properties: renderOptions ? { clip_render: renderOptions } : {} });
+        const url = URL.createObjectURL(result.blob);
+        setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: "Pronto", url, filename: result.filename } : entry) }));
+      } catch (error) {
+        setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: `Falhou: ${error.message || "exportação"}` } : entry) }));
+      }
+    }
+    setBatch((current) => ({ ...current, running: false }));
   }
 
   function requestUrlImport() {
@@ -349,6 +399,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
               <label className="text-xs font-semibold text-slate-400">Mínimo (s)<input aria-label="Duração mínima" type="number" min="15" max="60" value={session.minimum} onChange={(event) => update({ minimum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
               <label className="text-xs font-semibold text-slate-400">Máximo (s)<input aria-label="Duração máxima" type="number" min="15" max="60" value={session.maximum} onChange={(event) => update({ maximum: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             </div>
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Predefinições de duração">{SESSION_DURATION_PRESETS.map((preset) => <button key={preset.id} type="button" aria-pressed={session.minimum === preset.minimum && session.maximum === preset.maximum} onClick={() => update({ minimum: preset.minimum, maximum: preset.maximum })} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${session.minimum === preset.minimum && session.maximum === preset.maximum ? "border-violet-400 text-violet-200" : "border-slate-700 text-slate-400 hover:border-violet-400"}`}>{preset.label}</button>)}</div>
             <label className="block text-xs font-semibold text-slate-400">Orientação editorial<textarea aria-label="Orientação editorial" value={session.prompt} onChange={(event) => update({ prompt: event.target.value })} rows="4" className="mt-1 w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
             <div className="block text-xs font-semibold text-slate-400">IA para analisar e legendar
               {canManageAi ? <select aria-label="IA para analisar e legendar" value={session.analysisConnectionId} onChange={(event) => update({ analysisConnectionId: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white outline-none focus:border-violet-400">
@@ -368,8 +419,9 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
       <section className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="text-lg font-black text-white">{showingExamples ? "Cortes de exemplo" : "Sugestões de cortes"}</h2><p className="text-sm text-slate-400">{showingExamples ? "Demonstração visual: trechos e notas são ilustrativos, não resultados de IA." : "Revise o trecho e abra o escolhido no editor local."}</p></div>
-          <span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 size={14} /> Origem: {session.duration ? formatTime(session.duration) : "duração será lida pelo player"}</span>
+          <div className="flex flex-wrap items-center gap-2">{!showingExamples && session.suggestions.length > 0 && <button type="button" disabled={batch.running || (!session.sourceAssetId && !sourceFile)} onClick={exportAllSuggestions} className="flex items-center gap-1 rounded-lg border border-violet-400/50 px-3 py-1.5 text-xs font-bold text-violet-200 disabled:opacity-40"><Download size={13} /> {batch.running ? "Exportando…" : `Exportar todos em MP4 (${session.format})`}</button>}<span className="flex items-center gap-1 text-xs text-slate-400"><Clock3 size={14} /> Origem: {session.duration ? formatTime(session.duration) : "duração será lida pelo player"}</span></div>
         </div>
+        {batch.items.length > 0 && <ul aria-label="Exportação em lote" className="mt-3 space-y-1 rounded-lg border border-slate-800 bg-slate-900/50 p-2 text-xs text-slate-300">{batch.items.map((entry) => <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2"><span className="truncate">{entry.title}</span><span className="flex items-center gap-2"><span className={entry.status.startsWith("Falhou") ? "text-rose-300" : entry.status === "Pronto" ? "text-emerald-300" : "text-slate-400"}>{entry.status}</span>{entry.url && <a href={entry.url} download={entry.filename} className="font-bold text-violet-200 underline">Baixar</a>}</span></li>)}<li className="text-[11px] text-slate-500">Cada MP4 usa o formato da sessão e grava as legendas temporizadas do trecho.</li></ul>}
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {visibleSuggestions.map((item) => <article key={item.id} className={`rounded-xl border p-3 ${selectedVisibleId === item.id ? "border-violet-400 bg-violet-500/10" : "border-slate-800 bg-slate-900/50"}`}>
             <div className="mb-3 overflow-hidden rounded-lg border border-slate-700/70 bg-black">
@@ -378,6 +430,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
             </div>
             <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-100">{item.title}</p><p className="mt-1 text-xs text-slate-400">{formatTime(item.start)} — {formatTime(item.end)} · {session.format}</p></div><button type="button" aria-label={`Detalhes da nota ${item.score} de ${item.title}`} aria-expanded={expandedScore === item.id} onClick={() => setExpandedScore(expandedScore === item.id ? null : item.id)} className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-300" title="Clique para ver a justificativa">{item.example ? 'Exemplo · ' : ''}{item.score}/100</button></div>
             {expandedScore === item.id && <p className="mt-3 text-xs leading-relaxed text-slate-300">{item.notes || 'Nenhuma justificativa disponível.'}</p>}
+            {expandedScore === item.id && item.dimensions && <dl aria-label={`Composição da nota de ${item.title}`} className="mt-2 grid grid-cols-2 gap-1 text-[11px]">{DIMENSION_LABELS.map(([key, label]) => <div key={key} className="flex justify-between rounded bg-slate-900 px-2 py-1"><dt className="text-slate-400">{label}</dt><dd className="font-bold text-emerald-300">{Number(item.dimensions[key]) || 0}/25</dd></div>)}<p className="col-span-2 text-[10px] text-slate-500">Nota = soma das quatro dimensões calculada no servidor; é apoio editorial, não garantia de alcance.</p></dl>}
             <p className="mt-3 text-xs text-slate-400">{item.captions?.length ?? 0} legenda{(item.captions?.length ?? 0) === 1 ? " temporizada" : "s temporizadas"}</p>
             <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={!session.sourceUrl} aria-label={`Revisar trecho ${formatTime(item.start)} a ${formatTime(item.end)}`} onClick={() => reviewSuggestion(item)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-violet-400 hover:bg-slate-800 disabled:opacity-40"><Play size={14} /> Revisar</button><button type="button" disabled={!session.sourceUrl} onClick={() => openEditor(item)} className="flex items-center justify-center gap-2 rounded-lg bg-violet-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-violet-300 disabled:opacity-40"><Clapperboard size={14} /> Editor</button></div>
           </article>)}
@@ -396,6 +449,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
           <label className="text-xs font-semibold text-slate-400">Entrada (s)<input aria-label="Entrada do corte" type="number" min="0" value={selected.start} onChange={(event) => updateSelected({ start: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
           <label className="text-xs font-semibold text-slate-400">Saída (s)<input aria-label="Saída do corte" type="number" min="0" value={selected.end} onChange={(event) => updateSelected({ end: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400" /></label>
         </div>
+        {Number(selected.end) <= Number(selected.start) && <p role="alert" className="mt-3 text-xs text-rose-300">A saída precisa ser posterior à entrada.</p>}
         <p className="mt-3 text-xs text-slate-400">O recorte está salvo como rascunho local. A integração dele com a fila de cortes será adicionada depois desta validação independente.</p>
       </section>}
 

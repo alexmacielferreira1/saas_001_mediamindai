@@ -113,7 +113,7 @@ export default function ThreeDCraftWorkspace() {
     <div className="overflow-hidden border border-[#333] bg-[#181818] text-[12px] text-[#c8c8c8]" aria-label="Editor MM3D">
       <div className="flex h-10 items-center justify-between border-b border-[#343434] bg-[#202020] px-3">
         <div className="flex items-center gap-5"><h2 className="text-sm font-semibold text-white">MM3D</h2><span>Arquivo</span><span>Outliner</span><span>Atalhos</span></div>
-        <div className="flex items-center gap-2"><button className="rounded bg-[#303030] px-3 py-1">Construir</button><button className="rounded bg-red-600 px-3 py-1 text-white"><Video size={13} className="mr-1 inline" />Gravar</button></div>
+        <div className="flex items-center gap-2"><button disabled title="Ainda não disponível" className="rounded bg-[#303030] px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50">Construir</button><button disabled title="Ainda não disponível" className="rounded bg-red-600 px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50"><Video size={13} className="mr-1 inline" />Gravar</button></div>
       </div>
       <div className="grid min-h-[650px] grid-cols-[52px_220px_minmax(0,1fr)_250px]">
         <aside className="border-r border-[#343434] bg-[#202020] py-2" aria-label="Ferramentas 3D">

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightbulb,  Wrench, ExternalLink, X, FolderOpen, Paperclip, Settings2, ChevronDown, MonitorPlay } from 'lucide-react';
 import { createMCPQueue, listMCPTools } from '../../lib/mcpApi';
+import { isPersistedAssetId, useMCPContext } from '../../lib/mcpTargetContext';
 import { useAuth } from '../../auth';
 import CopilotAISettings from './CopilotAISettings';
 import { request } from '../../../api/httpClient';
@@ -96,7 +97,10 @@ const mcpModeFor = group => group.startsWith('graphic:') ? 'creative' : CREATIVE
 const key='mm_universal_copilot_v1';
 const newQueue=(id,group)=>({id,name:`Fila ${String(id).padStart(2,'0')}`,context:group,projectMode:'current',projectName:'',targetMode:'selected',targetName:'',assets:[],operations:[]});
 function restore(){try {const s=JSON.parse(localStorage.getItem(key)||'null');if(s&&Array.isArray(s.queues)&&s.queues.length)return s;}catch{} return {queues:[newQueue(1,'media')],active:1,history:[],chat:[],suggestionsDismissed:[]};}
-const statusStyle={queued:'text-amber-300',submitted:'text-sky-300',completed:'text-emerald-300',failed:'text-red-300',blocked:'text-amber-300'};
+const statusStyle={queued:'text-amber-300',submitted:'text-sky-300',completed:'text-emerald-300',partial:'text-amber-300',failed:'text-red-300',blocked:'text-amber-300'};
+// Ferramentas que leem mídias: sem IDs reais o backend leria o Acervo inteiro, então o alvo é obrigatório.
+const ASSET_MODULES=new Set(['mmfilm']);
+const OUTCOME={completed:['completed','Backend informou conclusão.'],partial:['partial','Execução parcial: parte dos alvos falhou.'],failed:['failed','O backend não conseguiu executar a operação.']};
 export default function UniversalCopilot(){
  const { user } = useAuth();
  const canManageAI = ['admin','superadmin'].includes(String(user?.role || '').toLowerCase());
@@ -106,6 +110,7 @@ export default function UniversalCopilot(){
  const [open,setOpen]=useState(()=>{try{return localStorage.getItem('mm_copilot_open')!=='0'}catch{return false}});
  const [tab,setTab]=useState('execute');const [data,setData]=useState(restore);const [input,setInput]=useState('');const [toolList,setToolList]=useState([]);const [status,setStatus]=useState('');const [expanded,setExpanded]=useState('');const [busy,setBusy]=useState(false);const [contextItem,setContextItem]=useState(null);
  const queue=data.queues.find(q=>q.id===data.active)||data.queues[0];
+ const mcpContext=useMCPContext();
  useEffect(()=>{setExpanded('');setStatus('');setAssetPicker(false)},[group]);
  useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(data))}catch{setStatus('Armazenamento local indisponível ou cheio.')}} ,[data]);
  useEffect(()=>{try{localStorage.setItem('mm_copilot_open',open?'1':'0')}catch{}},[open]);
@@ -122,12 +127,18 @@ export default function UniversalCopilot(){
    if(!executor){history({title:label,state:'blocked',details:'Nenhum executor MCP correspondente anunciado pelo backend.',operation:op});setStatus('Ferramenta sem executor MCP disponível. Não houve execução.');return;}
    if(queue.projectMode==='new'&&!queue.projectName.trim()){setStatus('Informe o nome do novo projeto. A criação efetiva precisa estar conectada ao módulo de projetos.');return;}
    if(queue.assets.some(a=>!a.attached)){setStatus('Existem mídias externas ainda não enviadas ao servidor. Vincule-as pela biblioteca do projeto antes de executar.');return;}
+   const openTimeline=queue.targetMode==='selected'&&mcpContext?.kind==='timeline'?mcpContext:null;
+   const assetIds=openTimeline?openTimeline.asset_ids:queue.assets.filter(a=>a.attached&&isPersistedAssetId(a.id)).map(a=>a.id);
+   if(ASSET_MODULES.has(executor.module)&&!assetIds.length){history({title:label,state:'blocked',details:'Alvo sem mídias do Acervo identificadas.',operation:op});setStatus('Nenhuma mídia do Acervo foi identificada no alvo. Abra a timeline com mídias do Acervo ou vincule mídias antes de executar.');return;}
+   const target=openTimeline?{id:openTimeline.id,name:`Timeline aberta · ${openTimeline.name}`,kind:'timeline'}:{id:`copilot-${queue.id}`,name:queue.targetName||'Seleção atual',kind:queue.targetMode==='selected'?'project':queue.targetMode};
    setBusy(true);
    try{
      const instruction=`${label}\nParâmetros: ${JSON.stringify(op.settings)}\nContexto de origem: ${location.pathname}${location.search}\nAlvo: ${queue.targetMode} ${queue.targetName}\nProjeto: ${queue.projectMode} ${queue.projectName}`;
-     const result=await createMCPQueue({name:`Copiloto · ${queue.name} · ${label}`,module:catalogue.module,tool_name:executor.name,instruction,output_mode:'internal',execution_mode:'immediate',target_projects:queue.projectMode==='existing'&&queue.projectName?[queue.projectName]:[],create_projects:[],targets:[{id:`copilot-${queue.id}`,name:queue.targetName||'Seleção atual',kind:queue.targetMode==='selected'?'project':queue.targetMode,instruction}],export_name:null,export_destination:null});
-     const state=result?.status==='completed'?'completed':'submitted';
-     patchQueue({operations:[...queue.operations,{...op,status:state,backendQueueId:result?.id||result?.queue?.id||null}]});history({title:label,state,details:state==='completed'?'Backend informou conclusão.':'Solicitação recebida pelo backend; acompanhe o registro de execução.',operation:op});setStatus(state==='completed'?'Backend informou conclusão.':'Enviado ao backend. Consulte o histórico desta operação.');
+     const result=await createMCPQueue({name:`Copiloto · ${queue.name} · ${label}`,module:catalogue.module,tool_name:executor.name,instruction,output_mode:'internal',execution_mode:'immediate',target_projects:queue.projectMode==='existing'&&queue.projectName?[queue.projectName]:[],create_projects:[],targets:[{...target,instruction,asset_ids:assetIds}],export_name:null,export_destination:null});
+     const failure=result?.results?.find(r=>r.status==='failed')?.error?.message;
+     const [state,summary]=OUTCOME[result?.status]||['submitted','Enviado ao backend. Consulte o histórico desta operação.'];
+     const details=failure?`${summary} ${failure}`:summary;
+     patchQueue({operations:[...queue.operations,{...op,status:state,backendQueueId:result?.id||result?.queue?.id||null}]});history({title:label,state,details,operation:op});setStatus(details);
    }catch(e){history({title:label,state:'failed',details:e?.message||'Falha na solicitação MCP.',operation:op});setStatus(e?.message||'Falha no MCP.');}finally{setBusy(false)}
  }
  async function chatSubmit(e){

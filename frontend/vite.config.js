@@ -18,6 +18,9 @@ export default defineConfig({
     env: { VITE_API_URL: '' },
     // Canvas/editor DOM suites compete heavily for CPU under V8 instrumentation.
     maxWorkers: 1,
+    // Node 25+ exposes its own global localStorage, which shadows jsdom's and is undefined
+    // without --localstorage-file; keep jsdom's storage in the test workers.
+    execArgv: Number(process.versions.node.split('.')[0]) >= 25 ? ['--no-experimental-webstorage'] : [],
     testTimeout: 20000,
     reporters: ['./scripts/pytest-style-reporter.mjs'],
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],

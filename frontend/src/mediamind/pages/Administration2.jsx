@@ -6,7 +6,7 @@ import {
   PlugZap, Search, Settings, ShieldCheck, SlidersHorizontal, UserCog, Users,
   UsersRound,
 } from 'lucide-react';
-import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, suspendAdminUser, updateAdminSettings } from '../../api/admin';
+import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, reactivateAdminUser, revokeAdminUserSessions, suspendAdminUser, updateAdminSettings } from '../../api/admin';
 import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
@@ -17,6 +17,7 @@ import { Permissions2, Profiles2, Teams2 } from '../components/admin2/AccessStru
 import { Forms2 } from '../components/admin2/UsersForms2';
 import Security2 from '../components/admin2/Security2';
 import { readLocalDemoSession } from '../lib/demoAccess';
+import { tenantRoleLabel } from '../lib/tenantRoleLabels';
 import { getDemoPermissionGroups, getDemoUsers } from '../lib/demoCatalog';
 import Acervo from './Acervo';
 import Management from './Management';
@@ -51,6 +52,9 @@ function getAdminDemoPayload() {
   return { items, total: items.length, page: 1, page_size: 25 };
 }
 
+// Abas que exibem o aviso de dados de demonstração (PreviewNotice): nelas o
+// selo "Dados reais…" do cabeçalho seria contraditório e fica oculto.
+const DEMO_DATA_TABS = new Set(['teams', 'forms', 'imports', 'registry', 'records', 'integrations']);
 const ADMIN_DEMO_SETTINGS_KEY = 'mediamind_admin_demo_settings_v1';
 const ADMIN_DEMO_SETTINGS = { organization_name: 'MediaMind AI', locale: 'pt-BR', timezone: 'America/Sao_Paulo', date_format: 'DD/MM/YYYY' };
 
@@ -139,9 +143,9 @@ export default function Administration2() {
           <p className="mt-1 text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança.</p>
           </div>
         </div>
-        <div className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
+        {!DEMO_DATA_TABS.has(active) && <div data-testid="admin-data-seal" className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">
           {localDemo ? 'Modo local funcional · demonstração explícita' : fallbackKind === 'unavailable' ? 'Dados reais indisponíveis' : fallbackKind === 'forbidden' ? 'Acesso restrito' : error ? 'Sessão real indisponível' : 'Dados reais do tenant selecionado'}
-        </div>
+        </div>}
       </header>
 
       <AdminTabs label="Navegação principal da Administração" tabs={ALL_TABS} active={active} onChange={openTab} />
@@ -264,12 +268,22 @@ function SecurityLine({ label, value }) {
 function UsersTab({ initialPayload, onReload, fallbackKind }) {
   const [view, setView] = useState('reference');
   async function suspend(user) {
-    if (!window.confirm(`Suspender ${user.full_name || user.email}?`)) return;
+    if (!window.confirm(`Suspender ${user.full_name || user.email} nesta empresa? As sessões abertas nela serão encerradas.`)) return;
     const updated = await suspendAdminUser(user.id, 'Suspensão confirmada pelo administrador.');
     await onReload();
     return updated;
   }
-  return <div className="space-y-4"><PageLead title="Usuários" description="Contas, convites, perfis e atividade de acesso." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'previous' ? <LegacyUsersTab initialPayload={initialPayload} onReload={onReload} fallbackKind={fallbackKind} /> : <><div className="grid gap-3 md:grid-cols-2"><Panel title="Convites pendentes"><p className="text-sm text-slate-400">{(initialPayload?.items || []).filter((user) => user.status === 'invited').length} convite(s) aguardando aceite.</p></Panel><Panel title="Acessos expirando"><p className="text-sm text-slate-500">Validade ainda não integrada ao contrato da lista.</p></Panel></div><UsersSection users={initialPayload?.items || []} total={initialPayload?.total || 0} demoMode={Boolean(fallbackKind)} loadUser={fallbackKind ? undefined : getAdminUser} onSuspend={suspend} /></>}</div>;
+  async function reactivate(user) {
+    if (!window.confirm(`Reativar ${user.full_name || user.email} nesta empresa?`)) return;
+    const updated = await reactivateAdminUser(user.id, 'Reativação confirmada pelo administrador.');
+    await onReload();
+    return updated;
+  }
+  async function revokeSessions(user) {
+    if (!window.confirm(`Encerrar as sessões de ${user.full_name || user.email} nesta empresa?`)) return;
+    return revokeAdminUserSessions(user.id, 'Encerramento de sessões confirmado pelo administrador.');
+  }
+  return <div className="space-y-4"><PageLead title="Usuários" description="Contas, convites, perfis e atividade de acesso." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'previous' ? <LegacyUsersTab initialPayload={initialPayload} onReload={onReload} fallbackKind={fallbackKind} /> : <><div className="grid gap-3 md:grid-cols-2"><Panel title="Convites pendentes"><p className="text-sm text-slate-400">{(initialPayload?.items || []).filter((user) => user.status === 'invited').length} convite(s) aguardando aceite.</p></Panel><Panel title="Acessos expirando"><p className="text-sm text-slate-500">Validade ainda não integrada ao contrato da lista.</p></Panel></div><UsersSection users={initialPayload?.items || []} total={initialPayload?.total || 0} demoMode={Boolean(fallbackKind)} loadUser={fallbackKind ? undefined : getAdminUser} onSuspend={suspend} onReactivate={reactivate} onRevokeSessions={revokeSessions} /></>}</div>;
 }
 
 function LegacyUsersTab({ initialPayload, onReload, fallbackKind }) {
@@ -353,19 +367,21 @@ function UserMetric({ label, value, tone }) {
 function UserDetail({ user, onChange, onBack, onReload }) {
   const [working, setWorking] = useState(false);
   const [detailTab, setDetailTab] = useState('overview');
-  async function suspend() {
-    if (!window.confirm(`Suspender ${user.full_name || user.email}?`)) return;
-    setWorking(true);
-    try {
-      onChange(await suspendAdminUser(user.id, 'Suspensão confirmada pelo administrador.'));
-      onReload();
-    } finally { setWorking(false); }
+  const [notice, setNotice] = useState('');
+  const name = user.full_name || user.email;
+  async function act(question, action) {
+    if (!window.confirm(question)) return;
+    setWorking(true); setNotice('');
+    try { await action(); } catch (error) { setNotice(error?.message || 'Não foi possível concluir a ação.'); } finally { setWorking(false); }
   }
+  const suspend = () => act(`Suspender ${name} nesta empresa? As sessões abertas nela serão encerradas.`, async () => { onChange(await suspendAdminUser(user.id, 'Suspensão confirmada pelo administrador.')); onReload(); });
+  const reactivate = () => act(`Reativar ${name} nesta empresa?`, async () => { onChange(await reactivateAdminUser(user.id, 'Reativação confirmada pelo administrador.')); onReload(); });
+  const revokeSessions = () => act(`Encerrar as sessões de ${name} nesta empresa?`, async () => { const { revoked_sessions: count } = await revokeAdminUserSessions(user.id, 'Encerramento de sessões confirmado pelo administrador.'); setNotice(count ? `${count} sessão(ões) encerrada(s).` : 'Nenhuma sessão aberta nesta empresa.'); });
   return (
     <div className="space-y-4">
       <Button variant="ghost" onClick={onBack}>← Voltar para usuários</Button>
       <Panel right={<UserStatus value={user.status} />}>
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-slate-50">{user.full_name || user.email}</h2><p className="text-sm text-slate-400">{user.email}</p><p className="mt-2 text-xs text-slate-500">Função: {user.tenant_role} · Perfil: {user.profile_name || 'não atribuído'}</p>{user.is_demo && <p className="mt-2 text-xs text-amber-300">Detalhe de demonstração — nenhuma alteração será enviada.</p>}</div>{user.status === 'active' && !user.is_demo && <Button variant="danger" loading={working} onClick={suspend}>Suspender usuário</Button>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold text-slate-50">{user.full_name || user.email}</h2><p className="text-sm text-slate-400">{user.email}</p><p className="mt-2 text-xs text-slate-500">Função: {tenantRoleLabel(user.tenant_role)} · Perfil: {user.profile_name || 'não atribuído'}</p>{user.is_demo && <p className="mt-2 text-xs text-amber-300">Detalhe de demonstração — nenhuma alteração será enviada.</p>}</div>{!user.is_demo && <div className="flex flex-wrap gap-2">{user.status === 'active' && <><Button variant="ghost" loading={working} onClick={revokeSessions}>Encerrar sessões</Button><Button variant="danger" loading={working} onClick={suspend}>Suspender usuário</Button></>}{user.status === 'suspended' && <Button loading={working} onClick={reactivate}>Reativar usuário</Button>}</div>}</div>{notice && <p role="status" className="mt-3 text-xs text-sky-200">{notice}</p>}
       </Panel>
       <Tabs tabs={[['overview', 'Visão Geral'], ['access', 'Acesso'], ['roles', 'Funções'], ['teams', 'Equipes'], ['modules', 'Módulos'], ['permissions', 'Permissões'], ['security', 'Segurança'], ['activity', 'Atividade'], ['history', 'Histórico']].map(([key, label]) => ({ key, label }))} active={detailTab} onChange={setDetailTab} />
       {detailTab === 'overview' && <div className="grid gap-4 lg:grid-cols-2"><Panel title="Conta"><dl className="space-y-2 text-sm"><Info label="Estado"><UserStatus value={user.status} /></Info><Info label="Criado em">{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'Não informado'}</Info></dl></Panel><Panel title="Vínculo atual"><p className="text-sm text-slate-400">Função <strong className="text-slate-200">{user.tenant_role}</strong>{user.profile_name ? ` com perfil ${user.profile_name}` : ' sem perfil adicional'}.</p></Panel></div>}
@@ -419,17 +435,17 @@ function LegacyTeamsPreview() {
 
 function ProfilesTab({ groups, users }) {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Perfis e Funções" description="Perfis reutilizáveis, funções associadas e permissões efetivas." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <ProfilesSection groups={groups} users={users} /> : <LegacyProfilesTab groups={groups} users={users} />}</div>;
+  return <div className="space-y-4"><PageLead title="Perfis e Funções" description="Perfis reutilizáveis, funções associadas e permissões efetivas." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'reference' ? <ProfilesSection groups={groups} users={users} /> : <LegacyProfilesTab groups={groups} users={users} />}</div>;
 }
 
 function TeamsPreview() {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Equipes / Setores / Unidades" description="Estrutura operacional, responsáveis, membros e vínculos." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <TeamsSection /> : <LegacyTeamsPreview />}</div>;
+  return <div className="space-y-4"><PageLead title="Equipes / Setores / Unidades" description="Estrutura operacional, responsáveis, membros e vínculos." /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'reference' ? <TeamsSection /> : <LegacyTeamsPreview />}</div>;
 }
 
 function FormsPreview() {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Formulários" description="Formulários internos e públicos conectados às entidades do sistema." action={<ReadOnlyAction>Criação de formulário</ReadOnlyAction>} /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <FormsSection /> : <LegacyFormsPreview />}</div>;
+  return <div className="space-y-4"><PageLead title="Formulários" description="Formulários internos e públicos conectados às entidades do sistema." action={<ReadOnlyAction>Criação de formulário</ReadOnlyAction>} /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'reference' ? <FormsSection /> : <LegacyFormsPreview />}</div>;
 }
 
 function LegacyFormsPreview() {
@@ -440,7 +456,7 @@ function LegacyFormsPreview() {
 
 function ImportsPreview() {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Importação de Dados" description="Upload, mapeamento, validação e relatório antes da gravação." /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <ImportsSection /> : <LegacyImportsPreview />}</div>;
+  return <div className="space-y-4"><PageLead title="Importação de Dados" description="Upload, mapeamento, validação e relatório antes da gravação." /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'reference' ? <ImportsSection /> : <LegacyImportsPreview />}</div>;
 }
 
 function LegacyImportsPreview() {
@@ -466,7 +482,7 @@ const SCREEN_TREE = [
 
 function RegistryPreview() {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Registro de telas e módulos" description="Mapa estrutural de produtos, módulos, telas, seções e ações controláveis." /><PreviewNotice /><Panel title="Hierarquia do produto"><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} /></Panel>{view === 'reference' ? <RegistrySection /> : <LegacyRegistryPreview />}</div>;
+  return <div className="space-y-4"><PageLead title="Registro de telas e módulos" description="Mapa estrutural de produtos, módulos, telas, seções e ações controláveis." /><PreviewNotice /><Panel title="Hierarquia do produto"><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} /></Panel>{view === 'reference' ? <RegistrySection /> : <LegacyRegistryPreview />}</div>;
 }
 
 function LegacyRegistryPreview() {
@@ -483,7 +499,7 @@ const RECORD_ENTITIES = [
 
 function RecordsPreview() {
   const [view, setView] = useState('reference');
-  return <div className="space-y-4"><PageLead title="Cadastros administrativos" description="Catálogo das entidades compartilhadas e seus vínculos com os módulos." /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Anterior +1' }]} active={view} onChange={setView} />{view === 'reference' ? <RecordsSection /> : <LegacyRecordsPreview />}</div>;
+  return <div className="space-y-4"><PageLead title="Cadastros administrativos" description="Catálogo das entidades compartilhadas e seus vínculos com os módulos." /><PreviewNotice /><Tabs tabs={[{ key: 'reference', label: 'Referência' }, { key: 'previous', label: 'Versão anterior' }]} active={view} onChange={setView} />{view === 'reference' ? <RecordsSection /> : <LegacyRecordsPreview />}</div>;
 }
 
 function LegacyRecordsPreview() {

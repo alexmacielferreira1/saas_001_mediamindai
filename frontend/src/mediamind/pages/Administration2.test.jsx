@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const listAdminUsersMock = vi.fn();
 const getAdminUserMock = vi.fn();
 const suspendAdminUserMock = vi.fn();
+const reactivateAdminUserMock = vi.fn();
+const revokeAdminUserSessionsMock = vi.fn();
 const listAdminActivityMock = vi.fn();
 const getAdminSettingsMock = vi.fn();
 const updateAdminSettingsMock = vi.fn();
@@ -15,6 +17,8 @@ vi.mock('../../api/admin', () => ({
   listAdminUsers: (...args) => listAdminUsersMock(...args),
   getAdminUser: (...args) => getAdminUserMock(...args),
   suspendAdminUser: (...args) => suspendAdminUserMock(...args),
+  reactivateAdminUser: (...args) => reactivateAdminUserMock(...args),
+  revokeAdminUserSessions: (...args) => revokeAdminUserSessionsMock(...args),
   listAdminActivity: (...args) => listAdminActivityMock(...args),
   getAdminSettings: (...args) => getAdminSettingsMock(...args),
   updateAdminSettings: (...args) => updateAdminSettingsMock(...args),
@@ -155,6 +159,38 @@ describe('Administration2 preview', () => {
     expect((await screen.findAllByText('Suspenso')).length).toBeGreaterThan(0);
   });
 
+  it('reactivates a suspended user and revokes sessions only after confirmation', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    listAdminUsersMock.mockResolvedValue({ items: [{ ...USER, status: 'suspended' }], total: 1, page: 1, page_size: 25 });
+    getAdminUserMock.mockResolvedValue({ ...USER, status: 'suspended', extra_screens: [], restricted_screens: [], failed_login_attempts: 0 });
+    reactivateAdminUserMock.mockResolvedValue({ ...USER, status: 'active' });
+    revokeAdminUserSessionsMock.mockResolvedValue({ revoked_sessions: 2 });
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver Editor Local' }));
+    expect(screen.queryByRole('button', { name: 'Suspender usuário' })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reativar usuário' }));
+    await waitFor(() => expect(reactivateAdminUserMock).toHaveBeenCalledWith('user-1', 'Reativação confirmada pelo administrador.'));
+
+    confirm.mockReturnValue(false);
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar sessões' }));
+    expect(revokeAdminUserSessionsMock).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar sessões' }));
+    expect(await screen.findByText('2 sessão(ões) encerrada(s).')).toBeInTheDocument();
+  });
+
+  it('shows the server error instead of a silent failure on user actions', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    suspendAdminUserMock.mockRejectedValue(new Error('A conta não está ativa.'));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver Editor Local' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Suspender usuário' }));
+    expect(await screen.findByText('A conta não está ativa.')).toBeInTheDocument();
+  });
+
   it('embeds the existing access screen without replacing it', () => {
     render(<MemoryRouter><Administration2 /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: 'Acessos por Função' }));
@@ -271,6 +307,16 @@ describe('Administration2 preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Integrações' }));
     expect(await screen.findByRole('heading', { name: 'Integrações' })).toBeInTheDocument();
     expect(screen.getByText(/Nenhuma integração validada por esta tela/)).toBeInTheDocument();
+  });
+
+  it('hides the real-data seal on tabs that declare demonstration data', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Dados reais do tenant selecionado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Versão anterior' })).toBeInTheDocument();
+    expect(screen.queryByText('Anterior +1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Formulários' }));
+    expect(await screen.findByRole('heading', { name: 'Formulários' })).toBeInTheDocument();
+    expect(screen.queryByTestId('admin-data-seal')).not.toBeInTheDocument();
   });
 
   it('loads, validates and persists organization settings through the backend', async () => {

@@ -20,6 +20,20 @@ export function suspendAdminUser(userId, reason) {
   });
 }
 
+export function reactivateAdminUser(userId, reason) {
+  return request(`/admin/users/${userId}/reactivate`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
+export function revokeAdminUserSessions(userId, reason) {
+  return request(`/admin/users/${userId}/revoke-sessions`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
 export function getAdminSettings() {
   return request('/admin/settings');
 }

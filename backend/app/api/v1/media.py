@@ -19,6 +19,7 @@ from app.api.v1.thumbnail_settings import configured_cutout
 from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session
+from app.media import clip_render
 from app.media.assets import serialize_asset
 from app.media.storage import LocalMediaStorage
 from app.models.identity import TenantRecord
@@ -194,8 +195,22 @@ def probe_media(source: Path) -> dict:
 def render_media_clip(
     source: Path, destination: Path, *, source_in: float, duration: float, properties: dict
 ) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    # Validate optional ClipsFree instructions before touching FFmpeg or the disk.
+    render_options = clip_render.parse_render_options(properties)
     speed = max(0.25, min(4.0, float(properties.get("speed", 1) or 1)))
+    burn_subtitles = clip_render.needs_subtitles(render_options)
+    video_filter = clip_render.build_video_filter(
+        render_options, speed=speed, duration=duration, subtitles=burn_subtitles
+    )
+    audio_filter = clip_render.build_audio_filter(render_options, speed=speed, duration=duration)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    subtitle_file = (
+        clip_render.write_subtitles(
+            render_options, destination.parent, speed=speed, duration=duration
+        )
+        if burn_subtitles
+        else None
+    )
     command = [str(find_ffmpeg()), "-y", "-ss", str(source_in), "-t", str(duration)]
     if speed != 1:
         command.extend(["-itsscale", str(1 / speed)])
@@ -208,7 +223,8 @@ def render_media_clip(
             "-map",
             "0:a?",
             "-vf",
-            "scale=1280:720",
+            video_filter,
+            *(["-af", audio_filter] if audio_filter else []),
             "-c:v",
             "libx264",
             "-preset",
@@ -220,8 +236,11 @@ def render_media_clip(
             str(destination),
         ]
     )
+    # The subtitle filter reads a relative file name so no host path is embedded
+    # in the filtergraph (Windows drive letters would need fragile escaping).
+    run_options = {"cwd": str(destination.parent)} if subtitle_file else {}
     try:
-        subprocess.run(command, check=True, capture_output=True, timeout=30 * 60)
+        subprocess.run(command, check=True, capture_output=True, timeout=30 * 60, **run_options)
     except subprocess.TimeoutExpired as error:
         destination.unlink(missing_ok=True)
         raise PublicError(
@@ -230,6 +249,9 @@ def render_media_clip(
     except subprocess.CalledProcessError as error:
         destination.unlink(missing_ok=True)
         raise PublicError(422, "EXPORT_FAILED", "Não foi possível exportar este clipe.") from error
+    finally:
+        if subtitle_file:
+            subtitle_file.unlink(missing_ok=True)
 
 
 def render_timeline_gap(destination: Path, *, duration: float) -> None:
@@ -638,7 +660,7 @@ def stream_asset(asset_id: UUID, request: Request, current: Authenticated, sessi
     membership = require_membership(current)
     record = find_asset(session, membership.tenant_id, asset_id)
     storage = LocalMediaStorage(get_settings().media_root)
-    source = storage.resolve(record.data["storage_key"])
+    source = storage.resolve(record.data.get("storage_key"))
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     size = source.stat().st_size
@@ -675,7 +697,7 @@ def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbS
     if record.data.get("asset_type") != "video":
         raise PublicError(422, "VIDEO_REQUIRED", "Selecione um clipe de vídeo para exportar.")
     storage = LocalMediaStorage(get_settings().media_root)
-    source = storage.resolve(record.data["storage_key"])
+    source = storage.resolve(record.data.get("storage_key"))
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     export_id = uuid4()
@@ -724,7 +746,7 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
         record = find_asset(session, membership.tenant_id, asset_id)
         segments.append(
             {
-                "source": storage.resolve(record.data["storage_key"]),
+                "source": storage.resolve(record.data.get("storage_key")),
                 **trimmed,
             }
         )

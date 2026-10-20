@@ -299,7 +299,11 @@ def test_dark_channel_materials_require_a_script_in_the_same_channel(permission_
         f"/api/v1/dark-channels/{other_channel['id']}/scripts", json={"topic": "Outro tema"}
     )
     materials = [
-        {"title": "Entrevista", "reference": "https://media.example/entrevista.mp4", "kind": "video"},
+        {
+            "title": "Entrevista",
+            "reference": "https://media.example/entrevista.mp4",
+            "kind": "video",
+        },
         {"title": "Trilha", "reference": "https://media.example/trilha.wav", "kind": "audio"},
     ]
     rejected = client.patch(
@@ -311,7 +315,9 @@ def test_dark_channel_materials_require_a_script_in_the_same_channel(permission_
     saved = client.patch(f"/api/v1/dark-channels/{channel['id']}", json={"materials": materials})
     invalid = client.patch(
         f"/api/v1/dark-channels/{channel['id']}",
-        json={"materials": [{"title": "Arquivo", "reference": "javascript:alert(1)", "kind": "video"}]},
+        json={
+            "materials": [{"title": "Arquivo", "reference": "javascript:alert(1)", "kind": "video"}]
+        },
     )
 
     assert rejected.status_code == 409

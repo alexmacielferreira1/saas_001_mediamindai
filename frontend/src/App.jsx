@@ -94,7 +94,7 @@ function AuthenticatedApp() {
       <Route path="/timeline2" element={protectedPage(Timeline2, "timeline2")} />
       <Route path="/social" element={protectedPage(ViralClips, "social")} />
       <Route path="/clips" element={<Navigate to="/social" replace />} />
-      <Route path="/publish" element={<Navigate to="/social" replace />} />
+      <Route path="/publish" element={<Navigate to="/corp?tab=producao&sub=para_publicar" replace />} />
       <Route path="/clipsfree" element={protectedPage(ClipsFree, "social")} />
       <Route path="/clipsfree2" element={protectedPage(ClipsFree2, "social")} />
       <Route path="/acervo" element={protectedPage(Acervo, "acervo")} />

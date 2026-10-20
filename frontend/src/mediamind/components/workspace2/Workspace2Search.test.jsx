@@ -84,4 +84,14 @@ describe('Workspace 2 search step', () => {
     expect(layout.style.gridTemplateColumns).toBe('220px minmax(0, 1fr) minmax(320px, 33.333%)');
     expect(layout.lastElementChild?.previousElementSibling).toBe(preview);
   });
+
+  it('mostra nome do arquivo e status em português em vez do código interno', () => {
+    render(<Workspace2Search assets={assets} selectedAssets={[]} selectedIds={[]} previewAsset={assets[0]} onToggle={vi.fn()} onPreview={vi.fn()} onStepChange={vi.fn()} />);
+    const grid = within(screen.getByTestId('workspace2-media-grid'));
+    expect(grid.getByText(/^prefeito\.mov ·/)).toBeInTheDocument();
+    expect(grid.getByText('Revisado')).toBeInTheDocument();
+    expect(grid.getByText('Indexado')).toBeInTheDocument();
+    expect(screen.queryByText(/ASSET-00/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reproduzir' })).toBeDisabled();
+  });
 });

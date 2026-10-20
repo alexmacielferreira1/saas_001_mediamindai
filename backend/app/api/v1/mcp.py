@@ -58,7 +58,9 @@ def inspect_assets(session: Session, tenant_id: UUID, arguments: dict, *, operat
     }
 
 
-async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments: dict, user_id=None) -> dict:
+async def run_tool(
+    session: Session, tenant_id: UUID, tool_name: str, arguments: dict, user_id=None
+) -> dict:
     tool = tool_by_name(tool_name)
     if tool is None:
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
@@ -84,14 +86,39 @@ async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments:
                 "AI_PROVIDER_NOT_CONFIGURED",
                 "Cadastre uma conexão de IA ativa para esta ferramenta.",
             )
-        guard_budget(session, tenant_id, connection["provider"], connection["model"], max_tokens=4000)
+        guard_budget(
+            session, tenant_id, connection["provider"], connection["model"], max_tokens=4000
+        )
         start = perf_counter()
         try:
             text, usage = await generate_connection_text(connection, prompt, return_usage=True)
         except PublicError as error:
-            record_usage(session, tenant_id, user_id, provider=connection["provider"], model=connection["model"], feature=tool_name, status="error", latency_ms=(perf_counter() - start)*1000, error_code=error.code, connection_id=connection["id"])
+            record_usage(
+                session,
+                tenant_id,
+                user_id,
+                provider=connection["provider"],
+                model=connection["model"],
+                feature=tool_name,
+                status="error",
+                latency_ms=(perf_counter() - start) * 1000,
+                error_code=error.code,
+                connection_id=connection["id"],
+            )
             raise
-        record_usage(session, tenant_id, user_id, provider=connection["provider"], model=connection["model"], feature=tool_name, latency_ms=(perf_counter() - start)*1000, input_tokens=usage.get("input_tokens",usage.get("prompt_tokens",0)) or 0, output_tokens=usage.get("output_tokens",usage.get("completion_tokens",0)) or 0, connection_id=connection["id"], usage_known=bool(usage))
+        record_usage(
+            session,
+            tenant_id,
+            user_id,
+            provider=connection["provider"],
+            model=connection["model"],
+            feature=tool_name,
+            latency_ms=(perf_counter() - start) * 1000,
+            input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0,
+            output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0,
+            connection_id=connection["id"],
+            usage_known=bool(usage),
+        )
         return {
             "operation": tool_name,
             "mode": "provider",
@@ -103,8 +130,25 @@ async def run_tool(session: Session, tenant_id: UUID, tool_name: str, arguments:
     raise PublicError(409, "MCP_TOOL_UNAVAILABLE", "Ferramenta MCP ainda não está conectada.")
 
 
+def queue_tool(record_data: dict) -> dict:
+    tool_name = record_data.get("tool_name") or f"{record_data['module']}.inspect"
+    tool = tool_by_name(tool_name)
+    if tool is None:
+        raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
+    if not tool["available"]:
+        raise PublicError(409, "MCP_TOOL_UNAVAILABLE", "Ferramenta MCP ainda não está conectada.")
+    return tool
+
+
+def queue_status(results: list[dict]) -> str:
+    failed = sum(1 for item in results if item["status"] == "failed")
+    if not failed:
+        return "completed"
+    return "failed" if failed == len(results) else "partial"
+
+
 async def execute_queue_record(record: TenantRecord, session: Session, user_id=None) -> None:
-    tool_name = record.data.get("tool_name") or f"{record.data['module']}.inspect"
+    tool_name = queue_tool(record.data)["name"]
     targets = record.data.get("targets") or [
         {"id": value, "name": value, "asset_ids": []}
         for value in record.data.get("target_projects", [])
@@ -113,19 +157,31 @@ async def execute_queue_record(record: TenantRecord, session: Session, user_id=N
         targets = [{"id": None, "name": "Acervo da empresa", "asset_ids": []}]
     results = []
     for target in targets:
-        result = await run_tool(
-            session,
-            record.tenant_id,
-            tool_name,
-            {
-                "project_id": target.get("id") or target.get("name"),
-                "asset_ids": target.get("asset_ids") or [],
-                "prompt": target.get("instruction") or record.data.get("instruction"),
-            },
-            user_id,
-        )
-        results.append({"target_id": target.get("id"), "status": "completed", **result})
-    record.data = {**record.data, "status": "completed", "results": results}
+        base = {"target_id": target.get("id"), "target_name": target.get("name")}
+        try:
+            result = await run_tool(
+                session,
+                record.tenant_id,
+                tool_name,
+                {
+                    "project_id": target.get("id") or target.get("name"),
+                    "asset_ids": target.get("asset_ids") or [],
+                    "prompt": target.get("instruction") or record.data.get("instruction"),
+                },
+                user_id,
+            )
+        except PublicError as error:
+            # Falha de um alvo não interrompe os demais nem é registrada como sucesso.
+            results.append(
+                {
+                    **base,
+                    "status": "failed",
+                    "error": {"code": error.code, "message": error.message},
+                }
+            )
+            continue
+        results.append({**base, "status": "completed", **result})
+    record.data = {**record.data, "status": queue_status(results), "results": results}
 
 
 @router.get("/tools")
@@ -149,7 +205,9 @@ async def call_mcp_tool(
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
     if membership.role == "viewer" and tool["effect"] != "read":
         raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
-    result = await run_tool(session, membership.tenant_id, tool_name, body.arguments, current.user.id)
+    result = await run_tool(
+        session, membership.tenant_id, tool_name, body.arguments, current.user.id
+    )
     correlation_id = getattr(request.state, "correlation_id", str(uuid4()))
     add_audit(
         session,
@@ -202,6 +260,11 @@ async def create_mcp_queue(body: MCPQueueCreate, current: Authenticated, session
         raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
     if body.module not in {module["id"] for module in MODULES}:
         raise PublicError(404, "MCP_MODULE_NOT_FOUND", "Aplicativo MCP não encontrado.")
+    tool = queue_tool(body.model_dump())
+    if tool["module"] != body.module:
+        raise PublicError(
+            422, "MCP_TOOL_MODULE_MISMATCH", "A ferramenta não pertence ao aplicativo informado."
+        )
     record = TenantRecord(
         tenant_id=membership.tenant_id,
         entity_type=QUEUE_ENTITY,

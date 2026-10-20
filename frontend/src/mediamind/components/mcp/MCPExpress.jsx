@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, LoaderCircle, Play, Plus, Search, Sparkles, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { createMCPQueue, listMCPTools } from "../../lib/mcpApi";
+import { useMCPContext } from "../../lib/mcpTargetContext";
 
 const EXPRESS_APPS = {
   filmcraft: { id: "mmfilm", module: "mmfilm", label: "MMFilm", actions: ["Ler timeline", "Inspecionar projeto", "Montar sequência", "Cortar trechos (IN / OUT)", "Remover silêncios", "Selecionar melhores cenas", "Criar legendas automáticas", "Adicionar imagens de apoio", "Inserir GC e artes", "Aplicar transições", "Ajustar áudio e normalização", "Ajustar cor e exposição", "Estabilizar imagem", "Preparar exportação"] },
@@ -16,18 +17,30 @@ const EXPRESS_APPS = {
 };
 function pageApp(location) { return location.pathname === "/ferramentas-ia" ? EXPRESS_APPS.ai : EXPRESS_APPS[new URLSearchParams(location.search).get("tool")] || EXPRESS_APPS.ai; }
 const toOperation = (label) => ({ id: label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-"), label, enabled: true });
-const TARGETS = { timeline: { name: "Timeline aberta · Corte principal", kind: "timeline" }, project: { name: "Projeto aberto", kind: "project" }, assets: { name: "Mídias selecionadas", kind: "assets" } };
+// Alvos derivados apenas do que a ferramenta aberta publicou; nada de rótulos fixos.
+function expressTargets(app, context) {
+  if (app.module === "ai-tools") return { assistant: { id: "assistant", name: "Assistente IA", kind: "virtual", asset_ids: [], ready: true } };
+  const timeline = context?.kind === "timeline" ? context : null;
+  const assetCount = timeline?.asset_ids.length || 0;
+  const reason = !timeline ? "Abra uma timeline nesta ferramenta para usar o MCP Express."
+    : assetCount ? "" : "A timeline aberta não tem mídias do Acervo que o MCP possa ler.";
+  return {
+    timeline: { id: timeline?.id || null, name: timeline ? `Timeline aberta · ${timeline.name}` : "Nenhuma timeline aberta", kind: "timeline", asset_ids: timeline?.asset_ids || [], ready: Boolean(assetCount), reason },
+    assets: { id: timeline ? `${timeline.id}:assets` : null, name: `Mídias do Acervo na timeline (${assetCount})`, kind: "assets", asset_ids: timeline?.asset_ids || [], ready: Boolean(assetCount), reason },
+  };
+}
 
 export default function MCPExpress() {
   const location = useLocation();
   const app = useMemo(() => pageApp(location), [location]);
+  const context = useMCPContext(); const targets = useMemo(() => expressTargets(app, context), [app, context]);
   const [prompt, setPrompt] = useState(""); const [target, setTarget] = useState("timeline"); const [query, setQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false); const [operations, setOperations] = useState(() => app.actions.slice(0, 4).map(toOperation));
   const [tools, setTools] = useState([]); const [running, setRunning] = useState([]); const [status, setStatus] = useState("");
-  useEffect(() => { setOperations(app.actions.slice(0, 4).map(toOperation)); setQuery(""); setPickerOpen(false); setRunning([]); setStatus(""); }, [app.id]);
+  useEffect(() => { setOperations(app.actions.slice(0, 4).map(toOperation)); setQuery(""); setPickerOpen(false); setRunning([]); setStatus(""); setTarget(app.module === "ai-tools" ? "assistant" : "timeline"); }, [app.id]);
   useEffect(() => { listMCPTools().then((data) => setTools(data.tools || [])).catch(() => setTools([])); }, []);
   const choices = app.actions.filter((action) => action.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR")) && !operations.some((operation) => operation.label === action));
-  const enabledOperations = operations.filter((operation) => operation.enabled); const activeTarget = TARGETS[target];
+  const enabledOperations = operations.filter((operation) => operation.enabled); const activeTarget = targets[target] || Object.values(targets)[0];
   const addOperation = (label) => { setOperations((current) => current.some((operation) => operation.label === label) ? current : [...current, toOperation(label)]); setQuery(""); setPickerOpen(false); };
   const toggleOperation = (id) => setOperations((current) => current.map((operation) => operation.id === id ? { ...operation, enabled: !operation.enabled } : operation));
   const removeOperation = (id) => setOperations((current) => current.filter((operation) => operation.id !== id));
@@ -42,16 +55,21 @@ export default function MCPExpress() {
   async function executeOperation(operation) {
     const tool = matchingTool(operation.label);
     if (!tool) { setStatus(`“${operation.label}” está no pacote, mas ainda precisa da ponte MCP de ${app.label} para executar.`); return false; }
+    if (!activeTarget.ready) { setStatus(activeTarget.reason); return false; }
     setRunning((current) => [...current, operation.id]);
     try {
       const instruction = [prompt.trim(), operation.label].filter(Boolean).join("\n");
-      const result = await createMCPQueue({ name: `Express · ${app.label} · ${operation.label}`, module: app.module, tool_name: tool.name, instruction, output_mode: "internal", execution_mode: "immediate", target_projects: target === "project" ? [activeTarget.name] : [], create_projects: [], targets: [{ id: `express-${target}`, name: activeTarget.name, kind: activeTarget.kind, instruction }], export_name: null, export_destination: null });
-      setStatus(result.status === "completed" ? `“${operation.label}” concluída.` : `“${operation.label}” foi enviada para execução.`); return true;
+      const result = await createMCPQueue({ name: `Express · ${app.label} · ${operation.label}`, module: app.module, tool_name: tool.name, instruction, output_mode: "internal", execution_mode: "immediate", target_projects: [], create_projects: [], targets: [{ id: activeTarget.id, name: activeTarget.name, kind: activeTarget.kind, instruction, asset_ids: activeTarget.asset_ids }], export_name: null, export_destination: null });
+      if (result.status === "completed") { setStatus(`“${operation.label}” concluída.`); return true; }
+      const failure = result.results?.find((item) => item.status === "failed")?.error?.message;
+      setStatus(result.status === "partial" ? `“${operation.label}” foi executada só em parte. ${failure || ""}`.trim() : `“${operation.label}” não foi executada. ${failure || ""}`.trim());
+      return false;
     } catch (error) { setStatus(error?.message || `Não foi possível executar “${operation.label}”.`); return false; }
     finally { setRunning((current) => current.filter((id) => id !== operation.id)); }
   }
   async function executeAll() {
     if (!enabledOperations.length) { setStatus("Ligue ao menos uma ação para executar."); return; }
+    if (!activeTarget.ready) { setStatus(activeTarget.reason); return; }
     let executed = 0;
     for (const operation of enabledOperations) if (await executeOperation(operation)) executed += 1;
     const notExecuted = enabledOperations.length - executed;
@@ -65,8 +83,8 @@ export default function MCPExpress() {
     <div aria-hidden="true" className="absolute inset-x-3 top-0 h-0.5 rounded-full bg-cyan-300" />
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={openPanel} className="flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-900"><span className="grid h-6 w-6 place-items-center rounded bg-gradient-to-br from-sky-400 to-violet-500"><Sparkles size={15}/></span>MCP Express</button>
-      <select aria-label="Alvo de execução MCP Express" value={target} onChange={(event) => setTarget(event.target.value)} className="rounded-lg border border-sky-800 bg-slate-950 px-2 py-2 text-xs text-slate-200"><option value="timeline">Timeline aberta · Corte principal</option><option value="project">Projeto aberto</option><option value="assets">Mídias selecionadas</option></select>
-      <span className="rounded-lg border border-cyan-800/70 bg-cyan-950/30 px-2 py-2 text-[11px] text-cyan-200">{activeTarget.name}</span>
+      <select aria-label="Alvo de execução MCP Express" value={target} onChange={(event) => setTarget(event.target.value)} className="rounded-lg border border-sky-800 bg-slate-950 px-2 py-2 text-xs text-slate-200">{Object.entries(targets).map(([key, item]) => <option key={key} value={key}>{item.name}</option>)}</select>
+      <span title={activeTarget.reason || undefined} className={`rounded-lg border px-2 py-2 text-[11px] ${activeTarget.ready ? "border-cyan-800/70 bg-cyan-950/30 text-cyan-200" : "border-amber-800/70 bg-amber-950/30 text-amber-200"}`}>{activeTarget.ready ? activeTarget.name : activeTarget.reason}</span>
       <label className="flex min-w-[190px] flex-1 items-center gap-2 rounded-lg border border-sky-800 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><Search size={15}/><input aria-label="Pesquisar operações MCP" value={query} onFocus={() => setPickerOpen(true)} onChange={(event) => { setQuery(event.target.value); setPickerOpen(true); }} placeholder={`Mais ações para ${app.label}…`} className="w-full bg-transparent py-2 outline-none"/></label>
       <label className="flex min-w-[190px] flex-[1.1] items-center rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><input aria-label="Descreva a ação MCP" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Instrução opcional para as ações…" className="w-full bg-transparent py-2 outline-none"/></label>
       <div className="flex flex-wrap items-center gap-1">{operations.map((operation) => <div key={operation.id} className={`flex items-center rounded-lg border text-xs ${operation.enabled ? "border-sky-500/80 bg-sky-950/80 text-sky-100" : "border-slate-700 bg-slate-950 text-slate-500"}`}><button aria-label={`${operation.enabled ? "Desligar" : "Ligar"} ${operation.label}`} aria-pressed={operation.enabled} onClick={() => toggleOperation(operation.id)} className="p-2 text-sky-300 hover:text-cyan-200">{operation.enabled ? <ToggleRight size={17}/> : <ToggleLeft size={17}/>}</button><span className="max-w-32 truncate py-2 pr-1" title={operation.label}>{operation.label}</span><button aria-label={`Executar ${operation.label}`} onClick={() => executeOperation(operation)} disabled={!operation.enabled || running.includes(operation.id)} className="border-l border-sky-700/60 p-2 text-sky-200 hover:text-cyan-100 disabled:text-slate-600">{running.includes(operation.id) ? <LoaderCircle size={13} className="animate-spin"/> : <Play size={13} fill="currentColor"/>}</button><button aria-label={`Remover ${operation.label}`} onClick={() => removeOperation(operation.id)} className="p-2 text-slate-400 hover:text-rose-300"><X size={14}/></button></div>)}<button aria-label="Adicionar operação MCP" onClick={() => { setPickerOpen((current) => !current); setQuery(""); }} className="rounded-lg border border-sky-500 bg-sky-950/70 p-2 text-sky-200 hover:bg-sky-900"><Plus size={16}/></button></div>

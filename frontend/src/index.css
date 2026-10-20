@@ -38,7 +38,8 @@
     justify-content: flex-end;
     border-top: 0;
     padding-top: 0;
-    flex-wrap: nowrap;
+    /* Quebra em linhas em vez de transbordar para a esquerda sobre as abas Importar/Editar/Exportar. */
+    flex-wrap: wrap;
     gap: 6px;
     min-width: 0;
   }

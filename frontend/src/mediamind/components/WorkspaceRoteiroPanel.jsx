@@ -146,13 +146,13 @@ export default function WorkspaceRoteiroPanel({
             <button onClick={handleSave} className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400">
               <Save size={13} /> Salvar
             </button>
-            <button className="flex items-center justify-center gap-1.5 rounded-lg border border-sky-700 bg-sky-950/30 py-2 text-xs font-medium text-sky-300 hover:bg-sky-900/40">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center justify-center gap-1.5 rounded-lg border border-sky-700 bg-sky-950/30 py-2 text-xs font-medium text-sky-300 hover:bg-sky-900/40 disabled:cursor-not-allowed disabled:opacity-60">
               <Copy size={13} /> Salvar como
             </button>
-            <button className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               <FileDown size={13} /> Exportar
             </button>
-            <button className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               <GitBranch size={13} /> Versões
             </button>
           </div>
@@ -203,6 +203,8 @@ export default function WorkspaceRoteiroPanel({
                   {/* Top insert */}
                   <div className="relative">
                     <button
+                      type="button"
+                      aria-label="Inserir bloco no início"
                       onClick={() => setOpenInsert(openInsert === 'top' ? null : 'top')}
                       className="flex w-full items-center justify-center rounded-lg border border-dashed border-sky-700/50 py-1 text-sky-500 transition hover:bg-sky-950/30"
                     >
@@ -277,12 +279,14 @@ export default function WorkspaceRoteiroPanel({
                             </div>
                             <div className="flex flex-col gap-1">
                               <button
+                                type="button"
+                                aria-label="Remover bloco"
                                 onClick={() => onRemove(item.id)}
                                 className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-300 hover:bg-rose-500/25"
                               >
                                 <Trash2 size={11} />
                               </button>
-                              <button className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 hover:bg-slate-700">
+                              <button type="button" disabled title="Ainda não disponível" className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60">
                                 Mover
                               </button>
                             </div>
@@ -295,6 +299,8 @@ export default function WorkspaceRoteiroPanel({
                   {/* Bottom insert */}
                   <div className="relative">
                     <button
+                      type="button"
+                      aria-label="Inserir bloco no final"
                       onClick={() => setOpenInsert(openInsert === 'bottom' ? null : 'bottom')}
                       className="flex w-full items-center justify-center rounded-lg border border-dashed border-sky-700/50 py-1 text-sky-500 transition hover:bg-sky-950/30"
                     >

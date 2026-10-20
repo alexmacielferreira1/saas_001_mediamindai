@@ -11,10 +11,16 @@ describe("GraphicTools", () => {
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
     expect(screen.getByRole("button", { name: "Objeto Esfera 1" })).toBeInTheDocument();
   });
+  it("opens the MMFig interface design workspace", () => {
+    window.history.replaceState({}, "", "/ferramentas-graficas?tool=figcraft");
+    render(<GraphicTools />);
+    expect(screen.getByRole("tab", { name: /MMFig/ })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("shows the MM programs plus MMSom, Word, Excel and PowerPoint at the end", () => {
     render(<GraphicTools />);
     const programTabs = screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" }).querySelectorAll('[role="tab"]');
-    expect(programTabs).toHaveLength(13);
+    expect(programTabs).toHaveLength(14);
     expect([...programTabs].slice(-4).map((tab) => tab.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("MMSom"), expect.stringContaining("Word"), expect.stringContaining("Excel"), expect.stringContaining("PowerPoint")]));
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
     expect(screen.getByRole("heading", { name: "MM3D" })).toBeInTheDocument();
