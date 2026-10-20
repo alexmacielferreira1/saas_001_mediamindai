@@ -34,7 +34,7 @@ export default function RevistasPage() {
         )}
 
         {sub === 'edicoes' && (
-          <Panel title="Edições" action={<button className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Nova edição</button>}>
+          <Panel title="Edições" action={<button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"><Plus size={11} /> Nova edição</button>}>
             <div className="space-y-2">
               {MOCK_CORP_MAGAZINES.map((m) => (
                 <div key={m.id} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">

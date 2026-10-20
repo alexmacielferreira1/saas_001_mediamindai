@@ -1,8 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MCPDock from "./MCPDock";
+import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
+
+const TIMELINE_ASSET = "11111111-2222-4333-8444-555555555555";
+afterEach(() => { clearMCPContext("mmfilm"); });
 
 const mcpApi = vi.hoisted(() => ({
   createMCPQueue: vi.fn(),
@@ -148,23 +152,35 @@ describe("MCPDock", () => {
     expect(await screen.findByRole("button", { name: "Selecionar mídia Entrevista real" })).toBeInTheDocument();
   });
 
+  it("does not offer a timeline target that was never opened", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Usar timeline aberta/ }));
+    expect(screen.queryByText(/Corte principal/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Abra uma timeline no MMFilm/);
+    expect(screen.getByText("0 alvo(s) selecionado(s)")).toBeInTheDocument();
+  });
+
   it("lets MMFilm target the active timeline before building the task package", async () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Entrevista final", clips: [{ assetId: TIMELINE_ASSET }] })));
     fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
 
     expect(screen.getByRole("button", { name: /Usar timeline aberta/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Usar timeline aberta/ }));
-    expect(screen.getByText("Timeline aberta · Corte principal")).toBeInTheDocument();
+    expect(screen.getByText("Timeline aberta · Entrevista final")).toBeInTheDocument();
   });
 
   it("keeps the timeline selected when it arrives from MCP Express", async () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Entrevista final", clips: [{ assetId: TIMELINE_ASSET }] })));
     window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: { appId: "mmfilm", target: "timeline", prompt: "Ler timeline", operations: [] } }));
-    expect(await screen.findByText("Timeline aberta · Corte principal")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline aberta · Entrevista final")).toBeInTheDocument();
   });
 
   it("labels the immediate package action as execute now", async () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Entrevista final", clips: [{ assetId: TIMELINE_ASSET }] })));
     fireEvent.click(await screen.findByRole("button", { name: /MMFilm/i }));
     fireEvent.click(screen.getByRole("button", { name: /Usar timeline aberta/ }));
     fireEvent.change(screen.getByRole("textbox", { name: /Operações e prompt/i }), { target: { value: "Ler timeline" } });

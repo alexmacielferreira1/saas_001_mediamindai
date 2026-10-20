@@ -87,7 +87,7 @@ export default function EstagiarioPage() {
                       <p className="text-[11px] text-slate-500">{g.duracao}</p>
                     </div>
                   </div>
-                  <button className="rounded-md bg-sky-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400">Estudar</button>
+                  <button type="button" disabled title="Ainda não disponível" className="rounded-md bg-sky-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60">Estudar</button>
                 </div>
               ))}
             </div>

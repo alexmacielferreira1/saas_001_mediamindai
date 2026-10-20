@@ -61,13 +61,13 @@ export default function RoteiroEditor({
               </select>
               <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
             </div>
-            <button className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               <Save size={12} /> Salvar
             </button>
-            <button className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               <Download size={12} /> Exportar
             </button>
-            <button className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-400">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60">
               <Send size={12} /> Enviar para edição
             </button>
           </div>
@@ -173,6 +173,8 @@ export default function RoteiroEditor({
                             )}
                           </div>
                           <button
+                            type="button"
+                            aria-label="Remover bloco"
                             onClick={() => onRemove(item.id)}
                             className="shrink-0 rounded-md bg-rose-500/15 px-1.5 py-1 text-rose-300 opacity-0 transition hover:bg-rose-500/25 group-hover:opacity-100"
                           >

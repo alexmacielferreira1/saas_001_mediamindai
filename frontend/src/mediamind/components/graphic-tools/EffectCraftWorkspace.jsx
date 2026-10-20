@@ -1,20 +1,18 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Box,
   Camera,
-  ChevronDown,
   Circle,
   Film,
   FolderPlus,
   Hand,
-  Layers3,
   Lightbulb,
   MousePointer2,
   Pause,
   PenTool,
   Play,
-  Plus,
   RotateCcw,
   Search,
   Square,
@@ -46,6 +44,166 @@ const EFFECT_GROUPS = {
   "Transição": ["Wipe linear", "Iris Wipe", "Block Dissolve"],
 };
 
+// Ferramentas sem botão próprio na barra (mesmos atalhos do After Effects).
+const SHORTCUT_TOOLS = [
+  ["W", "Rotação"],
+  ["Y", "Âncora"],
+  ["Z", "Zoom"],
+];
+
+const COMP_DURATION = 10;
+const FPS = 30;
+const HISTORY_LIMIT = 100;
+const PRESET_COMPOSITIONS = ["3D Showcase", "EffectCraft Intro", "Particles"];
+const PRESET_SHARED_KEY = "__predefinidas__";
+const DEFAULT_TRANSFORM = { x: 960, y: 540, scale: 100, rotation: 0, opacity: 100 };
+const DEFAULT_CANVAS_BOX = { x: 22, y: 34, w: 60, h: 22 };
+const TRANSFORM_PROPERTIES = ["x", "y", "scale", "rotation", "opacity"];
+const PARAGRAPH_ALIGNMENTS = [
+  ["left", "Alinhar texto à esquerda"],
+  ["center", "Centralizar texto"],
+  ["right", "Alinhar texto à direita"],
+  ["justify", "Justificar texto"],
+  ["justify-all", "Justificar todas as linhas"],
+];
+
+// Parâmetros editáveis por efeito: [rótulo, valor padrão, faixa opcional do controle deslizante].
+const EFFECT_FIELDS = {
+  "Color Range": [["Fuzziness","0"],["Color Space","Lab"],["Min (L, Y, R)","0"],["Max (L, Y, R)","255"],["Min (a, U, G)","0"],["Max (a, U, G)","100"],["Min (b, V, B)","128"],["Max (b, V, B)","255"]],
+  "CC Particle World": [["Birth Rate","0.50"],["Longevity (sec)","1.00"],["Position X","0.00"],["Position Y","0.00"],["Position Z","0.00"],["Radius X","0.025"],["Radius Y","0.025"],["Radius Z","0.025"],["Animation","Explosive"],["Velocity","1.00"],["Inherit Velocity %","0.0"],["Gravity","0.500"],["Resistance","0.00"],["Extra","1.00"],["Extra Angle","360.0°"]],
+  "Desfoque gaussiano": [["Desfoque","0",[0,50]]],
+  "Desfoque de câmera": [["Raio do desfoque","0",[0,50]]],
+  "Brilho e contraste": [["Brilho","0",[-100,100]],["Contraste","0",[-100,100]]],
+  "Tonalidade/Saturação": [["Matiz","0",[-180,180]],["Saturação","0",[-100,100]]],
+  "Glow": [["Raio do brilho","12",[0,60]],["Intensidade do brilho","1",[0,4]]],
+  "Drop Shadow": [["Opacidade da sombra","50",[0,100]],["Distância","6",[0,100]],["Suavidade","4",[0,50]]],
+};
+
+function numeric(value, fallback = 0) {
+  const parsed = parseFloat(String(value ?? "").replace("°", "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function effectValue(effectParams, effect, label) {
+  const field = (EFFECT_FIELDS[effect] || []).find(([name]) => name === label);
+  return effectParams?.[effect]?.[label] ?? field?.[1];
+}
+
+// Converte os efeitos aplicados em filtros CSS/canvas reais (mesma sintaxe em ambos).
+function buildEffectFilter(appliedEffects, effectParams, scale = 1) {
+  const parts = [];
+  for (const effect of appliedEffects || []) {
+    if (!EFFECT_FIELDS[effect]) continue;
+    const value = (label) => numeric(effectValue(effectParams, effect, label));
+    if (effect === "Desfoque gaussiano" && value("Desfoque") > 0) parts.push(`blur(${value("Desfoque") * scale}px)`);
+    if (effect === "Desfoque de câmera" && value("Raio do desfoque") > 0) parts.push(`blur(${value("Raio do desfoque") * scale}px)`);
+    if (effect === "Brilho e contraste") {
+      if (value("Brilho")) parts.push(`brightness(${Math.max(0, 1 + value("Brilho") / 100)})`);
+      if (value("Contraste")) parts.push(`contrast(${Math.max(0, 1 + value("Contraste") / 100)})`);
+    }
+    if (effect === "Tonalidade/Saturação") {
+      if (value("Matiz")) parts.push(`hue-rotate(${value("Matiz")}deg)`);
+      if (value("Saturação")) parts.push(`saturate(${Math.max(0, 1 + value("Saturação") / 100)})`);
+    }
+    if (effect === "Glow" && value("Raio do brilho") > 0 && value("Intensidade do brilho") > 0) {
+      parts.push(`drop-shadow(0px 0px ${value("Raio do brilho") * scale}px rgba(255, 255, 255, ${Math.min(1, value("Intensidade do brilho") / 2)}))`);
+    }
+    if (effect === "Drop Shadow" && value("Opacidade da sombra") > 0) {
+      const distance = value("Distância") * scale;
+      parts.push(`drop-shadow(${distance}px ${distance}px ${value("Suavidade") * scale}px rgba(0, 0, 0, ${Math.min(1, value("Opacidade da sombra") / 100)}))`);
+    }
+  }
+  return parts.join(" ");
+}
+
+function particleField(effectParams, enabled) {
+  const value = (label, fallback) => enabled ? numeric(effectValue(effectParams, "CC Particle World", label), fallback) : fallback;
+  const birthRate = Math.max(0, value("Birth Rate", 0.5));
+  const velocity = Math.max(0, value("Velocity", 1));
+  const gravity = value("Gravity", 0.5);
+  const longevity = Math.max(0.1, value("Longevity (sec)", 1));
+  const count = Math.max(1, Math.min(240, Math.round(34 * birthRate * 2)));
+  const center = { x: 320 + value("Position X", 0) * 320, y: 180 + value("Position Y", 0) * 180 };
+  return {
+    center,
+    particles: Array.from({ length: count }, (_, index) => {
+      const angle = (index * 137.5) * Math.PI / 180;
+      const radius = (24 + ((index * 31) % 150)) * velocity;
+      const length = (12 + (index % 5) * 5) * longevity;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius + (gravity - 0.5) * radius * 0.4;
+      return { x1: x, y1: y, x2: x + Math.cos(angle) * length, y2: y + Math.sin(angle) * length, color: index % 3 === 0 ? "#ff6a00" : index % 3 === 1 ? "#ffd500" : "#fff500" };
+    }),
+  };
+}
+
+function layerTransformAt(propertyKeyframes, layerId, base, time) {
+  const animated = propertyKeyframes?.[layerId] || {};
+  return Object.fromEntries(Object.entries(base).map(([property, fallback]) => [property, evaluateKeyframes(animated[property], time, fallback)]));
+}
+
+function motionBlurAmount(propertyKeyframes, layerId, base, time) {
+  const now = layerTransformAt(propertyKeyframes, layerId, base, time);
+  const before = layerTransformAt(propertyKeyframes, layerId, base, Math.max(0, time - 1 / FPS));
+  const travel = Math.hypot(now.x - before.x, now.y - before.y) / 4 + Math.abs(now.rotation - before.rotation) / 2 + Math.abs(now.scale - before.scale) / 2;
+  return Math.min(12, travel);
+}
+
+function layerTextStyle(layer) {
+  if (!layer) return {};
+  const size = numeric(layer.fontSize, NaN);
+  const lineHeight = numeric(layer.lineHeight, NaN);
+  return {
+    ...(layer.fontFamily ? { fontFamily: `"${layer.fontFamily}", Inter, sans-serif` } : {}),
+    ...(layer.fontWeight ? { fontWeight: layer.fontWeight === "Regular" ? 400 : 900 } : {}),
+    ...(size > 0 ? { fontSize: `calc(${size} / 1920 * 100cqw)` } : {}),
+    ...(lineHeight > 0 ? { lineHeight: `calc(${lineHeight} / 1920 * 100cqw)` } : {}),
+  };
+}
+
+function layerAlignStyle(layer) {
+  if (!layer?.textAlign) return {};
+  return layer.textAlign === "justify-all" ? { textAlign: "justify", textAlignLast: "justify" } : { textAlign: layer.textAlign };
+}
+
+function maskClipPath(layer) {
+  if (layer?.maskPath?.closed && layer.maskPath.points.length >= 3) {
+    return `polygon(${layer.maskPath.points.map((point) => `${point.x}% ${point.y}%`).join(", ")})`;
+  }
+  if (layer?.mask) return `inset(${layer.mask.top}% ${100 - layer.mask.right}% ${100 - layer.mask.bottom}% ${layer.mask.left}%)`;
+  return undefined;
+}
+
+function snapValue(value, targets, threshold = 1.5) {
+  for (const target of targets) if (Math.abs(value - target) <= threshold) return target;
+  return value;
+}
+
+function sameDocument(left, right) {
+  return Boolean(left && right) && Object.keys(left).every((key) => left[key] === right[key]);
+}
+
+function slugify(name) {
+  return String(name || "projeto").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "projeto";
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function formatTimecode(time) {
+  const seconds = Math.floor(time + 1e-6);
+  const frames = Math.min(FPS - 1, Math.floor((time - seconds) * FPS + 1e-6));
+  return `00:00:${String(seconds).padStart(2, "0")}:${String(Math.max(0, frames)).padStart(2, "0")}`;
+}
+
 function evaluateKeyframes(frames, time, fallback) {
   if (!frames?.length) return fallback;
   const ordered = [...frames].sort((a, b) => a.time - b.time);
@@ -60,6 +218,160 @@ function evaluateKeyframes(frames, time, fallback) {
     progress = progress * progress * (3 - 2 * progress);
   }
   return left.value + (right.value - left.value) * progress;
+}
+
+// Desenha um quadro da composição num canvas 2D, nas mesmas coordenadas do visualizador.
+function drawCompositionFrame(ctx, scene, time, width, height) {
+  const w = scene.viewerWidth || 800;
+  const h = w * 9 / 16;
+  ctx.save();
+  ctx.setTransform?.(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.scale(width / w, height / h);
+  if (scene.composition === "Particles") {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+  } else if (scene.composition === "3D Showcase") {
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, "#080611");
+    gradient.addColorStop(0.58, "#15192a");
+    gradient.addColorStop(1, "#07070c");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    const radius = Math.hypot(w, h) / 2;
+    const gradient = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, radius);
+    gradient.addColorStop(0, "#14295c");
+    gradient.addColorStop(0.48, "#07122d");
+    gradient.addColorStop(1, "#030713");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if (scene.image) {
+    const ratio = Math.max(w / scene.image.width, h / scene.image.height) || 1;
+    const iw = scene.image.width * ratio;
+    const ih = scene.image.height * ratio;
+    ctx.globalAlpha = 0.7;
+    ctx.drawImage(scene.image, (w - iw) / 2, (h - ih) / 2, iw, ih);
+    ctx.globalAlpha = 1;
+  }
+  if (scene.composition === "Particles") {
+    const field = particleField(scene.effectParams, scene.particleEnabled);
+    const k = w / 640;
+    ctx.save();
+    ctx.scale(k, k);
+    ctx.translate(field.center.x, field.center.y);
+    ctx.lineWidth = 2;
+    for (const particle of field.particles) {
+      ctx.strokeStyle = particle.color;
+      ctx.beginPath();
+      ctx.moveTo(particle.x1, particle.y1);
+      ctx.lineTo(particle.x2, particle.y2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#fff600";
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (scene.composition === "3D Showcase") {
+    const blue = ctx.createLinearGradient(w * 0.31, h * 0.26, w * 0.47, h * 0.61);
+    blue.addColorStop(0, "#22d3ee");
+    blue.addColorStop(1, "#1d4ed8");
+    ctx.fillStyle = blue;
+    ctx.fillRect(w * 0.31, h * 0.26, w * 0.16, h * 0.35);
+    const coral = ctx.createLinearGradient(w * 0.45, h * 0.22, w * 0.6, h * 0.59);
+    coral.addColorStop(0, "#fb923c");
+    coral.addColorStop(1, "#9f1239");
+    ctx.fillStyle = coral;
+    ctx.fillRect(w * 0.45, h * 0.22, w * 0.15, h * 0.37);
+    ctx.save();
+    ctx.translate(w * 0.39, h * 0.45);
+    ctx.rotate(-6 * Math.PI / 180);
+    ctx.fillStyle = "#fff";
+    ctx.font = "italic 700 36px Inter, sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillText("CLASSIC 3D", 0, 0);
+    ctx.restore();
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("CÂMERAS · LUZES · SOMBRAS · PROFUNDIDADE DE CAMPO", w / 2, h * 0.9);
+    ctx.textAlign = "left";
+  }
+  if (scene.composition === "EffectCraft Intro") {
+    ctx.strokeStyle = "#e879f9";
+    ctx.lineWidth = 0.7 * 110 / 24;
+    ctx.beginPath();
+    ctx.arc(w - w * 0.18 - 55, h * 0.3 + 55, 110 * 10 / 24, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#67e8f9";
+    ctx.lineWidth = 64 / 24;
+    const bx = w - w * 0.28 - 64;
+    const by = h - h * 0.18 - 64;
+    ctx.strokeRect(bx + 64 * 0.2, by + 64 * 0.2, 64 * 0.6, 64 * 0.6);
+  }
+  const layer = scene.layer;
+  if (scene.showBox && layer) {
+    const box = scene.canvasBox;
+    const bw = box.w / 100 * w;
+    const bh = box.h / 100 * h;
+    const left = box.x / 100 * w;
+    const top = box.y / 100 * h;
+    const value = layerTransformAt(scene.propertyKeyframes, layer.id, scene.transform, time);
+    const anchor = layer.anchor || { x: 50, y: 50 };
+    const ox = anchor.x / 100 * bw;
+    const oy = anchor.y / 100 * bh;
+    ctx.save();
+    ctx.translate(left + ox + (value.x - 960) / 19.2 / 100 * bw, top + oy + (value.y - 540) / 10.8 / 100 * bh);
+    ctx.scale(value.scale / 100, value.scale / 100);
+    ctx.rotate(value.rotation * Math.PI / 180);
+    ctx.translate(-ox, -oy);
+    ctx.globalAlpha = Math.max(0, Math.min(1, value.opacity / 100));
+    const filters = [];
+    if (layer.effectsEnabled !== false) filters.push(buildEffectFilter(scene.appliedEffects, scene.effectParams));
+    if (layer.motionBlur) {
+      const blur = motionBlurAmount(scene.propertyKeyframes, layer.id, scene.transform, time);
+      if (blur > 0.05) filters.push(`blur(${blur.toFixed(2)}px)`);
+    }
+    const filter = filters.filter(Boolean).join(" ");
+    if (filter) ctx.filter = filter;
+    if (layer.maskPath?.closed && layer.maskPath.points.length >= 3) {
+      ctx.beginPath();
+      layer.maskPath.points.forEach((point, index) => ctx[index ? "lineTo" : "moveTo"](point.x / 100 * bw, point.y / 100 * bh));
+      ctx.closePath();
+      ctx.clip();
+    } else if (layer.mask) {
+      ctx.beginPath();
+      ctx.rect(layer.mask.left / 100 * bw, layer.mask.top / 100 * bh, (layer.mask.right - layer.mask.left) / 100 * bw, (layer.mask.bottom - layer.mask.top) / 100 * bh);
+      ctx.clip();
+    }
+    const customSize = numeric(layer.fontSize, NaN);
+    const size = customSize > 0 ? customSize * w / 1920 : Math.max(24, Math.min(62, (scene.viewportWidth || 1280) * 0.04));
+    const weight = layer.fontWeight === "Regular" ? 400 : 900;
+    const family = layer.fontFamily ? `"${layer.fontFamily}", Inter, sans-serif` : "Inter, sans-serif";
+    const align = layer.textAlign === "left" ? "left" : layer.textAlign === "right" ? "right" : "center";
+    const textX = align === "left" ? 24 : align === "right" ? bw - 24 : bw / 2;
+    ctx.textAlign = align;
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#fff";
+    ctx.shadowColor = "rgba(255,255,255,.7)";
+    ctx.shadowBlur = 8;
+    ctx.font = `${weight} ${size}px ${family}`;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = `${(size * 0.04).toFixed(2)}px`;
+    const lineHeight = numeric(layer.lineHeight, NaN) > 0 ? numeric(layer.lineHeight) * w / 1920 : size * 1.5;
+    ctx.fillText(layer.text ?? "MMEffect", textX, 16 + (lineHeight - size) / 2);
+    if (scene.composition === "EffectCraft Intro") {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#67e8f9";
+      ctx.font = "14px Inter, sans-serif";
+      if ("letterSpacing" in ctx) ctx.letterSpacing = "5.6px";
+      ctx.fillText("MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST", textX, 16 + lineHeight);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 const APP_MENUS = {
@@ -83,6 +395,17 @@ export default function EffectCraftWorkspace({
 }) {
   const [tool, setTool] = useGraphicDraftState("EffectCraftWorkspace.jsx:tool", "Seleção");
   const [openMenu, setOpenMenu] = useState(null);
+  // Posição do menu suspenso: renderizado em portal com position fixed para não ser cortado
+  // pelo overflow-x-auto da barra de menus.
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 });
+  useEffect(() => {
+    if (!openMenu) return undefined;
+    const close = (event) => {
+      if (!event.target.closest?.("[data-effect-menu]")) setOpenMenu(null);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [openMenu]);
   const [workspace, setWorkspace] = useGraphicDraftState("EffectCraftWorkspace.jsx:workspace", "Padrão");
   const [viewportOffset, setViewportOffset] = useGraphicDraftState("EffectCraftWorkspace.jsx:viewportOffset", { x: 0, y: 0 });
   const [leftPanel, setLeftPanel] = useGraphicDraftState("EffectCraftWorkspace.jsx:leftPanel", "Controles de efeitos");
@@ -200,6 +523,101 @@ export default function EffectCraftWorkspace({
     rotation: 0,
     opacity: 100,
   });
+  const [effectParams, setEffectParams] = useGraphicDraftState("EffectCraftWorkspace.jsx:effectParams", {});
+  const [compStore, setCompStore] = useGraphicDraftState("EffectCraftWorkspace.jsx:compositions", {});
+  const [snapping, setSnapping] = useGraphicDraftState("EffectCraftWorkspace.jsx:snapping", true);
+  const [showGrid, setShowGrid] = useGraphicDraftState("EffectCraftWorkspace.jsx:showGrid", false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [activeProperty, setActiveProperty] = useState("x");
+  const [, setHistoryVersion] = useState(0);
+  const frameRef = useRef(null);
+  const documentState = useMemo(
+    () => ({ composition, layers, transform, propertyKeyframes, markers, appliedEffects, canvasBox, effectParams, compStore }),
+    [composition, layers, transform, propertyKeyframes, markers, appliedEffects, canvasBox, effectParams, compStore],
+  );
+  const history = useRef(null);
+  if (!history.current) history.current = { undo: [], redo: [], last: documentState, gesture: null, pendingKey: null, lastKey: null, lastTime: 0 };
+
+  // Histórico por instantâneos do documento (como o History do EffectCraft): cada edição
+  // empilha o estado anterior; um gesto contínuo (arrasto) ou edições seguidas da mesma
+  // propriedade viram um único passo.
+  useEffect(() => {
+    const state = history.current;
+    if (sameDocument(state.last, documentState)) {
+      state.last = documentState;
+      return;
+    }
+    const now = Date.now();
+    const merged = state.gesture?.recorded
+      || (state.pendingKey && state.pendingKey === state.lastKey && now - state.lastTime < 800);
+    if (!merged) {
+      state.undo.push(state.last);
+      if (state.undo.length > HISTORY_LIMIT) state.undo.shift();
+      state.redo = [];
+      if (state.gesture) state.gesture.recorded = true;
+      setHistoryVersion((value) => value + 1);
+    }
+    state.lastKey = state.pendingKey;
+    state.lastTime = now;
+    state.pendingKey = null;
+    state.last = documentState;
+  }, [documentState]);
+
+  function mergeHistoryAs(key) {
+    history.current.pendingKey = key;
+  }
+
+  function beginHistoryGesture() {
+    history.current.gesture = { recorded: false };
+  }
+
+  function endHistoryGesture() {
+    history.current.gesture = null;
+  }
+
+  function applyDocument(snapshot) {
+    setComposition(snapshot.composition);
+    setLayers(snapshot.layers);
+    setTransform(snapshot.transform);
+    setPropertyKeyframes(snapshot.propertyKeyframes);
+    setMarkers(snapshot.markers);
+    setAppliedEffects(snapshot.appliedEffects);
+    setCanvasBox(snapshot.canvasBox);
+    setEffectParams(snapshot.effectParams);
+    setCompStore(snapshot.compStore);
+    if (selectedLayer && !snapshot.layers.some((layer) => layer.id === selectedLayer)) setSelectedLayer(null);
+    setSelectedKeyframe(null);
+  }
+
+  function undo() {
+    const state = history.current;
+    const previous = state.undo.pop();
+    if (!previous) {
+      setStatusMessage("Nada para desfazer.");
+      return;
+    }
+    state.redo.push(state.last);
+    state.last = previous;
+    state.lastKey = null;
+    applyDocument(previous);
+    setHistoryVersion((value) => value + 1);
+    setStatusMessage("Ação desfeita.");
+  }
+
+  function redo() {
+    const state = history.current;
+    const next = state.redo.pop();
+    if (!next) {
+      setStatusMessage("Nada para refazer.");
+      return;
+    }
+    state.undo.push(state.last);
+    state.last = next;
+    state.lastKey = null;
+    applyDocument(next);
+    setHistoryVersion((value) => value + 1);
+    setStatusMessage("Ação refeita.");
+  }
 
   useEffect(() => {
     if (!playing || !active) return;
@@ -235,6 +653,18 @@ export default function EffectCraftWorkspace({
       evaluateKeyframes(animated[property], playhead, fallback),
     ]));
   }, [playhead, propertyKeyframes, selectedLayer, transform]);
+  const showLayerBox = composition === "EffectCraft Intro" || (!PRESET_COMPOSITIONS.includes(composition) && Boolean(activeLayer));
+  const layerFilter = useMemo(() => {
+    const filters = [];
+    if (activeLayer && activeLayer.effectsEnabled !== false) filters.push(buildEffectFilter(appliedEffects, effectParams));
+    if (activeLayer?.motionBlur) {
+      const blur = motionBlurAmount(propertyKeyframes, activeLayer.id, transform, playhead);
+      if (blur > 0.05) filters.push(`blur(${blur.toFixed(2)}px)`);
+    }
+    return filters.filter(Boolean).join(" ");
+  }, [activeLayer, appliedEffects, effectParams, propertyKeyframes, transform, playhead]);
+  const customCompositions = Object.keys(compStore).filter((name) => name !== PRESET_SHARED_KEY && !PRESET_COMPOSITIONS.includes(name));
+  if (!PRESET_COMPOSITIONS.includes(composition) && !customCompositions.includes(composition)) customCompositions.push(composition);
   const timelineColumns = `18px repeat(6,18px) 22px 14px 18px 100px${showSwitches ? " repeat(8,16px)" : ""}${showModes ? " 60px 16px 80px 16px 80px" : ""}`;
   const timelinePanelWidth = 280 + (showSwitches ? 128 : 0) + (showModes ? 252 : 0);
 
@@ -294,12 +724,221 @@ export default function EffectCraftWorkspace({
     setSelectedLayer(id);
   }
 
+  function projectSnapshot() {
+    return {
+      schema: "mmeffect-project/v1",
+      savedAt: new Date().toISOString(),
+      composition,
+      layers,
+      transform,
+      propertyKeyframes,
+      markers,
+      appliedEffects,
+      canvasBox,
+      effectParams,
+      compositions: compStore,
+      selectedLayer,
+      playhead,
+    };
+  }
+
+  function saveProject() {
+    try {
+      const filename = `${slugify(composition)}.mmeffect.json`;
+      downloadBlob(new Blob([JSON.stringify(projectSnapshot(), null, 2)], { type: "application/json" }), filename);
+      setStatusMessage(`Projeto salvo no arquivo ${filename}.`);
+    } catch {
+      setStatusMessage("Não foi possível gerar o arquivo do projeto.");
+    }
+  }
+
+  async function openProjectFile(file) {
+    try {
+      const project = JSON.parse(await file.text());
+      if (project?.schema !== "mmeffect-project/v1" || !Array.isArray(project.layers) || typeof project.composition !== "string") throw new Error("inválido");
+      applyDocument({
+        composition: project.composition,
+        layers: project.layers,
+        transform: { ...DEFAULT_TRANSFORM, ...(project.transform || {}) },
+        propertyKeyframes: project.propertyKeyframes || {},
+        markers: Array.isArray(project.markers) ? project.markers : [],
+        appliedEffects: Array.isArray(project.appliedEffects) ? project.appliedEffects : [],
+        canvasBox: { ...DEFAULT_CANVAS_BOX, ...(project.canvasBox || {}) },
+        effectParams: project.effectParams || {},
+        compStore: project.compositions || {},
+      });
+      setSelectedLayer(project.layers.some((layer) => layer.id === project.selectedLayer) ? project.selectedLayer : project.layers[0]?.id ?? null);
+      setStatusMessage(`Projeto ${file.name} aberto.`);
+    } catch {
+      setStatusMessage(`O arquivo ${file.name} não é um projeto MMEffect válido. Nada foi alterado.`);
+    }
+  }
+
+  function importFiles(fileList) {
+    const files = [...(fileList || [])];
+    const projects = files.filter((file) => /\.mmeffect\.json$/i.test(file.name));
+    const media = files.filter((file) => !projects.includes(file));
+    projects.forEach(openProjectFile);
+    if (media.length) onOpenFiles(media);
+  }
+
+  function newProject() {
+    if (!window.confirm("Criar um novo projeto? A composição atual será descartada (salve o projeto antes, se precisar).")) return;
+    setComposition("Composição 1");
+    setLayers([]);
+    setTransform(DEFAULT_TRANSFORM);
+    setPropertyKeyframes({});
+    setMarkers([]);
+    setAppliedEffects([]);
+    setCanvasBox(DEFAULT_CANVAS_BOX);
+    setEffectParams({});
+    setCompStore({});
+    setSelectedLayer(null);
+    setSelectedKeyframe(null);
+    setPlayhead(0);
+    setViewportOffset({ x: 0, y: 0 });
+    setZoom(100);
+    history.current = { ...history.current, undo: [], redo: [], lastKey: null, pendingKey: null };
+    setHistoryVersion((value) => value + 1);
+    setStatusMessage("Novo projeto criado.");
+  }
+
+  function currentCompositionData() {
+    return { layers, propertyKeyframes, markers, appliedEffects, selectedLayer };
+  }
+
+  function newComposition() {
+    const existing = new Set([...PRESET_COMPOSITIONS, ...Object.keys(compStore), composition]);
+    let index = 1;
+    while (existing.has(`Composição ${index}`)) index += 1;
+    const answer = window.prompt("Nome da nova composição (1920×1080, 10 s):", `Composição ${index}`);
+    if (answer === null) return;
+    const name = answer.trim();
+    if (!name) return;
+    if (existing.has(name)) {
+      setStatusMessage(`Já existe uma composição chamada ${name}.`);
+      return;
+    }
+    const leaving = PRESET_COMPOSITIONS.includes(composition)
+      ? { [PRESET_SHARED_KEY]: { propertyKeyframes, markers } }
+      : { [composition]: currentCompositionData() };
+    setCompStore((old) => ({ ...old, ...leaving, [name]: { layers: [], propertyKeyframes: {}, markers: [], appliedEffects: [], selectedLayer: null } }));
+    setComposition(name);
+    setLayers([]);
+    setPropertyKeyframes({});
+    setMarkers([]);
+    setAppliedEffects([]);
+    setSelectedLayer(null);
+    setSelectedKeyframe(null);
+    setPlayhead(0);
+    setGraphEditor(false);
+    setStatusMessage(`Composição ${name} criada.`);
+  }
+
+  function renameComposition() {
+    if (PRESET_COMPOSITIONS.includes(composition)) {
+      setStatusMessage("Composições de exemplo não podem ser renomeadas. Use Nova composição.");
+      return;
+    }
+    const answer = window.prompt("Nome da composição:", composition);
+    const name = answer?.trim();
+    if (!name || name === composition) return;
+    if (PRESET_COMPOSITIONS.includes(name) || compStore[name]) {
+      setStatusMessage(`Já existe uma composição chamada ${name}.`);
+      return;
+    }
+    setCompStore((old) => {
+      const next = { ...old };
+      if (next[composition]) {
+        next[name] = next[composition];
+        delete next[composition];
+      }
+      return next;
+    });
+    setComposition(name);
+  }
+
+  function addKeyframeAtPlayhead() {
+    if (!selectedLayer) {
+      setStatusMessage("Selecione uma camada para adicionar o quadro-chave.");
+      return;
+    }
+    const property = selectedKeyframe?.layerId === selectedLayer ? selectedKeyframe.property : activeProperty;
+    const time = Math.round(playhead * 100) / 100;
+    const value = displayTransform[property];
+    setPropertyKeyframes((old) => {
+      const layerFrames = old[selectedLayer] || {};
+      const frames = layerFrames[property] || [];
+      const nextFrames = frames.some((frame) => frame.time === time)
+        ? frames.map((frame) => frame.time === time ? { ...frame, value } : frame)
+        : [...frames, { time, value, interpolation: "linear" }];
+      return { ...old, [selectedLayer]: { ...layerFrames, [property]: nextFrames } };
+    });
+    setStatusMessage(`Quadro-chave de ${property} adicionado em ${time.toFixed(2)}s.`);
+  }
+
+  function resetLayerTransform() {
+    setTransform(DEFAULT_TRANSFORM);
+    if (selectedLayer) {
+      setPropertyKeyframes((old) => {
+        if (!old[selectedLayer]) return old;
+        const layerFrames = { ...old[selectedLayer] };
+        TRANSFORM_PROPERTIES.forEach((property) => delete layerFrames[property]);
+        return { ...old, [selectedLayer]: layerFrames };
+      });
+      setLayers((old) => old.map((layer) => layer.id === selectedLayer && layer.anchor ? { ...layer, anchor: null } : layer));
+    }
+    setStatusMessage("Transformação da camada redefinida.");
+  }
+
+  function anchorLabel(layer) {
+    if (!layer?.anchor) return "960, 540";
+    return `${Math.round(layer.anchor.x / 100 * canvasBox.w / 100 * 1920)}, ${Math.round(layer.anchor.y / 100 * canvasBox.h / 100 * 1080)}`;
+  }
+
+  function getRenderScene() {
+    return {
+      composition,
+      layer: activeLayer || null,
+      showBox: showLayerBox,
+      canvasBox,
+      transform,
+      propertyKeyframes,
+      appliedEffects,
+      effectParams,
+      particleEnabled: appliedEffects.includes("CC Particle World"),
+      imageUrl: selected?.type?.startsWith("image") ? selected.url : null,
+      viewerWidth: frameRef.current?.clientWidth || 800,
+      viewportWidth: typeof window === "undefined" ? 1280 : window.innerWidth,
+      duration: COMP_DURATION,
+    };
+  }
+
+  function stepPlayhead(delta) {
+    setPlaying(false);
+    setPlayhead((old) => Math.max(0, Math.min(COMP_DURATION, Math.round((old + delta) * FPS) / FPS)));
+  }
+
   function runMenuCommand(command) {
     setOpenMenu(null);
     if (command === "Importar mídia") document.getElementById("mmeffect-import")?.click();
+    else if (command === "Novo projeto") newProject();
+    else if (command === "Salvar projeto") saveProject();
+    else if (command === "Desfazer") undo();
+    else if (command === "Refazer") redo();
     else if (command === "Adicionar à fila de renderização") setBottomPanel("Fila de renderização");
-    else if (command === "Nova composição") openComposition("EffectCraft Intro");
-    else if (command === "Adicionar marcador" || command === "Adicionar quadro-chave") setMarkers(old=>[...old,playhead]);
+    else if (command === "Nova composição") newComposition();
+    else if (command === "Configurações da composição") renameComposition();
+    else if (command === "Adicionar marcador") setMarkers(old=>[...old,playhead]);
+    else if (command === "Adicionar quadro-chave") addKeyframeAtPlayhead();
+    else if (command === "Assistente de quadro-chave") {
+      if (selectedKeyframe) { setKeyframeInterpolation("easy-ease"); setStatusMessage("Suavização aplicada ao quadro-chave selecionado."); }
+      else setStatusMessage("Selecione um quadro-chave na timeline para aplicar a suavização.");
+    }
+    else if (command === "Ajustar composição") { setZoom(100); setViewportOffset({ x: 0, y: 0 }); }
+    else if (command === "Mostrar grades") setShowGrid((value) => !value);
+    else if (command === "Atalhos do MMEffect") setStatusMessage("Atalhos: V Seleção · H Mão · Q Forma · G Caneta · T Texto · C Câmera · L Luz · W Rotação · Y Âncora · Z Zoom · Ctrl+Z/Ctrl+Shift+Z · Ctrl+S · Ctrl+D · Delete.");
+    else if (command === "Sobre o MMEffect") setStatusMessage("MMEffect — editor de animação e efeitos do MediaMind.");
     else if (command === "Nova camada de texto") addLayer("Texto");
     else if (command === "Nova camada de forma") addLayer("Forma");
     else if (command === "Nova câmera") addLayer("Câmera");
@@ -346,6 +985,7 @@ export default function EffectCraftWorkspace({
     event.stopPropagation();
     setSelectedLayer(layer.id);
     timelineGesture.current = { id: layer.id, mode, startX: event.clientX, start: layer.start, duration: layer.duration };
+    beginHistoryGesture();
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
@@ -356,7 +996,15 @@ export default function EffectCraftWorkspace({
     setLayers(old=>old.map(layer=>{
       if (layer.id !== active.id) return layer;
       if (active.mode === "move") {
-        const start = Math.max(0,Math.min(9.9,active.start+delta));
+        let start = Math.max(0,Math.min(9.9,active.start+delta));
+        // "Ajustar": encaixa o início ou o fim da camada na agulha e nos marcadores.
+        if (snapping) {
+          const targets = [playhead, ...markers];
+          const snappedStart = snapValue(start, targets, 0.1);
+          const snappedEnd = snapValue(start + active.duration, targets, 0.1);
+          if (snappedStart !== start) start = snappedStart;
+          else if (snappedEnd !== start + active.duration) start = Math.max(0, snappedEnd - active.duration);
+        }
         return {...layer,start,duration:Math.max(.1,Math.min(active.duration,10-start))};
       }
       if (active.mode === "trim-start") {
@@ -369,6 +1017,7 @@ export default function EffectCraftWorkspace({
 
   function togglePropertyKeyframe(property) {
     if (!selectedLayer) return;
+    setActiveProperty(property);
     const time = Math.round(playhead*100)/100;
     setPropertyKeyframes(old=>{
       const layerFrames = old[selectedLayer] || {};
@@ -380,6 +1029,9 @@ export default function EffectCraftWorkspace({
 
   function changeTransform(property, nextValue) {
     const value = Number(nextValue);
+    if (!Number.isFinite(value)) return;
+    if (TRANSFORM_PROPERTIES.includes(property)) setActiveProperty(property);
+    if (!history.current.gesture) mergeHistoryAs(`transform:${selectedLayer}:${property}`);
     setTransform((old) => ({ ...old, [property]: value }));
     if (!selectedLayer) return;
     const time = Math.round(playhead * 100) / 100;
@@ -408,37 +1060,75 @@ export default function EffectCraftWorkspace({
     event.preventDefault();
     event.stopPropagation();
     gesture.current = { mode, startX: event.clientX, startY: event.clientY, box: canvasBox, offset: viewportOffset };
+    beginHistoryGesture();
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
-  useEffect(() => {
-    function handleEditorKey(event) {
-      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (!selectedLayer || activeLayer?.locked) return;
-        event.preventDefault();
-        if (maskSelected && activeLayer?.mask) {
-          setLayers(old => old.map(layer => layer.id === selectedLayer ? { ...layer, mask: null } : layer));
-          setMaskSelected(false);
-          return;
-        }
-        setLayers(old => old.filter(layer => layer.id !== selectedLayer));
-        setSelectedLayer(null);
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
-        if (!activeLayer) return;
-        event.preventDefault();
-        const copy = { ...activeLayer, id: crypto.randomUUID(), name: `${activeLayer.name} cópia` };
-        setLayers(old => [copy, ...old]);
-        setSelectedLayer(copy.id);
-      } else if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-        const shortcut = TOOLS.find(([key]) => key.toLowerCase() === event.key.toLowerCase());
-        if (shortcut) { event.preventDefault(); setTool(shortcut[1]); }
-        if (event.key === "Escape") setSelectedLayer(null);
-      }
+  function handleEditorKey(event) {
+    if (!active) return;
+    if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    const key = String(event.key || "").toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "z") {
+      event.preventDefault();
+      if (event.shiftKey) redo(); else undo();
+      return;
     }
-    window.addEventListener("keydown", handleEditorKey);
-    return () => window.removeEventListener("keydown", handleEditorKey);
-  }, [selectedLayer, activeLayer, maskSelected, setLayers, setSelectedLayer]);
+    if ((event.ctrlKey || event.metaKey) && key === "y") {
+      event.preventDefault();
+      redo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === "s") {
+      event.preventDefault();
+      saveProject();
+      return;
+    }
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (!selectedLayer || activeLayer?.locked) return;
+      event.preventDefault();
+      if (maskSelected && (activeLayer?.mask || activeLayer?.maskPath)) {
+        setLayers(old => old.map(layer => layer.id === selectedLayer ? { ...layer, mask: null, maskPath: null } : layer));
+        setMaskSelected(false);
+        return;
+      }
+      setLayers(old => old.filter(layer => layer.id !== selectedLayer));
+      setSelectedLayer(null);
+    } else if ((event.ctrlKey || event.metaKey) && key === "d") {
+      if (!activeLayer) return;
+      event.preventDefault();
+      const copy = { ...activeLayer, id: crypto.randomUUID(), name: `${activeLayer.name} cópia` };
+      setLayers(old => [copy, ...old]);
+      setSelectedLayer(copy.id);
+    } else if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+      if (event.key === "Enter" && activeLayer?.maskPath && !activeLayer.maskPath.closed && activeLayer.maskPath.points.length >= 3) {
+        event.preventDefault();
+        setLayerValue(activeLayer.id, "maskPath", { ...activeLayer.maskPath, closed: true });
+        return;
+      }
+      const shortcut = [...TOOLS, ...SHORTCUT_TOOLS].find(([shortcutKey]) => shortcutKey.toLowerCase() === key);
+      if (shortcut) { event.preventDefault(); setTool(shortcut[1]); }
+      if (event.key === "Escape") setSelectedLayer(null);
+    }
+  }
+  const keyHandler = useRef(handleEditorKey);
+  keyHandler.current = handleEditorKey;
+
+  useEffect(() => {
+    const listener = (event) => keyHandler.current(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
+
+  function layerPoint(element, event) {
+    const bounds = element.getBoundingClientRect();
+    const width = bounds.width || 1;
+    const height = bounds.height || 1;
+    return {
+      bounds,
+      x: Math.max(0, Math.min(100, (event.clientX - bounds.left) / width * 100)),
+      y: Math.max(0, Math.min(100, (event.clientY - bounds.top) / height * 100)),
+    };
+  }
 
   function useActiveTool(event) {
     if (tool === "Seleção") return;
@@ -446,13 +1136,48 @@ export default function EffectCraftWorkspace({
       beginCanvasGesture(event, "pan");
       return;
     }
-    if (tool === "Forma" && activeLayer && !activeLayer.locked) {
-      const element = event.currentTarget.querySelector('[data-effect-layer]');
-      if (!element) return;
-      const bounds = element.getBoundingClientRect();
-      const point = { x: (event.clientX - bounds.left) / bounds.width * 100, y: (event.clientY - bounds.top) / bounds.height * 100 };
-      gesture.current = { mode: "mask", layerId: activeLayer.id, bounds, point };
+    if (tool === "Zoom") {
+      event.preventDefault();
+      const out = event.altKey || event.shiftKey;
+      setZoom((old) => Math.max(25, Math.min(200, old + (out ? -25 : 25))));
+      return;
+    }
+    const element = event.currentTarget.querySelector('[data-effect-layer]');
+    const editable = activeLayer && !activeLayer.locked && element;
+    if (tool === "Forma" && editable) {
+      const { bounds, x, y } = layerPoint(element, event);
+      gesture.current = { mode: "mask", layerId: activeLayer.id, bounds, point: { x, y } };
+      beginHistoryGesture();
       setMaskSelected(true);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    if (tool === "Caneta" && editable) {
+      event.preventDefault();
+      const { x, y } = layerPoint(element, event);
+      const point = { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+      const path = activeLayer.maskPath;
+      let next;
+      if (!path || path.closed) next = { points: [point], closed: false };
+      else if (path.points.length >= 3 && Math.hypot(point.x - path.points[0].x, point.y - path.points[0].y) <= 3) next = { ...path, closed: true };
+      else next = { ...path, points: [...path.points, point] };
+      setLayerValue(activeLayer.id, "maskPath", next);
+      setMaskSelected(true);
+      return;
+    }
+    if (tool === "Rotação" && editable) {
+      const bounds = element.getBoundingClientRect();
+      const center = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+      gesture.current = { mode: "rotate", center, startAngle: Math.atan2(event.clientY - center.y, event.clientX - center.x), rotation: displayTransform.rotation };
+      beginHistoryGesture();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      return;
+    }
+    if (tool === "Âncora" && editable) {
+      const { bounds, x, y } = layerPoint(element, event);
+      gesture.current = { mode: "anchor", layerId: activeLayer.id, bounds };
+      beginHistoryGesture();
+      setLayerValue(activeLayer.id, "anchor", { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
       event.currentTarget.setPointerCapture?.(event.pointerId);
       return;
     }
@@ -471,10 +1196,29 @@ export default function EffectCraftWorkspace({
   }
 
   function openComposition(name) {
+    if (name === composition && !PRESET_COMPOSITIONS.includes(name)) return;
+    const leavingCustom = !PRESET_COMPOSITIONS.includes(composition);
+    const enteringCustom = !PRESET_COMPOSITIONS.includes(name);
+    // Quadros-chave e marcadores das composições predefinidas ficam guardados enquanto
+    // uma composição criada pelo usuário está aberta.
+    if (leavingCustom) setCompStore((old) => ({ ...old, [composition]: currentCompositionData() }));
+    else if (enteringCustom) setCompStore((old) => ({ ...old, [PRESET_SHARED_KEY]: { propertyKeyframes, markers } }));
+    if (leavingCustom && !enteringCustom && compStore[PRESET_SHARED_KEY]) {
+      setPropertyKeyframes(compStore[PRESET_SHARED_KEY].propertyKeyframes || {});
+      setMarkers(compStore[PRESET_SHARED_KEY].markers || []);
+    }
     setComposition(name);
     setPlayhead(name === "3D Showcase" ? 2 : 3);
     setGraphEditor(false);
-    if (name === "Particles") {
+    if (!PRESET_COMPOSITIONS.includes(name)) {
+      const saved = compStore[name] || {};
+      setLayers(saved.layers || []);
+      setPropertyKeyframes(saved.propertyKeyframes || {});
+      setMarkers(saved.markers || []);
+      setAppliedEffects(saved.appliedEffects || []);
+      setSelectedLayer(saved.selectedLayer ?? null);
+      setPlayhead(0);
+    } else if (name === "Particles") {
       setLayers([{id:"particles",name:"Particles",kind:"■",color:"bg-[#a9343c]",visible:true,locked:false,start:0,duration:10}]);
       setSelectedLayer("particles");
       setAppliedEffects(["CC Particle World"]);
@@ -523,11 +1267,39 @@ export default function EffectCraftWorkspace({
       });
       return;
     }
+    if (active.mode === "rotate") {
+      const angle = Math.atan2(event.clientY - active.center.y, event.clientX - active.center.x);
+      let rotation = active.rotation + (angle - active.startAngle) * 180 / Math.PI;
+      rotation = ((rotation + 180) % 360 + 360) % 360 - 180;
+      changeTransform("rotation", Math.round(rotation * 10) / 10);
+      return;
+    }
+    if (active.mode === "anchor") {
+      const width = active.bounds.width || 1;
+      const height = active.bounds.height || 1;
+      const x = Math.max(0, Math.min(100, (event.clientX - active.bounds.left) / width * 100));
+      const y = Math.max(0, Math.min(100, (event.clientY - active.bounds.top) / height * 100));
+      setLayerValue(active.layerId, "anchor", { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+      return;
+    }
     const dx = (event.clientX - active.startX) / 8;
     const dy = (event.clientY - active.startY) / 5;
-    setCanvasBox(active.mode === "resize"
-      ? { ...active.box, w: Math.max(18, Math.min(78, active.box.w + dx)), h: Math.max(10, Math.min(55, active.box.h + dy)) }
-      : { ...active.box, x: active.box.x + dx, y: active.box.y + dy });
+    if (active.mode === "resize") {
+      setCanvasBox({ ...active.box, w: Math.max(18, Math.min(78, active.box.w + dx)), h: Math.max(10, Math.min(55, active.box.h + dy)) });
+      return;
+    }
+    let x = active.box.x + dx;
+    let y = active.box.y + dy;
+    // "Ajustar": encaixa bordas e centro da camada nas bordas e no centro da composição.
+    if (snapping) {
+      const w = active.box.w;
+      const h = active.box.h;
+      const snappedX = snapValue(x, [0, 50 - w / 2, 100 - w]);
+      const snappedY = snapValue(y, [0, 50 - h / 2, 100 - h]);
+      x = snappedX;
+      y = snappedY;
+    }
+    setCanvasBox({ ...active.box, x, y });
   }
 
   const compactWorkspace = workspace === "Tela pequena";
@@ -547,10 +1319,10 @@ export default function EffectCraftWorkspace({
       <div className="flex h-7 items-center gap-0 overflow-x-auto border-b border-[#080808] bg-[#202020] px-1 text-[11px]">
         {Object.entries(APP_MENUS).map(([item,commands]) => (
           <div key={item} className="relative h-full shrink-0">
-            <button onClick={()=>setOpenMenu(openMenu===item?null:item)} aria-expanded={openMenu===item} className={`h-full px-2 text-[#c8c8c8] hover:bg-[#343434] hover:text-white ${openMenu===item?'bg-[#343434] text-white':''}`}>{item}</button>
-            {openMenu===item && <div className="absolute left-0 top-full z-50 min-w-52 border border-[#555] bg-[#292929] py-1 shadow-xl">
+            <button data-effect-menu aria-haspopup="menu" onClick={(event)=>{const rect=event.currentTarget.getBoundingClientRect();setMenuPosition({left:rect.left,top:rect.bottom});setOpenMenu(openMenu===item?null:item)}} aria-expanded={openMenu===item} className={`h-full px-2 text-[#c8c8c8] hover:bg-[#343434] hover:text-white ${openMenu===item?'bg-[#343434] text-white':''}`}>{item}</button>
+            {openMenu===item && typeof document !== "undefined" && createPortal(<div data-effect-menu role="menu" aria-label={`Menu ${item}`} className="fixed z-50 min-w-52 border border-[#555] bg-[#292929] py-1 text-[11px] text-slate-200 shadow-xl" style={{left:menuPosition.left,top:menuPosition.top}}>
               {commands.map(command=><button key={command} onClick={()=>runMenuCommand(command)} className="block w-full whitespace-nowrap px-4 py-1.5 text-left text-[11px] hover:bg-[#2675df] hover:text-white">{command}</button>)}
-            </div>}
+            </div>, document.body)}
           </div>
         ))}
       </div>
@@ -568,9 +1340,9 @@ export default function EffectCraftWorkspace({
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-[#555]" />
-        <label className="flex items-center gap-2 px-2 text-[10px] text-slate-400"><input type="checkbox" defaultChecked className="accent-blue-500"/> Ajustar</label>
+        <label className="flex items-center gap-2 px-2 text-[10px] text-slate-400"><input type="checkbox" aria-label="Ajustar (encaixe)" checked={Boolean(snapping)} onChange={(event)=>setSnapping(event.target.checked)} className="accent-blue-500"/> Ajustar</label>
         <span className="ml-auto flex h-full items-center text-[10px]">{["Padrão","Animação","Standard","Tela pequena"].map(item=><button key={item} onClick={()=>setWorkspace(item)} className={`h-full px-3 ${workspace===item?'border-b-2 border-blue-400 text-blue-300':'text-[#aaa] hover:text-white'}`}>{item}</button>)}</span>
-        <label className="ml-2 cursor-pointer rounded bg-[#5663e8] px-3 py-1 text-[10px] font-bold text-white"><Upload className="mr-1 inline" size={11}/>Importar<input id="mmeffect-import" hidden multiple type="file" accept="video/*,image/*,audio/*" onChange={(event)=>onOpenFiles(event.target.files)}/></label>
+        <label className="ml-2 cursor-pointer rounded bg-[#5663e8] px-3 py-1 text-[10px] font-bold text-white"><Upload className="mr-1 inline" size={11}/>Importar<input id="mmeffect-import" hidden multiple type="file" accept="video/*,image/*,audio/*,.json,application/json" onChange={(event)=>{importFiles(event.target.files);event.target.value=""}}/></label>
       </div>
 
       <div aria-label="Grade do workspace MMEffect" data-workspace={workspace} className={`grid h-[calc(100%-64px)] min-h-0 gap-px bg-[#080808] ${workspaceGrid}`}>
@@ -581,7 +1353,7 @@ export default function EffectCraftWorkspace({
           <button onClick={()=>document.getElementById("mmeffect-import")?.click()} className="m-2 flex items-center justify-center gap-2 rounded border border-[#555] bg-[#292929] px-3 py-2 text-[10px] hover:border-blue-400 hover:bg-[#343434]"><Upload size={12}/>Importar mídia</button>
           <div className="border-b border-[#333] px-2 py-1 text-[9px] text-[#aaa]">Nome <span className="float-right">Tipo&nbsp;&nbsp;&nbsp;Tamanho</span></div>
           <div className="space-y-px p-1 text-[10px]">
-            {[['3D Showcase','▣','Composição'],['EffectCraft Intro','▣','Composição'],['Particles','▣','Composição'],['Precomps','▱','Pasta'],['Solids','▱','Pasta']].map(([name,icon,type])=><button key={name} onDoubleClick={()=>type==='Composição'&&openComposition(name)} className={`grid w-full grid-cols-[18px_1fr_78px] items-center px-1 py-1 text-left hover:bg-[#353535] ${composition===name?'bg-[#3a3f46]':''}`}><span className={type==='Pasta'?'text-yellow-300':'text-violet-300'}>{icon}</span><span>{name}</span><span className="text-[#999]">{type}</span></button>)}
+            {[['3D Showcase','▣','Composição'],['EffectCraft Intro','▣','Composição'],['Particles','▣','Composição'],...customCompositions.map(name=>[name,'▣','Composição']),['Precomps','▱','Pasta'],['Solids','▱','Pasta']].map(([name,icon,type])=><button key={name} onDoubleClick={()=>type==='Composição'&&openComposition(name)} className={`grid w-full grid-cols-[18px_1fr_78px] items-center px-1 py-1 text-left hover:bg-[#353535] ${composition===name?'bg-[#3a3f46]':''}`}><span className={type==='Pasta'?'text-yellow-300':'text-violet-300'}>{icon}</span><span>{name}</span><span className="text-[#999]">{type}</span></button>)}
           </div>
           <div className="space-y-px p-1">
             {assets.map((asset) => (
@@ -617,7 +1389,7 @@ export default function EffectCraftWorkspace({
           </div>
           </> : leftPanel === "Controles de efeitos" ? <div className="p-3 text-[10px]">
             <div className="mb-3 flex items-center gap-2 border-b border-slate-700 pb-3"><span className="grid h-6 w-6 place-items-center rounded bg-cyan-500 text-black">{activeLayer?.kind}</span><b className="truncate">{activeLayer?.name}</b></div>
-            {appliedEffects.map((effect, index) => <EffectControl key={`${effect}-${index}`} effect={effect} transform={displayTransform} onTransformChange={changeTransform} onRemove={()=>setAppliedEffects(old=>old.filter((_,i)=>i!==index))}/>) }
+            {appliedEffects.map((effect, index) => <EffectControl key={`${effect}-${index}`} effect={effect} transform={displayTransform} onTransformChange={changeTransform} values={effectParams[effect] || {}} onValueChange={(label,value)=>{mergeHistoryAs(`effect:${effect}:${label}`);setEffectParams(old=>({...old,[effect]:{...(old[effect]||{}),[label]:value}}))}} onReset={()=>{setEffectParams(old=>{const next={...old};delete next[effect];return next});if(!EFFECT_FIELDS[effect])resetLayerTransform()}} onRemove={()=>setAppliedEffects(old=>old.filter((_,i)=>i!==index))}/>) }
           </div> : <EffectsBrowser search={search} setSearch={setSearch} visibleEffectGroups={visibleEffectGroups} openEffectGroups={openEffectGroups} setOpenEffectGroups={setOpenEffectGroups} setAppliedEffects={setAppliedEffects} setLeftPanel={setLeftPanel} />}
         </aside>
 
@@ -626,12 +1398,13 @@ export default function EffectCraftWorkspace({
             <div className="flex items-center border-b border-slate-800 bg-[#151920] px-3 py-2 text-[10px]">
               <b>Composição: {composition}</b>
               {activeLayer && <label className="ml-3 flex items-center gap-2">Texto da camada<input aria-label="Texto da camada selecionada" disabled={activeLayer.locked} value={activeLayer.text ?? "MMEffect"} onChange={event => setLayers(old => old.map(layer => layer.id === activeLayer.id ? { ...layer, text: event.target.value } : layer))} className="w-40 bg-[#252525] px-2 py-1"/></label>}
-              <span className="ml-auto text-slate-500">
-                Visualização: Ativa · Resolução: Completa · 100%
+              {statusMessage && <span role="status" aria-label="Status do MMEffect" title={statusMessage} className="ml-3 min-w-0 truncate text-amber-300">{statusMessage}</span>}
+              <span className="ml-auto shrink-0 text-slate-500">
+                Visualização: Ativa · Resolução: Completa · {zoom}%
               </span>
             </div>
-            <div aria-label="Visualizador da composição" onPointerDown={useActiveTool} onPointerMove={moveCanvasGesture} onPointerUp={()=>{gesture.current=null}} onDragOver={(event)=>event.preventDefault()} onDrop={placeAsset} className={`relative grid flex-1 place-items-center overflow-hidden bg-[#181818] p-4 ${viewerCursor}`}>
-              <div style={{transform:`translate(${viewportOffset.x}px, ${viewportOffset.y}px)`}} className={`relative aspect-video h-[88%] max-h-full max-w-[92%] overflow-hidden shadow-2xl ${composition==='Particles'?'bg-black':composition==='3D Showcase'?'bg-[linear-gradient(155deg,#080611,#15192a_58%,#07070c)]':'bg-[radial-gradient(circle_at_center,#14295c_0,#07122d_48%,#030713_100%)]'}`}>
+            <div aria-label="Visualizador da composição" onPointerDown={useActiveTool} onPointerMove={moveCanvasGesture} onPointerUp={()=>{gesture.current=null;endHistoryGesture()}} onDragOver={(event)=>event.preventDefault()} onDrop={placeAsset} className={`relative grid flex-1 place-items-center overflow-hidden bg-[#181818] p-4 ${viewerCursor}`}>
+              <div ref={frameRef} aria-label="Quadro da composição" style={{transform:`translate(${viewportOffset.x}px, ${viewportOffset.y}px)${zoom !== 100 ? ` scale(${zoom/100})` : ""}`,...(numeric(activeLayer?.fontSize, NaN) > 0 || numeric(activeLayer?.lineHeight, NaN) > 0 ? {containerType:"inline-size"} : {})}} className={`relative aspect-video h-[88%] max-h-full max-w-[92%] overflow-hidden shadow-2xl ${composition==='Particles'?'bg-black':composition==='3D Showcase'?'bg-[linear-gradient(155deg,#080611,#15192a_58%,#07070c)]':'bg-[radial-gradient(circle_at_center,#14295c_0,#07122d_48%,#030713_100%)]'}`}>
                 {selected?.type.startsWith("image") && (
                   <img
                     src={selected.url}
@@ -639,27 +1412,36 @@ export default function EffectCraftWorkspace({
                     className="absolute inset-0 h-full w-full object-cover opacity-70"
                   />
                 )}
-                {composition === "Particles" && <ParticlePreview />}
+                {composition === "Particles" && <ParticlePreview params={effectParams} enabled={appliedEffects.includes("CC Particle World")} />}
                 {composition === "3D Showcase" && <ThreeDPreview />}
                 <div className="absolute inset-8 border border-dashed border-indigo-300/50" />
-                {composition === "EffectCraft Intro" && <>
+                {showGrid && <div aria-label="Grade da composição" className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(rgba(148,163,184,.25)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.25)_1px,transparent_1px)] bg-[size:10%_10%]" />}
+                {showLayerBox && <>
                 <div
                   aria-label={`Camada ${activeLayer?.name || "EFFECTCRAFT"} na composição`}
                   data-effect-layer
                   onPointerDown={(event)=>tool === "Seleção" && beginCanvasGesture(event,"move")}
                   onPointerMove={moveCanvasGesture}
-                  onPointerUp={()=>{gesture.current=null}}
+                  onPointerUp={()=>{gesture.current=null;endHistoryGesture()}}
                   className="absolute cursor-move select-none border border-[#55a4ff] px-6 py-4 text-center"
-                  style={{left:`${canvasBox.x}%`,top:`${canvasBox.y}%`,width:`${canvasBox.w}%`,height:`${canvasBox.h}%`,transform:`translate(${(displayTransform.x-960)/19.2}%, ${(displayTransform.y-540)/10.8}%) scale(${displayTransform.scale/100}) rotate(${displayTransform.rotation}deg)`,opacity:displayTransform.opacity/100}}
+                  style={{left:`${canvasBox.x}%`,top:`${canvasBox.y}%`,width:`${canvasBox.w}%`,height:`${canvasBox.h}%`,transform:`translate(${(displayTransform.x-960)/19.2}%, ${(displayTransform.y-540)/10.8}%) scale(${displayTransform.scale/100}) rotate(${displayTransform.rotation}deg)`,opacity:displayTransform.opacity/100,...(activeLayer?.anchor ? {transformOrigin:`${activeLayer.anchor.x}% ${activeLayer.anchor.y}%`} : {}),...(layerFilter ? {filter:layerFilter} : {}),...(activeLayer?.threeD ? {transformStyle:"preserve-3d"} : {})}}
+                  data-motion-blur={activeLayer?.motionBlur ? "on" : undefined}
+                  data-three-d={activeLayer?.threeD ? "on" : undefined}
                 >
-                  <div style={{clipPath: activeLayer?.mask ? `inset(${activeLayer.mask.top}% ${100-activeLayer.mask.right}% ${100-activeLayer.mask.bottom}% ${activeLayer.mask.left}%)` : undefined}}>
-                  <span className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]">
+                  <div style={{clipPath: maskClipPath(activeLayer), ...layerAlignStyle(activeLayer)}}>
+                  <span aria-label="Texto renderizado da camada" className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]" style={layerTextStyle(activeLayer)}>
                     {activeLayer?.text ?? "MMEffect"}
                   </span>
-                  <span className="text-sm tracking-[0.4em] text-cyan-300">
+                  {composition === "EffectCraft Intro" && <span className="text-sm tracking-[0.4em] text-cyan-300">
                     MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST
-                  </span>
+                  </span>}
                   </div>
+                  {activeLayer?.maskPath?.points?.length > 0 && <svg aria-label="Traçado da caneta" data-closed={activeLayer.maskPath.closed ? "true" : "false"} className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    {activeLayer.maskPath.closed
+                      ? <polygon points={activeLayer.maskPath.points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#facc15" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                      : <polyline points={activeLayer.maskPath.points.map((point) => `${point.x},${point.y}`).join(" ")} fill="none" stroke="#facc15" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />}
+                    {activeLayer.maskPath.points.map((point, index) => <rect key={index} x={point.x - 0.8} y={point.y - 1.4} width="1.6" height="2.8" fill="#facc15" />)}
+                  </svg>}
                   {activeLayer?.mask && <div
                     aria-label="Máscara da camada"
                     onPointerDown={event => {
@@ -667,6 +1449,7 @@ export default function EffectCraftWorkspace({
                       if (activeLayer.locked) return;
                       setMaskSelected(true);
                       gesture.current = { mode: "mask-edit", layerId: activeLayer.id, edge: event.target.dataset.edge || "move", mask: { ...activeLayer.mask }, bounds: event.currentTarget.parentElement.getBoundingClientRect(), startX: event.clientX, startY: event.clientY };
+                      beginHistoryGesture();
                       event.currentTarget.setPointerCapture?.(event.pointerId);
                     }}
                     className="absolute z-20 cursor-move border border-yellow-400"
@@ -676,8 +1459,9 @@ export default function EffectCraftWorkspace({
                     <button aria-label="Excluir máscara" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setLayers(old => old.map(layer => layer.id === activeLayer.id ? {...layer,mask:null} : layer)); setMaskSelected(false); }} className="absolute -top-7 left-0 whitespace-nowrap bg-[#252525] px-2 text-xs text-yellow-300">Excluir máscara</button>
                   </div>}
                   <i className="absolute -left-1 -top-1 h-2 w-2 bg-indigo-300" />
-                  <button aria-label="Redimensionar camada" onPointerDown={(event)=>{event.stopPropagation();beginCanvasGesture(event,"resize")}} onPointerMove={moveCanvasGesture} onPointerUp={()=>{gesture.current=null}} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize bg-[#55a4ff]" />
+                  <button aria-label="Redimensionar camada" onPointerDown={(event)=>{event.stopPropagation();beginCanvasGesture(event,"resize")}} onPointerMove={moveCanvasGesture} onPointerUp={()=>{gesture.current=null;endHistoryGesture()}} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-nwse-resize bg-[#55a4ff]" />
                 </div>
+                {composition === "EffectCraft Intro" && <>
                 <Circle
                   className="absolute right-[18%] top-[30%] text-fuchsia-400"
                   size={110}
@@ -689,6 +1473,7 @@ export default function EffectCraftWorkspace({
                   strokeWidth={1}
                 />
                 </>}
+                </>}
               </div>
             </div>
             <div className="flex items-center gap-3 border-t border-slate-800 bg-[#151920] p-2 text-[10px]">
@@ -699,7 +1484,7 @@ export default function EffectCraftWorkspace({
                 {playing ? <Pause size={14} /> : <Play size={14} />}
               </button>
               <span className="font-mono text-indigo-300">
-                00:00:{String(Math.floor(playhead)).padStart(2, "0")}:00
+                {formatTimecode(playhead)}
               </span>
               <input
                 type="range"
@@ -719,7 +1504,7 @@ export default function EffectCraftWorkspace({
             {bottomPanel === "Timeline" ? <>
             <div className="flex items-center gap-3 border-b border-slate-800 p-2 text-[10px]">
               <b className="text-white">{composition}</b>
-              <span className="font-mono text-xl text-[#33a3ff]">00:00:{String(Math.floor(playhead)).padStart(2,"0")}:00</span>
+              <span className="font-mono text-xl text-[#33a3ff]">{formatTimecode(playhead)}</span>
               <label className="ml-2 flex items-center gap-2 rounded-full bg-[#171b22] px-3 py-1"><Search size={12}/><input placeholder="Pesquisar" className="w-24 bg-transparent outline-none"/></label>
               <button onClick={()=>setShowSwitches(value=>!value)} aria-pressed={showSwitches} className={`ml-auto rounded px-2 py-1 ${showSwitches?'bg-[#2675df]':'bg-[#30343b]'}`}>Switches</button>
               <button onClick={()=>setShowModes(value=>!value)} aria-pressed={showModes} className={`rounded px-2 py-1 ${showModes?'bg-[#2675df]':'bg-[#30343b]'}`}>Modos</button>
@@ -813,7 +1598,7 @@ export default function EffectCraftWorkspace({
                       aria-valuetext={`Início ${layer.start.toFixed(2)}s, duração ${layer.duration.toFixed(2)}s`}
                       onPointerDown={(event)=>beginTimelineGesture(event,layer,"move")}
                       onPointerMove={moveTimelineGesture}
-                      onPointerUp={()=>{timelineGesture.current=null}}
+                      onPointerUp={()=>{timelineGesture.current=null;endHistoryGesture()}}
                       className={`absolute top-1 h-5 cursor-grab ${layer.color} px-2 text-left text-[9px] text-white active:cursor-grabbing`}
                       style={{
                         left: `${(layer.start / 10) * 100}%`,
@@ -822,15 +1607,15 @@ export default function EffectCraftWorkspace({
                     >
                       {layer.name}
                     </button>
-                    <button aria-label={`Aparar início de ${layer.name}`} onPointerDown={(event)=>beginTimelineGesture(event,layer,"trim-start")} onPointerMove={moveTimelineGesture} onPointerUp={()=>{timelineGesture.current=null}} className="absolute top-1 z-10 h-5 w-1.5 cursor-ew-resize bg-white/75" style={{left:`${(layer.start/10)*100}%`}} />
-                    <button aria-label={`Aparar fim de ${layer.name}`} onPointerDown={(event)=>beginTimelineGesture(event,layer,"trim-end")} onPointerMove={moveTimelineGesture} onPointerUp={()=>{timelineGesture.current=null}} className="absolute top-1 z-10 h-5 w-1.5 -translate-x-full cursor-ew-resize bg-white/75" style={{left:`${((layer.start+layer.duration)/10)*100}%`}} />
+                    <button aria-label={`Aparar início de ${layer.name}`} onPointerDown={(event)=>beginTimelineGesture(event,layer,"trim-start")} onPointerMove={moveTimelineGesture} onPointerUp={()=>{timelineGesture.current=null;endHistoryGesture()}} className="absolute top-1 z-10 h-5 w-1.5 cursor-ew-resize bg-white/75" style={{left:`${(layer.start/10)*100}%`}} />
+                    <button aria-label={`Aparar fim de ${layer.name}`} onPointerDown={(event)=>beginTimelineGesture(event,layer,"trim-end")} onPointerMove={moveTimelineGesture} onPointerUp={()=>{timelineGesture.current=null;endHistoryGesture()}} className="absolute top-1 z-10 h-5 w-1.5 -translate-x-full cursor-ew-resize bg-white/75" style={{left:`${((layer.start+layer.duration)/10)*100}%`}} />
                     {(layer.markers||[]).map((at) => (
                       <button key={`layer-marker-${layer.id}-${at}`} aria-label={`Marcador de ${layer.name} em ${at.toFixed(2)}s`} onClick={()=>setPlayhead(at)} className="absolute top-0 z-20 h-3 w-2 -translate-x-1/2 bg-[#8eb7d8] [clip-path:polygon(0_0,100%_0,50%_100%)]" style={{ left: `${(at/10)*100}%` }} />
                     ))}
                     {Object.entries(propertyKeyframes[layer.id] || {}).flatMap(([property,frames])=>frames.map(frame=><button key={`${property}-${frame.time}`} aria-label={`Keyframe ${property} em ${frame.time.toFixed(2)}s`} data-interpolation={frame.interpolation} onClick={()=>{setPlayhead(frame.time);setSelectedKeyframe({layerId:layer.id,property,time:frame.time})}} className={`absolute top-2 z-20 h-2 w-2 rotate-45 border ${selectedKeyframe?.layerId===layer.id&&selectedKeyframe?.property===property&&selectedKeyframe?.time===frame.time?'border-white bg-blue-300':'border-sky-200 bg-sky-500'}`} style={{left:`${(frame.time/10)*100}%`}} />))}
                     </>}
                   </div>
-                  {expandedLayers.includes(layer.id) && <div className="ml-8 grid w-[292px] grid-cols-1 border-l border-[#444] bg-[#1b1b1b] py-1 pl-3 text-[9px] text-[#bbb]">{[["anchor","Ponto de ancoragem"],["position","Posição"],["scale","Escala"],["rotation","Rotação"],["opacity","Opacidade"]].map(([property,label])=><button key={property} aria-label={`${label} de ${layer.name}`} onClick={()=>{setSelectedLayer(layer.id);togglePropertyKeyframe(property==="position"?"x":property)}} className="flex items-center gap-2 py-0.5 text-left"><span className="text-slate-500"><EffectIcon name="stopwatch"/></span><span>{label}</span><span className="ml-auto pr-2 text-blue-400">{property==="position"?`${displayTransform.x}, ${displayTransform.y}`:property==="anchor"?"960, 540":displayTransform[property]??100}</span></button>)}</div>}
+                  {expandedLayers.includes(layer.id) && <div className="ml-8 grid w-[292px] grid-cols-1 border-l border-[#444] bg-[#1b1b1b] py-1 pl-3 text-[9px] text-[#bbb]">{[["anchor","Ponto de ancoragem"],["position","Posição"],["scale","Escala"],["rotation","Rotação"],["opacity","Opacidade"]].map(([property,label])=><button key={property} aria-label={`${label} de ${layer.name}`} onClick={()=>{setSelectedLayer(layer.id);togglePropertyKeyframe(property==="position"?"x":property)}} className="flex items-center gap-2 py-0.5 text-left"><span className="text-slate-500"><EffectIcon name="stopwatch"/></span><span>{label}</span><span className="ml-auto pr-2 text-blue-400">{property==="position"?`${displayTransform.x}, ${displayTransform.y}`:property==="anchor"?anchorLabel(layer):displayTransform[property]??100}</span></button>)}</div>}
                 </div>
               ))}
               {graphEditor && <div className="absolute bottom-0 right-0 top-7 overflow-hidden bg-[#151515]/95" style={{left:timelinePanelWidth}}>
@@ -855,17 +1640,17 @@ export default function EffectCraftWorkspace({
                 <i className="absolute -left-1 top-0 h-2 w-2 rotate-45 bg-indigo-300" />
               </span>
             </div>
-            </> : <RenderQueuePanel composition={composition} setBottomPanel={setBottomPanel} />}
+            </> : <RenderQueuePanel composition={composition} setBottomPanel={setBottomPanel} getScene={getRenderScene} onImport={onOpenFiles} />}
           </div>
 
         <aside className={`col-start-3 row-span-2 row-start-1 min-h-0 overflow-auto bg-[#202020] ${compactWorkspace ? "invisible" : ""}`}>
           <PanelTabs labels={["Pré-visualização", "Informações", "Áudio"]} active={rightTopPanel} onChange={setRightTopPanel} />
-          {rightTopPanel === "Pré-visualização" ? <PreviewPanel playing={playing} setPlaying={setPlaying} /> : rightTopPanel === "Informações" ? <InfoPanel transform={displayTransform} /> : <AudioPanel />}
+          {rightTopPanel === "Pré-visualização" ? <PreviewPanel playing={playing} setPlaying={setPlaying} onJump={(time)=>{setPlaying(false);setPlayhead(time)}} onStep={stepPlayhead} /> : rightTopPanel === "Informações" ? <InfoPanel transform={displayTransform} /> : <AudioPanel />}
           <PanelTabs labels={["Propriedades", "Efeitos e predefinições"]} active={rightBottomPanel} onChange={setRightBottomPanel} />
           {rightBottomPanel === "Efeitos e predefinições" ? <EffectsBrowser search={search} setSearch={setSearch} visibleEffectGroups={visibleEffectGroups} openEffectGroups={openEffectGroups} setOpenEffectGroups={setOpenEffectGroups} setAppliedEffects={setAppliedEffects} setLeftPanel={setLeftPanel} /> : <>
           <div className="border-t border-slate-800 p-3">
             <div className="mb-3 flex items-center border-b border-slate-700 pb-2"><h3 className="text-xs font-bold">Propriedades: {activeLayer?.name}</h3><span className="ml-auto">☰</span></div>
-            <h4 className="mb-2 text-[10px] font-semibold">Transformação da camada <button className="float-right text-indigo-300">Redefinir</button></h4>
+            <h4 className="mb-2 text-[10px] font-semibold">Transformação da camada <button onClick={resetLayerTransform} className="float-right text-indigo-300">Redefinir</button></h4>
             <div className="border-y border-[#353535] py-1">
               {Object.entries(displayTransform).map(([key, value]) => (
                 <AePropertyRow
@@ -894,7 +1679,7 @@ export default function EffectCraftWorkspace({
               <RotateCcw size={12} /> Restaurar
             </button>
           </div>
-          <PropertiesExtras activeLayer={activeLayer} />
+          <PropertiesExtras activeLayer={activeLayer} onChange={(key,value)=>{if(!activeLayer||activeLayer.locked)return;mergeHistoryAs(`layer:${activeLayer.id}:${key}`);setLayerValue(activeLayer.id,key,value)}} />
           <div className="border-t border-[#383838] p-3 text-[10px]">
             <div className="mb-3 flex items-center border-b border-[#383838] pb-2"><b>Alinhar</b><span className="ml-auto text-[#999]">☰</span></div>
             <label className="mb-2 flex items-center gap-2 text-[#aaa]">Alinhar camadas a:<select className="ml-auto rounded border border-[#444] bg-[#191919] px-2 py-1 text-white"><option>Composição</option><option>Seleção</option></select></label>
@@ -918,13 +1703,9 @@ export default function EffectCraftWorkspace({
   );
 }
 
-function ParticlePreview() {
-  const particles = Array.from({ length: 34 }, (_, index) => ({
-    angle: (index * 137.5) * Math.PI / 180,
-    radius: 24 + ((index * 31) % 150),
-    length: 12 + (index % 5) * 5,
-  }));
-  return <svg className="absolute inset-0 h-full w-full" viewBox="0 0 640 360" aria-label="Prévia de partículas"><g transform="translate(320 180)">{particles.map((particle,index)=>{const x=Math.cos(particle.angle)*particle.radius;const y=Math.sin(particle.angle)*particle.radius;return <line key={index} x1={x} y1={y} x2={x+Math.cos(particle.angle)*particle.length} y2={y+Math.sin(particle.angle)*particle.length} stroke={index%3===0?'#ff6a00':index%3===1?'#ffd500':'#fff500'} strokeWidth="2"/>})}<circle r="8" fill="#fff600"/></g></svg>;
+function ParticlePreview({ params, enabled }) {
+  const field = particleField(params, enabled);
+  return <svg className="absolute inset-0 h-full w-full" viewBox="0 0 640 360" aria-label="Prévia de partículas" data-particles={field.particles.length}><g transform={`translate(${field.center.x} ${field.center.y})`}>{field.particles.map((particle,index)=><line key={index} x1={particle.x1} y1={particle.y1} x2={particle.x2} y2={particle.y2} stroke={particle.color} strokeWidth="2"/>)}<circle r="8" fill="#fff600"/></g></svg>;
 }
 
 function ThreeDPreview() {
@@ -973,12 +1754,23 @@ function EffectIcon({ name, size = 12 }) {
   </svg>;
 }
 
-function EffectControl({ effect, transform, onTransformChange, onRemove }) {
-  const colorRange = [["Fuzziness","0"],["Color Space","Lab"],["Min (L, Y, R)","0"],["Max (L, Y, R)","255"],["Min (a, U, G)","0"],["Max (a, U, G)","100"],["Min (b, V, B)","128"],["Max (b, V, B)","255"]];
-  const particles = [["Birth Rate","0.50"],["Longevity (sec)","1.00"],["Position X","0.00"],["Position Y","0.00"],["Position Z","0.00"],["Radius X","0.025"],["Radius Y","0.025"],["Radius Z","0.025"],["Animation","Explosive"],["Velocity","1.00"],["Inherit Velocity %","0.0"],["Gravity","0.500"],["Resistance","0.00"],["Extra","1.00"],["Extra Angle","360.0°"]];
-  const fields = effect === "Color Range" ? colorRange : effect === "CC Particle World" ? particles : null;
+function EffectControl({ effect, transform, onTransformChange, values = {}, onValueChange, onReset, onRemove }) {
+  const fields = EFFECT_FIELDS[effect] || null;
   const [open, setOpen] = useState(true);
-  const [values, setValues] = useGraphicDraftState(`effect:control:${effect}`, ()=>Object.fromEntries((fields||[]).map(([label,value])=>[label,value])));
+  // Valores gravados pela versão anterior (por efeito) são migrados uma vez para o projeto.
+  const [legacyValues] = useGraphicDraftState(`effect:control:${effect}`, null);
+  const migrated = useRef(false);
+  useEffect(() => {
+    if (migrated.current || !fields || !legacyValues || Object.keys(values).length) return;
+    migrated.current = true;
+    fields.forEach(([label, initial]) => {
+      if (legacyValues[label] !== undefined && String(legacyValues[label]) !== String(initial)) onValueChange?.(label, legacyValues[label]);
+    });
+  }, [fields, legacyValues, values, onValueChange]);
+  const setValues = (update) => {
+    const next = update(values);
+    Object.entries(next).forEach(([label, value]) => { if (values[label] !== value) onValueChange?.(label, value); });
+  };
   const rangeFor = (label) => {
     const normalized = label.toLowerCase();
     if (normalized.includes("angle") || normalized.includes("rotation")) return [-360, 360];
@@ -989,9 +1781,9 @@ function EffectControl({ effect, transform, onTransformChange, onRemove }) {
   };
   return <section className="mb-2 border-b border-[#3a3a3a] pb-2">
     <div className="flex h-7 items-center gap-1 bg-[#34476c] px-1">
-      <button aria-label={`${open?"Recolher":"Expandir"} ${effect}`} aria-expanded={open} onClick={()=>setOpen(value=>!value)} className="grid w-4 place-items-center text-[#ddd]"><EffectIcon name={open?"chevronDown":"chevronRight"}/></button><EffectIcon name="fx"/><b className="truncate">{effect}</b><button className="ml-auto text-[#bbb]">Redefinir</button><button aria-label={`Remover ${effect}`} onClick={onRemove} className="relative h-4 w-4 before:absolute before:left-1/2 before:top-0 before:h-4 before:w-px before:rotate-45 before:bg-current after:absolute after:left-1/2 after:top-0 after:h-4 after:w-px after:-rotate-45 after:bg-current"/>
+      <button aria-label={`${open?"Recolher":"Expandir"} ${effect}`} aria-expanded={open} onClick={()=>setOpen(value=>!value)} className="grid w-4 place-items-center text-[#ddd]"><EffectIcon name={open?"chevronDown":"chevronRight"}/></button><EffectIcon name="fx"/><b className="truncate">{effect}</b><button aria-label={`Redefinir ${effect}`} onClick={onReset} className="ml-auto text-[#bbb]">Redefinir</button><button aria-label={`Remover ${effect}`} onClick={onRemove} className="relative h-4 w-4 before:absolute before:left-1/2 before:top-0 before:h-4 before:w-px before:rotate-45 before:bg-current after:absolute after:left-1/2 after:top-0 after:h-4 after:w-px after:-rotate-45 after:bg-current"/>
     </div>
-    {open && (fields ? <div className="py-1">{fields.map(([label,initial])=>{const value=values[label]??initial;const isChoice=label.includes("Space")||label==="Animation";const [min,max]=rangeFor(label);return <div key={label} className="group grid min-h-7 grid-cols-[18px_minmax(82px,1fr)_58px_64px] items-center gap-1 px-1 text-[10px] hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span className="truncate text-[#c6c6c6]">{label}</span>{isChoice?<select aria-label={`Valor de ${label}`} value={value} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="col-span-2 h-5 border border-[#444] bg-[#191919] px-1"><option>{value}</option></select>:<><input aria-label={`Valor de ${label}`} type="number" value={String(value).replace("°","")} step="any" onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:bg-[#171717]"/><input aria-label={`${label} deslizante`} type="range" min={min} max={max} step="any" value={String(value).replace("°","")} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-1 w-full accent-[#3b8edb]"/></>}</div>})}</div> : Object.entries(transform).map(([key,value])=>{const [min,max]=rangeFor(key);return <label key={key} className="grid h-7 grid-cols-[18px_1fr_58px_64px] items-center gap-1 px-1 capitalize hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span>{key}</span><input aria-label={`Valor de ${key} no efeito`} type="number" value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none"/><input aria-label={`${key} do efeito deslizante`} type="range" min={min} max={max} value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-1 w-full accent-[#3b8edb]"/></label>}))}
+    {open && (fields ? <div className="py-1">{fields.map(([label,initial,range])=>{const value=values[label]??initial;const isChoice=label.includes("Space")||label==="Animation";const [min,max]=range||rangeFor(label);return <div key={label} className="group grid min-h-7 grid-cols-[18px_minmax(82px,1fr)_58px_64px] items-center gap-1 px-1 text-[10px] hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span className="truncate text-[#c6c6c6]">{label}</span>{isChoice?<select aria-label={`Valor de ${label}`} value={value} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="col-span-2 h-5 border border-[#444] bg-[#191919] px-1"><option>{value}</option></select>:<><input aria-label={`Valor de ${label}`} type="number" value={String(value).replace("°","")} step="any" onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:bg-[#171717]"/><input aria-label={`${label} deslizante`} type="range" min={min} max={max} step="any" value={String(value).replace("°","")} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-1 w-full accent-[#3b8edb]"/></>}</div>})}</div> : Object.entries(transform).map(([key,value])=>{const [min,max]=rangeFor(key);return <label key={key} className="grid h-7 grid-cols-[18px_1fr_58px_64px] items-center gap-1 px-1 capitalize hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span>{key}</span><input aria-label={`Valor de ${key} no efeito`} type="number" value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none"/><input aria-label={`${key} do efeito deslizante`} type="range" min={min} max={max} value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-1 w-full accent-[#3b8edb]"/></label>}))}
   </section>;
 }
 
@@ -999,8 +1791,8 @@ function EffectsBrowser({ search, setSearch, visibleEffectGroups, openEffectGrou
   return <div className="p-3"><label className="flex items-center gap-2 rounded border border-slate-700 bg-slate-950 px-2 py-1.5"><Search size={13}/><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Pesquisar efeitos e predefinições" className="min-w-0 flex-1 bg-transparent text-xs outline-none"/></label><div className="mt-2 space-y-1">{visibleEffectGroups.map(([group,effects])=>{const open=openEffectGroups.includes(group)||search;return <section key={group}><button onClick={()=>setOpenEffectGroups(old=>old.includes(group)?old.filter(item=>item!==group):[...old,group])} className="flex w-full items-center gap-2 px-1 py-1.5 text-left text-[10px] font-semibold hover:bg-slate-800"><span>{open?'⌄':'›'}</span><span className="text-amber-300">▱</span>{group}<span className="ml-auto text-slate-600">{effects.length}</span></button>{open&&<div className="ml-4 border-l border-slate-700 pl-2">{effects.map(effect=><button key={effect} onDoubleClick={()=>{setAppliedEffects(old=>old.includes(effect)?old:[...old,effect]);setLeftPanel('Controles de efeitos')}} className="block w-full rounded px-2 py-1.5 text-left text-[10px] hover:bg-indigo-500/20">fx&nbsp; {effect}</button>)}</div>}</section>})}</div><p className="mt-3 text-[9px] text-slate-500">Clique duas vezes para aplicar à camada selecionada.</p></div>;
 }
 
-function PreviewPanel({ playing, setPlaying }) {
-  return <div className="p-3 text-[10px]"><div className="mb-4 flex items-center justify-center gap-5"><button>◀◀</button><button>◀</button><button onClick={()=>setPlaying(!playing)} className="grid h-8 w-8 place-items-center rounded hover:bg-slate-800">{playing?<Pause size={15}/>:<Play size={15}/>}</button><button>▶</button><button>▶▶</button></div><dl className="grid grid-cols-[110px_1fr] gap-y-2 text-slate-400"><dt>Atalho</dt><dd className="text-slate-200">Barra de espaço</dd><dt>Repetir</dt><dd><input type="checkbox" defaultChecked/></dd><dt>Intervalo</dt><dd className="text-slate-200">Área de trabalho</dd><dt>Reproduzir de</dt><dd className="text-slate-200">Tempo atual</dd><dt>Taxa de quadros</dt><dd className="text-slate-200">29,97</dd><dt>Resolução</dt><dd className="text-slate-200">Automática</dd></dl><div className="mt-4 h-1.5 overflow-hidden rounded bg-slate-900"><div className="h-full w-1/3 bg-emerald-500"/></div><p className="mt-2 text-slate-500">36 / 300 quadros em cache</p></div>;
+function PreviewPanel({ playing, setPlaying, onJump, onStep }) {
+  return <div className="p-3 text-[10px]"><div className="mb-4 flex items-center justify-center gap-5"><button aria-label="Ir para o primeiro quadro" title="Ir para o primeiro quadro" onClick={()=>onJump?.(0)}>◀◀</button><button aria-label="Quadro anterior" title="Quadro anterior" onClick={()=>onStep?.(-1/FPS)}>◀</button><button onClick={()=>setPlaying(!playing)} className="grid h-8 w-8 place-items-center rounded hover:bg-slate-800">{playing?<Pause size={15}/>:<Play size={15}/>}</button><button aria-label="Próximo quadro" title="Próximo quadro" onClick={()=>onStep?.(1/FPS)}>▶</button><button aria-label="Ir para o último quadro" title="Ir para o último quadro" onClick={()=>onJump?.(COMP_DURATION)}>▶▶</button></div><dl className="grid grid-cols-[110px_1fr] gap-y-2 text-slate-400"><dt>Atalho</dt><dd className="text-slate-200">Barra de espaço</dd><dt>Repetir</dt><dd><input type="checkbox" defaultChecked/></dd><dt>Intervalo</dt><dd className="text-slate-200">Área de trabalho</dd><dt>Reproduzir de</dt><dd className="text-slate-200">Tempo atual</dd><dt>Taxa de quadros</dt><dd className="text-slate-200">29,97</dd><dt>Resolução</dt><dd className="text-slate-200">Automática</dd></dl><div className="mt-4 h-1.5 overflow-hidden rounded bg-slate-900"><div className="h-full w-1/3 bg-emerald-500"/></div><p className="mt-2 text-slate-500">36 / 300 quadros em cache</p></div>;
 }
 
 function InfoPanel({ transform }) {
@@ -1011,14 +1803,126 @@ function AudioPanel() {
   return <div className="p-3 text-[10px]"><div className="mb-3 flex h-28 items-end gap-2">{[45,72,88,64,38,80,55,92,66,41].map((height,index)=><span key={index} className="flex-1 bg-gradient-to-t from-emerald-500 via-amber-400 to-red-500" style={{height:`${height}%`}}/>)}</div><div className="flex justify-between text-slate-500"><span>-48 dB</span><span>-12</span><span>0 dB</span></div></div>;
 }
 
-function PropertiesExtras({ activeLayer }) {
-  if (activeLayer?.kind !== "T") return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Opções da camada</h4><label className="flex gap-2"><input type="checkbox" defaultChecked/> Desfoque de movimento</label><label className="mt-2 flex gap-2"><input type="checkbox"/> Camada 3D</label></div>;
-  return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Texto</h4><select className="mb-2 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Inter</option><option>Source Sans 3</option></select><select className="mb-3 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Bold</option><option>Regular</option></select><div className="grid grid-cols-2 gap-2"><label>Tamanho<input defaultValue="148 px" className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label><label>Entrelinha<input defaultValue="Auto" className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label></div><h4 className="mb-2 mt-4 font-semibold">Parágrafo</h4><div className="flex justify-between">{['≡','≣','≡','☷','☰'].map((item,index)=><button key={index} className="h-8 w-8 rounded hover:bg-slate-800">{item}</button>)}</div><button className="mt-4 rounded border border-slate-700 px-3 py-2">+ Adicionar animador</button></div>;
+function PropertiesExtras({ activeLayer, onChange }) {
+  const disabled = !activeLayer || activeLayer.locked;
+  if (activeLayer?.kind !== "T") return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Opções da camada</h4><label className="flex gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(activeLayer?.motionBlur)} onChange={(event)=>onChange?.("motionBlur",event.target.checked)}/> Desfoque de movimento</label><label className="mt-2 flex gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(activeLayer?.threeD)} onChange={(event)=>onChange?.("threeD",event.target.checked)}/> Camada 3D</label></div>;
+  return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Texto</h4><select aria-label="Fonte do texto" disabled={disabled} value={activeLayer.fontFamily || "Inter"} onChange={(event)=>onChange?.("fontFamily",event.target.value)} className="mb-2 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Inter</option><option>Source Sans 3</option></select><select aria-label="Peso da fonte" disabled={disabled} value={activeLayer.fontWeight || "Bold"} onChange={(event)=>onChange?.("fontWeight",event.target.value)} className="mb-3 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Bold</option><option>Regular</option></select><div className="grid grid-cols-2 gap-2"><label>Tamanho<input aria-label="Tamanho do texto" disabled={disabled} value={activeLayer.fontSize ?? "148 px"} onChange={(event)=>onChange?.("fontSize",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label><label>Entrelinha<input aria-label="Entrelinha do texto" disabled={disabled} value={activeLayer.lineHeight ?? "Auto"} onChange={(event)=>onChange?.("lineHeight",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label></div><h4 className="mb-2 mt-4 font-semibold">Parágrafo</h4><div className="flex justify-between">{['≡','≣','≡','☷','☰'].map((item,index)=><button key={index} aria-label={PARAGRAPH_ALIGNMENTS[index][1]} aria-pressed={(activeLayer.textAlign || "center") === PARAGRAPH_ALIGNMENTS[index][0]} disabled={disabled} onClick={()=>onChange?.("textAlign",PARAGRAPH_ALIGNMENTS[index][0])} className="h-8 w-8 rounded hover:bg-slate-800">{item}</button>)}</div><button disabled title="Animadores de texto ainda não estão disponíveis no MMEffect" className="mt-4 rounded border border-slate-700 px-3 py-2">+ Adicionar animador</button></div>;
 }
 
-function RenderQueuePanel({ composition, setBottomPanel }) {
+const RENDER_SIZES = [
+  ["Melhores configurações", 1920, 1080],
+  ["Metade da resolução", 960, 540],
+];
+
+function supportedRecorderTypes() {
+  if (typeof window === "undefined" || typeof window.MediaRecorder === "undefined") return [];
+  const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  const check = window.MediaRecorder.isTypeSupported?.bind(window.MediaRecorder);
+  return check ? candidates.filter((type) => check(type)) : ["video/webm"];
+}
+
+function canvasRecordingAvailable() {
+  return typeof window !== "undefined"
+    && typeof window.MediaRecorder !== "undefined"
+    && typeof HTMLCanvasElement !== "undefined"
+    && typeof HTMLCanvasElement.prototype.captureStream === "function";
+}
+
+function loadImage(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
+// Renderização real no navegador: desenha cada quadro num canvas e grava com MediaRecorder (WebM).
+function RenderQueuePanel({ composition, setBottomPanel, getScene, onImport }) {
   const [queued, setQueued] = useState(true);
-  return <div className="flex h-[288px] flex-col text-[10px]"><div className="flex items-center gap-2 border-b border-slate-800 p-2"><button onClick={()=>setQueued(!queued)} className={`h-4 w-4 rounded border ${queued?'border-emerald-400 bg-emerald-500':'border-slate-600'}`}/><b>{composition}</b><span className="rounded bg-[#3d4655] px-2 py-0.5">Configuração pronta</span><button onClick={()=>setBottomPanel('Timeline')} className="ml-auto text-slate-400">Voltar à Timeline</button></div><div className="grid grid-cols-[140px_1fr] gap-y-2 p-4"><span className="text-slate-500">Configurações de renderização:</span><button className="text-left text-blue-400 underline">Melhores configurações</button><span className="text-slate-500">Módulo de saída:</span><button className="text-left text-blue-400 underline">Alta qualidade · H.264</button><span className="text-slate-500">Saída para:</span><button className="truncate text-left text-blue-400 underline">C:\Users\Alex\{composition}.mp4</button><span className="text-slate-500">Ação pós-renderização:</span><select className="w-48 rounded border border-slate-700 bg-[#0d1015] px-2 py-1"><option>Nenhuma</option><option>Importar</option><option>Importar e substituir uso</option></select></div><div className="mt-auto flex items-center border-t border-slate-800 p-3"><span className="text-amber-300">Renderizador do MMEffect ainda não conectado ao backend.</span><button disabled className="ml-auto rounded bg-[#2675df] px-5 py-2 font-semibold text-white opacity-40">Renderizar</button></div></div>;
+  const [sizeIndex, setSizeIndex] = useState(0);
+  const [typeIndex, setTypeIndex] = useState(0);
+  const [postAction, setPostAction] = useState("Nenhuma");
+  const [fileName, setFileName] = useState("");
+  const [progress, setProgress] = useState(null);
+  const [message, setMessage] = useState("");
+  const job = useRef(null);
+  const types = supportedRecorderTypes();
+  const available = canvasRecordingAvailable() && types.length > 0;
+  const outputName = `${fileName || slugify(composition)}.webm`;
+  const mimeType = types[typeIndex % Math.max(1, types.length)] || "video/webm";
+  const [sizeLabel, width, height] = RENDER_SIZES[sizeIndex];
+  const rendering = progress !== null;
+
+  useEffect(() => () => { if (job.current) job.current.cancelled = true; job.current?.stop?.(); }, []);
+
+  async function render() {
+    if (rendering) {
+      if (job.current) job.current.cancelled = true;
+      job.current?.stop?.();
+      return;
+    }
+    const current = { cancelled: false, stop: null };
+    job.current = current;
+    setMessage("");
+    setProgress(0);
+    let timer = null;
+    let stream = null;
+    try {
+      const scene = getScene();
+      scene.image = await loadImage(scene.imageUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas 2D indisponível neste navegador.");
+      drawCompositionFrame(context, scene, 0, width, height);
+      stream = canvas.captureStream(FPS);
+      const recorder = new window.MediaRecorder(stream, { mimeType, videoBitsPerSecond: width >= 1920 ? 12_000_000 : 5_000_000 });
+      const chunks = [];
+      recorder.ondataavailable = (event) => { if (event.data?.size) chunks.push(event.data); };
+      const stopped = new Promise((resolve, reject) => {
+        recorder.onstop = resolve;
+        recorder.onerror = (event) => reject(event?.error || new Error("Falha no gravador de vídeo."));
+      });
+      recorder.start(250);
+      const total = Math.round(scene.duration * FPS);
+      let frame = 0;
+      await new Promise((resolve) => {
+        current.stop = resolve;
+        timer = setInterval(() => {
+          if (current.cancelled || frame > total) { resolve(); return; }
+          drawCompositionFrame(context, scene, frame / FPS, width, height);
+          setProgress(Math.min(99, Math.round(frame / total * 100)));
+          frame += 1;
+        }, 1000 / FPS);
+      });
+      clearInterval(timer);
+      if (recorder.state !== "inactive") recorder.stop();
+      await stopped;
+      if (current.cancelled) {
+        setMessage("Renderização cancelada. Nenhum arquivo foi gerado.");
+        return;
+      }
+      const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
+      if (!blob.size) throw new Error("O gravador não produziu dados de vídeo.");
+      downloadBlob(blob, outputName);
+      if (postAction !== "Nenhuma" && typeof File !== "undefined") onImport?.([new File([blob], outputName, { type: blob.type })]);
+      setMessage(`Renderização concluída: ${outputName} (${Math.max(1, Math.round(blob.size / 1024))} KB, ${width}×${height}, ${FPS} qps).`);
+    } catch (error) {
+      setMessage(`Falha na renderização: ${error?.message || "erro desconhecido"}. Nenhum arquivo foi gerado.`);
+    } finally {
+      clearInterval(timer);
+      stream?.getTracks?.().forEach((track) => track.stop());
+      if (job.current === current) job.current = null;
+      setProgress(null);
+    }
+  }
+
+  const unavailableReason = !available ? "Este navegador não permite gravar o canvas em vídeo (MediaRecorder/captureStream indisponível)." : !queued ? "Marque a composição na fila para renderizar." : "";
+  const statusText = rendering ? `Renderizando ${composition}… ${progress}% (tempo real)` : message || unavailableReason || `Pronto para renderizar ${outputName} no navegador.`;
+  return <div className="flex h-[288px] flex-col text-[10px]"><div className="flex items-center gap-2 border-b border-slate-800 p-2"><button aria-label={queued?"Remover composição da fila":"Incluir composição na fila"} aria-pressed={queued} onClick={()=>setQueued(!queued)} className={`h-4 w-4 rounded border ${queued?'border-emerald-400 bg-emerald-500':'border-slate-600'}`}/><b>{composition}</b><span className="rounded bg-[#3d4655] px-2 py-0.5">{rendering?"Renderizando":"Configuração pronta"}</span><button onClick={()=>setBottomPanel('Timeline')} className="ml-auto text-slate-400">Voltar à Timeline</button></div><div className="grid grid-cols-[140px_1fr] gap-y-2 p-4"><span className="text-slate-500">Configurações de renderização:</span><button disabled={rendering} onClick={()=>setSizeIndex(index=>(index+1)%RENDER_SIZES.length)} className="text-left text-blue-400 underline">{sizeLabel} · {width}×{height} · {FPS} qps</button><span className="text-slate-500">Módulo de saída:</span><button disabled={rendering||types.length<2} onClick={()=>setTypeIndex(index=>index+1)} className="text-left text-blue-400 underline">WebM · {mimeType.includes("vp9")?"VP9":mimeType.includes("vp8")?"VP8":"codec do navegador"}</button><span className="text-slate-500">Saída para:</span><button disabled={rendering} onClick={()=>{const answer=window.prompt("Nome do arquivo de vídeo (sem extensão):",fileName||slugify(composition));if(answer!==null&&answer.trim())setFileName(slugify(answer));}} className="truncate text-left text-blue-400 underline">Downloads\{outputName}</button><span className="text-slate-500">Ação pós-renderização:</span><select aria-label="Ação pós-renderização" value={postAction} onChange={(event)=>setPostAction(event.target.value)} className="w-48 rounded border border-slate-700 bg-[#0d1015] px-2 py-1"><option>Nenhuma</option><option>Importar</option><option>Importar e substituir uso</option></select></div><div className="mt-auto flex items-center border-t border-slate-800 p-3"><span role="status" className="text-amber-300">{statusText}</span><button disabled={!available||(!queued&&!rendering)} title={unavailableReason||undefined} onClick={render} className={`ml-auto rounded bg-[#2675df] px-5 py-2 font-semibold text-white ${!available||(!queued&&!rendering)?"opacity-40":""}`}>{rendering?"Cancelar":"Renderizar"}</button></div></div>;
 }
 
 function PanelTabs({ labels, active = labels[0], onChange }) {

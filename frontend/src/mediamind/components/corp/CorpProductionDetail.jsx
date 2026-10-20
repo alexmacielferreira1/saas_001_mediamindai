@@ -42,7 +42,7 @@ export default function CorpProductionDetail({ productionId }) {
             <p className="text-[10px] font-bold uppercase tracking-wide text-sky-400">{production.episodio} — {production.programa}</p>
             <h2 className="text-sm font-semibold text-slate-100">{production.titulo}</h2>
           </div>
-          <button className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800">
+          <button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
             Editar <ChevronDown size={11} />
           </button>
         </div>
@@ -223,8 +223,8 @@ export default function CorpProductionDetail({ productionId }) {
                   <p className="text-[10px] text-slate-500">Solicitado por {ap.solicitante} · {ap.tempo}</p>
                 </div>
                 <div className="flex gap-1.5">
-                  <button className="rounded-md border border-slate-700 px-2.5 py-1 text-[10px] text-slate-400 hover:bg-slate-800">Recusar</button>
-                  <button className="rounded-md bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-emerald-400">Aprovar</button>
+                  <button type="button" disabled title="Ainda não disponível" className="rounded-md border border-slate-700 px-2.5 py-1 text-[10px] text-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">Recusar</button>
+                  <button type="button" disabled title="Ainda não disponível" className="rounded-md bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">Aprovar</button>
                 </div>
               </div>
             ))}

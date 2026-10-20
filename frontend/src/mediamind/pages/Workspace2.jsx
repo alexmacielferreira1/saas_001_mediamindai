@@ -70,6 +70,7 @@ export default function Workspace2() {
     setNotice('Projeto salvo localmente · Última alteração: agora');
   };
   const resetProject = () => {
+    if (!window.confirm('Resetar o projeto? As mídias selecionadas, o roteiro e o rascunho salvo neste navegador serão descartados.')) return;
     setActiveStep('create'); setSelectedIds([]);
     setPreviewAssetId(assets[0]?.id || null); setBlocks([]); setProject(initialProject);
     localStorage.removeItem(storagePrefix + 'mm_workspace2_draft'); setNotice('Projeto restaurado ao padrão');

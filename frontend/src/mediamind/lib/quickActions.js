@@ -3,6 +3,8 @@
 //
 // Cada ação declara:
 //  - id, label, icon, path, param (roteamento via ?novo= quando há handler)
+//  - to (opcional): destino exato quando a ação só navega (rótulo "Ir para …");
+//    tem prioridade sobre path/param em runAction
 //  - group: categoria para agrupar no menu
 //  - roles: '*' = todos os papéis logados; array = papéis autorizados a criar
 //  - tab (opcional): aba do Corp exigida (verificado via filterTabsForUser)
@@ -43,39 +45,39 @@ export const GROUPS = [
 export const ACTIONS = [
   // Produção & Conteúdo
   { id: 'nova_producao', label: 'Nova produção', icon: Plus, group: 'producao', path: '/corp', param: 'producao', tab: 'producao', roles: PRODUCAO, entity: 'Produção' },
-  { id: 'novo_roteiro', label: 'Novo roteiro', icon: FileText, group: 'producao', path: '/workspace', roles: EDITORIAL, entity: 'Roteiro' },
+  { id: 'novo_roteiro', label: 'Ir para o Workspace (roteiro)', icon: FileText, group: 'producao', path: '/workspace', roles: EDITORIAL, entity: 'Roteiro' },
   { id: 'nova_gravacao', label: 'Novo agendamento de gravação', icon: Calendar, group: 'producao', path: '/corp', param: 'producao', tab: 'producao', roles: PRODUCAO, entity: 'Gravação' },
   { id: 'novo_briefing', label: 'Novo briefing', icon: ClipboardList, group: 'producao', path: '/corp', param: 'producao', tab: 'producao', roles: PRODUCAO, entity: 'Briefing' },
 
   // Acervo & Ingest
-  { id: 'novo_pacote', label: 'Novo pacote de ingest', icon: Layers, group: 'acervo', path: '/ingest', param: 'pacote', roles: INGEST, entity: 'IngestPackage' },
+  { id: 'novo_pacote', label: 'Novo pacote de ingest', icon: Layers, group: 'acervo', path: '/ingest', param: 'pacote', roles: INGEST, entity: 'Pacote de ingest' },
   { id: 'ingest_express', label: 'Ingest express', icon: Zap, group: 'acervo', path: '/ingest', roles: INGEST, entity: 'Ingest expresso' },
-  { id: 'nova_biblioteca', label: 'Nova biblioteca', icon: Database, group: 'acervo', path: '/acervo', roles: ADMIN, entity: 'Biblioteca' },
-  { id: 'processamento_ia', label: 'Novo processamento IA', icon: Cpu, group: 'acervo', path: '/management', roles: ['admin', 'ti_suporte'], entity: 'ProcessamentoJob' },
+  { id: 'nova_biblioteca', label: 'Ir para o Acervo (bibliotecas)', icon: Database, group: 'acervo', path: '/acervo', roles: ADMIN, entity: 'Biblioteca' },
+  { id: 'processamento_ia', label: 'Ir para Gestão (processamentos de IA)', icon: Cpu, group: 'acervo', path: '/management', roles: ['admin', 'ti_suporte'], entity: 'Processamento de IA' },
 
   // Edição & Cortes
-  { id: 'nova_publicacao', label: 'Novo corte com IA', icon: Scissors, group: 'edicao', path: '/social', param: 'publicacao', roles: '*', entity: 'Clip' },
-  { id: 'nova_edicao', label: 'Nova edição', icon: Film, group: 'edicao', path: '/corp', param: 'editor_video', tab: 'editor_video', roles: EDICAO, entity: 'Edição' },
-  { id: 'nova_revisao', label: 'Nova revisão', icon: FileText, group: 'edicao', path: '/corp', param: 'revisor', roles: REVISAO, entity: 'Revisão' },
+  { id: 'nova_publicacao', label: 'Novo corte com IA', icon: Scissors, group: 'edicao', path: '/social', param: 'publicacao', roles: '*', entity: 'Corte' },
+  { id: 'nova_edicao', label: 'Ir para Edição de vídeo', icon: Film, group: 'edicao', path: '/corp', param: 'editor_video', tab: 'editor_video', to: '/corp?tab=editor_video', roles: EDICAO, entity: 'Edição' },
+  { id: 'nova_revisao', label: 'Ir para Revisão', icon: FileText, group: 'edicao', path: '/corp', param: 'revisor', to: '/corp?tab=revisor', roles: REVISAO, entity: 'Revisão' },
   { id: 'nova_pesquisa', label: 'Nova pesquisa no acervo', icon: Search, group: 'edicao', path: '/search', roles: '*', entity: 'Busca' },
 
   // Publicação & Social
-  { id: 'publicar', label: 'Nova publicação', icon: Send, group: 'publicacao', path: '/social', roles: SOCIAL, entity: 'Publicação' },
-  { id: 'agendar_publicacao', label: 'Agendar publicação', icon: Calendar, group: 'publicacao', path: '/social', roles: SOCIAL, entity: 'Agendamento' },
+  { id: 'publicar', label: 'Ir para Redes sociais', icon: Send, group: 'publicacao', path: '/social', roles: SOCIAL, entity: 'Publicação' },
+  { id: 'agendar_publicacao', label: 'Ir para Redes sociais (agendamento)', icon: Calendar, group: 'publicacao', path: '/social', roles: SOCIAL, entity: 'Agendamento' },
 
   // Comunicação & Assessoria
-  { id: 'novo_release', label: 'Novo release', icon: Newspaper, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', roles: ASSESSORIA, entity: 'Release' },
-  { id: 'novo_clipping', label: 'Novo clipping', icon: Newspaper, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', roles: ASSESSORIA, entity: 'Clipping' },
-  { id: 'nova_mencao', label: 'Nova menção', icon: Hash, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', roles: ASSESSORIA, entity: 'Menção' },
+  { id: 'novo_release', label: 'Ir para Assessoria (releases)', icon: Newspaper, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', to: '/corp?tab=assessoria', roles: ASSESSORIA, entity: 'Release' },
+  { id: 'novo_clipping', label: 'Ir para Assessoria (clipping)', icon: Newspaper, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', to: '/corp?tab=assessoria', roles: ASSESSORIA, entity: 'Clipping' },
+  { id: 'nova_mencao', label: 'Ir para Assessoria (menções)', icon: Hash, group: 'comunicacao', path: '/corp', param: 'assessoria', tab: 'assessoria', to: '/corp?tab=assessoria', roles: ASSESSORIA, entity: 'Menção' },
 
   // Gestão & Relatórios
-  { id: 'novo_relatorio', label: 'Novo relatório', icon: BarChart3, group: 'gestao', path: '/management', roles: ADMIN, entity: 'Relatório' },
-  { id: 'gestao_equipe', label: 'Gestão de equipe e acessos', icon: Users, group: 'gestao', path: '/corp', param: 'admin_acessos', tab: 'admin_acessos', roles: ADMIN, entity: 'Acessos' },
-  { id: 'nova_tarefa', label: 'Nova tarefa', icon: ClipboardList, group: 'gestao', path: '/workspace', roles: TAREFAS, entity: 'Tarefa' },
+  { id: 'novo_relatorio', label: 'Ir para Gestão (relatórios)', icon: BarChart3, group: 'gestao', path: '/management', to: '/management?tab=reports', roles: ADMIN, entity: 'Relatório' },
+  { id: 'gestao_equipe', label: 'Gestão de equipe e acessos', icon: Users, group: 'gestao', path: '/corp', param: 'admin_acessos', tab: 'admin_acessos', to: '/corp?tab=admin_acessos', roles: ADMIN, entity: 'Acessos' },
+  { id: 'nova_tarefa', label: 'Ir para o Workspace (tarefas)', icon: ClipboardList, group: 'gestao', path: '/workspace', roles: TAREFAS, entity: 'Tarefa' },
 
   // Sistema
-  { id: 'acesso_ia', label: 'Configurar acesso IA', icon: Settings, group: 'sistema', path: '/corp', param: 'admin_acessos', tab: 'admin_acessos', roles: ADMIN, entity: 'Acesso IA' },
-  { id: 'nova_empresa', label: 'Nova empresa / tenant', icon: Briefcase, group: 'sistema', path: '/management', roles: ADMIN, entity: 'Empresa' },
+  { id: 'acesso_ia', label: 'Ir para Gestão de acessos (IA)', icon: Settings, group: 'sistema', path: '/corp', param: 'admin_acessos', tab: 'admin_acessos', to: '/corp?tab=admin_acessos', roles: ADMIN, entity: 'Acesso IA' },
+  { id: 'nova_empresa', label: 'Ir para Gestão (empresas)', icon: Briefcase, group: 'sistema', path: '/management', roles: ADMIN, entity: 'Empresa' },
 ];
 
 export function getAction(id) {
@@ -108,6 +110,7 @@ export function actionsForUser(user) {
 export function runAction(actionId, navigate) {
   const a = getAction(actionId);
   if (!a || !navigate) return;
+  if (a.to) { navigate(a.to); return; }
   navigate(a.param ? `${a.path}?novo=${a.param}` : a.path);
 }
 

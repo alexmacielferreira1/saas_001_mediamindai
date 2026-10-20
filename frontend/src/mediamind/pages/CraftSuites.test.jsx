@@ -35,10 +35,12 @@ describe("OfficeCraft", () => {
 
   it("edits and restores a WordCraft document locally", () => {
     const { unmount } = render(<OfficeCraft />);
-    fireEvent.change(screen.getByLabelText("Documento WordCraft"), { target: { value: "Relatório trimestral" } });
+    const editor = screen.getByLabelText("Documento WordCraft");
+    editor.innerHTML = "<p>Relatório trimestral</p>";
+    fireEvent.input(editor);
     unmount();
     render(<OfficeCraft />);
-    expect(screen.getByLabelText("Documento WordCraft")).toHaveValue("Relatório trimestral");
+    expect(screen.getByLabelText("Documento WordCraft")).toHaveTextContent("Relatório trimestral");
   });
 
   it("edits spreadsheet cells and adds presentation slides", () => {

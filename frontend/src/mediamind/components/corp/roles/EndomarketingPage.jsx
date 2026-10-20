@@ -33,7 +33,7 @@ export default function EndomarketingPage() {
         )}
 
         {sub === 'campanhas' && (
-          <Panel title="Campanhas internas" action={<button className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Nova campanha</button>}>
+          <Panel title="Campanhas internas" action={<button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"><Plus size={11} /> Nova campanha</button>}>
             <div className="space-y-2">
               {MOCK_CORP_CAMPAIGNS.map((c) => (
                 <div key={c.id} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">

@@ -147,7 +147,9 @@ class DarkWorkflow(BaseModel):
     thumbnail_title: str = Field(default="", max_length=160)
     thumbnail_reference: str = Field(default="", max_length=2048)
     video_format: Literal["16:9", "9:16", "1:1"] = "16:9"
-    target_channels: list[Literal["youtube", "instagram", "tiktok", "facebook"]] = Field(default_factory=list, max_length=4)
+    target_channels: list[Literal["youtube", "instagram", "tiktok", "facebook"]] = Field(
+        default_factory=list, max_length=4
+    )
     description: str = Field(default="", max_length=5000)
     tags: list[str] = Field(default_factory=list, max_length=30)
     cuts: list[DarkCut] = Field(default_factory=list, max_length=50)

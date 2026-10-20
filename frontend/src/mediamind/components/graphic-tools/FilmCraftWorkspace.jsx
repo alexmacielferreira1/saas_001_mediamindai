@@ -1,5 +1,7 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
+import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
 import { useEffect, useRef, useState } from "react";
+import { useTextPrompt } from "./FilmCraftTextPrompt";
 import {
   AudioLines,
   BarChart3,
@@ -8,7 +10,6 @@ import {
   Copy,
   Flag,
   Eye,
-  Headphones,
   Lock,
   Magnet,
   Mic,
@@ -28,7 +29,6 @@ import {
   Unlock,
   Upload,
   Volume2,
-  VolumeX,
 } from "lucide-react";
 import {
   createEdl,
@@ -46,6 +46,28 @@ import {
   clipsInsideMarquee,
   timelineTimeFromPointer,
 } from "../../lib/mmfilmTimeline";
+import {
+  FilmcraftAudioEngine,
+  clipVolumeToDb,
+  dbToClipVolume,
+  emptyMixer,
+  isAudioSupported,
+  mixerStrip,
+} from "./filmcraftAudio";
+import {
+  SEQUENCE_FPS,
+  downloadBlob,
+  estimateSizeMB,
+  exportFileName,
+  exportRange,
+  exportSupport,
+  layerFilter,
+  mbpsToBps,
+  parseKbps,
+  presetSize,
+  programLayers,
+  renderTimelineToWebm,
+} from "./filmcraftRender";
 
 const WORKSPACES = [
   "Montagem",
@@ -97,8 +119,116 @@ const compatible = (asset, kind) =>
   kind === "audio"
     ? asset.type.startsWith("audio") || asset.type.startsWith("video")
     : !asset.type.startsWith("audio");
+const FRAME = 1 / 30;
+const EPSILON = 1e-6;
+const TITLE_TYPE = "text/title";
+const speedFactor = (clip) => (clip.speed || 100) / 100;
+const frameRound = (value) => Math.round(value * 30) / 30;
+const clipEnd = (clip) => clip.start + clip.duration;
+const seconds = (value) => `${value.toFixed(2).replace(".", ",")} s`;
+// Duração máxima que a mídia de origem ainda permite para o clipe (imagens e títulos não têm limite).
+function maxDurationForMedia(clip) {
+  const media = Number(clip.mediaDuration);
+  if (
+    !Number.isFinite(media) ||
+    clip.type === TITLE_TYPE ||
+    clip.type?.startsWith("image")
+  )
+    return Infinity;
+  return Math.max(FRAME, (media - (clip.sourceIn || 0)) / speedFactor(clip));
+}
+// Ao salvar no navegador, URLs blob: deixam de existir após recarregar: a mídia fica offline para religar.
+function persistableItem(item) {
+  return typeof item.url === "string" && item.url.startsWith("blob:")
+    ? { ...item, url: undefined, offline: true }
+    : item;
+}
+function parseCaptionTime(value) {
+  const match = String(value)
+    .trim()
+    .replace(",", ".")
+    .match(/^(?:(\d+):)?(\d{1,2}):(\d{2}(?:\.\d+)?)$/);
+  if (!match) return Number.NaN;
+  return Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+function parseCaptions(text) {
+  return String(text)
+    .replace(/\r/g, "")
+    .split(/\n{2,}/)
+    .map((block) => {
+      const lines = block.split("\n").filter((line) => line.trim());
+      const index = lines.findIndex((line) => line.includes("-->"));
+      if (index < 0) return null;
+      const [from, to = ""] = lines[index].split("-->");
+      const start = parseCaptionTime(from);
+      const end = parseCaptionTime(to.trim().split(/\s+/)[0]);
+      const body = lines
+        .slice(index + 1)
+        .join("\n")
+        .replace(/<[^>]+>/g, "")
+        .trim();
+      if (!Number.isFinite(start) || !(end > start) || !body) return null;
+      return { start, end, text: body };
+    })
+    .filter(Boolean);
+}
+// Parte esquerda de um corte: mesmo id, mesma origem, termina em `at`.
+function leftPart(clip, at) {
+  const offset = at - clip.start;
+  return {
+    ...clip,
+    duration: offset,
+    keyframes: (clip.keyframes || []).filter((time) => time < offset - EPSILON),
+  };
+}
+// Parte direita de um corte: começa em `at` e avança a origem pelo trecho consumido (respeitando a velocidade).
+function rightPart(clip, at, id = crypto.randomUUID()) {
+  const offset = at - clip.start;
+  return {
+    ...clip,
+    id,
+    start: at,
+    duration: clipEnd(clip) - at,
+    sourceIn: (clip.sourceIn || 0) + offset * speedFactor(clip),
+    keyframes: (clip.keyframes || [])
+      .filter((time) => time > offset + EPSILON)
+      .map((time) => time - offset),
+    transition: undefined,
+  };
+}
+// Insere (empurra o que vem depois) ou sobrescreve (apara o que estiver embaixo) um clipe na faixa.
+function placeClip(clips, item, mode) {
+  const start = item.start;
+  const end = clipEnd(item);
+  const next = clips.flatMap((clip) => {
+    if (clip.track !== item.track) return [clip];
+    if (mode === "insert") {
+      if (clip.start >= start - EPSILON)
+        return [{ ...clip, start: clip.start + item.duration }];
+      if (clipEnd(clip) > start + EPSILON) {
+        const right = rightPart(clip, start);
+        return [
+          leftPart(clip, start),
+          { ...right, start: right.start + item.duration },
+        ];
+      }
+      return [clip];
+    }
+    if (clip.start >= end - EPSILON || clipEnd(clip) <= start + EPSILON)
+      return [clip];
+    const pieces = [];
+    if (clip.start < start - EPSILON) pieces.push(leftPart(clip, start));
+    if (clipEnd(clip) > end + EPSILON)
+      pieces.push(rightPart(clip, end, pieces.length ? undefined : clip.id));
+    return pieces;
+  });
+  return [...next, item];
+}
+const KEYBOARD_HELP =
+  "Atalhos: V seleção · A selecionar faixa · B ripple · R rate stretch · C navalha · Y slip (Shift+arrastar = slide) · P caneta · H mão · T texto · Espaço reproduzir · J/K/L · I/O entrada/saída · M marcador · Q/W ripple no cursor · Ctrl+K cortar · Ctrl+C/X/V copiar/recortar/colar · Ctrl+S salvar · Ctrl+Z desfazer · Ctrl+Shift+Z refazer · +/- zoom";
 
 export default function FilmCraftWorkspace({ active = true, previewAsset = null }) {
+  const [askText, textPromptDialog] = useTextPrompt();
   useEffect(() => {
     if (!previewAsset?.stream_url) return;
     setSource({id:String(previewAsset.id),name:previewAsset.title || previewAsset.filename,type:previewAsset.mime_type || `${previewAsset.asset_type || 'video'}/mp4`,url:previewAsset.stream_url,duration:Number(previewAsset.duration) || 8});
@@ -139,22 +269,72 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const [relinkTarget, setRelinkTarget] = useGraphicDraftState("FilmCraftWorkspace.jsx:relinkTarget", null);
   const [mediaLocatorOpen, setMediaLocatorOpen] = useGraphicDraftState("FilmCraftWorkspace.jsx:mediaLocatorOpen", false);
   const [contextMenu, setContextMenu] = useState(null);
+  const [linkedSelection, setLinkedSelection] = useGraphicDraftState("FilmCraftWorkspace.jsx:linkedSelection", true);
+  const [insertMode, setInsertMode] = useGraphicDraftState("FilmCraftWorkspace.jsx:insertMode", false);
+  const [showClipInfo, setShowClipInfo] = useGraphicDraftState("FilmCraftWorkspace.jsx:showClipInfo", true);
+  const [mixer, setMixer] = useGraphicDraftState("FilmCraftWorkspace.jsx:mixer", emptyMixer);
+  const clipboard = useRef([]);
+  const noticeTimer = useRef(null);
+  const workspaceRoot = useRef(null);
+  const timelineScroll = useRef(null);
   const urls = useRef(new Set());
   const projectInput = useRef(null);
   const mediaInput = useRef(null);
   const relinkInput = useRef(null);
   const individualRelinkInput = useRef(null);
   const timelineTracks = useRef(null);
+  // Motor de áudio (Web Audio) criado sob demanda; o AudioContext só nasce no primeiro "Reproduzir".
+  const audioEngine = useRef(null);
+  if (!audioEngine.current)
+    audioEngine.current = new FilmcraftAudioEngine({
+      onDecodeError: () => notify("Áudio: não foi possível decodificar o som de uma mídia da timeline; ela segue em silêncio", 5000),
+    });
+  const playheadRef = useRef(playhead);
+  playheadRef.current = playhead;
 
   useEffect(
-    () => () => urls.current.forEach((url) => URL.revokeObjectURL(url)),
+    () => () => {
+      urls.current.forEach((url) => URL.revokeObjectURL(url));
+      window.clearTimeout(noticeTimer.current);
+      audioEngine.current?.dispose();
+    },
     [],
   );
   useEffect(() => {
+    audioEngine.current.setMix({ trackState, mixer });
+  }, [trackState, mixer]);
+  const videoVisibility = ["V1", "V2", "V3"].map((id) => trackState[id]?.visible !== false).join();
+  // Reprodução de áudio sincronizada ao indicador: (re)agenda ao tocar, ao editar clipes ou mudar a velocidade.
+  useEffect(() => {
+    const engine = audioEngine.current;
+    if (!playing || !active || !(playbackRate > 0)) {
+      engine.stop();
+      return;
+    }
+    engine.play({ clips, trackState, from: playheadRef.current, rate: playbackRate });
+    return () => engine.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, active, playbackRate, clips, videoVisibility]);
+  // Busca durante a reprodução (clique na régua, marcadores, setas): reancora o áudio no novo ponto.
+  useEffect(() => {
+    const engine = audioEngine.current;
+    const time = engine.currentTime();
+    if (!playing || time === null || Math.abs(time - playhead) <= 0.3) return;
+    engine.play({ clips, trackState, from: playhead, rate: playbackRate });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playhead]);
+  useEffect(() => {
+    if (!active) { clearMCPContext("mmfilm"); return; }
+    publishMCPContext(timelineContext({ source: "mmfilm", sequenceName, clips }));
+  }, [active, sequenceName, clips]);
+  useEffect(() => () => clearMCPContext("mmfilm"), []);
+  useEffect(() => {
     if (!playing || !active) return;
     const timer = setInterval(() => {
+      // Com áudio tocando, o relógio do AudioContext manda no indicador (sem deriva entre som e imagem).
+      const audioTime = audioEngine.current?.currentTime();
       setPlayhead((value) =>
-        Math.max(0, Math.min(60, value + 0.1 * playbackRate)),
+        Math.max(0, Math.min(60, audioTime ?? value + 0.1 * playbackRate)),
       );
     }, 100);
     return () => clearInterval(timer);
@@ -164,6 +344,14 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       if (!active) return;
       if (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
       const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && ["c", "x", "v", "s"].includes(key)) {
+        event.preventDefault();
+        if (key === "c") copySelection();
+        if (key === "x") cutSelection();
+        if (key === "v") pasteClipboard();
+        if (key === "s") saveProjectNow();
+        return;
+      }
       if (key === " ") {
         event.preventDefault();
         setPlaying((value) => !value);
@@ -219,16 +407,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   });
 
   const chosen = clips.find((clip) => clip.id === selected);
-  const program = [...clips]
-    .reverse()
-    .find(
-      (clip) =>
-        clip.track.startsWith("V") &&
-        clip.enabled !== false &&
-        trackState[clip.track]?.visible !== false &&
-        playhead >= clip.start &&
-        playhead < clip.start + clip.duration,
-    );
+  // Programa multicamada: V1 embaixo, V3 em cima; `program` é a camada superior (controles do monitor).
+  const layers = programLayers(clips, playhead, trackState);
+  const program = layers.at(-1);
 
   function commit(next) {
     setClips((current) => {
@@ -371,8 +552,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     setContextMenu({ x: event.clientX, y: event.clientY, type, item });
   }
 
-  function renameAsset(asset) {
-    const name = window.prompt("Novo nome da mídia", asset.name);
+  async function renameAsset(asset) {
+    const name = await askText("Novo nome da mídia", asset.name);
     if (!name?.trim()) return;
     setMedia((items) =>
       items.map((item) =>
@@ -405,6 +586,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   function makeClip(asset, track, start) {
     return {
       ...asset,
+      assetId: asset.assetId ?? asset.id,
+      mediaDuration: asset.mediaDuration ?? asset.duration,
       id: crypto.randomUUID(),
       track,
       start: snap ? Math.round(start) : start,
@@ -455,22 +638,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         : "V1";
     if (trackState[track].locked) return;
     const item = makeClip(source, track, playhead);
-    commit((old) => {
-      const prepared =
-        mode === "insert"
-          ? old.map((clip) =>
-              clip.track === track && clip.start >= playhead
-                ? { ...clip, start: clip.start + item.duration }
-                : clip,
-            )
-          : old.filter(
-              (clip) =>
-                clip.track !== track ||
-                clip.start + clip.duration <= playhead ||
-                clip.start >= playhead + item.duration,
-            );
-      return [...prepared, item];
-    });
+    commit((old) => placeClip(old, item, mode));
     setSelected(item.id);
   }
   function patch(key, value) {
@@ -489,22 +657,510 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       playhead >= chosen.start + chosen.duration
     )
       return;
-    const left = playhead - chosen.start;
+    razorAt(playhead, [chosen.id]);
+  }
+  function notify(text, duration = 3500) {
+    setCommandNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setCommandNotice(""), duration);
+  }
+  function unavailable(label, reason) {
+    notify(`${label}: indisponível — ${reason}`, 5000);
+  }
+  // Tempo da timeline sob o ponteiro, relativo à faixa clicada.
+  function pointerTime(event) {
+    const lane =
+      event.currentTarget?.closest?.("[data-track-id]") || event.currentTarget;
+    const left = lane?.getBoundingClientRect?.().left ?? 0;
+    return timelineTimeFromPointer(event.clientX ?? 0, left, zoom, 60);
+  }
+  // Ímã: encaixa no indicador ou em marcadores próximos (6 px); senão, no quadro mais próximo.
+  function snapTime(time) {
+    if (snap) {
+      const near = [playhead, ...markers].find(
+        (point) => Math.abs(point - time) * zoom <= 6,
+      );
+      if (near !== undefined) return near;
+    }
+    return frameRound(time);
+  }
+  function isLocked(clip) {
+    return Boolean(trackState[clip.track]?.locked);
+  }
+  // Navalha: corta os clipes indicados (ou todos os desbloqueados) no tempo dado.
+  function razorAt(time, onlyIds = null) {
+    const targets = clips.filter(
+      (clip) =>
+        (!onlyIds || onlyIds.includes(clip.id)) &&
+        !isLocked(clip) &&
+        time > clip.start + EPSILON &&
+        time < clipEnd(clip) - EPSILON,
+    );
+    if (!targets.length) return 0;
+    const ids = targets.map((clip) => clip.id);
     commit((old) =>
       old.flatMap((clip) =>
-        clip.id === chosen.id
-          ? [
-              { ...clip, duration: left },
-              {
-                ...clip,
-                id: crypto.randomUUID(),
-                start: playhead,
-                duration: clip.duration - left,
-              },
-            ]
-          : clip,
+        ids.includes(clip.id)
+          ? [leftPart(clip, time), rightPart(clip, time)]
+          : [clip],
       ),
     );
+    return targets.length;
+  }
+  function sameTrackNeighbours(clip, list = clips) {
+    const others = list.filter(
+      (item) => item.track === clip.track && item.id !== clip.id,
+    );
+    const previous = others
+      .filter((item) => clipEnd(item) <= clip.start + EPSILON)
+      .sort((a, b) => clipEnd(b) - clipEnd(a))[0];
+    const next = others
+      .filter((item) => item.start >= clipEnd(clip) - EPSILON)
+      .sort((a, b) => a.start - b.start)[0];
+    return { previous, next };
+  }
+  // Edição ripple: move a borda e desloca os clipes seguintes da mesma faixa, sem abrir nem sobrepor espaço.
+  function rippleEdit(clip, edge, delta) {
+    if (isLocked(clip)) return;
+    const oldEnd = clipEnd(clip);
+    const factor = speedFactor(clip);
+    let change;
+    let updated;
+    if (edge === "out") {
+      const duration = Math.max(
+        FRAME,
+        Math.min(maxDurationForMedia(clip), clip.duration + delta),
+      );
+      change = duration - clip.duration;
+      updated = { ...clip, duration };
+    } else {
+      // borda de entrada: delta > 0 remove o início; delta < 0 recupera mídia anterior
+      const minDelta = -(clip.sourceIn || 0) / factor;
+      const applied = Math.max(minDelta, Math.min(clip.duration - FRAME, delta));
+      change = -applied;
+      updated = {
+        ...clip,
+        duration: clip.duration - applied,
+        sourceIn: Math.max(0, (clip.sourceIn || 0) + applied * factor),
+        keyframes: (clip.keyframes || [])
+          .map((time) => time - applied)
+          .filter((time) => time >= 0 && time <= clip.duration - applied),
+      };
+    }
+    if (Math.abs(change) < EPSILON) return;
+    commit((old) =>
+      old.map((item) => {
+        if (item.id === clip.id) return updated;
+        if (item.track === clip.track && item.start >= oldEnd - EPSILON)
+          return { ...item, start: Math.max(0, item.start + change) };
+        return item;
+      }),
+    );
+    setSelected(clip.id);
+    notify(`Edição ripple: ${change > 0 ? "+" : "−"}${seconds(Math.abs(change))} em ${clip.name}`);
+  }
+  // Rate stretch: muda a duração alterando a velocidade, sem mudar o trecho de mídia usado.
+  function rateStretchEdge(clip, edge, delta) {
+    if (isLocked(clip)) return;
+    const { previous, next } = sameTrackNeighbours(clip);
+    const used = clip.duration * speedFactor(clip);
+    const minDuration = Math.max(FRAME, used / 10);
+    const maxDuration = used / 0.1;
+    let start = clip.start;
+    let duration;
+    if (edge === "out") {
+      const limit = next ? next.start - clip.start : Infinity;
+      duration = Math.max(minDuration, Math.min(maxDuration, limit, clip.duration + delta));
+    } else {
+      const limit = clipEnd(clip) - (previous ? clipEnd(previous) : 0);
+      duration = Math.max(minDuration, Math.min(maxDuration, limit, clip.duration - delta));
+      start = clipEnd(clip) - duration;
+    }
+    if (Math.abs(duration - clip.duration) < EPSILON) return;
+    const speed = Math.round(((used / duration) * 100) * 10) / 10;
+    const ratio = duration / clip.duration;
+    commit((old) =>
+      old.map((item) =>
+        item.id === clip.id
+          ? {
+              ...item,
+              start,
+              duration,
+              speed,
+              keyframes: (item.keyframes || []).map((time) => time * ratio),
+            }
+          : item,
+      ),
+    );
+    setSelected(clip.id);
+    notify(`Rate stretch: ${clip.name} agora com ${seconds(duration)} a ${String(speed).replace(".", ",")}%`);
+  }
+  // Slip: troca o trecho da mídia exibido sem mover o clipe na timeline.
+  function slipBy(clip, deltaTimeline) {
+    if (isLocked(clip)) return;
+    const factor = speedFactor(clip);
+    const media = Number(clip.mediaDuration);
+    const maxIn = Number.isFinite(media) && clip.type !== TITLE_TYPE && !clip.type?.startsWith("image")
+      ? Math.max(0, media - clip.duration * factor)
+      : Infinity;
+    const sourceIn = Math.max(0, Math.min(maxIn, (clip.sourceIn || 0) - deltaTimeline * factor));
+    if (Math.abs(sourceIn - (clip.sourceIn || 0)) < EPSILON) return;
+    commit((old) =>
+      old.map((item) => (item.id === clip.id ? { ...item, sourceIn } : item)),
+    );
+    setSelected(clip.id);
+    notify(`Slip: ${clip.name} mostra a mídia a partir de ${seconds(sourceIn)}`);
+  }
+  // Slide: move o clipe entre os vizinhos, aparando-os para manter a faixa sem buracos.
+  function slideBy(clip, delta) {
+    if (isLocked(clip)) return;
+    const { previous, next } = sameTrackNeighbours(clip);
+    const touchingPrevious = previous && Math.abs(clipEnd(previous) - clip.start) < 0.002 ? previous : null;
+    const touchingNext = next && Math.abs(next.start - clipEnd(clip)) < 0.002 ? next : null;
+    let applied = delta;
+    if (touchingPrevious) {
+      applied = Math.max(applied, -(touchingPrevious.duration - FRAME));
+      applied = Math.min(applied, maxDurationForMedia(touchingPrevious) - touchingPrevious.duration);
+    } else applied = Math.max(applied, -(clip.start - (previous ? clipEnd(previous) : 0)));
+    if (touchingNext) {
+      applied = Math.min(applied, touchingNext.duration - FRAME);
+      applied = Math.max(applied, -(touchingNext.sourceIn || 0) / speedFactor(touchingNext));
+    } else if (next) applied = Math.min(applied, next.start - clipEnd(clip));
+    if (Math.abs(applied) < EPSILON) return;
+    commit((old) =>
+      old.map((item) => {
+        if (item.id === clip.id) return { ...item, start: item.start + applied };
+        if (touchingPrevious && item.id === touchingPrevious.id)
+          return { ...item, duration: item.duration + applied };
+        if (touchingNext && item.id === touchingNext.id)
+          return {
+            ...item,
+            start: item.start + applied,
+            duration: item.duration - applied,
+            sourceIn: Math.max(0, (item.sourceIn || 0) + applied * speedFactor(item)),
+          };
+        return item;
+      }),
+    );
+    setSelected(clip.id);
+    notify(`Slide: ${clip.name} movido ${applied > 0 ? "+" : "−"}${seconds(Math.abs(applied))}`);
+  }
+  // Caneta: adiciona (ou remove, se já existir) um quadro-chave no tempo clicado do clipe.
+  function toggleKeyframeAt(clip, time) {
+    if (isLocked(clip)) return;
+    const local = Math.max(0, Math.min(clip.duration, time - clip.start));
+    const existing = (clip.keyframes || []).find(
+      (item) => Math.abs(item - local) * zoom <= 4,
+    );
+    const keyframes = existing !== undefined
+      ? (clip.keyframes || []).filter((item) => item !== existing)
+      : [...(clip.keyframes || []), Math.round(local * 1000) / 1000].sort((a, b) => a - b);
+    commit((old) =>
+      old.map((item) => (item.id === clip.id ? { ...item, keyframes } : item)),
+    );
+    setSelected(clip.id);
+    setSelectedIds([clip.id]);
+    notify(
+      existing !== undefined
+        ? `Quadro-chave removido em ${seconds(existing)} de ${clip.name}`
+        : `Quadro-chave de opacidade (${clip.opacity ?? 100}%) em ${seconds(local)} de ${clip.name}`,
+    );
+  }
+  // Selecionar faixa para frente: tudo que termina depois do tempo clicado (Shift = todas as faixas).
+  function selectTrackForward(track, time, allTracks = false) {
+    const ids = clips
+      .filter(
+        (clip) => (allTracks || clip.track === track) && clipEnd(clip) > time + EPSILON,
+      )
+      .sort((a, b) => a.start - b.start)
+      .map((clip) => clip.id);
+    setSelectedIds(ids);
+    setSelected(ids[0] ?? null);
+    notify(`${ids.length} clipe(s) selecionado(s) a partir de ${clock(time)}${allTracks ? " em todas as faixas" : ` em ${track}`}`);
+  }
+  function freeVideoTrack(start, duration, preferred) {
+    const order = [preferred, "V1", "V2", "V3"].filter(
+      (id, index, list) =>
+        id && list.indexOf(id) === index && TRACKS.find(([track]) => track === id)?.[2] === "video",
+    );
+    return order.find(
+      (id) =>
+        !trackState[id]?.locked &&
+        !clips.some(
+          (clip) =>
+            clip.track === id &&
+            clip.start < start + duration - EPSILON &&
+            clipEnd(clip) > start + EPSILON,
+        ),
+    );
+  }
+  function titleClip(text, track, start, duration = 5, extra = {}) {
+    return {
+      ...makeClip(
+        { id: crypto.randomUUID(), name: text.split("\n")[0], type: TITLE_TYPE, duration },
+        track,
+        start,
+      ),
+      start,
+      duration,
+      sourceIn: 0,
+      assetId: undefined,
+      mediaDuration: undefined,
+      text,
+      ...extra,
+    };
+  }
+  // Texto: cria um título no indicador, na faixa de vídeo clicada ou na primeira livre.
+  async function createTitle(start = playhead, preferred) {
+    const text = (await askText("Texto do título", "Título"))?.trim();
+    if (!text) return;
+    const track = freeVideoTrack(start, 5, preferred);
+    if (!track) {
+      notify("Texto: nenhuma faixa de vídeo livre e desbloqueada no indicador");
+      return;
+    }
+    const item = titleClip(text, track, start);
+    commit((old) => [...old, item]);
+    setSelected(item.id);
+    setSelectedIds([item.id]);
+    notify(`Título “${item.name}” criado em ${track} · ${clock(start)}`);
+  }
+  async function updateTitleText() {
+    if (!chosen || chosen.type !== TITLE_TYPE) {
+      notify("Atualizar texto: selecione um clipe de título na timeline");
+      return;
+    }
+    const text = (await askText("Texto do título", chosen.text || chosen.name))?.trim();
+    if (!text) return;
+    commit((old) =>
+      old.map((item) =>
+        item.id === chosen.id ? { ...item, text, name: text.split("\n")[0] } : item,
+      ),
+    );
+  }
+  async function importCaptions(file) {
+    if (!file) return;
+    const cues = parseCaptions(await file.text());
+    if (!cues.length) {
+      notify(`Legendas: nenhuma legenda válida encontrada em ${file.name}`);
+      return;
+    }
+    const track = ["V3", "V2", "V1"].find((id) => !trackState[id]?.locked);
+    if (!track) {
+      notify("Legendas: todas as faixas de vídeo estão bloqueadas");
+      return;
+    }
+    const items = cues.map((cue) =>
+      titleClip(cue.text, track, cue.start, cue.end - cue.start, { caption: true }),
+    );
+    commit((old) => items.reduce((list, item) => placeClip(list, item, "overwrite"), old));
+    notify(`${items.length} legenda(s) de ${file.name} adicionada(s) em ${track}`);
+  }
+  function selectionForClipboard() {
+    const ids = selectedIds.length ? selectedIds : chosen ? [chosen.id] : [];
+    return clips.filter((clip) => ids.includes(clip.id));
+  }
+  function copySelection() {
+    const items = selectionForClipboard();
+    if (!items.length) {
+      notify("Copiar: selecione um ou mais clipes");
+      return false;
+    }
+    clipboard.current = items.map((clip) => ({ ...clip }));
+    notify(`${items.length} clipe(s) copiado(s)`);
+    return true;
+  }
+  function cutSelection() {
+    if (!copySelection()) return;
+    removeSelected(false);
+    notify(`${clipboard.current.length} clipe(s) recortado(s)`);
+  }
+  function pasteClipboard() {
+    const items = clipboard.current;
+    if (!items.length) {
+      notify("Colar: a área de transferência do MMFilm está vazia");
+      return;
+    }
+    const origin = Math.min(...items.map((clip) => clip.start));
+    const pasted = items
+      .filter((clip) => !trackState[clip.track]?.locked)
+      .map((clip) => ({
+        ...clip,
+        id: crypto.randomUUID(),
+        start: playhead + (clip.start - origin),
+      }));
+    if (!pasted.length) {
+      notify("Colar: as faixas de destino estão bloqueadas");
+      return;
+    }
+    commit((old) => pasted.reduce((list, item) => placeClip(list, item, "overwrite"), old));
+    setSelectedIds(pasted.map((clip) => clip.id));
+    setSelected(pasted[0].id);
+    notify(`${pasted.length} clipe(s) colado(s) em ${clock(playhead)}`);
+  }
+  // Velocidade/Duração: como no Premiere, a duração acompanha a nova velocidade.
+  function setClipSpeed(clip, value) {
+    if (!clip || isLocked(clip) || !Number.isFinite(value) || value <= 0) return;
+    const duration = Math.max(FRAME, clip.duration * ((clip.speed || 100) / value));
+    commit((old) =>
+      old.map((item) =>
+        item.id === clip.id ? { ...item, speed: value, duration } : item,
+      ),
+    );
+  }
+  async function promptClipSpeed(clip = chosen) {
+    if (!clip) {
+      notify("Velocidade/Duração: selecione um clipe");
+      return;
+    }
+    const value = Number(
+      String((await askText("Velocidade do clipe (%)", clip.speed || 100)) ?? "").replace(",", "."),
+    );
+    if (Number.isFinite(value) && value > 0) setClipSpeed(clip, value);
+  }
+  async function renameClip() {
+    if (!chosen) {
+      notify("Renomear: selecione um clipe");
+      return;
+    }
+    const name = (await askText("Nome do clipe", chosen.name))?.trim();
+    if (!name) return;
+    commit((old) => old.map((item) => (item.id === chosen.id ? { ...item, name } : item)));
+  }
+  function jumpMarker(direction) {
+    const target =
+      direction > 0
+        ? markers.find((marker) => marker > playhead + 0.01)
+        : [...markers].reverse().find((marker) => marker < playhead - 0.01);
+    if (target === undefined) {
+      notify(direction > 0 ? "Nenhum marcador depois do indicador" : "Nenhum marcador antes do indicador");
+      return;
+    }
+    setPlayhead(target);
+  }
+  function newProject() {
+    if ((clips.length || media.length) && !window.confirm("Fechar o projeto atual e começar um novo? Use Salvar antes se quiser mantê-lo.")) return;
+    commit([]);
+    setMedia([]);
+    setMarkers([]);
+    setSource(null);
+    setSelected(null);
+    setSelectedIds([]);
+    setPlayhead(0);
+    setSequenceName("Sequência 01");
+    notify("Novo projeto criado");
+  }
+  async function newSequence() {
+    const name = (await askText("Nome da nova sequência", "Sequência 02"))?.trim();
+    if (!name) return;
+    if (clips.length && !window.confirm("O MMFilm edita uma sequência por vez. Esvaziar a timeline atual (a mídia do projeto é mantida)?")) return;
+    commit([]);
+    setMarkers([]);
+    setSelected(null);
+    setSelectedIds([]);
+    setPlayhead(0);
+    setSequenceName(name);
+    notify(`Sequência “${name}” criada · Desfazer recupera os clipes anteriores`);
+  }
+  // Pan da timeline com a ferramenta Mão.
+  function beginPan(event) {
+    const scroller = timelineScroll.current;
+    if (!scroller) return;
+    event.preventDefault?.();
+    const x = event.clientX;
+    const initial = scroller.scrollLeft;
+    const move = (moveEvent) => {
+      scroller.scrollLeft = Math.max(0, initial - (moveEvent.clientX - x));
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
+  // Ferramentas de arraste sobre um clipe: Mão, Ripple, Rate stretch, Slip/Slide.
+  function beginClipTool(event, clip) {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (editTool === "Mão") {
+      beginPan(event);
+      return;
+    }
+    if (!["Edição ripple", "Rate stretch", "Slip e slide"].includes(editTool)) return;
+    if (isLocked(clip)) return;
+    const startX = event.clientX;
+    const time = pointerTime(event);
+    const edge = time - clip.start < clip.duration / 2 ? "in" : "out";
+    const tool = editTool;
+    const slide = event.shiftKey;
+    const finish = (endEvent) => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", cancel);
+      const dx = (endEvent.clientX ?? startX) - startX;
+      const moved = Math.abs(dx) >= 3;
+      const delta = frameRound(dx / zoom);
+      if (tool === "Edição ripple") {
+        if (moved) rippleEdit(clip, edge, delta);
+        else {
+          // clique sem arrastar: apara até o ponto clicado (Q/W com o mouse)
+          const at = snapTime(time);
+          if (edge === "in") rippleEdit(clip, "in", at - clip.start);
+          else rippleEdit(clip, "out", at - clipEnd(clip));
+        }
+      } else if (moved && tool === "Rate stretch") rateStretchEdge(clip, edge, delta);
+      else if (moved && tool === "Slip e slide") {
+        if (slide) slideBy(clip, delta);
+        else slipBy(clip, delta);
+      }
+    };
+    const cancel = () => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", cancel);
+    };
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", cancel);
+  }
+  function clickClipWithTool(event, clip) {
+    const time = pointerTime(event);
+    if (editTool === "Razor") {
+      const at = snapTime(time);
+      const cut = event.shiftKey ? razorAt(at) : razorAt(at, [clip.id]);
+      notify(cut ? `Corte em ${seconds(at)}${cut > 1 ? ` · ${cut} clipes` : ""}` : `Navalha: ${isLocked(clip) ? "faixa bloqueada" : "clique dentro do clipe"}`);
+      return true;
+    }
+    if (editTool === "Caneta") {
+      toggleKeyframeAt(clip, time);
+      return true;
+    }
+    if (editTool === "Selecionar faixa") {
+      selectTrackForward(clip.track, time, event.shiftKey);
+      return true;
+    }
+    if (editTool === "Texto") {
+      const at = snapTime(time);
+      setPlayhead(at);
+      createTitle(at, clip.track);
+      return true;
+    }
+    return false;
+  }
+  function clickLaneWithTool(event, track) {
+    const time = pointerTime(event);
+    if (editTool === "Selecionar faixa") selectTrackForward(track, time, event.shiftKey);
+    if (editTool === "Texto") {
+      const at = snapTime(time);
+      setPlayhead(at);
+      createTitle(at, track);
+    }
+  }
+  function beginLanePointer(event, track) {
+    if (editTool === "Mão" && (event.button === undefined || event.button === 0)) {
+      beginPan(event);
+      return;
+    }
+    beginMarquee(event, track);
   }
   function trim(side) {
     if (!chosen || trackState[chosen.track].locked) return;
@@ -654,29 +1310,67 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     downloadProject(...formats[projectFormat]);
     setCommandNotice(`Projeto exportado: ${projectFormat}`);
   }
-  function saveProjectLocally() {
-    const nextName = window.prompt("Nome do projeto", sequenceName)?.trim();
+  function writeLocalProject(name) {
+    const savedMedia = media.map(persistableItem);
+    try {
+      localStorage.setItem(
+        "mmfilm:last-project",
+        JSON.stringify({
+          version: 2,
+          sequence: name,
+          fps: 29.97,
+          media: savedMedia,
+          clips: clips.map(persistableItem),
+          markers,
+          trackState,
+          mixer,
+        }),
+      );
+    } catch (error) {
+      notify(`Não foi possível salvar no navegador: ${error.message || "armazenamento indisponível"}`);
+      return false;
+    }
+    const relink = savedMedia.filter((asset) => asset.offline).length;
+    notify(
+      `Projeto “${name}” salvo no navegador${relink ? ` · ${relink} mídia(s) local(is) precisarão ser religadas ao recarregar` : ""}`,
+    );
+    return true;
+  }
+  function saveProjectNow() {
+    writeLocalProject(sequenceName);
+  }
+  async function saveProjectLocally() {
+    const nextName = (await askText("Nome do projeto", sequenceName))?.trim();
     if (!nextName) return;
     setSequenceName(nextName);
-    localStorage.setItem(
-      "mmfilm:last-project",
-      JSON.stringify({
-        version: 1,
-        sequence: nextName,
-        fps: 29.97,
-        clips,
-        markers,
-      }),
-    );
+    writeLocalProject(nextName);
   }
   function reloadProject() {
-    const saved = localStorage.getItem("mmfilm:last-project");
-    if (!saved) return;
-    const project = JSON.parse(saved);
+    let project;
+    try {
+      const saved = localStorage.getItem("mmfilm:last-project");
+      if (!saved) {
+        notify("Recarregar: nenhum projeto salvo neste navegador");
+        return;
+      }
+      project = JSON.parse(saved);
+    } catch {
+      notify("Recarregar: o projeto salvo está corrompido e não foi aplicado");
+      return;
+    }
     setSequenceName(project.sequence || "Sequência 01");
-    setClips(project.clips || []);
+    // Versão 1 não guardava mídia: preserva a pasta atual nesse caso.
+    if (Array.isArray(project.media)) setMedia(project.media);
+    commit(project.clips || []);
     setMarkers(project.markers || []);
+    if (project.trackState) setTrackState({ ...emptyTrackState(), ...project.trackState });
+    if (project.mixer) setMixer({ ...emptyMixer(), ...project.mixer });
     setSelected(null);
+    setSelectedIds([]);
+    const offline = (project.media || []).filter((asset) => asset.offline).length;
+    notify(
+      `Projeto recarregado · ${(project.clips || []).length} clipes${offline ? ` · religue ${offline} mídia(s) offline` : ""}`,
+    );
   }
   async function importProject(file) {
     if (!file) return;
@@ -736,8 +1430,19 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     }
     if (!asset || !compatible(asset, kind)) return;
     const item = makeClip(asset, track, start);
-    commit((old) => [...old, item]);
+    // Modo inserção (botão ▤ ativo) empurra os clipes seguintes; desligado mantém o comportamento original.
+    commit((old) => (insertMode ? placeClip(old, item, "insert") : [...old, item]));
     setSelected(item.id);
+  }
+  function patchClip(id, values) {
+    commit((old) =>
+      old.map((clip) =>
+        clip.id === id && !trackState[clip.track]?.locked ? { ...clip, ...values } : clip,
+      ),
+    );
+  }
+  function changeMixerStrip(id, values) {
+    setMixer((old) => ({ ...emptyMixer(), ...old, [id]: { ...mixerStrip(old, id), ...values } }));
   }
   function toggleTrack(track, key) {
     setTrackState((old) => ({
@@ -879,11 +1584,11 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   }
 
   return (
-    <section className="bg-[#191919] text-slate-200">
+    <section ref={workspaceRoot} className="bg-[#191919] text-slate-200">
       <header className="mmfilm-project-header grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 border-b border-black bg-[#1d1d1d] px-4 py-3">
         <div>
           <nav className="flex items-center gap-5 text-sm">
-            <button className="text-slate-400 hover:text-white">⌂</button>
+            <button title="Montagem" aria-current={workspace === "Montagem" ? "page" : undefined} onClick={() => setWorkspace("Montagem")} className={workspace === "Montagem" ? "border-b-2 border-slate-200 pb-1 text-white" : "text-slate-400 hover:text-white"}>⌂</button>
             <button
               onClick={() => mediaInput.current?.click()}
               className="text-slate-400 hover:text-white"
@@ -892,13 +1597,15 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
             </button>
             <button
               onClick={() => setWorkspace("Edição")}
-              className="border-b-2 border-slate-200 pb-1 text-white"
+              aria-current={workspace !== "Montagem" && workspace !== "Exportar" ? "page" : undefined}
+              className={workspace !== "Montagem" && workspace !== "Exportar" ? "border-b-2 border-slate-200 pb-1 text-white" : "text-slate-400 hover:text-white"}
             >
               Editar
             </button>
             <button
               onClick={() => setWorkspace("Exportar")}
-              className="text-slate-400 hover:text-white"
+              aria-current={workspace === "Exportar" ? "page" : undefined}
+              className={workspace === "Exportar" ? "border-b-2 border-slate-200 pb-1 text-white" : "text-slate-400 hover:text-white"}
             >
               Exportar
             </button>
@@ -999,6 +1706,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
           />
         </div>
       </header>
+      {textPromptDialog}
       {commandNotice && (
         <div className="fixed right-5 top-20 z-[200] border border-blue-500 bg-[#202020] px-4 py-2 text-xs text-blue-200 shadow-2xl">
           {commandNotice}
@@ -1040,12 +1748,72 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               redo,
               split,
               marker: addMarker,
-              notify: (label) => {
-                setCommandNotice(
-                  `${label}: comando preparado para o projeto atual`,
-                );
-                window.setTimeout(() => setCommandNotice(""), 1800);
+              manageProxies: () =>
+                unavailable("Gerenciar proxies", "o navegador reproduz sempre a mídia original; não há geração de proxies"),
+              newProject,
+              openProject: () => projectInput.current?.click(),
+              save: saveProjectNow,
+              saveAs: saveProjectLocally,
+              cut: cutSelection,
+              copy: copySelection,
+              paste: pasteClipboard,
+              preferences: () =>
+                unavailable("Preferências", "o MMFilm ainda não tem preferências configuráveis"),
+              renameClip,
+              speed: () => promptClipSpeed(),
+              videoOptions: () => {
+                setWorkspace("Edição");
+                notify("Opções de vídeo: ajuste o clipe em Propriedades, no painel à direita");
               },
+              audio: () => setWorkspace("Áudio"),
+              newSequence,
+              sequenceSettings: () =>
+                notify(`${sequenceName}: 1920×1080 · 29,97 fps · 48 kHz estéreo (configuração fixa nesta versão)`, 5000),
+              renderInOut: () =>
+                unavailable("Renderizar entrada/saída", "a reprodução usa a mídia original e não há renderização de prévia"),
+              addEdit: () => {
+                const cut = razorAt(playhead);
+                notify(cut ? `Edição adicionada em ${clock(playhead)} · ${cut} clipe(s)` : "Adicionar edição: nenhum clipe desbloqueado sob o indicador");
+              },
+              nextMarker: () => jumpMarker(1),
+              previousMarker: () => jumpMarker(-1),
+              clearMarkers: () => {
+                setMarkers([]);
+                notify("Marcadores removidos");
+              },
+              newText: () => createTitle(playhead, targetTrack),
+              newLayer: () =>
+                unavailable("Nova camada", "camadas de forma ainda não são suportadas; use Novo texto ou a ferramenta Texto (T)"),
+              installTemplate: () =>
+                unavailable("Instalar modelo", "a instalação de modelos .mogrt não é suportada no navegador"),
+              updateText: updateTitleText,
+              sourceMonitor: () => setDualMonitor(true),
+              programMonitor: () => setDualMonitor(false),
+              rulers: () => unavailable("Réguas", "o monitor do programa ainda não exibe réguas"),
+              guides: () => unavailable("Guias", "o monitor do programa ainda não exibe guias"),
+              fullscreen: () => {
+                const element = workspaceRoot.current;
+                if (!element?.requestFullscreen) {
+                  unavailable("Tela cheia", "este navegador não permite tela cheia aqui");
+                  return;
+                }
+                element.requestFullscreen().catch(() =>
+                  unavailable("Tela cheia", "o navegador recusou o pedido"),
+                );
+              },
+              projects: () => setWorkspace("Montagem"),
+              effectControls: () => setWorkspace("Edição"),
+              effects: () => setWorkspace("Efeitos"),
+              audioMixer: () => setWorkspace("Áudio"),
+              essentialSound: () => setWorkspace("Áudio"),
+              textPanel: () => setWorkspace("Legendas"),
+              help: () =>
+                notify("Ajuda do MMFilm: importe mídia, arraste para as faixas e use as ferramentas à esquerda da timeline. Veja Ajuda › Atalhos de teclado.", 7000),
+              shortcuts: () => notify(KEYBOARD_HELP, 10000),
+              about: () =>
+                notify("MMFilm — editor de vídeo do MediaMind, inspirado no FilmCraft (Apache-2.0) e no OpenCut (MIT). Edição no navegador; exportação em WebM gravada pelo próprio navegador.", 7000),
+              notify: (label) =>
+                unavailable(label, "comando ainda não implementado"),
             }}
           />
         )}
@@ -1123,7 +1891,16 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       </div>
 
       {workspace === "Exportar" && (
-        <ExportWorkspace sequenceName={sequenceName} program={program} />
+        <ExportWorkspace
+          sequenceName={sequenceName}
+          program={program}
+          notify={notify}
+          clips={clips}
+          trackState={trackState}
+          mixer={mixer}
+          markIn={sourceIn}
+          markOut={sourceOut}
+        />
       )}
 
       <div
@@ -1138,6 +1915,22 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
             <AudioTrackMixer
               trackState={trackState}
               toggleTrack={toggleTrack}
+              mixer={mixer}
+              onMixerChange={changeMixerStrip}
+              clipsAtPlayhead={Object.fromEntries(
+                ["A1", "A2", "A3"].map((id) => [
+                  id,
+                  clips
+                    .filter((clip) => clip.track === id && playhead >= clip.start && playhead < clipEnd(clip))
+                    .at(-1),
+                ]),
+              )}
+              onClipChange={patchClip}
+              onSource={() => {
+                setDualMonitor(true);
+                notify("Origem: o Monitor de Origem foi aberto ao lado do Programa");
+              }}
+              onEffects={() => setWorkspace("Efeitos")}
             />
           ) : (
             <ColorEffectControls clip={chosen} patch={patch} />
@@ -1164,6 +1957,10 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               onContextMenu={(event, asset) =>
                 showContext(event, "media", asset)
               }
+              markers={markers}
+              onSeek={setPlayhead}
+              historyLength={history.length}
+              futureLength={future.length}
             />
           }
           {false && (
@@ -1254,7 +2051,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       )}
                     </div>
                     <p
-                      onDoubleClick={event => { event.stopPropagation(); const name = window.prompt('Nome da mídia', asset.name)?.trim(); if(name) { setMedia(old => old.map(item => item.id === asset.id ? {...item,name} : item)); setSource(old => old?.id === asset.id ? {...old,name} : old); } }}
+                      onDoubleClick={async event => { event.stopPropagation(); const name = (await askText('Nome da mídia', asset.name))?.trim(); if(name) { setMedia(old => old.map(item => item.id === asset.id ? {...item,name} : item)); setSource(old => old?.id === asset.id ? {...old,name} : old); } }}
                       className={`truncate text-[10px] text-slate-300 ${workspace === "Cor" ? "px-1" : "p-2"}`}
                     >
                       {asset.name}
@@ -1304,10 +2101,13 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <Monitor
                 title="Programa"
                 asset={program}
+                layers={layers}
                 playing={playing}
                 playhead={playhead}
                 onPlayingChange={setPlaying}
                 onSeek={setPlayhead}
+                audioMuted={mixerStrip(mixer, "Mix").muted}
+                onToggleAudio={() => changeMixerStrip("Mix", { muted: !mixerStrip(mixer, "Mix").muted })}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 border border-[#303030] bg-[#1e1e1e] p-2 text-[10px] text-slate-400">
@@ -1492,7 +2292,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               />
             </div>
 
-            <div className="overflow-x-auto">
+            <div ref={timelineScroll} className="overflow-x-auto">
               <div
                 ref={timelineTracks}
                 className="relative"
@@ -1511,7 +2311,11 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       00:{clock(playhead)}:23
                     </div>
                     <div className="mt-2 flex items-center gap-1 text-slate-300">
-                      <TrackButton label="Seleção vinculada" active>
+                      <TrackButton
+                        label="Seleção vinculada"
+                        active={linkedSelection}
+                        onClick={() => setLinkedSelection(!linkedSelection)}
+                      >
                         ▣
                       </TrackButton>
                       <TrackButton
@@ -1521,10 +2325,23 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       >
                         ∪
                       </TrackButton>
-                      <TrackButton label="Inserção e sobrescrita">
+                      <TrackButton
+                        label="Inserção e sobrescrita"
+                        active={insertMode}
+                        onClick={() => {
+                          setInsertMode(!insertMode);
+                          notify(insertMode ? "Arrastar para a faixa: sobrepor (padrão)" : "Arrastar para a faixa: inserir e empurrar os clipes seguintes");
+                        }}
+                      >
                         ▤
                       </TrackButton>
-                      <TrackButton label="Exibição da timeline">▥</TrackButton>
+                      <TrackButton
+                        label="Exibição da timeline"
+                        active={showClipInfo}
+                        onClick={() => setShowClipInfo(!showClipInfo)}
+                      >
+                        ▥
+                      </TrackButton>
                       <Flag size={10} />
                       <span className="ml-auto">⌕</span>
                     </div>
@@ -1638,7 +2455,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       <div
                         data-track-id={id}
                         className={`relative flex-1 ${state.locked ? "bg-slate-950/60" : ""}`}
-                        onPointerDown={(event) => beginMarquee(event, id)}
+                        onPointerDown={(event) => beginLanePointer(event, id)}
+                        onClick={(event) => clickLaneWithTool(event, id)}
                         onDragOver={(event) => event.preventDefault()}
                         onDrop={(event) => dropOnTrack(event, id, kind)}
                         onDoubleClick={() => source && insert(source, id)}
@@ -1648,8 +2466,11 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                           .map((clip) => (
                             <button
                               key={clip.id}
-                              draggable={!state.locked}
-                              onPointerDown={(event) => event.stopPropagation()}
+                              draggable={!state.locked && (editTool === "Seleção" || editTool === "Selecionar faixa")}
+                              onPointerDown={(event) => {
+                                event.stopPropagation();
+                                beginClipTool(event, clip);
+                              }}
                               onDragStart={(event) => {
                                 event.stopPropagation();
                                 event.dataTransfer.setData(
@@ -1659,11 +2480,24 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                               }}
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (clickClipWithTool(event, clip)) return;
+                                const linked = linkedSelection
+                                  ? clips
+                                      .filter(
+                                        (item) =>
+                                          item.id !== clip.id &&
+                                          item.track !== clip.track &&
+                                          clip.assetId &&
+                                          item.assetId === clip.assetId &&
+                                          Math.abs(item.start - clip.start) < 0.002,
+                                      )
+                                      .map((item) => item.id)
+                                  : [];
                                 setSelected(clip.id);
                                 setSelectedIds(
                                   event.shiftKey
-                                    ? [...new Set([...selectedIds, clip.id])]
-                                    : [clip.id],
+                                    ? [...new Set([...selectedIds, clip.id, ...linked])]
+                                    : [clip.id, ...linked],
                                 );
                               }}
                               onContextMenu={(event) => {
@@ -1678,10 +2512,12 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                               }}
                             >
                               <b className="block truncate">{clip.name}</b>
-                              <span>
-                                {clock(clip.start)} · {clip.duration.toFixed(1)}
-                                s
-                              </span>
+                              {showClipInfo && (
+                                <span>
+                                  {clock(clip.start)} · {clip.duration.toFixed(1)}
+                                  s
+                                </span>
+                              )}
                               {clip.transition && (
                                 <span className="absolute right-1 top-1 rounded bg-black/50 px-1 text-[8px]">
                                   {clip.transition}
@@ -1761,7 +2597,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         </main>
 
         <aside className="space-y-3 overflow-auto border border-[#303030] bg-[#1e1e1e] p-3 xl:col-start-3 xl:row-span-2 xl:row-start-1">
-          <WorkspacePanel workspace={workspace} clip={chosen} patch={patch} />
+          <WorkspacePanel workspace={workspace} clip={chosen} patch={patch} historyLength={history.length} futureLength={future.length} notify={notify} onImportCaptions={importCaptions} />
           {workspace === "Edição" && (
             <>
               <div className="border-b border-slate-700 pb-3">
@@ -1904,7 +2740,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
             </>
           )}
           <AudioMeter
-            active={playing && clips.some((clip) => clip.track.startsWith("A"))}
+            active={playing}
+            engine={audioEngine.current}
           />
         </aside>
       </div>
@@ -1947,12 +2784,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     : item,
                 ),
               ),
-            speed: (clip) => {
-              const value = Number(
-                window.prompt("Velocidade do clipe (%)", clip.speed || 100),
-              );
-              if (Number.isFinite(value) && value > 0) patch("speed", value);
-            },
+            speed: (clip) => promptClipSpeed(clip),
             split,
             remove: () => removeSelected(false),
             rippleRemove: () => removeSelected(true),
@@ -1970,9 +2802,14 @@ function PremiereProjectPanel({
   sequenceName,
   onRelink,
   onContextMenu,
+  markers = [],
+  onSeek = () => {},
+  historyLength = 0,
+  futureLength = 0,
 }) {
   const [tab, setTab] = useState("Projeto");
   const [query, setQuery] = useState("");
+  const searchInput = useRef(null);
   const [folders, setFolders] = useState([
     "01 Mídias",
     "02 Áudio",
@@ -1984,6 +2821,7 @@ function PremiereProjectPanel({
   const visible = media.filter((asset) =>
     asset.name.toLowerCase().includes(query.toLowerCase()),
   );
+  const [askText, textPromptDialog] = useTextPrompt();
   return (
     <div className="flex h-full flex-col text-[10px] text-slate-400">
       <div className="flex gap-5 border-b border-black px-3 py-2">
@@ -2009,6 +2847,7 @@ function PremiereProjectPanel({
             <span>{media.length + 1} itens</span>
           </div>
           <input
+            ref={searchInput}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="⌕ Pesquisar"
@@ -2117,11 +2956,11 @@ function PremiereProjectPanel({
               className="w-20"
             />
             <span className="ml-auto flex gap-4">
-              <button title="Pesquisar">⌕</button>
+              <button title="Pesquisar" onClick={() => searchInput.current?.focus()}>⌕</button>
               <button
                 title="Nova pasta"
-                onClick={() => {
-                  const name = window.prompt(
+                onClick={async () => {
+                  const name = await askText(
                     "Nome da nova pasta",
                     "Nova pasta",
                   );
@@ -2132,8 +2971,8 @@ function PremiereProjectPanel({
               </button>
               <button
                 title="Nova sequência"
-                onClick={() => {
-                  const name = window.prompt(
+                onClick={async () => {
+                  const name = await askText(
                     "Nome da nova sequência",
                     `Sequência ${sequences.length + 1}`,
                   );
@@ -2158,8 +2997,28 @@ function PremiereProjectPanel({
           </div>
         </>
       ) : (
-        <div className="p-4 text-slate-500">Painel {tab}</div>
+        <div className="p-4 text-slate-500">
+          {tab === "Info" &&
+            (source
+              ? `${source.name} · ${source.type}${source.duration ? ` · ${Number(source.duration).toFixed(1)} s` : ""}${source.offline ? " · offline" : ""}`
+              : "Selecione uma mídia para ver as informações")}
+          {tab === "Marcadores" &&
+            (markers.length
+              ? markers.map((marker) => (
+                  <button
+                    key={marker}
+                    onClick={() => onSeek(marker)}
+                    className="block w-full py-1 text-left hover:text-slate-200"
+                  >
+                    ◆ {clock(marker)} · {marker.toFixed(1)} s
+                  </button>
+                ))
+              : "Nenhum marcador na sequência")}
+          {tab === "Histórico" &&
+            `${historyLength} ação(ões) para desfazer · ${futureLength} para refazer`}
+        </div>
       )}
+      {textPromptDialog}
     </div>
   );
 }
@@ -2447,7 +3306,22 @@ function EditableControlRow({
   );
 }
 
-function AudioMeter({ active }) {
+// Medidores L/R lidos dos AnalyserNodes do master enquanto o áudio toca; sem áudio real, ficam em repouso.
+function AudioMeter({ active, engine }) {
+  const [levels, setLevels] = useState(null);
+  useEffect(() => {
+    if (!active || !engine || typeof requestAnimationFrame !== "function") {
+      setLevels(null);
+      return;
+    }
+    let frame = 0;
+    const tick = () => {
+      setLevels(engine.playing ? engine.levels() : null);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [active, engine]);
   return (
     <div className="border-t border-black pt-3">
       <div className="mb-2 flex justify-between text-[9px] text-slate-500">
@@ -2458,7 +3332,9 @@ function AudioMeter({ active }) {
         {[0, 1].map((channel) => (
           <div key={channel} className="relative h-full bg-[#111]">
             <span
-              className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 via-lime-400 to-amber-400 transition-all duration-100 ${active ? (channel ? "h-[72%]" : "h-[82%]") : "h-[4%]"}`}
+              data-meter-channel={channel ? "R" : "L"}
+              className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-emerald-500 via-lime-400 to-amber-400 transition-all duration-100 ${levels ? "" : "h-[4%]"}`}
+              style={levels ? { height: `${Math.max(4, Math.round(levels[channel] * 100))}%` } : undefined}
             />
           </div>
         ))}
@@ -2515,64 +3391,68 @@ const APPLICATION_MENUS = {
   Mídia: [
     ["Importar mídia…", "importMedia"],
     ["Vincular mídia…", "relinkMedia"],
-    ["Gerenciar proxies"],
+    ["Gerenciar proxies", "manageProxies"],
   ],
   Arquivo: [
-    ["Novo projeto"],
-    ["Abrir projeto…"],
-    ["Salvar"],
-    ["Salvar como…"],
+    ["Novo projeto", "newProject"],
+    ["Abrir projeto…", "openProject"],
+    ["Salvar", "save"],
+    ["Salvar como…", "saveAs"],
     ["Exportar", "exportView"],
   ],
   Editar: [
     ["Desfazer", "undo"],
     ["Refazer", "redo"],
-    ["Recortar"],
-    ["Copiar"],
-    ["Colar"],
-    ["Preferências"],
+    ["Recortar", "cut"],
+    ["Copiar", "copy"],
+    ["Colar", "paste"],
+    ["Preferências", "preferences"],
   ],
   Clipe: [
-    ["Renomear"],
-    ["Velocidade/Duração…"],
-    ["Opções de vídeo"],
-    ["Áudio"],
+    ["Renomear", "renameClip"],
+    ["Velocidade/Duração…", "speed"],
+    ["Opções de vídeo", "videoOptions"],
+    ["Áudio", "audio"],
     ["Dividir", "split"],
   ],
   Sequência: [
-    ["Nova sequência…"],
-    ["Configurações da sequência…"],
-    ["Renderizar entrada/saída"],
-    ["Adicionar edição", "split"],
+    ["Nova sequência…", "newSequence"],
+    ["Configurações da sequência…", "sequenceSettings"],
+    ["Renderizar entrada/saída", "renderInOut"],
+    ["Adicionar edição", "addEdit"],
   ],
   Marcadores: [
     ["Adicionar marcador", "marker"],
-    ["Próximo marcador"],
-    ["Marcador anterior"],
-    ["Limpar marcadores"],
+    ["Próximo marcador", "nextMarker"],
+    ["Marcador anterior", "previousMarker"],
+    ["Limpar marcadores", "clearMarkers"],
   ],
   "Gráficos e Títulos": [
-    ["Novo texto"],
-    ["Nova camada"],
-    ["Instalar modelo…"],
-    ["Atualizar texto"],
+    ["Novo texto", "newText"],
+    ["Nova camada", "newLayer"],
+    ["Instalar modelo…", "installTemplate"],
+    ["Atualizar texto", "updateText"],
   ],
   Exibir: [
-    ["Monitor de origem"],
-    ["Monitor do programa"],
-    ["Réguas"],
-    ["Guias"],
-    ["Tela cheia"],
+    ["Monitor de origem", "sourceMonitor"],
+    ["Monitor do programa", "programMonitor"],
+    ["Réguas", "rulers"],
+    ["Guias", "guides"],
+    ["Tela cheia", "fullscreen"],
   ],
   Janela: [
-    ["Projetos"],
-    ["Controles de efeitos"],
-    ["Efeitos"],
-    ["Mixer de faixa de áudio"],
-    ["Som essencial"],
-    ["Texto"],
+    ["Projetos", "projects"],
+    ["Controles de efeitos", "effectControls"],
+    ["Efeitos", "effects"],
+    ["Mixer de faixa de áudio", "audioMixer"],
+    ["Som essencial", "essentialSound"],
+    ["Texto", "textPanel"],
   ],
-  Ajuda: [["Ajuda do MMFilm"], ["Atalhos de teclado"], ["Sobre o MMFilm"]],
+  Ajuda: [
+    ["Ajuda do MMFilm", "help"],
+    ["Atalhos de teclado", "shortcuts"],
+    ["Sobre o MMFilm", "about"],
+  ],
 };
 function ApplicationMenu({ name, actions, onClose }) {
   return (
@@ -2600,24 +3480,51 @@ function ApplicationMenu({ name, actions, onClose }) {
     </div>
   );
 }
-function AudioTrackMixer({ trackState, toggleTrack }) {
+// Mixer ligado ao grafo de Web Audio: fader (dB), pan, mudo/solo, estéreo/mono por faixa e master (Mix).
+// "Mixer de clipe" usa os mesmos controles sobre o clipe sob o indicador em cada faixa.
+function AudioTrackMixer({
+  trackState,
+  toggleTrack,
+  mixer,
+  onMixerChange = () => {},
+  clipsAtPlayhead = {},
+  onClipChange = () => {},
+  onSource = () => {},
+  onEffects = () => {},
+}) {
+  const [mode, setMode] = useState("track");
+  const clipMode = mode === "clip";
   return (
     <div className="h-full text-[10px] text-slate-300">
       <div className="flex gap-4 border-b border-black px-2 py-2">
-        <button className="border-b border-slate-200">Mixer de faixa ☰</button>
-        <button>Origem</button>
-        <button>Mixer de clipe</button>
-        <button>Efeitos</button>
+        <button onClick={() => setMode("track")} className={clipMode ? undefined : "border-b border-slate-200"}>Mixer de faixa ☰</button>
+        <button onClick={onSource}>Origem</button>
+        <button onClick={() => setMode("clip")} className={clipMode ? "border-b border-slate-200" : undefined}>Mixer de clipe</button>
+        <button onClick={onEffects}>Efeitos</button>
       </div>
       <div className="grid h-[calc(100%-34px)] grid-cols-4 gap-px bg-black">
         {["A1", "A2", "A3", "Mix"].map((id) => {
-          const state = trackState[id] || {};
+          const isMaster = id === "Mix";
+          const state = isMaster ? { muted: mixerStrip(mixer, "Mix").muted } : trackState[id] || {};
+          const strip = mixerStrip(mixer, id);
+          const clip = clipMode && !isMaster ? clipsAtPlayhead[id] : null;
+          const clipDisabled = clipMode && !isMaster && (!clip || trackState[id]?.locked);
+          const volumeDb = clip ? clipVolumeToDb(clip.volume ?? 100) : clipMode && !isMaster ? 0 : strip.volumeDb;
+          const pan = clip ? clip.pan ?? 0 : clipMode && !isMaster ? 0 : strip.pan;
+          const setVolume = (db) =>
+            clip ? onClipChange(clip.id, { volume: dbToClipVolume(db) }) : onMixerChange(id, { volumeDb: db });
+          const setPan = (value) => (clip ? onClipChange(clip.id, { pan: value }) : onMixerChange(id, { pan: value }));
           return (
             <div
               key={id}
               className="flex flex-col items-center bg-[#202020] px-1 py-2"
             >
-              <select className="w-full bg-[#111]">
+              <select
+                aria-label={`Canais ${id}`}
+                value={strip.channels}
+                onChange={(event) => onMixerChange(id, { channels: event.target.value })}
+                className="w-full bg-[#111]"
+              >
                 <option>Estéreo</option>
                 <option>Mono</option>
               </select>
@@ -2630,7 +3537,10 @@ function AudioTrackMixer({ trackState, toggleTrack }) {
                 type="range"
                 min="-100"
                 max="100"
-                defaultValue="0"
+                value={pan}
+                disabled={clipDisabled}
+                title={clip ? `Pan do clipe ${clip.name}: ${pan}` : `Pan ${id}: ${pan}`}
+                onChange={(event) => setPan(+event.target.value)}
                 className="my-3 w-full"
               />
               <select className="w-full bg-[#111]">
@@ -2640,7 +3550,9 @@ function AudioTrackMixer({ trackState, toggleTrack }) {
               </select>
               <div className="my-2 flex gap-1">
                 <button
-                  onClick={() => id !== "Mix" && toggleTrack(id, "muted")}
+                  onClick={() =>
+                    isMaster ? onMixerChange("Mix", { muted: !state.muted }) : toggleTrack(id, "muted")
+                  }
                   className={
                     state.muted
                       ? "bg-amber-500 px-1 text-black"
@@ -2673,7 +3585,11 @@ function AudioTrackMixer({ trackState, toggleTrack }) {
                   type="range"
                   min="-60"
                   max="12"
-                  defaultValue="0"
+                  step="0.1"
+                  value={volumeDb}
+                  disabled={clipDisabled}
+                  title={`${clip ? `Clipe ${clip.name}` : id}: ${volumeDb <= -60 ? "−∞" : volumeDb} dB`}
+                  onChange={(event) => setVolume(+event.target.value)}
                   className="relative z-10 h-full [writing-mode:vertical-lr]"
                 />
               </div>
@@ -2685,33 +3601,89 @@ function AudioTrackMixer({ trackState, toggleTrack }) {
     </div>
   );
 }
-function Monitor({ title, asset, children, playing = false, playhead = 0, onPlayingChange, onSeek }) {
+// Estilo visual de uma camada. No Programa, a posição (pixels da sequência 1920×1080) é escalada ao tamanho do monitor.
+function layerVisualStyle(asset, frameScale = 1) {
+  if (!asset) return undefined;
+  return {
+    opacity: (asset.opacity ?? 100) / 100,
+    transformOrigin: `${(asset.anchorX ?? 960) / 19.2}% ${(asset.anchorY ?? 540) / 10.8}%`,
+    clipPath: `inset(${asset.cropTop ?? 0}% ${asset.cropRight ?? 0}% ${asset.cropBottom ?? 0}% ${asset.cropLeft ?? 0}%)`,
+    transform: `translate(${(asset.x ?? 0) * frameScale}px, ${(asset.y ?? 0) * frameScale}px) rotate(${asset.rotation ?? 0}deg) scale(${(asset.scale ?? 100) / 100})`,
+    filter: layerFilter(asset),
+  };
+}
+// Uma camada do Programa (V1–V3). Vídeos ficam mudos: o som vem da mixagem Web Audio.
+function ProgramLayer({ clip, zIndex, frameScale, playing, playhead, mediaRef, audioMuted, ...videoEvents }) {
   const videoRef = useRef(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !clip?.url) return;
+    video.muted = isAudioSupported() || Boolean(audioMuted) || !mediaRef;
+    const target = clipMediaTime(clip, playhead);
+    const seekTime = Number.isFinite(video.duration) ? Math.min(target, Math.max(0, video.duration - 0.01)) : target;
+    if (!playing || Math.abs(video.currentTime - seekTime) > 0.35) video.currentTime = seekTime;
+    video.playbackRate = Math.max(0.25, Math.min(4, (clip.speed || 100) / 100));
+    if (playing) video.play?.()?.catch?.(() => {});
+    else video.pause?.();
+  }, [clip, playhead, playing, audioMuted, mediaRef]);
+  const style = { ...layerVisualStyle(clip, frameScale), zIndex };
+  if (clip.type === TITLE_TYPE)
+    return (
+      <div style={style} className="col-start-1 row-start-1 whitespace-pre-wrap px-6 text-center text-3xl font-bold text-white">
+        {clip.text || clip.name}
+      </div>
+    );
+  if (clip.offline || !clip.url)
+    return (
+      <div style={{ zIndex }} className="col-start-1 row-start-1 max-w-sm border border-amber-500/50 bg-amber-950/20 p-5 text-center text-xs text-amber-200">
+        <b className="block text-sm">Mídia offline</b>
+        <span className="mt-2 block text-slate-400">{clip.name}</span>
+        <span className="mt-2 block">
+          Use “Importar mídia” e escolha o arquivo original para religar e
+          reproduzir este clipe.
+        </span>
+      </div>
+    );
+  if (clip.type?.startsWith("image"))
+    return <img src={clip.url} alt="" style={style} className="col-start-1 row-start-1 h-full w-full object-contain" />;
+  return (
+    <video
+      ref={(node) => {
+        videoRef.current = node;
+        if (mediaRef) mediaRef.current = node;
+      }}
+      {...videoEvents}
+      src={clip.url}
+      style={style}
+      className="absolute inset-0 h-full w-full object-contain"
+    />
+  );
+}
+function Monitor({ title, asset, layers, children, playing = false, playhead = 0, onPlayingChange, onSeek, audioMuted = false, onToggleAudio }) {
+  const videoRef = useRef(null);
+  const frameRef = useRef(null);
   const [monitorPlaying, setMonitorPlaying] = useState(false);
   const [monitorTime, setMonitorTime] = useState(0);
   const [monitorDuration, setMonitorDuration] = useState(0);
+  const [frameScale, setFrameScale] = useState(1);
+  const hasLayers = Boolean(layers);
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || title !== "Programa" || !asset?.url) return;
-    const target = clipMediaTime(asset, playhead);
-    const seekTime = Number.isFinite(video.duration) ? Math.min(target, Math.max(0, video.duration - 0.01)) : target;
-    if (!playing || Math.abs(video.currentTime - seekTime) > 0.35) video.currentTime = seekTime;
-    video.playbackRate = Math.max(
-      0.25,
-      Math.min(4, (asset.speed || 100) / 100),
-    );
-    if (playing) video.play().catch(() => {});
-    else video.pause();
-  }, [asset, playhead, playing, title]);
-  const visualStyle = asset
-    ? {
-        opacity: (asset.opacity ?? 100) / 100,
-        transformOrigin: `${(asset.anchorX ?? 960) / 19.2}% ${(asset.anchorY ?? 540) / 10.8}%`,
-        clipPath: `inset(${asset.cropTop ?? 0}% ${asset.cropRight ?? 0}% ${asset.cropBottom ?? 0}% ${asset.cropLeft ?? 0}%)`,
-        transform: `translate(${asset.x ?? 0}px, ${asset.y ?? 0}px) rotate(${asset.rotation ?? 0}deg) scale(${(asset.scale ?? 100) / 100})`,
-        filter: `brightness(${100 + (asset.exposure ?? 0)}%) contrast(${asset.contrast ?? 100}%) saturate(${asset.saturation ?? 100}%)`,
-      }
-    : undefined;
+    const element = frameRef.current;
+    if (!hasLayers || !element || typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setFrameScale(Math.min(width / 1920, height / 1080));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasLayers]);
+  const visualStyle = layerVisualStyle(asset);
+  const videoEvents = {
+    onPlay: () => setMonitorPlaying(true),
+    onPause: () => setMonitorPlaying(false),
+    onTimeUpdate: (event) => setMonitorTime(event.currentTarget.currentTime),
+    onLoadedMetadata: (event) => setMonitorDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0),
+  };
   return (
     <div draggable={Boolean(asset)} onDragStart={event => {
       if (!asset) return;
@@ -2725,9 +3697,34 @@ function Monitor({ title, asset, children, playing = false, playhead = 0, onPlay
         </span>
         {children}
       </div>
-      <div className="relative grid min-h-0 flex-1 overflow-hidden place-items-center">
+      <div ref={frameRef} className="relative grid min-h-0 flex-1 overflow-hidden place-items-center">
         {asset && <div draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id)); event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset)); }} className="col-start-1 row-start-1 self-start justify-self-start z-10 m-2 cursor-grab rounded border border-sky-600 bg-slate-950/90 px-2 py-1 text-xs text-sky-300" title="Arraste para uma pista da timeline">Arrastar mídia para timeline</div>}
-        {asset?.offline || (asset && !asset.url) ? (
+        {layers ? (
+          layers.length ? (
+            layers.map((layer, index) => (
+              <ProgramLayer
+                key={layer.id}
+                clip={layer}
+                zIndex={index + 1}
+                frameScale={frameScale}
+                playing={playing}
+                playhead={playhead}
+                audioMuted={audioMuted}
+                mediaRef={layer.id === asset?.id ? videoRef : undefined}
+                {...(layer.id === asset?.id ? videoEvents : {})}
+              />
+            ))
+          ) : (
+            <span className="text-xs text-slate-600">00:00:00:00</span>
+          )
+        ) : asset?.type === TITLE_TYPE ? (
+          <div
+            style={visualStyle}
+            className="whitespace-pre-wrap px-6 text-center text-3xl font-bold text-white"
+          >
+            {asset.text || asset.name}
+          </div>
+        ) : asset?.offline || (asset && !asset.url) ? (
           <div className="max-w-sm border border-amber-500/50 bg-amber-950/20 p-5 text-center text-xs text-amber-200">
             <b className="block text-sm">Mídia offline</b>
             <span className="mt-2 block text-slate-400">{asset.name}</span>
@@ -2768,7 +3765,7 @@ function Monitor({ title, asset, children, playing = false, playhead = 0, onPlay
         {asset?.type?.startsWith('video') && <>
           <button aria-label={`${monitorPlaying ? 'Pausar' : 'Reproduzir'} ${title}`} onClick={() => { if(onPlayingChange) {onPlayingChange(!playing);return;} const video = videoRef.current; if (!video) return; if(video.paused) video.play().catch(() => {}); else video.pause(); }}>{monitorPlaying ? 'Ⅱ' : '▶'}</button>
           <input aria-label={`Progresso ${title}`} type="range" min="0" max={monitorDuration || 1} step="0.01" value={Math.min(monitorTime,monitorDuration || 1)} onChange={event => { const next=Number(event.target.value); if(onSeek) onSeek(asset.start+Math.max(0,next-(asset.sourceIn || 0))/((asset.speed || 100)/100)); else if(videoRef.current) videoRef.current.currentTime=next; }} className="min-w-0 flex-1 accent-sky-400"/>
-          <button aria-label={`Silenciar ${title}`} onClick={() => {if(videoRef.current) videoRef.current.muted=!videoRef.current.muted;}}>♪</button>
+          <button aria-label={`Silenciar ${title}`} aria-pressed={onToggleAudio ? audioMuted : undefined} onClick={() => {if(onToggleAudio) {onToggleAudio();return;} if(videoRef.current) videoRef.current.muted=!videoRef.current.muted;}}>♪</button>
         </>}
         <span className="font-mono text-blue-400">{clock(monitorTime)}</span>
         <button>Fit ▾</button>
@@ -2779,9 +3776,20 @@ function Monitor({ title, asset, children, playing = false, playhead = 0, onPlay
   );
 }
 
-function ExportWorkspace({ sequenceName, program }) {
+const DOWNLOADS_LOCATION = "Pasta de downloads do navegador";
+const FINISHED_STATUSES = ["Concluído", "Não renderizado", "Cancelado"];
+// Exportação real: renderiza o Programa num canvas em tempo real e grava canvas + mixagem com MediaRecorder (WebM).
+function ExportWorkspace({
+  sequenceName,
+  program,
+  notify = () => {},
+  clips = [],
+  trackState = {},
+  mixer,
+  markIn = 0,
+  markOut = 0,
+}) {
   const [fileName, setFileName] = useState(sequenceName || "Main Edit");
-  const [location, setLocation] = useState("C:\\Users\\Alex\\Videos");
   const [preset, setPreset] = useState(
     "Corresponder à origem – Alta taxa de bits",
   );
@@ -2792,38 +3800,140 @@ function ExportWorkspace({ sequenceName, program }) {
   const [audioOpen, setAudioOpen] = useState(true);
   const [quality, setQuality] = useState(true);
   const [hardware, setHardware] = useState(true);
+  const [targetMbps, setTargetMbps] = useState(9.94);
+  const [encoding, setEncoding] = useState("VBR, 1 passagem");
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [sampleRate, setSampleRate] = useState("48000 Hz");
+  const [audioChannels, setAudioChannels] = useState("Estéreo");
+  const [audioRate, setAudioRate] = useState("320 kbps");
+  const [interval, setIntervalMode] = useState("Sequência inteira");
+  const [fit, setFit] = useState("Ajustar ao quadro");
+  const abortRef = useRef(null);
+  const stopRef = useRef(false);
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+  const [support] = useState(() => exportSupport());
+  const size = presetSize(preset);
+  const range = exportRange({ clips, trackState, interval, markIn, markOut });
+  const seconds = Math.max(0, range.end - range.start);
+  const audioKbps = includeAudio ? parseKbps(audioRate) / 1000 : 0;
+  const unsupportedTitle = support.supported
+    ? undefined
+    : `Exportação indisponível neste navegador: ${support.reason}`;
+  useEffect(() => () => abortRef.current?.abort(), []);
 
+  function snapshot() {
+    return {
+      width: size.width,
+      height: size.height,
+      fps: SEQUENCE_FPS,
+      videoBitsPerSecond: mbpsToBps(targetMbps),
+      audioBitsPerSecond: parseKbps(audioRate),
+      includeAudio,
+      sampleRate: Number.parseInt(sampleRate, 10) || 48000,
+      channels: audioChannels,
+      bitrateMode: encoding === "CBR" ? "constant" : "variable",
+      fit,
+      interval,
+    };
+  }
+  function makeJob() {
+    return { id: Date.now() + Math.random(), name: fileName, format, preset, status: "Pronto", settings: snapshot() };
+  }
   function addToQueue() {
-    setQueue((old) => [
-      ...old,
-      { id: Date.now(), name: fileName, format, preset, status: "Pronto" },
-    ]);
+    setQueue((old) => [...old, makeJob()]);
+  }
+  function setJob(id, values) {
+    setQueue((old) => old.map((job) => (job.id === id ? { ...job, ...values } : job)));
+  }
+  async function renderJob(job) {
+    const { channels, interval: jobInterval, ...settings } = job.settings || snapshot();
+    const master = mixerStrip(mixer, "Mix");
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setJob(job.id, { status: "Renderizando 0%" });
+    let last = 0;
+    try {
+      const blob = await renderTimelineToWebm({
+        ...settings,
+        clips,
+        trackState,
+        // Canais da exportação: Mono reduz o master a um canal.
+        mixer: { ...mixer, Mix: { ...master, channels: channels === "Mono" ? "Mono" : master.channels } },
+        range: exportRange({ clips, trackState, interval: jobInterval, markIn, markOut }),
+        signal: controller.signal,
+        onProgress: (value) => {
+          const percent = Math.floor(value * 100);
+          if (percent !== last) {
+            last = percent;
+            setJob(job.id, { status: `Renderizando ${percent}%` });
+          }
+        },
+      });
+      const name = exportFileName(job.name);
+      downloadBlob(blob, name);
+      setJob(job.id, { status: "Concluído" });
+      notify(
+        `Exportação concluída: ${name} (WebM, ${(blob.size / 1_000_000).toFixed(1).replace(".", ",")} MB) enviado para os downloads do navegador`,
+        6000,
+      );
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        setJob(job.id, { status: "Cancelado" });
+        notify(`Exportação de ${job.name} cancelada; nenhum arquivo foi gerado`);
+      } else {
+        const reason = error?.message || "erro desconhecido";
+        setJob(job.id, { status: `Falhou: ${reason}` });
+        notify(`Exportação de ${job.name} falhou: ${reason}; nenhum arquivo foi gerado`, 6000);
+      }
+      return false;
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+    }
+  }
+  async function runJobs(jobs) {
+    if (!jobs.length) return;
+    setRunning(true);
+    stopRef.current = false;
+    notify("Renderizando em tempo real: mantenha esta aba visível até o fim da exportação", 5000);
+    for (const job of jobs) {
+      if (stopRef.current) break;
+      // job removido da fila antes de começar: pula
+      if (!queueRef.current.some((item) => item.id === job.id)) continue;
+      await renderJob(job);
+    }
+    setRunning(false);
   }
   function startQueue() {
-    setRunning(true);
-    setQueue((old) => old.map((item) => ({ ...item, status: "Codificando" })));
-    window.setTimeout(() => {
-      setQueue((old) => old.map((item) => ({ ...item, status: "Concluído" })));
+    if (!support.supported) {
       setRunning(false);
-    }, 900);
+      setQueue((old) =>
+        old.map((item) => ({ ...item, status: "Não renderizado" })),
+      );
+      notify(
+        `Iniciar fila: não renderizado — a renderização local de vídeo ainda não está disponível neste navegador (${support.reason}); nenhum arquivo foi gerado`,
+        6000,
+      );
+      return;
+    }
+    runJobs(queue.filter((item) => item.status !== "Concluído"));
   }
-  function exportSettings() {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          { fileName, location, preset, format, quality, hardware },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${fileName}.mmexport.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  function stopQueue() {
+    stopRef.current = true;
+    abortRef.current?.abort();
+  }
+  function exportNow() {
+    if (!support.supported || running) return;
+    const job = makeJob();
+    queueRef.current = [...queueRef.current, job];
+    setQueue((old) => [...old, job]);
+    runJobs([job]);
+  }
+  function removeJob(item) {
+    if (item.status.startsWith("Renderizando")) abortRef.current?.abort();
+    queueRef.current = queueRef.current.filter((job) => job.id !== item.id);
+    setQueue((old) => old.filter((job) => job.id !== item.id));
   }
 
   return (
@@ -2842,6 +3952,13 @@ function ExportWorkspace({ sequenceName, program }) {
         ].map((name, index) => (
           <button
             key={name}
+            onClick={() =>
+              index > 0 &&
+              notify(
+                `${name}: publicação direta indisponível — exporte o arquivo e publique manualmente`,
+                5000,
+              )
+            }
             className={`mx-2 mt-1 px-3 py-2 text-left ${index === 0 ? "bg-[#3a3a3a] text-white" : "hover:bg-[#292929]"}`}
           >
             {name}
@@ -2878,9 +3995,9 @@ function ExportWorkspace({ sequenceName, program }) {
                     className="min-w-0 flex-1 bg-transparent font-semibold outline-none"
                   />
                   <button
-                    onClick={() =>
-                      setQueue((old) => old.filter((job) => job.id !== item.id))
-                    }
+                    aria-label={`Remover ${item.name} da fila`}
+                    title={item.status.startsWith("Renderizando") ? "Cancelar e remover" : "Remover"}
+                    onClick={() => removeJob(item)}
                   >
                     ×
                   </button>
@@ -2888,6 +4005,7 @@ function ExportWorkspace({ sequenceName, program }) {
                 <div className="mt-1 flex justify-between">
                   <select
                     value={item.format}
+                    title="O navegador grava sempre em WebM (VP9/VP8 + Opus)"
                     onChange={(event) =>
                       setQueue((old) =>
                         old.map((job) =>
@@ -2920,6 +4038,7 @@ function ExportWorkspace({ sequenceName, program }) {
         <div className="mt-auto flex gap-1 border-t border-[#333] p-2">
           <button
             disabled={!queue.length || running}
+            title={unsupportedTitle}
             onClick={startQueue}
             className="border border-[#444] px-2 py-1 disabled:opacity-40"
           >
@@ -2927,7 +4046,7 @@ function ExportWorkspace({ sequenceName, program }) {
           </button>
           <button
             disabled={!running}
-            onClick={() => setRunning(false)}
+            onClick={stopQueue}
             className="border border-[#444] px-2 py-1 disabled:opacity-40"
           >
             Parar
@@ -2935,7 +4054,11 @@ function ExportWorkspace({ sequenceName, program }) {
           <button
             onClick={() =>
               setQueue((old) =>
-                old.filter((item) => item.status !== "Concluído"),
+                old.filter(
+                  (item) =>
+                    !FINISHED_STATUSES.includes(item.status) &&
+                    !item.status.startsWith("Falhou"),
+                ),
               )
             }
             className="border border-[#444] px-2 py-1"
@@ -2954,8 +4077,9 @@ function ExportWorkspace({ sequenceName, program }) {
         </ExportField>
         <ExportField label="Local">
           <input
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
+            value={DOWNLOADS_LOCATION}
+            readOnly
+            title="O navegador salva o arquivo exportado na pasta de downloads configurada nele"
           />
         </ExportField>
         <ExportField label="Predefinição">
@@ -2972,6 +4096,7 @@ function ExportWorkspace({ sequenceName, program }) {
         <ExportField label="Formato">
           <select
             value={format}
+            title="O navegador grava sempre em WebM (VP9/VP8 + Opus)"
             onChange={(event) => setFormat(event.target.value)}
           >
             <option>H.264</option>
@@ -2984,7 +4109,11 @@ function ExportWorkspace({ sequenceName, program }) {
           <ExportCheck
             label="Tamanho do quadro"
             checked
-            value="Corresponder à origem · 1920×1080"
+            value={
+              preset.startsWith("Corresponder")
+                ? "Corresponder à origem · 1920×1080"
+                : `${size.width}×${size.height}`
+            }
           />
           <ExportCheck label="Taxa de quadros" checked value="29,97 fps" />
           <ExportField label="Ordem dos campos">
@@ -3007,14 +4136,20 @@ function ExportWorkspace({ sequenceName, program }) {
             </select>
           </ExportField>
           <ExportField label="Codificação">
-            <select>
+            <select value={encoding} onChange={(event) => setEncoding(event.target.value)}>
               <option>VBR, 1 passagem</option>
               <option>VBR, 2 passagens</option>
               <option>CBR</option>
             </select>
           </ExportField>
           <ExportField label="Taxa alvo">
-            <input type="number" defaultValue="9.94" step="0.1" />
+            <input
+              type="number"
+              value={targetMbps}
+              min="0.1"
+              step="0.1"
+              onChange={(event) => setTargetMbps(event.target.value)}
+            />
           </ExportField>
           <ExportCheck
             label="Hardware"
@@ -3029,28 +4164,28 @@ function ExportWorkspace({ sequenceName, program }) {
           />
         </ExportSection>
         <ExportSection title="Áudio" open={audioOpen} setOpen={setAudioOpen}>
-          <ExportCheck label="Exportar áudio" checked />
+          <ExportCheck label="Exportar áudio" checked={includeAudio} onChange={setIncludeAudio} />
           <ExportField label="Formato">
-            <select>
+            <select title="O navegador grava o áudio em Opus dentro do WebM">
               <option>AAC</option>
               <option>PCM</option>
               <option>MP3</option>
             </select>
           </ExportField>
           <ExportField label="Amostragem">
-            <select>
+            <select value={sampleRate} onChange={(event) => setSampleRate(event.target.value)}>
               <option>48000 Hz</option>
               <option>44100 Hz</option>
             </select>
           </ExportField>
           <ExportField label="Canais">
-            <select>
+            <select value={audioChannels} onChange={(event) => setAudioChannels(event.target.value)}>
               <option>Estéreo</option>
               <option>Mono</option>
             </select>
           </ExportField>
           <ExportField label="Taxa de áudio">
-            <select>
+            <select value={audioRate} onChange={(event) => setAudioRate(event.target.value)}>
               <option>320 kbps</option>
               <option>256 kbps</option>
               <option>192 kbps</option>
@@ -3076,13 +4211,13 @@ function ExportWorkspace({ sequenceName, program }) {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <ExportField label="Intervalo">
-            <select>
+            <select value={interval} onChange={(event) => setIntervalMode(event.target.value)}>
               <option>Sequência inteira</option>
               <option>Entrada/Saída</option>
             </select>
           </ExportField>
           <ExportField label="Escala">
-            <select>
+            <select value={fit} onChange={(event) => setFit(event.target.value)}>
               <option>Ajustar ao quadro</option>
               <option>Preencher</option>
             </select>
@@ -3091,11 +4226,19 @@ function ExportWorkspace({ sequenceName, program }) {
         <div className="mt-3 bg-[#111] p-4 leading-5">
           <b className="text-white">Resumo</b>
           <p>
-            Saída: {location}\\{fileName}.mp4
+            Saída: downloads do navegador · {exportFileName(fileName)}
           </p>
-          <p>{format} · 1920×1080 · 29,97 fps · Progressivo</p>
-          <p>VBR · Alvo 9,94 Mbps · AAC 320 kbps</p>
-          <p className="mt-3 text-slate-500">Tamanho estimado: 34 MB</p>
+          <p>
+            WebM (VP9/VP8) · {size.width}×{size.height} · 29,97 fps · Progressivo · {seconds.toFixed(1).replace(".", ",")} s
+          </p>
+          <p>
+            {encoding === "CBR" ? "CBR" : "VBR"} · Alvo {String(targetMbps).replace(".", ",")} Mbps ·{" "}
+            {includeAudio ? `Opus ${audioRate}` : "sem áudio"}
+          </p>
+          <p className="mt-3 text-slate-500">
+            Tamanho estimado: {Math.round(estimateSizeMB({ videoMbps: targetMbps, audioKbps, seconds }))} MB
+            {unsupportedTitle ? ` · ${unsupportedTitle}` : ""}
+          </p>
         </div>
         <div className="mt-auto flex justify-end gap-2">
           <button
@@ -3105,7 +4248,9 @@ function ExportWorkspace({ sequenceName, program }) {
             Enviar à fila
           </button>
           <button
-            onClick={exportSettings}
+            onClick={exportNow}
+            disabled={!support.supported || running}
+            title={unsupportedTitle || "Renderiza a sequência em tempo real e baixa um arquivo WebM"}
             className="rounded-full bg-blue-600 px-8 py-2 font-bold text-white"
           >
             Exportar
@@ -3153,7 +4298,8 @@ function ExportCheck({ label, checked, onChange = () => {}, value }) {
   );
 }
 
-function WorkspacePanel({ workspace, clip, patch }) {
+function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLength = 0, notify = () => {}, onImportCaptions }) {
+  const [infoTab, setInfoTab] = useState("Informações");
   const [openEffects, setOpenEffects] = useState({});
   const Icon =
     workspace === "Cor"
@@ -3195,29 +4341,66 @@ function WorkspacePanel({ workspace, clip, patch }) {
       {workspace === "Montagem" && (
         <div className="min-h-full bg-[#1e1e1e] text-[11px]">
           <div className="flex border-b border-[#333] px-2">
-            <button className="border-b-2 border-slate-200 px-3 py-2 text-white">
-              Informações
-            </button>
-            <button className="px-3 py-2 text-slate-400">Metadados</button>
-            <button className="px-3 py-2 text-slate-400">Histórico</button>
+            {["Informações", "Metadados", "Histórico"].map((name) => (
+              <button
+                key={name}
+                onClick={() => setInfoTab(name)}
+                className={
+                  infoTab === name
+                    ? "border-b-2 border-slate-200 px-3 py-2 text-white"
+                    : "px-3 py-2 text-slate-400"
+                }
+              >
+                {name}
+              </button>
+            ))}
           </div>
           <div className="p-3">
-            <p className="mb-4 text-slate-500">
-              Selecione uma mídia ou sequência no painel Projeto.
-            </p>
-            <PanelStack
-              rows={[
-                ["Área de trabalho", "Montagem"],
-                ["Exibição", "Ícones livres"],
-                ["Ordenação", "Nome"],
-                ["Metadados", "Básicos"],
-              ]}
-            />
+            {infoTab === "Informações" && (
+              <>
+                <p className="mb-4 text-slate-500">
+                  Selecione uma mídia ou sequência no painel Projeto.
+                </p>
+                <PanelStack
+                  rows={[
+                    ["Área de trabalho", "Montagem"],
+                    ["Exibição", "Ícones livres"],
+                    ["Ordenação", "Nome"],
+                    ["Metadados", "Básicos"],
+                  ]}
+                />
+              </>
+            )}
+            {infoTab === "Metadados" &&
+              (clip ? (
+                <PanelStack
+                  rows={[
+                    ["Nome", clip.name],
+                    ["Tipo", clip.type || "—"],
+                    ["Faixa", clip.track],
+                    ["Início", `${clip.start.toFixed(2)} s`],
+                    ["Duração", `${clip.duration.toFixed(2)} s`],
+                    ["Velocidade", `${clip.speed ?? 100}%`],
+                    ["Entrada na origem", `${(clip.sourceIn || 0).toFixed(2)} s`],
+                    ["Quadros-chave", String((clip.keyframes || []).length)],
+                  ]}
+                />
+              ) : (
+                <p className="mb-4 text-slate-500">
+                  Selecione um clipe na timeline para ver os metadados.
+                </p>
+              ))}
+            {infoTab === "Histórico" && (
+              <p className="mb-4 text-slate-500">
+                {historyLength} ação(ões) para desfazer · {futureLength} para
+                refazer
+              </p>
+            )}
           </div>
         </div>
       )}
       {workspace === "Edição" && (
-        <EditingWorkspacePanel clip={clip} patch={patch} />
+        <EditingWorkspacePanel clip={clip} patch={patch} notify={notify} onImportCaptions={onImportCaptions} />
       )}
       {workspace === "Cor" && (
         <div className="text-[10px]">
@@ -3366,10 +4549,12 @@ function WorkspacePanel({ workspace, clip, patch }) {
           clip={clip}
           patch={patch}
           initialTab="Gráficos essenciais"
+          notify={notify}
+          onImportCaptions={onImportCaptions}
         />
       )}
       {workspace === "Legendas" && (
-        <EditingWorkspacePanel clip={clip} patch={patch} initialTab="Texto" />
+        <EditingWorkspacePanel clip={clip} patch={patch} initialTab="Texto" notify={notify} onImportCaptions={onImportCaptions} />
       )}
       {workspace === "Exportar" && (
         <div className="space-y-2 text-[10px]">
@@ -3427,7 +4612,7 @@ function PrecisionProperty({label,value,min,max,speed,disabled,onChange}) {
   return <label className="grid grid-cols-[90px_minmax(0,1fr)_70px] items-center gap-2 px-3 py-2 text-xs"><span>{label}</span><input aria-label={`Propriedades ${label}`} type="range" disabled={disabled} min={low} max={low+span} step={Math.max(0.01,Math.min(1,speed))} value={value} onChange={event=>onChange(Number(event.target.value))} className="min-w-0 accent-sky-400"/><input aria-label={`Valor ${label}`} title="Arraste para os lados para ajustar; clique para digitar" type="number" disabled={disabled} value={value} onPointerDown={start} onPointerMove={move} onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}} onChange={event=>{const next=Number(event.target.value);if(Number.isFinite(next))onChange(Math.max(min,Math.min(max,next)));}} className="w-full cursor-ew-resize rounded border border-slate-700 bg-slate-950 p-1"/></label>;
 }
 
-function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
+function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notify = () => {}, onImportCaptions }) {
   const [adjustmentSpeed, setAdjustmentSpeed] = useState(1);
   const [tab, setTab] = useState(initialTab);
   const [graphicsMode, setGraphicsMode] = useState("Procurar");
@@ -3543,7 +4728,15 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
                   <option>Títulos</option>
                   <option>Lower Thirds</option>
                 </select>
-                <button className="rounded border border-[#3a3a3a]">
+                <button
+                  onClick={() =>
+                    notify(
+                      "Instalar modelo: indisponível — a instalação de modelos .mogrt não é suportada no navegador",
+                      5000,
+                    )
+                  }
+                  className="rounded border border-[#3a3a3a]"
+                >
                   Instalar…
                 </button>
               </div>
@@ -3581,7 +4774,10 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
             <div className="space-y-2 p-3">
               <b className="text-xs text-white">Editar gráfico selecionado</b>
               <input
-                defaultValue="Título do gráfico"
+                aria-label="Texto do gráfico selecionado"
+                value={clip?.text ?? clip?.name ?? "Título do gráfico"}
+                disabled={!clip}
+                onChange={(event) => patch("text", event.target.value)}
                 className="w-full border border-[#444] bg-[#111] p-2"
               />
               <PanelStack
@@ -3621,7 +4817,15 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
                   Gere uma transcrição editável para pesquisar e montar a
                   sequência por texto.
                 </p>
-                <button className="w-full rounded-full bg-blue-600 px-8 py-2 text-xs font-bold text-white">
+                <button
+                  onClick={() =>
+                    notify(
+                      "Transcrever: indisponível — o serviço de transcrição ainda não está conectado ao MMFilm",
+                      5000,
+                    )
+                  }
+                  className="w-full rounded-full bg-blue-600 px-8 py-2 text-xs font-bold text-white"
+                >
                   Transcrever
                 </button>
               </div>
@@ -3645,7 +4849,15 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades" }) {
                 </button>
                 <label className="block w-full cursor-pointer rounded-full bg-black px-8 py-2 text-xs font-bold text-white">
                   Importar arquivo…
-                  <input type="file" accept=".srt,.vtt" className="hidden" />
+                  <input
+                    type="file"
+                    accept=".srt,.vtt"
+                    className="hidden"
+                    onChange={(event) => {
+                      onImportCaptions?.(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
                 </label>
               </div>
             )}

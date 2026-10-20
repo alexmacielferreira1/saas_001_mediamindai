@@ -1,5 +1,4 @@
 import pytest
-
 from app.clips.contracts import CandidateDimensions, TranscriptWord
 from app.clips.scoring import build_candidate, normalize_transcript
 
@@ -36,5 +35,8 @@ def test_build_candidate_keeps_real_quote_and_composes_deterministic_score():
 def test_normalize_transcript_rejects_overlapping_or_non_monotonic_words():
     with pytest.raises(ValueError, match="sobreposição"):
         normalize_transcript(
-            [TranscriptWord(text="um", start=1, end=2), TranscriptWord(text="dois", start=1.5, end=3)]
+            [
+                TranscriptWord(text="um", start=1, end=2),
+                TranscriptWord(text="dois", start=1.5, end=3),
+            ]
         )

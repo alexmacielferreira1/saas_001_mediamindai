@@ -90,13 +90,16 @@ class LocalMediaStorage:
             mime_type=mime_type,
         )
 
-    def resolve_local(self, relative_key: str) -> Path:
+    def resolve_local(self, relative_key: str | None) -> Path:
+        # Registros de mídia sem arquivo (ex.: criados só como metadados) não têm chave.
+        if not relative_key or not isinstance(relative_key, str):
+            raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
         candidate = (self.root / relative_key).resolve()
         if self.root not in candidate.parents:
             raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
         return candidate
 
-    def resolve(self, relative_key: str) -> Path:
+    def resolve(self, relative_key: str | None) -> Path:
         return self.resolve_local(relative_key)
 
     def delete_asset(self, tenant_id: UUID, asset_id: UUID) -> None:

@@ -60,3 +60,14 @@ describe("ThreeDCraftWorkspace", () => {
     expect(screen.getByRole("button", { name: "Objeto Cubo" })).toHaveStyle({ left: "62%" });
   });
 });
+
+describe("ThreeDCraftWorkspace — ações não implementadas", () => {
+  it("Construir e Gravar ficam desabilitados com aviso honesto", () => {
+    render(<ThreeDCraftWorkspace />);
+    for (const name of ["Construir", "Gravar"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("title", "Ainda não disponível");
+    }
+  });
+});

@@ -21,3 +21,8 @@ frontend/coverage-*/
 uploads/
 *.db
 *.log
+
+# Triagem de arquivos de Alex e relatórios dos agentes (locais)
+/_entrada/
+/_arquivo/
+/docs/relatorios/

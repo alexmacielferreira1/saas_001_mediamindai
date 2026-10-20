@@ -1,6 +1,5 @@
 from app.clips.contracts import CandidateDimensions, ClipCandidate, TranscriptWord
 
-
 MIN_CANDIDATE_SECONDS = 15.0
 MAX_CANDIDATE_SECONDS = 60.0
 

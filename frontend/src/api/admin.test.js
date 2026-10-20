@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const requestMock = vi.fn();
 vi.mock('./httpClient', () => ({ request: (...args) => requestMock(...args) }));
 
-import { getAdminUser, listAdminActivity, listAdminUsers, suspendAdminUser } from './admin';
+import { getAdminUser, listAdminActivity, listAdminUsers, reactivateAdminUser, revokeAdminUserSessions, suspendAdminUser } from './admin';
 
 describe('admin API', () => {
   beforeEach(() => requestMock.mockReset());
@@ -23,6 +23,14 @@ describe('admin API', () => {
       method: 'POST',
       body: { reason: 'Afastamento temporário' },
     });
+  });
+
+  it('sends reactivation and session revocation to their own endpoints', async () => {
+    requestMock.mockResolvedValue({});
+    await reactivateAdminUser('user-1', 'Retorno');
+    await revokeAdminUserSessions('user-1', 'Troca de senha');
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/admin/users/user-1/reactivate', { method: 'POST', body: { reason: 'Retorno' } });
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/admin/users/user-1/revoke-sessions', { method: 'POST', body: { reason: 'Troca de senha' } });
   });
 
   it('loads recent administrative activity', async () => {

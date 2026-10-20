@@ -71,7 +71,7 @@ export default function WorkspaceSearchPanel({ search, setSearch }) {
               rows={8}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-500"
             />
-            <button className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400">
+            <button type="button" disabled title="Ainda não disponível" className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60">
               <Sparkles size={13} /> Gerar
             </button>
             <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-xs text-slate-400">

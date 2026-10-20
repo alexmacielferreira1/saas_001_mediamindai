@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import MCPExpress from "./MCPExpress";
 import { createMCPQueue } from "../../lib/mcpApi";
+import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
+
+const ASSET = "11111111-2222-4333-8444-555555555555";
 
 vi.mock("../../lib/mcpApi", () => ({
   listMCPTools: vi.fn().mockResolvedValue({
@@ -58,10 +61,58 @@ describe("MCPExpress", () => {
     window.removeEventListener("mm:mcp-open", opened);
   });
 
-  it("shows the active timeline as the Express execution target", () => {
+  it("does not invent a target when no timeline was published", async () => {
     render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPExpress /></MemoryRouter>);
+    await act(async () => {});
     expect(screen.getByRole("combobox", { name: "Alvo de execução MCP Express" })).toHaveValue("timeline");
-    expect(screen.getByText("Timeline aberta · Corte principal", { selector: "span" })).toBeInTheDocument();
+    expect(screen.queryByText(/Corte principal/)).not.toBeInTheDocument();
+    expect(screen.getByText("Abra uma timeline nesta ferramenta para usar o MCP Express.", { selector: "span" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Executar Ler timeline" }));
+
+    expect(createMCPQueue).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent(/Abra uma timeline/);
+  });
+
+  it("uses the timeline really published by FilmCraft with its Acervo asset ids", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPExpress /></MemoryRouter>);
+    await act(async () => {});
+    act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Entrevista final", clips: [{ assetId: ASSET }, { assetId: ASSET }, { assetId: "local-1" }] })));
+
+    expect(screen.getByText("Timeline aberta · Entrevista final", { selector: "span" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Executar Ler timeline" }));
+
+    await waitFor(() => expect(createMCPQueue).toHaveBeenCalledWith(expect.objectContaining({
+      tool_name: "mmfilm.timeline",
+      targets: [expect.objectContaining({ id: "mmfilm:Entrevista final", name: "Timeline aberta · Entrevista final", asset_ids: [ASSET] })],
+    })));
+    act(() => clearMCPContext("mmfilm"));
+  });
+
+  it("blocks a published timeline that has no Acervo media instead of reading the whole Acervo", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPExpress /></MemoryRouter>);
+    await act(async () => {});
+    act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Rascunho", clips: [{ assetId: "local-1" }] })));
+
+    fireEvent.click(screen.getByRole("button", { name: /Executar 4 ações ativas/ }));
+
+    expect(createMCPQueue).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent(/não tem mídias do Acervo/);
+    act(() => clearMCPContext("mmfilm"));
+  });
+
+  it("reports partial and failed executions without announcing success", async () => {
+    createMCPQueue.mockResolvedValueOnce({ status: "failed", results: [{ status: "failed", error: { message: "Cadastre uma conexão de IA ativa para esta ferramenta." } }] });
+    render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
+    await act(async () => {});
+    fireEvent.change(screen.getByRole("textbox", { name: "Descreva a ação MCP" }), { target: { value: "Analise" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Executar Executar prompt com IA cadastrada" }));
+
+    const status = await screen.findByRole("status");
+    await waitFor(() => expect(status).toHaveTextContent(/não foi executada/));
+    expect(status).toHaveTextContent(/Cadastre uma conexão de IA/);
+    expect(status).not.toHaveTextContent(/concluída/);
   });
 
   it("offers direct execution for one operation and for all active operations", () => {

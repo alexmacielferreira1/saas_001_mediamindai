@@ -427,11 +427,10 @@ export default function Shell({ children, persistentPath }) {
           <div className="ml-auto flex items-center gap-1.5">
             <QuickActionsButton />
             <EmpresaSwitcher />
-            <button className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+            <button type="button" disabled aria-label="Notificações" title="Notificações ainda não disponíveis" className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
               <Bell size={18} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
             </button>
-            <button className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+            <button type="button" aria-label="Configurações de IA" title="Configurações de IA" onClick={() => navigate("/configuracoes/ia")} className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
               <Settings size={18} />
             </button>
           </div>

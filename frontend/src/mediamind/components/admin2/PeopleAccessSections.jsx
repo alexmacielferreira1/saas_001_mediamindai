@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContextDetailLayout, SelectableItem, UnavailableAction } from './ContextDetailLayout';
 import { MediaIdentity } from './MediaIdentity';
+import { tenantRoleLabel } from '../../lib/tenantRoleLabels';
 
 const statusLabels = { active: 'Ativo', invited: 'Convite pendente', suspended: 'Suspenso', blocked: 'Bloqueado' };
 
@@ -13,15 +14,16 @@ function Status({ value }) {
   return <span className={`rounded-full border px-2 py-1 text-xs ${colors}`}>{statusLabels[value] || value}</span>;
 }
 
-export function UsersSection({ users = [], total = 0, demoMode = false, onSuspend, loadUser }) {
+export function UsersSection({ users = [], total = 0, demoMode = false, onSuspend, onReactivate, onRevokeSessions, loadUser }) {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [overrides, setOverrides] = useState({});
+  const [notice, setNotice] = useState('');
   const originRefs = useRef({});
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
-    return users.map((user) => ({ ...user, ...overrides[user.id] })).filter((user) => (!status || user.status === status) && (!normalized || `${user.full_name} ${user.email} ${user.tenant_role}`.toLocaleLowerCase('pt-BR').includes(normalized)));
+    return users.map((user) => ({ ...user, ...overrides[user.id] })).filter((user) => (!status || user.status === status) && (!normalized || `${user.full_name} ${user.email} ${user.tenant_role} ${tenantRoleLabel(user.tenant_role)}`.toLocaleLowerCase('pt-BR').includes(normalized)));
   }, [overrides, query, status, users]);
   const selected = visible.find((user) => user.id === selectedId) || null;
   useEffect(() => { if (selectedId && !visible.some((user) => user.id === selectedId)) setSelectedId(null); }, [selectedId, visible]);
@@ -33,9 +35,13 @@ export function UsersSection({ users = [], total = 0, demoMode = false, onSuspen
     if (detail) setOverrides((current) => ({ ...current, [user.id]: detail }));
   }
 
-  async function suspendUser(user) {
-    const updated = await onSuspend?.(user);
-    if (updated) setOverrides((current) => ({ ...current, [user.id]: updated }));
+  async function runAction(action, user) {
+    setNotice('');
+    try {
+      const result = await action?.(user);
+      if (result?.id) setOverrides((current) => ({ ...current, [user.id]: result }));
+      if (typeof result?.revoked_sessions === 'number') setNotice(result.revoked_sessions ? `${result.revoked_sessions} sessão(ões) encerrada(s).` : 'Nenhuma sessão aberta nesta empresa.');
+    } catch (error) { setNotice(error?.message || 'Não foi possível concluir a ação.'); }
   }
 
   const metrics = [
@@ -56,24 +62,24 @@ export function UsersSection({ users = [], total = 0, demoMode = false, onSuspen
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/35">
         <table aria-label="Usuários do tenant" className="w-full min-w-[760px] text-left text-sm">
           <thead className="border-b border-slate-800 bg-slate-900/80 text-xs text-slate-400"><tr><th className="p-3">Usuário</th><th className="p-3">Função</th><th className="p-3">Perfil</th><th className="p-3">Equipe / Setor</th><th className="p-3">Status</th><th className="p-3">Ações</th></tr></thead>
-          <tbody>{visible.map((user) => <tr key={user.id} className={`border-b border-slate-800/70 ${selectedId === user.id ? 'bg-sky-950/30' : ''}`}><td className="p-3"><div className="flex items-center gap-2"><MediaIdentity src={user.avatar_url} alt={user.avatar_url ? user.full_name : ''} initials={initials(user.full_name || user.email)} /><span><strong className="block text-slate-100">{user.full_name || user.email}</strong><span className="text-xs text-slate-500">{user.email}</span></span></div></td><td className="p-3 text-slate-300">{user.tenant_role || '—'}</td><td className="p-3 text-slate-300">{user.profile_name || 'Sem perfil'}</td><td className="p-3 text-slate-500">{user.team_name || 'Não integrado'}</td><td className="p-3"><Status value={user.status} /></td><td className="p-3"><SelectableItem ref={(node) => { originRefs.current[user.id] = node; }} selected={selectedId === user.id} onSelect={() => selectUser(user)} aria-label={`Ver ${user.full_name || user.email}`} className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs text-sky-300">Ver detalhe</SelectableItem></td></tr>)}</tbody>
+          <tbody>{visible.map((user) => <tr key={user.id} className={`border-b border-slate-800/70 ${selectedId === user.id ? 'bg-sky-950/30' : ''}`}><td className="p-3"><div className="flex items-center gap-2"><MediaIdentity src={user.avatar_url} alt={user.avatar_url ? user.full_name : ''} initials={initials(user.full_name || user.email)} /><span><strong className="block text-slate-100">{user.full_name || user.email}</strong><span className="text-xs text-slate-500">{user.email}</span></span></div></td><td className="p-3 text-slate-300">{tenantRoleLabel(user.tenant_role)}</td><td className="p-3 text-slate-300">{user.profile_name || 'Sem perfil'}</td><td className="p-3 text-slate-500">{user.team_name || 'Não integrado'}</td><td className="p-3"><Status value={user.status} /></td><td className="p-3"><SelectableItem ref={(node) => { originRefs.current[user.id] = node; }} selected={selectedId === user.id} onSelect={() => selectUser(user)} aria-label={`Ver ${user.full_name || user.email}`} className="rounded-lg border border-sky-800 px-3 py-1.5 text-xs text-sky-300">Ver detalhe</SelectableItem></td></tr>)}</tbody>
         </table>
         {!visible.length && <p className="p-8 text-center text-sm text-slate-500">Nenhum usuário encontrado com estes filtros.</p>}
       </div>
     </div>
   );
 
-  return <ContextDetailLayout master={master} detailTitle={selected?.full_name || selected?.email || 'Usuário'} isOpen={Boolean(selected)} onClose={() => setSelectedId(null)} originRef={{ current: selectedId ? originRefs.current[selectedId] : null }} detail={selected && <UserContextDetail user={selected} demoMode={demoMode} onSuspend={suspendUser} />} />;
+  return <ContextDetailLayout master={master} detailTitle={selected?.full_name || selected?.email || 'Usuário'} isOpen={Boolean(selected)} onClose={() => setSelectedId(null)} originRef={{ current: selectedId ? originRefs.current[selectedId] : null }} detail={selected && <UserContextDetail user={selected} demoMode={demoMode} notice={notice} onSuspend={onSuspend && ((user) => runAction(onSuspend, user))} onReactivate={onReactivate && ((user) => runAction(onReactivate, user))} onRevokeSessions={onRevokeSessions && ((user) => runAction(onRevokeSessions, user))} />} />;
 }
 
-function UserContextDetail({ user, demoMode, onSuspend }) {
+function UserContextDetail({ user, demoMode, notice, onSuspend, onReactivate, onRevokeSessions }) {
   const [tab, setTab] = useState('Visão Geral');
   const tabs = ['Visão Geral', 'Acesso', 'Funções', 'Equipes', 'Módulos', 'Permissões', 'Segurança', 'Atividade', 'Histórico'];
   let content = <p className="mt-3 text-sm text-slate-500">Esta guia preserva o contexto do usuário. Os dados serão exibidos quando o contrato correspondente estiver disponível.</p>;
-  if (tab === 'Visão Geral') content = <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Função</dt><dd>{user.tenant_role || '—'}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Perfil</dt><dd>{user.profile_name || 'Sem perfil'}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Status</dt><dd><Status value={user.status} /></dd></div></dl>;
+  if (tab === 'Visão Geral') content = <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Função</dt><dd>{tenantRoleLabel(user.tenant_role)}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Perfil</dt><dd>{user.profile_name || 'Sem perfil'}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Status</dt><dd><Status value={user.status} /></dd></div></dl>;
   if (tab === 'Módulos') content = <div className="mt-3 grid gap-3"><div><h4 className="text-sm font-medium text-slate-300">Telas adicionais</h4>{user.extra_screens?.length ? <p className="text-sm text-slate-400">{user.extra_screens.join(', ')}</p> : <p className="text-sm text-slate-500">Nenhuma tela extra liberada.</p>}</div><div><h4 className="text-sm font-medium text-slate-300">Telas restritas</h4>{user.restricted_screens?.length ? <p className="text-sm text-slate-400">{user.restricted_screens.join(', ')}</p> : <p className="text-sm text-slate-500">Nenhuma tela restrita.</p>}</div></div>;
   if (tab === 'Segurança') content = <dl className="mt-3 space-y-2 text-sm"><div className="flex justify-between gap-3"><dt className="text-slate-500">Tentativas falhas</dt><dd>{user.failed_login_attempts ?? 0}</dd></div><div className="flex justify-between gap-3"><dt className="text-slate-500">Bloqueio</dt><dd>{user.locked_until ? `Até ${new Date(user.locked_until).toLocaleString('pt-BR')}` : 'Sem bloqueio ativo'}</dd></div></dl>;
-  return <div className="space-y-4"><div className="flex items-center gap-3"><MediaIdentity src={user.avatar_url} alt={user.avatar_url ? user.full_name : ''} initials={initials(user.full_name || user.email)} className="h-14 w-14" /><div><p className="text-xl font-bold text-slate-50">{user.full_name || user.email}</p><p className="text-sm text-slate-400">{user.email}</p></div></div><div className="flex gap-1 overflow-x-auto pb-1">{tabs.map((name) => <button key={name} type="button" onClick={() => setTab(name)} className={`shrink-0 rounded-lg px-2 py-1.5 text-xs ${tab === name ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400'}`}>{name}</button>)}</div><section className="rounded-xl border border-slate-800 bg-slate-950/45 p-4"><h3 className="font-semibold text-slate-100">{tab}</h3>{content}</section>{user.status === 'active' && !demoMode && onSuspend ? <button type="button" onClick={() => onSuspend(user)} className="rounded-lg border border-rose-700 px-3 py-2 text-sm text-rose-300">Suspender usuário</button> : demoMode ? <p className="text-xs text-amber-300">Detalhe de demonstração — alterações reais de conta permanecem indisponíveis.</p> : null}</div>;
+  return <div className="space-y-4"><div className="flex items-center gap-3"><MediaIdentity src={user.avatar_url} alt={user.avatar_url ? user.full_name : ''} initials={initials(user.full_name || user.email)} className="h-14 w-14" /><div><p className="text-xl font-bold text-slate-50">{user.full_name || user.email}</p><p className="text-sm text-slate-400">{user.email}</p></div></div><div className="flex gap-1 overflow-x-auto pb-1">{tabs.map((name) => <button key={name} type="button" onClick={() => setTab(name)} className={`shrink-0 rounded-lg px-2 py-1.5 text-xs ${tab === name ? 'bg-sky-500 text-slate-950' : 'bg-slate-900 text-slate-400'}`}>{name}</button>)}</div><section className="rounded-xl border border-slate-800 bg-slate-950/45 p-4"><h3 className="font-semibold text-slate-100">{tab}</h3>{content}</section>{demoMode ? <p className="text-xs text-amber-300">Detalhe de demonstração — alterações reais de conta permanecem indisponíveis.</p> : <div className="flex flex-wrap gap-2">{user.status === 'active' && onRevokeSessions && <button type="button" onClick={() => onRevokeSessions(user)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200">Encerrar sessões</button>}{user.status === 'active' && onSuspend && <button type="button" onClick={() => onSuspend(user)} className="rounded-lg border border-rose-700 px-3 py-2 text-sm text-rose-300">Suspender usuário</button>}{user.status === 'suspended' && onReactivate && <button type="button" onClick={() => onReactivate(user)} className="rounded-lg border border-emerald-700 px-3 py-2 text-sm text-emerald-300">Reativar usuário</button>}</div>}{notice && <p role="status" className="text-xs text-sky-200">{notice}</p>}</div>;
 }
 
 export function ProfilesSection({ groups = [], users = [] }) {

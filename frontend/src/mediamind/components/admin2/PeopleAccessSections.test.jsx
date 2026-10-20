@@ -8,6 +8,18 @@ const users = [
 ];
 
 describe('PeopleAccessSections', () => {
+  it('shows_friendly_role_names_and_searches_by_them', () => {
+    const real = [{ id: 'r1', full_name: 'Ana Real', email: 'ana@empresa.com', tenant_role: 'admin', profile_name: null, status: 'active' }, { id: 'r2', full_name: 'Beto Real', email: 'beto@empresa.com', tenant_role: 'social_media', profile_name: null, status: 'active' }];
+    render(<UsersSection users={real} total={2} demoMode />);
+    const table = screen.getByRole('table', { name: 'Usuários do tenant' });
+    expect(table).toHaveTextContent('Administrador');
+    expect(table).toHaveTextContent('Social media');
+    expect(table).not.toHaveTextContent('social_media');
+    fireEvent.change(screen.getByPlaceholderText('Buscar nome, e-mail ou função'), { target: { value: 'Administrador' } });
+    expect(screen.getByText('ana@empresa.com')).toBeVisible();
+    expect(screen.queryByText('beto@empresa.com')).not.toBeInTheDocument();
+  });
+
   it('opens_user_detail_without_removing_the_list', () => {
     render(<UsersSection users={users} total={2} demoMode />);
 
