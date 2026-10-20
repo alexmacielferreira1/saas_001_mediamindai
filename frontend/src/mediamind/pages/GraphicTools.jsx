@@ -236,6 +236,8 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
           futura.
         </p>
       </header>
+      {/* Editores Craft usam cinzas fixos de NLE: permanecem escuros também no tema claro. */}
+      <div className="dark space-y-4">
       <nav
         role="tablist"
         aria-label="Programas das Ferramentas Gráficas"
@@ -322,6 +324,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         <FilmCraftWorkspace />
       )}
       </div>)}
+      </div>
     </section>
   );
 }

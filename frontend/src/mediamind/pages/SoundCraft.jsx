@@ -30,7 +30,7 @@ function IntegratedSoundCraft() {
 
 export default function SoundCraft() {
   const [experience, setExperience] = useWorkDraftState("mmsom:experience", "complete");
-  return <section className="overflow-hidden rounded-xl border border-[#34373c] bg-[#18191c] shadow-2xl">
+  return <section className="dark overflow-hidden rounded-xl border border-[#34373c] bg-[#18191c] shadow-2xl">
     <div className="flex h-10 items-center border-b border-black bg-[#24262a] px-3 text-xs text-[#d9dde2]">
       <img src="/soundcraft-runtime/ai.storyteller.soundcraft-4f86cc0f1d19c49f.png" alt="" className="mr-2 h-6 w-6 rounded"/>
       <strong>MMSOM 0.5</strong>

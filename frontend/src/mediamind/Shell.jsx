@@ -33,6 +33,7 @@ import WorkProtection from "./lib/workProtection";
 import EmpresaSwitcher from "./components/EmpresaSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import QuickActionsButton from "./components/QuickActionsButton";
+import ThemeToggle from "./components/ThemeToggle";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
 import MCPDock from "./components/mcp/MCPDock";
 import MCPExpress from "./components/mcp/MCPExpress";
@@ -434,6 +435,7 @@ export default function Shell({ children, persistentPath }) {
             <button className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
               <Settings size={18} />
             </button>
+            <ThemeToggle />
           </div>
         </header>
 

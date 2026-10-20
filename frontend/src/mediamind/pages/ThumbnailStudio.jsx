@@ -648,7 +648,7 @@ function ThumbnailStudioEditor({ darkChannelId = "", darkScriptId = "", workspac
 
       {darkChannelMode && <p className="rounded-xl border border-cyan-900/60 bg-cyan-950/20 px-4 py-2 text-xs text-cyan-100">Estúdio de Arte para “{initialTitle || 'roteiro sem título'}” · independente do acervo MediaMind · rascunho protegido por canal e roteiro.</p>}
 
-      {activeThumb?.expanded && <><div className="border-b border-slate-800 bg-[#081421]"><button type="button" aria-expanded={modesOpen} onClick={() => setModesOpen((value) => !value)} className="flex w-full items-center justify-between px-5 py-2 text-xs font-bold text-slate-300"><span>Modo: {tab}</span><span>{modesOpen ? 'Recolher ▴' : 'Expandir ▾'}</span></button>{modesOpen && <div role="tablist" aria-label="Modos de criação" className="grid border-t border-slate-800 sm:grid-cols-5">
+      {activeThumb?.expanded && <><div className="border-b border-slate-800 bg-mm-bar"><button type="button" aria-expanded={modesOpen} onClick={() => setModesOpen((value) => !value)} className="flex w-full items-center justify-between px-5 py-2 text-xs font-bold text-slate-300"><span>Modo: {tab}</span><span>{modesOpen ? 'Recolher ▴' : 'Expandir ▾'}</span></button>{modesOpen && <div role="tablist" aria-label="Modos de criação" className="grid border-t border-slate-800 sm:grid-cols-5">
         {visibleTabs.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} className={`px-4 py-3 text-sm font-bold transition ${tab === item ? 'border-b-2 border-cyan-400 bg-cyan-950/40 text-cyan-200' : 'border-b-2 border-transparent text-slate-400 hover:bg-slate-900 hover:text-white'}`}>{item}</button>)}
       </div>}</div>
 

@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="manifest" href="/manifest.json" />
     <title>Base44 APP</title>
+    <script>
+      // Aplica o tema salvo antes do primeiro desenho (chave igual a THEME_STORAGE_KEY).
+      try {
+        var mmTheme = localStorage.getItem('mediamind-theme');
+        if (mmTheme === 'system') {
+          mmTheme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        if (mmTheme === 'light' || mmTheme === 'dark') document.documentElement.classList.add(mmTheme);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
