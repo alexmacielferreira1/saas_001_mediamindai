@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV_GROUPS, navigationForRole, settingsPathForRole } from "./Shell";
+import { NAV_GROUPS, NOTIFICATIONS_AVAILABLE, navigationForRole, settingsPathForRole } from "./Shell";
+
+describe("notifications bell", () => {
+  it("stays hidden while there is no real notification system", () => {
+    expect(NOTIFICATIONS_AVAILABLE).toBe(false);
+  });
+});
 
 describe("settings shortcut", () => {
   it("opens Administração for administrators", () => {

@@ -193,6 +193,10 @@ export function navigationForRole(role) {
   })).filter((group) => group.items.length > 0);
 }
 
+// Sino oculto até existir um sistema real de notificações (sem backend nem dados hoje);
+// o indicador de "não lidas" não deve aparecer sem notificações de verdade.
+export const NOTIFICATIONS_AVAILABLE = false;
+
 // Engrenagem do topo: abre a área de configuração que o papel pode acessar.
 export function settingsPathForRole(role) {
   if (canAccessModule(role, "management")) return "/administration2";
@@ -437,10 +441,12 @@ export default function Shell({ children, persistentPath }) {
           <div className="ml-auto flex items-center gap-1.5">
             <QuickActionsButton />
             <EmpresaSwitcher />
-            <button className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
-              <Bell size={18} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
-            </button>
+            {NOTIFICATIONS_AVAILABLE && (
+              <button className="relative rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+                <Bell size={18} />
+                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
+              </button>
+            )}
             <button
               className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200"
               aria-label="Configurações"
