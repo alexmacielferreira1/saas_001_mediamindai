@@ -28,6 +28,7 @@ import {
   Activity,
 } from "lucide-react";
 import { useAuth } from "./auth";
+import { canAccessModule } from "./lib/moduleAccess";
 import { useEmpresa } from "./lib/empresaContext";
 import WorkProtection from "./lib/workProtection";
 import EmpresaSwitcher from "./components/EmpresaSwitcher";
@@ -192,6 +193,13 @@ export function navigationForRole(role) {
   })).filter((group) => group.items.length > 0);
 }
 
+// Engrenagem do topo: abre a área de configuração que o papel pode acessar.
+export function settingsPathForRole(role) {
+  if (canAccessModule(role, "management")) return "/administration2";
+  if (canAccessModule(role, "ai_tools")) return "/configuracoes/ia";
+  return null;
+}
+
 export default function Shell({ children, persistentPath }) {
   const { user, logout, roleLabels } = useAuth();
   const navigate = useNavigate();
@@ -200,6 +208,7 @@ export default function Shell({ children, persistentPath }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const role = user?.role || "default";
   const navGroups = navigationForRole(role);
+  const settingsPath = settingsPathForRole(user?.role);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
       return Number(localStorage.getItem(`mm_sidebar_width__${role}`)) || 240;
@@ -432,7 +441,13 @@ export default function Shell({ children, persistentPath }) {
               <Bell size={18} />
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-sky-400" />
             </button>
-            <button className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200">
+            <button
+              className="rounded-xl border border-slate-700 bg-slate-900/60 p-2.5 text-slate-400 hover:text-slate-200"
+              aria-label="Configurações"
+              title="Configurações"
+              disabled={!settingsPath}
+              onClick={() => settingsPath && navigate(settingsPath)}
+            >
               <Settings size={18} />
             </button>
             <ThemeToggle />

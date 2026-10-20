@@ -17,6 +17,8 @@ export function MediaMindThemeProvider({ children }) {
       defaultTheme="dark"
       enableSystem
       storageKey={THEME_STORAGE_KEY}
+      // Sem color-scheme: controles nativos (sliders, selects) mantêm a aparência original.
+      enableColorScheme={false}
       disableTransitionOnChange
     >
       {children}

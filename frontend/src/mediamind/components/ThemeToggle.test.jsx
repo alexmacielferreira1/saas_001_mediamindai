@@ -34,6 +34,8 @@ describe('ThemeToggle', () => {
     expect(screen.getByRole('radio', { name: 'Tema Escuro' })).toHaveAttribute('aria-checked', 'true');
     expect(document.documentElement).toHaveClass('dark');
     expect(document.documentElement).not.toHaveClass('light');
+    // color-scheme alteraria sliders e selects nativos do tema escuro original.
+    expect(document.documentElement.style.colorScheme).toBe('');
   });
 
   it('oferece as três opções no grupo acessível', () => {
@@ -62,6 +64,11 @@ describe('ThemeToggle', () => {
     act(() => fireEvent.click(screen.getByRole('radio', { name: 'Tema Sistema' })));
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system');
     expect(document.documentElement).toHaveClass('light');
+  });
+
+  it('mostra o escuro como ativo mesmo fora do provedor de tema', () => {
+    render(<ThemeToggle />);
+    expect(screen.getByRole('radio', { name: 'Tema Escuro' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('restaura a preferência salva ao abrir', () => {

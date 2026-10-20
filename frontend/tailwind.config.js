@@ -1,4 +1,4 @@
-const { slateColors, surfaceColors, textColors, themePlugin } = require('./theme/palette.cjs');
+const { accentSurfaceColors, slateColors, surfaceColors, textColors, themePlugin } = require('./theme/palette.cjs');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -15,6 +15,7 @@ module.exports = {
   		textColor: textColors(),
   		colors: {
   			slate: slateColors(),
+  			...accentSurfaceColors(),
   			...surfaceColors(),
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',

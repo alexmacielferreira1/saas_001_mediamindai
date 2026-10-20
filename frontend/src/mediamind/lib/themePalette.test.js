@@ -62,6 +62,51 @@ describe('paleta temática', () => {
     expect(Object.keys(calls[0])).toEqual([':root, .dark', '.light']);
   });
 
+  it('inverte cinzas escuros de fundo e claros de texto, preservando o restante', () => {
+    expect(palette.lightGrayFor('#202020', 'bg')).toBe('230 233 239');
+    expect(palette.lightGrayFor('#bcbcbc', 'text')).toBe('61 64 70');
+    expect(palette.lightGrayFor('#555', 'text')).toBeNull();
+    expect(palette.lightGrayFor('#e8e8e8', 'bg')).toBeNull();
+    expect(palette.lightGrayFor('#2675df', 'bg')).toBeNull();
+  });
+
+  it('gera sobreposições só para o tema claro, com variantes e opacidade', () => {
+    const rules = palette.grayOverrideRules([
+      'className="bg-[#202020] hover:bg-[#242424] border-[#555]/50 text-[#bcbcbc] divide-[#333]"',
+      'className="bg-[#e8e8e8] text-[#242424] bg-[#a9343c] xbg-[#111]"',
+    ]);
+    expect(rules['.light .bg-\\[\\#202020\\]']).toEqual({ 'background-color': 'rgb(230 233 239)' });
+    expect(rules['.light .hover\\:bg-\\[\\#242424\\]:hover']).toBeDefined();
+    expect(rules['.light .border-\\[\\#555\\]\\/50']['border-color']).toMatch(/\/ 0\.5\)$/);
+    expect(rules['.light .text-\\[\\#bcbcbc\\]']).toEqual({ color: 'rgb(61 64 70)' });
+    expect(rules['.light .divide-\\[\\#333\\] > :not([hidden]) ~ :not([hidden])']).toBeDefined();
+    expect(Object.keys(rules).every((selector) => selector.startsWith('.light '))).toBe(true);
+    expect(Object.keys(rules)).toHaveLength(5);
+  });
+
+  it('o plugin padrão lê os fontes reais e cobre os cinzas dos editores', () => {
+    const calls = [];
+    palette.themePlugin({ addBase: (rules) => calls.push(rules) });
+    expect(calls[1]['.light .bg-\\[\\#202020\\]']).toBeDefined();
+  });
+
+  it('o plugin tolera pasta de fontes ausente', () => {
+    const calls = [];
+    palette.createThemePlugin('pasta-inexistente')({ addBase: (rules) => calls.push(rules) });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual({});
+  });
+
+  it('clareia fundos tingidos de destaque no claro e mantém o escuro original', () => {
+    expect(dark['--mm-sky-950']).toBe(channels(defaultColors.sky[950]));
+    expect(light['--mm-sky-950']).toBe(channels(defaultColors.sky[50]));
+    expect(light['--mm-rose-800']).toBe(channels(defaultColors.rose[200]));
+    expect(palette.accentSurfaceColors().sky['900']).toBe('rgb(var(--mm-sky-900) / <alpha-value>)');
+    expect(palette.textColors().emerald['950']).toBe(
+      `rgb(${channels(defaultColors.emerald[950])} / <alpha-value>)`,
+    );
+  });
+
   it('converte hex curto e recusa cor inválida', () => {
     expect(channels('#fff')).toBe('255 255 255');
     expect(() => channels('#zzzzzz')).toThrow('Cor inválida');

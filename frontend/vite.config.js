@@ -14,6 +14,8 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Node 25+ expõe um localStorage nativo que se sobrepõe ao do jsdom e quebra a suíte.
+    execArgv: Number(process.versions.node.split('.')[0]) >= 25 ? ['--no-experimental-webstorage'] : [],
     // Test expectations use the same-origin API; local .env files must not alter them.
     env: { VITE_API_URL: '' },
     // Canvas/editor DOM suites compete heavily for CPU under V8 instrumentation.
@@ -34,6 +36,9 @@ export default defineConfig({
         'src/mediamind/lib/empresaContext.jsx',
         'src/mediamind/lib/gravacoesUpload.js',
         'src/mediamind/lib/productionWorkflow.js',
+        'src/mediamind/lib/theme.jsx',
+        'src/mediamind/components/ThemeToggle.jsx',
+        'theme/palette.cjs',
       ],
       thresholds: {
         branches: 100,
