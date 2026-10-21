@@ -1,5 +1,6 @@
 import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Download, Eye, Search, Upload } from 'lucide-react';
 import { listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import Workspace2Stepper from '../components/workspace2/Workspace2Stepper';
@@ -12,9 +13,13 @@ import UploadReceiptPanel from '../components/UploadReceiptPanel';
 import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, removeScriptBlock, reorderScriptBlocks, toggleSelectedAsset } from '../lib/workspace2Model';
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 import { MOCK_ASSETS } from '../data';
+import { findAssetById, workspaceAssetId } from '../lib/assetIdentity';
 
 export default function Workspace2() {
   const storagePrefix = useWorkStorageKey("");
+  // Deep-link vindo da Pesquisa/Acervo: ?assetId=<id> (ou o alias ?asset=<id>).
+  const [searchParams] = useSearchParams();
+  const linkedAssetId = workspaceAssetId(searchParams);
   const initialProject = {
     title: 'Jornal 12h - 15/05/2026', segment: 'Jornalismo', program: 'Jornal do Meio Dia',
     status: 'Rascunho', version: 'v1.0', estimatedDuration: '02:48:10', reporter: 'João Silva',
@@ -48,7 +53,15 @@ export default function Workspace2() {
       if (!active) return;
       const normalized = items.map((asset) => ({ ...asset, title: asset.title || asset.filename, stream_url: mediaStreamUrl(asset), icon: asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'image' ? '🖼️' : '🎬' }));
       setAssets(normalized);
-      setPreviewAssetId((current) => current || normalized[0]?.id || null);
+      const linked = linkedAssetId ? findAssetById(normalized, linkedAssetId) : null;
+      if (linked) {
+        setSelectedIds((current) => (current.includes(linked.id) ? current : [...current, linked.id]));
+        setPreviewAssetId(linked.id);
+        setNotice(`Mídia aberta pelo link: ${linked.title || linked.id}`);
+      } else {
+        setPreviewAssetId((current) => current || normalized[0]?.id || null);
+        if (linkedAssetId) setNotice('A mídia do link não foi encontrada no Acervo desta empresa.');
+      }
     }).catch(() => {
       if (!active) return;
       const demo = MOCK_ASSETS.slice(0, 6).map((asset) => ({ ...asset, stream_url: mediaStreamUrl(asset) }));
@@ -61,7 +74,7 @@ export default function Workspace2() {
       setNotice('Acervo indisponível · exibindo dados demonstrativos para validar o roteiro');
     });
     return () => { active = false; };
-  }, []);
+  }, [linkedAssetId]);
   useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_selection', JSON.stringify(selectedIds)); }, [selectedIds, storagePrefix]);
   useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_search', JSON.stringify(mediaSearch)); }, [mediaSearch, storagePrefix]);
 

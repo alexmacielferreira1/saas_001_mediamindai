@@ -1,13 +1,15 @@
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[3]
 PRODUCT = "mediamind"
 DEFAULT_DB_PORT = 5434 if PRODUCT == "central" else 5433
+HUB_ADMIN_KNOWN_SCOPES = frozenset({"hub:observe", "hub:command"})
 
 
 class Settings(BaseSettings):
@@ -31,12 +33,51 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
     hub_admin_token: SecretStr | None = None
     hub_admin_audience: str = "central"
+    # Scopes granted to HUB_ADMIN_TOKEN, defined only on the server (space separated).
+    # The default matches the Central contract (observe + dry-run commands); restrict with
+    # HUB_ADMIN_SCOPES="hub:observe" to deny commands. Callers can never widen this set.
+    hub_admin_scopes: str = "hub:observe hub:command"
+    hub_admin_token_expires_at: datetime | None = None
+    # Extra browser origins trusted for cookie-authenticated mutations (comma separated).
+    csrf_trusted_origins: str = ""
+    # Local development only: let server-side calls reach private/loopback hosts.
+    outbound_allow_private_networks: bool = False
     hub_product_id: str = "mediamind-ai"
     media_root: Path = ROOT / ".runtime" / "media"
     media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
     ffmpeg_path: Path | None = None
     thumbnail_secret_key: SecretStr | None = None
     ai_secret_key: SecretStr | None = None
+
+    @field_validator(
+        "hub_admin_token_expires_at",
+        "outbound_allow_private_networks",
+        "csrf_trusted_origins",
+        "hub_admin_scopes",
+        mode="before",
+    )
+    @classmethod
+    def empty_optional_means_default(cls, value: object, info: ValidationInfo) -> object:
+        # `VAR=` (copied from .env.example or left blank on the host) means "not defined":
+        # fall back to the safe default instead of refusing to start the API.
+        if isinstance(value, str) and not value.strip():
+            return cls.model_fields[info.field_name].default
+        return value
+
+    @field_validator("hub_admin_scopes")
+    @classmethod
+    def validate_hub_admin_scopes(cls, value: str) -> str:
+        unknown = set(value.split()) - HUB_ADMIN_KNOWN_SCOPES
+        if unknown:
+            raise ValueError("HUB_ADMIN_SCOPES contém escopo desconhecido")
+        return value
+
+    @field_validator("hub_admin_token_expires_at")
+    @classmethod
+    def validate_hub_admin_expiry(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
     @model_validator(mode="after")
     def validate_production_auth(self) -> "Settings":
@@ -52,7 +93,13 @@ class Settings(BaseSettings):
             raise ValueError("GOOGLE_REDIRECT_URI deve usar HTTPS em production")
         if self.hub_admin_token is None or not self.hub_admin_token.get_secret_value().strip():
             raise ValueError("HUB_ADMIN_TOKEN deve ser configurado em production")
+        if self.outbound_allow_private_networks:
+            raise ValueError("OUTBOUND_ALLOW_PRIVATE_NETWORKS não é permitido em production")
         return self
+
+    @property
+    def hub_admin_scope_set(self) -> frozenset[str]:
+        return frozenset(self.hub_admin_scopes.split())
 
     @property
     def version(self) -> str:

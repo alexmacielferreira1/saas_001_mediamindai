@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
 import { LayoutDashboard, Megaphone, Mail, FileText, BarChart3, Plus, KanbanSquare } from 'lucide-react';
-import CorpPanel from '../CorpPanel';
 import { SubTabsBar, StatCard, StatusBadge, Panel } from './RoleShared';
 import PendenciasHub from '../PendenciasHub';
 import RoleInicio from '../RoleInicio';

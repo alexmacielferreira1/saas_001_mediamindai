@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useWorkDraftState } from '../../../lib/workProtection';
 import { Plus, Play, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 

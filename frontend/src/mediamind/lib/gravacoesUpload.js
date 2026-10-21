@@ -33,6 +33,11 @@ export async function uploadRecordingFiles(files, upload, metadata = {}) {
         url: result.stream_url,
         stream_url: result.stream_url,
         sha256: result.sha256,
+        // Metadados técnicos reais (ffprobe), usados no XML de edição.
+        ...(result.fps ? { fps: result.fps } : {}),
+        ...(result.width ? { width: result.width } : {}),
+        ...(result.height ? { height: result.height } : {}),
+        ...(result.duration ? { duracao: result.duration } : {}),
       });
     } catch {
       failed.push(file.name);

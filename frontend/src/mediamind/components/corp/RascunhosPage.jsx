@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Calendar, Users, CheckCircle, Trash2, Sparkles, Clapperboard } from 'lucide-react';
 import { MOCK_CORP_PRESENTERS, MOCK_CORP_PRODUCTIONS } from '../../data';
-import { useProducaoProjetos, updateProjeto, addProjeto, setEtapa, moverEtapa } from '../../lib/producaoStore';
+import { useProducaoProjetos, updateProjeto, addProjeto, moverEtapa } from '../../lib/producaoStore';
 import { StageDragArea, DraggableStageCard } from './StageDragList';
 import BriefingChecklistPanel from './BriefingChecklistPanel';
 import { isProjectInProductionStage } from '../../lib/productionWorkflow';

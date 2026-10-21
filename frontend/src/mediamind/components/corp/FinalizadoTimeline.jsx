@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Plus, Trash2, Flag, Film, Send, Play, Download, Scissors, CalendarClock, FileVideo, User, Clock3, Copy } from 'lucide-react';
+import { Check, Plus, Trash2, Flag, Play, Download, Scissors, CalendarClock, FileVideo, Clock3, Copy } from 'lucide-react';
 import { useProducaoProjetos, updateProjeto } from '../../lib/producaoStore';
 import { buildMediaHandoff } from '../../lib/mediaHandoff';
 

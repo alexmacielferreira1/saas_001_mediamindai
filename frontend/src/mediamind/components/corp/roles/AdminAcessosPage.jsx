@@ -4,6 +4,7 @@ import { listMemberships, updateMembershipRole, updateMembershipScreens } from '
 import { ROLE_CATALOG } from '../../../lib/roleCatalog';
 import { ALL_SUBTABS, isTotalAccess, getActiveSubtabs, toggleSubtab } from '../../../lib/roleSubtabs';
 import { useAuth } from '../../../auth';
+import { accessErrorMessage, isAccessDenied } from '../../../lib/accessErrors';
 import EmployeeAccessRow from './EmployeeAccessRow';
 import AcessoIAPanel from './AcessoIAPanel';
 
@@ -49,7 +50,11 @@ export default function AdminAcessosPage({ administration2 = false, localDemo = 
           restrictedScreens: u.restricted_screens || [],
         })));
       })
-      .catch(() => { if (alive) setEmployees([]); })
+      .catch((error) => {
+        if (!alive) return;
+        setEmployees([]);
+        if (isAccessDenied(error)) setAccessError(accessErrorMessage(error, 'Sem permissão para listar os funcionários desta empresa.'));
+      })
       .finally(() => { if (alive) setLoadingUsers(false); });
     return () => { alive = false; };
   }, [localDemo]);
@@ -67,16 +72,18 @@ export default function AdminAcessosPage({ administration2 = false, localDemo = 
       setEmployees((current) => current.map((item) => (
         item.membershipId === user.membershipId ? { ...item, extraScreens, restrictedScreens } : item
       )));
-    } catch {
-      setAccessError('Não foi possível alterar as telas. Tente novamente.');
+    } catch (error) {
+      setAccessError(accessErrorMessage(error, 'Não foi possível alterar as telas. Tente novamente.'));
     }
   }
 
   async function onCopyAccess(user, source) {
     setAccessError('');
+    let roleSaved = false;
     try {
       if (!localDemo) {
         await updateMembershipRole(user.membershipId, source.role);
+        roleSaved = true;
         await updateMembershipScreens(user.membershipId, source.extraScreens || [], source.restrictedScreens || []);
       }
       setEmployees((current) => current.map((item) => (
@@ -84,8 +91,14 @@ export default function AdminAcessosPage({ administration2 = false, localDemo = 
           ? { ...item, role: source.role, extraScreens: source.extraScreens || [], restrictedScreens: source.restrictedScreens || [] }
           : item
       )));
-    } catch {
-      setAccessError('Não foi possível copiar o acesso. Tente novamente.');
+    } catch (error) {
+      // Falha parcial: o cargo já foi gravado no servidor; as telas continuam as anteriores.
+      if (roleSaved) {
+        setEmployees((current) => current.map((item) => (
+          item.membershipId === user.membershipId ? { ...item, role: source.role } : item
+        )));
+      }
+      setAccessError(accessErrorMessage(error, 'Não foi possível copiar o acesso. Tente novamente.'));
     }
   }
 
@@ -96,8 +109,8 @@ export default function AdminAcessosPage({ administration2 = false, localDemo = 
       setEmployees((current) => current.map((item) => (
         item.membershipId === user.membershipId ? { ...item, role } : item
       )));
-    } catch {
-      setAccessError('Não foi possível alterar o cargo. Tente novamente.');
+    } catch (error) {
+      setAccessError(accessErrorMessage(error, 'Não foi possível alterar o cargo. Tente novamente.'));
     }
   }
 

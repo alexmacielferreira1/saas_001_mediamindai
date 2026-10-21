@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Loader2, Film, Sparkles, FileVideo, AlertTriangle } from 'lucide-react';
+import { X, Search, Film, Sparkles, FileVideo, AlertTriangle } from 'lucide-react';
 import { useEmpresa } from '../../../lib/empresaContext';
 import { listAssets, getAsset } from '../../../lib/clipEngineService';
 import { Loading, EmptyState } from '../../shared';

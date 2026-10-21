@@ -37,6 +37,9 @@ import SoundCraft from "./mediamind/pages/SoundCraft";
 import OfficeCraft from "./mediamind/pages/OfficeCraft";
 import AISettings from "./mediamind/pages/AISettings";
 import AIUsageDashboard from "./mediamind/pages/AIUsageDashboard";
+import Telas2 from "./mediamind/pages/Telas2";
+import Gestao2 from "./mediamind/pages/Gestao2";
+import APIsIA2 from "./mediamind/pages/APIsIA2";
 import { canAccessModule } from "./mediamind/lib/moduleAccess";
 
 function ModuleRoute({ moduleId, children }) {
@@ -117,6 +120,9 @@ function AuthenticatedApp() {
       <Route path="/soundcraft" element={<ModuleRoute moduleId="ai_tools"><></></ModuleRoute>} />
       <Route path="/ferramentas-office" element={protectedPage(OfficeCraft, "ai_tools")} />
       <Route path="/dash-ias" element={protectedPage(AIUsageDashboard)} />
+      <Route path="/telas2" element={protectedPage(Telas2, "management")} />
+      <Route path="/telas2/gestao" element={protectedPage(Gestao2, "management")} />
+      <Route path="/telas2/apis-ia" element={protectedPage(APIsIA2, "management")} />
       <Route path="/configuracoes/ia" element={protectedPage(AISettings, "ai_tools")} />
     </Route>
     <Route path="*" element={<PageNotFound />} />

@@ -381,7 +381,7 @@ export default function CarouselStudio({ projectId = null, initialMode = "image"
     setDoc((value) => ({ ...value, slides: value.slides.map((item, index) => index === selected ? { ...item, ...preset } : item) }));
     setMessage(`Padrão ${preset.name} aplicado à arte atual.`);
   }
-  function useSingleArtModel(preset) {
+  function applySingleArtModel(preset) {
     setContentMode("single"); setTheme("single-news");
     setDoc((value) => ({ ...value, template_id: "simers-noticia-unica", slides: value.slides.map((item, index) => index === selected ? { ...item, ...preset } : item) }));
     setProfile((value) => ({ ...value, name: "SIMERS", handle: "" }));
@@ -531,7 +531,7 @@ export default function CarouselStudio({ projectId = null, initialMode = "image"
         <div className="mb-2 flex items-center justify-between"><div><h3 className="text-sm font-black text-white">Modelos SIMERS</h3><p className="text-[11px] text-slate-400">Clique em uma miniatura para aplicar à arte selecionada.</p></div></div>
         <h4 className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-300">Artes individuais</h4>
         <div className="flex flex-wrap gap-3 pb-2">
-          {singleArtPresets.map((preset) => <button key={`${preset.name}-model`} type="button" aria-label={`Usar modelo ${preset.name}`} onClick={() => useSingleArtModel(preset)} className="w-24 shrink-0 rounded-xl border border-slate-700 bg-slate-950/60 p-1 text-left hover:border-cyan-400">
+          {singleArtPresets.map((preset) => <button key={`${preset.name}-model`} type="button" aria-label={`Usar modelo ${preset.name}`} onClick={() => applySingleArtModel(preset)} className="w-24 shrink-0 rounded-xl border border-slate-700 bg-slate-950/60 p-1 text-left hover:border-cyan-400">
             <img src={`/reference/arte-unica-${preset.image}.png`} alt="" className="aspect-[4/5] w-full rounded-lg object-cover object-top" />
             <span className="mt-1 block truncate px-1 text-[10px] font-bold text-slate-200">{preset.name}</span>
           </button>)}
@@ -1531,7 +1531,7 @@ export default function CarouselStudio({ projectId = null, initialMode = "image"
           </header>
           <div className="space-y-5 p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {singleArtPresets.map((preset) => <button key={`${preset.name}-guide`} type="button" aria-label={`Aplicar padrão ${preset.name}`} onClick={() => { useSingleArtModel(preset); setGuideOpen(false); }} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-left hover:border-emerald-400"><img src={`/reference/arte-unica-${preset.image}.png`} alt="" className="aspect-[4/5] w-full object-cover object-top" /><span className="block p-3 text-sm font-bold text-white">{preset.name}</span></button>)}
+              {singleArtPresets.map((preset) => <button key={`${preset.name}-guide`} type="button" aria-label={`Aplicar padrão ${preset.name}`} onClick={() => { applySingleArtModel(preset); setGuideOpen(false); }} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-left hover:border-emerald-400"><img src={`/reference/arte-unica-${preset.image}.png`} alt="" className="aspect-[4/5] w-full object-cover object-top" /><span className="block p-3 text-sm font-bold text-white">{preset.name}</span></button>)}
               <button type="button" onClick={() => { applyGiroTemplate(); setGuideOpen(false); }} className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-left hover:border-emerald-400"><img src="/reference/giro-semana-capa.png" alt="" className="aspect-[4/5] w-full object-cover object-top" /><span className="block p-3 text-sm font-bold text-white">Giro da Semana</span></button>
             </div>
             <div className="grid gap-4 md:grid-cols-3">

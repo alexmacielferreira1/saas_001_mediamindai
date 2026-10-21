@@ -1,3 +1,4 @@
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ class PermissionGroupUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=300)
     permission_codes: list[str] | None = None
+    reason: str | None = Field(default=None, max_length=300)
 
 
 class PermissionGroupResponse(BaseModel):
@@ -27,8 +29,13 @@ class PermissionGroupListResponse(BaseModel):
     permission_groups: list[PermissionGroupResponse]
 
 
+# Motivo opcional das mudanças de acesso; vai para a auditoria (MM-006/MM-008).
+AccessChangeReason = Annotated[str | None, Field(max_length=300)]
+
+
 class MembershipPermissionGroupUpdate(BaseModel):
     permission_group_id: UUID | None
+    reason: AccessChangeReason = None
 
 
 class MembershipPermissionGroupResponse(BaseModel):
@@ -53,6 +60,7 @@ class MembershipListResponse(BaseModel):
 
 class MembershipRoleUpdate(BaseModel):
     role: str = Field(min_length=1, max_length=80)
+    reason: AccessChangeReason = None
 
 
 class MembershipRoleResponse(BaseModel):
@@ -60,10 +68,14 @@ class MembershipRoleResponse(BaseModel):
     role: str
 
 
-class MembershipScreensUpdate(BaseModel):
+class MembershipScreens(BaseModel):
     extra_screens: list[str] = Field(default_factory=list)
     restricted_screens: list[str] = Field(default_factory=list)
 
 
-class MembershipScreensResponse(MembershipScreensUpdate):
+class MembershipScreensUpdate(MembershipScreens):
+    reason: AccessChangeReason = None
+
+
+class MembershipScreensResponse(MembershipScreens):
     membership_id: UUID

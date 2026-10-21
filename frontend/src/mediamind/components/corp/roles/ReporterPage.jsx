@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Newspaper, Mic, Users, Clock, FileText, Search } from 'lucide-react';
+import { LayoutDashboard, Users, FileText } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
 import { StatCard, StatusBadge } from './RoleShared';
-import { MOCK_CORP_SOURCES, MOCK_CORP_PAUTAS, MOCK_CORP_ARTICLES } from '../../../data';
+import { MOCK_CORP_SOURCES, MOCK_CORP_ARTICLES } from '../../../data';
 
 const TONE = {
   em_campo: 'bg-amber-500/15 text-amber-300',

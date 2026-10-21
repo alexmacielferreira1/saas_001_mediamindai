@@ -8,7 +8,7 @@ vi.mock('../../../lib/clipEngineService', () => ({
   ...api, ensureTranscription: vi.fn(), runAnalysis: vi.fn(), promoteCandidate: vi.fn(), getAsset: vi.fn(),
 }));
 
-import ClipCandidatesPanel from './ClipCandidatesPanel';
+import ClipCandidatesPanel, { fromClipsAnalysis } from './ClipCandidatesPanel';
 import ClipLegendasPanel from './ClipLegendasPanel';
 
 function Workspace() {
@@ -57,5 +57,23 @@ describe('seleção de candidatos para legendas', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Selecionar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Gerar legendas' }));
     expect(screen.getByDisplayValue('Uma fala verdadeira.')).toBeInTheDocument();
+  });
+});
+
+describe('fromClipsAnalysis — explicações das notas', () => {
+  const base = { id: 'c1', start: 1, end: 5, quote: 'Fala', score: 80, dimensions: { hook: 20, flow: 18, value: 22, shareability: 20 } };
+
+  it('does not invent Hook/Fluxo/Valor explanations when the analysis has none', () => {
+    const item = fromClipsAnalysis(base, 0);
+    expect(item).toMatchObject({ hook_grade: '20/25', flow_grade: '18/25', value_grade: '22/25', trend_grade: '20/25' });
+    expect(item.hook_explanation).toBe('');
+    expect(item.flow_explanation).toBe('');
+    expect(item.value_explanation).toBe('');
+    expect(item.trend_explanation).toBe('');
+  });
+
+  it('uses the explanations returned by the analysis', () => {
+    const item = fromClipsAnalysis({ ...base, explanations: { hook: ' Abre com pergunta direta. ', flow: 'Sem cortes.', value: 'Dado novo.', shareability: 'Frase citável.' } }, 1);
+    expect(item).toMatchObject({ hook_explanation: 'Abre com pergunta direta.', flow_explanation: 'Sem cortes.', value_explanation: 'Dado novo.', trend_explanation: 'Frase citável.', rank: 2 });
   });
 });

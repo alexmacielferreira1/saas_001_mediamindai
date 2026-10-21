@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, ScrollText } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { MOCK_CORP_DRAFTS, MOCK_CORP_PAUTAS } from '../../../data';
 
 // Roteirista — rascunhos e versionamento de roteiro (extensão de texto puro).

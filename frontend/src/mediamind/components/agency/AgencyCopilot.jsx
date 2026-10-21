@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bot, Lightbulb, MessageSquare, History, X, ArrowRight, CircleAlert, Check, PauseCircle, Trash2 } from "lucide-react";
+import { Bot, Lightbulb, MessageSquare, History, X, ArrowRight } from "lucide-react";
 
 // Copiloto V1: conversa e histórico LOCAL. Nenhuma IA/API é chamada; nenhuma mensagem externa é enviada.
 const KEY = "mediamind_agencia_copiloto_v1";

@@ -15,6 +15,7 @@ from app.clips.contracts import (
 )
 from app.clips.scoring import build_candidate
 from app.clips.transcription import TranscriptionUnavailable
+from app.security.outbound import OutboundUrlRejected, validate_outbound_url
 
 
 class CommandAnalysisAdapter:
@@ -120,9 +121,16 @@ class RemoteAnalysisAdapter:
             .replace("{minimum}", "{minimum}")
             .replace("{maximum}", "{maximum}")
         )
+        endpoint = f"{str(self.connection['base_url']).rstrip('/')}/chat/completions"
+        try:
+            validate_outbound_url(endpoint)
+        except OutboundUrlRejected as error:
+            raise TranscriptionUnavailable(
+                "O endereço configurado para a IA não é permitido pelo servidor."
+            ) from error
         try:
             response = httpx.post(
-                f"{str(self.connection['base_url']).rstrip('/')}/chat/completions",
+                endpoint,
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json={
                     "model": self.connection["model"],

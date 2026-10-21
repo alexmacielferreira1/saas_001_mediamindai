@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightbulb,  Wrench, ExternalLink, X, FolderOpen, Paperclip, Settings2, ChevronDown, MonitorPlay } from 'lucide-react';
+import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightbulb,  Wrench, X, FolderOpen, Paperclip, Settings2, ChevronDown } from 'lucide-react';
 import { createMCPQueue, listMCPTools } from '../../lib/mcpApi';
 import { isPersistedAssetId, useMCPContext } from '../../lib/mcpTargetContext';
 import { useMCPActions } from '../../lib/mcpActions';

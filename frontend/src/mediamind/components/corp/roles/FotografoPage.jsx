@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, Image as ImageIcon } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { MOCK_CEDOC_MIDIAS } from '../../../data';
 
 // Fotógrafo — ensaios e cobertura de eventos; sobe arquivo no Ingest com metadados.

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, SlidersHorizontal } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { MOCK_CORP_RECORDINGS } from '../../../data';
 
 // Operador de Áudio / Sonoplasta — captação e mixagem nas gravações;

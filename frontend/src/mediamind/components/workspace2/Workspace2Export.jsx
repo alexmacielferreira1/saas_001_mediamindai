@@ -44,7 +44,7 @@ function hasExportableClip(timeline) {
 }
 
 function toMaterials(timeline) {
-  return (timeline?.tracks || []).flatMap((track) => track.clips || []).filter((clip) => clip.assetId).map((clip) => ({ nome: clip.filename || clip.name }));
+  return (timeline?.tracks || []).flatMap((track) => track.clips || []).filter((clip) => clip.assetId).map((clip) => ({ nome: clip.filename || clip.name, duracao: Number(clip.duration) || undefined, fps: clip.fps, width: clip.width, height: clip.height }));
 }
 
 function buildEdl(timeline) {
@@ -91,7 +91,7 @@ export default function Workspace2Export({ project, timeline, onSave, onNotice }
     onNotice('Arquivo de projeto MediaMind exportado.');
   };
   const exportXml = () => {
-    downloadContent(`${exportName}.xml`, gerarXmlPremiere({ titulo: project?.title, materiais: toMaterials(timeline) }), 'application/xml');
+    downloadContent(`${exportName}.xml`, gerarXmlPremiere({ titulo: project?.title, fps: timeline?.fps, width: timeline?.width, height: timeline?.height, materiais: toMaterials(timeline) }), 'application/xml');
     onNotice('XML compatível com Premiere e DaVinci exportado.');
   };
   const exportEdl = () => { downloadContent(`${exportName}.edl`, buildEdl(timeline)); onNotice('EDL exportada.'); };

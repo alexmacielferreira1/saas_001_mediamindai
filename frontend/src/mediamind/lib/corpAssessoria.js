@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import {
   MOCK_CORP_RELEASES, MOCK_CORP_CLIPPINGS, MOCK_CORP_JOURNALISTS, MOCK_CORP_MENTIONS,
 } from '../data';
+import { isAccessDenied } from './accessErrors';
 
 // Assessoria de Imprensa — 4 entidades separadas, cada uma com seu loader
 // load/seed (mesmo padrão de corpAgenda/corpPendencias). O mock preenche o
@@ -56,8 +57,30 @@ export async function loadOrSeedMencoes(fallback = MOCK_CORP_MENTIONS) {
   );
 }
 
+const EMPTY_ASSESSORIA = { releases: [], clippings: [], jornalistas: [], mencoes: [] };
+
+function loadAllAssessoria() {
+  return Promise.all([
+    loadOrSeedReleases(),
+    loadOrSeedClippings(),
+    loadOrSeedJornalistas(),
+    loadOrSeedMencoes(),
+  ]);
+}
+
+function mergeLoaded([releases, clippings, jornalistas, mencoes]) {
+  return (d) => ({
+    releases: releases.length > 0 ? releases : d.releases,
+    clippings: clippings.length > 0 ? clippings : d.clippings,
+    jornalistas: jornalistas.length > 0 ? jornalistas : d.jornalistas,
+    mencoes: mencoes.length > 0 ? mencoes : d.mencoes,
+  });
+}
+
 // Hook único que carrega as 4 listas da Assessoria de uma vez. Expõe
-// `error` + `reload` para tratamento de erro consistente.
+// error + reload para tratamento de erro consistente. Em 403 (tela
+// restrita pelo gestor) expõe forbidden e esvazia as listas: nada de
+// dados de demonstração no lugar da recusa do servidor.
 export function useAssessoria() {
   const [data, setData] = useState({
     releases: MOCK_CORP_RELEASES,
@@ -67,73 +90,70 @@ export function useAssessoria() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [forbidden, setForbidden] = useState(false);
+
+  const fail = useCallback((e) => {
+    if (isAccessDenied(e)) {
+      setForbidden(true);
+      setData(EMPTY_ASSESSORIA);
+    }
+    setError(e);
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [releases, clippings, jornalistas, mencoes] = await Promise.all([
-        loadOrSeedReleases(),
-        loadOrSeedClippings(),
-        loadOrSeedJornalistas(),
-        loadOrSeedMencoes(),
-      ]);
-      setData((d) => ({
-        releases: releases.length > 0 ? releases : d.releases,
-        clippings: clippings.length > 0 ? clippings : d.clippings,
-        jornalistas: jornalistas.length > 0 ? jornalistas : d.jornalistas,
-        mencoes: mencoes.length > 0 ? mencoes : d.mencoes,
-      }));
+      const loaded = await loadAllAssessoria();
+      setForbidden(false);
+      setData(mergeLoaded(loaded));
     } catch (e) {
-      setError(e);
+      fail(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fail]);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([
-      loadOrSeedReleases(),
-      loadOrSeedClippings(),
-      loadOrSeedJornalistas(),
-      loadOrSeedMencoes(),
-    ])
-      .then(([releases, clippings, jornalistas, mencoes]) => {
-        if (!alive) return;
-        setData((d) => ({
-          releases: releases.length > 0 ? releases : d.releases,
-          clippings: clippings.length > 0 ? clippings : d.clippings,
-          jornalistas: jornalistas.length > 0 ? jornalistas : d.jornalistas,
-          mencoes: mencoes.length > 0 ? mencoes : d.mencoes,
-        }));
-      })
-      .catch((e) => { if (alive) setError(e); })
+    loadAllAssessoria()
+      .then((loaded) => { if (alive) setData(mergeLoaded(loaded)); })
+      .catch((e) => { if (alive) fail(e); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [fail]);
 
-  return { ...data, loading, error, reload };
+  return { ...data, loading, error, forbidden, reload };
 }
 
-// Hook isolado só para releases — usado pelo roleInicioData (assessoria/juridico).
+// Hook isolado só para releases. Em 403 devolve lista vazia + forbidden.
 export function useReleases() {
   const [releases, setReleases] = useState(MOCK_CORP_RELEASES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [forbidden, setForbidden] = useState(false);
+
+  const fail = useCallback((e) => {
+    if (isAccessDenied(e)) {
+      setForbidden(true);
+      setReleases([]);
+    }
+    setError(e);
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const loaded = await loadOrSeedReleases();
+      setForbidden(false);
       setReleases(loaded.length > 0 ? loaded : MOCK_CORP_RELEASES);
     } catch (e) {
-      setError(e);
+      fail(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fail]);
 
   useEffect(() => {
     let alive = true;
@@ -142,10 +162,10 @@ export function useReleases() {
         if (!alive) return;
         setReleases(loaded.length > 0 ? loaded : MOCK_CORP_RELEASES);
       })
-      .catch((e) => { if (alive) setError(e); })
+      .catch((e) => { if (alive) fail(e); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [fail]);
 
-  return { releases, loading, error, reload };
+  return { releases, loading, error, forbidden, reload };
 }

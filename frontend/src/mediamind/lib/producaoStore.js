@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { base44 } from '@/api/base44Client';
+import { toast } from '@/components/ui/use-toast';
 import { MOCK_CORP_PRODUCAO_PROJETOS } from '../data';
 import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './productionWorkflow';
 
@@ -11,8 +12,9 @@ import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './production
 // preenche o primeiro render (pra não piscar tela vazia) e é substituído pelos
 // registros reais assim que a carga termina; se a entidade estiver vazia, o
 // mock é semeado nela. Toda mutação atualiza a memória na hora (UX instantânea,
-// API síncrona preservada) e persiste em background (best-effort, degradação
-// graciosa se o backend estiver fora).
+// API síncrona preservada) e persiste em background. A gravação devolve uma
+// Promise<boolean>; falhas não são engolidas: ficam em useProducaoSaveState
+// ('error') e geram aviso. Falha na carga não cai para o mock.
 
 // Id da empresa ativa (tenant) — lido do localStorage (mesma chave do EmpresaProvider).
 function currentEmpresaId() {
@@ -22,6 +24,7 @@ function currentEmpresaId() {
 let projetos = seedMock();
 let loaded = false;
 let loadingPromise = null;
+let loadError = null;
 const listeners = new Set();
 
 function seedMock() {
@@ -64,6 +67,10 @@ export function useProducaoProjetos() {
 
 export function useProducaoReady() {
   return useSyncExternalStore(subscribe, () => loaded);
+}
+
+export function useProducaoLoadError() {
+  return useSyncExternalStore(subscribe, () => loadError);
 }
 
 // Reconstrói o shape esperado pelos consumers a partir do registro da entidade.
@@ -137,27 +144,138 @@ function toEntityData(p) {
   };
 }
 
-// Persiste o projeto em background. Se ainda não tem _entityId, cria; senão,
-// atualiza. Nunmo bloqueia a UI — falhas são silenciosas (degradação graciosa).
+// Estado de gravação por projeto (id local): 'saving' | 'saved' | 'error'.
+// "Salvo" só existe depois de o servidor confirmar. Em falha a edição local é
+// mantida e marcada como não salva (para nova tentativa) e um aviso é exibido.
+// Mudança de etapa recusada pelo servidor (409/422) volta para a etapa
+// confirmada, para a tela não ficar numa etapa que o servidor não aceitou.
+let saveStates = {};
+// Fila por projeto: as gravações saem uma de cada vez, na ordem em que foram
+// feitas, cada uma com o retrato do projeto no momento da alteração. Assim
+// movimentos rápidos não chegam fora de ordem e o create nunca recebe uma
+// etapa que ainda não passou pelas etapas intermediárias.
+const queues = new Map();
+// Última etapa/histórico confirmados pelo servidor, por id local.
+const confirmed = new Map();
+// Incrementa no reset (logout): respostas atrasadas da sessão anterior são ignoradas.
+let storeEpoch = 0;
+
+function setSaveState(localId, state) {
+  saveStates = { ...saveStates, [localId]: state };
+  emit();
+}
+
+export function getSaveState(localId) {
+  return saveStates[localId] || null;
+}
+
+export function useProducaoSaveState(localId) {
+  return useSyncExternalStore(subscribe, () => saveStates[localId] || null);
+}
+
+function saveErrorMessage(error) {
+  const detail = error?.message || '';
+  return detail ? `A alteração não foi salva no servidor: ${detail}` : 'A alteração não foi salva no servidor. Tente novamente.';
+}
+
+function isStageRejection(error) {
+  return error?.status === 409 || error?.status === 422 || /^PRODUCTION_STAGE_/.test(String(error?.code || ''));
+}
+
+function rememberConfirmed(localId, data) {
+  confirmed.set(localId, { etapa: data?.etapa, historico: data?.historico || [] });
+}
+
+async function runWrite(localId, snapshot) {
+  const p = projetos.find((x) => x.id === localId);
+  if (!p) return null;
+  if (p._entityId) return base44.entities.ProducaoProjeto.update(p._entityId, snapshot);
+  const created = await base44.entities.ProducaoProjeto.create({ ...snapshot, ordem: Number(p.id) || 0 });
+  if (!created?.id) throw new Error('o servidor não devolveu o registro criado');
+  // Amarra o id da entidade ao id local, sem trocar o id local.
+  projetos = projetos.map((x) => (x.id === localId ? { ...x, _entityId: created.id } : x));
+  return created;
+}
+
+function revertRejectedStage(localId, queue) {
+  const conf = confirmed.get(localId);
+  if (!conf) return;
+  projetos = projetos.map((x) => (x.id === localId ? { ...x, etapa: conf.etapa, historico: conf.historico } : x));
+  // A próxima gravação na fila não deve repetir a etapa recusada.
+  if (queue.pending) queue.pending.snapshot = { ...queue.pending.snapshot, etapa: conf.etapa, historico: conf.historico };
+}
+
+// Persiste o projeto. Resolve true quando o servidor confirmou e false em
+// falha — nunca rejeita, para não quebrar chamadores que ignoram o retorno.
 function persist(localId) {
   const p = projetos.find((x) => x.id === localId);
-  if (!p) return;
-  if (p._entityId) {
-    base44.entities.ProducaoProjeto.update(p._entityId, toEntityData(p)).catch(() => {});
-  } else {
-    base44.entities.ProducaoProjeto.create({ ...toEntityData(p), ordem: Number(p.id) || 0 })
-      .then((created) => {
-        // Re-persiste o estado atual (inclui updates feitos durante o create)
-        // e amarra o id da entidade ao id local, sem trocar o id local.
-        const cur = projetos.find((x) => x.id === localId);
-        if (cur) {
-          base44.entities.ProducaoProjeto.update(created.id, toEntityData(cur)).catch(() => {});
-          projetos = projetos.map((x) => (x.id === localId ? { ...x, _entityId: created.id } : x));
-          emit();
-        }
-      })
-      .catch(() => {});
+  if (!p) return Promise.resolve(false);
+  const snapshot = toEntityData(p);
+  let queue = queues.get(localId);
+  if (!queue) {
+    queue = { tail: Promise.resolve(), pending: null, size: 0 };
+    queues.set(localId, queue);
   }
+  setSaveState(localId, { status: 'saving', error: null });
+  // Edição que ainda não saiu e não muda a etapa: atualiza o retrato pendente.
+  if (queue.pending && queue.pending.snapshot.etapa === snapshot.etapa) {
+    queue.pending.snapshot = snapshot;
+    return queue.pending.promise;
+  }
+  const epoch = storeEpoch;
+  const entry = { snapshot, promise: null };
+  const start = async () => {
+    if (queue.pending === entry) queue.pending = null;
+    if (epoch !== storeEpoch) return false;
+    try {
+      const saved = await runWrite(localId, entry.snapshot);
+      if (epoch !== storeEpoch) return false;
+      rememberConfirmed(localId, saved && saved.etapa !== undefined ? saved : entry.snapshot);
+      if (queue.size === 1) setSaveState(localId, { status: 'saved', error: null });
+      return true;
+    } catch (error) {
+      if (epoch !== storeEpoch) return false;
+      const rejected = isStageRejection(error);
+      if (rejected) revertRejectedStage(localId, queue);
+      const message = rejected
+        ? `Mudança de etapa recusada pelo servidor: ${error?.message || 'etapa inválida'}`
+        : saveErrorMessage(error);
+      setSaveState(localId, { status: 'error', error: message });
+      toast({ title: rejected ? 'Mudança de etapa recusada' : 'Falha ao salvar produção', description: message, variant: 'destructive' });
+      return false;
+    } finally {
+      queue.size -= 1;
+    }
+  };
+  const idle = queue.size === 0;
+  queue.size += 1;
+  if (idle) {
+    entry.promise = start();
+  } else {
+    queue.pending = entry;
+    entry.promise = queue.tail.then(start);
+  }
+  queue.tail = entry.promise;
+  return entry.promise;
+}
+
+// Grava de novo o estado atual do projeto (botão "Salvar" / nova tentativa).
+export function salvarProjeto(id) {
+  if (!projetos.some((p) => p.id === id)) return Promise.resolve(false);
+  return persist(id);
+}
+
+// Logout/troca de sessão: descarta os dados da empresa da memória.
+export function resetProducaoStore() {
+  storeEpoch += 1;
+  projetos = [];
+  loaded = false;
+  loadingPromise = null;
+  loadError = null;
+  saveStates = {};
+  queues.clear();
+  confirmed.clear();
+  emit();
 }
 
 // Carga inicial: entidade é a fonte de verdade. Se vazia, semeia do mock.
@@ -166,14 +284,21 @@ async function loadOrSeed() {
     const existing = await base44.entities.ProducaoProjeto.list('ordem', 200);
     if (existing.length > 0) {
       projetos = existing.map(fromEntity);
-    } else {
+      for (const p of projetos) rememberConfirmed(p.id, p);
+    } else if (projetos.length > 0) {
       const created = await base44.entities.ProducaoProjeto.bulkCreate(
         projetos.map((p, i) => ({ ...toEntityData(p), ordem: i }))
       );
       projetos = projetos.map((p, i) => ({ ...p, _entityId: created[i]?.id || null }));
+      for (const p of projetos) if (p._entityId) rememberConfirmed(p.id, p);
     }
-  } catch {
-    // Mantém o seed do mock em memória (degradação graciosa).
+    loadError = null;
+  } catch (error) {
+    // Sem confirmação do servidor não exibimos dados de exemplo como se fossem
+    // reais (editá-los criaria registros falsos): a lista fica vazia com aviso.
+    projetos = [];
+    loadError = error?.message || 'Não foi possível carregar as produções.';
+    toast({ title: 'Falha ao carregar produções', description: loadError, variant: 'destructive' });
   } finally {
     loaded = true;
     emit();
@@ -190,13 +315,13 @@ function ensureLoaded() {
 export function updateProjeto(id, patch) {
   projetos = projetos.map((p) => (p.id === id ? { ...p, ...patch } : p));
   emit();
-  persist(id);
+  return persist(id);
 }
 
 export const STAGE_ORDER = PRODUCTION_STAGE_ORDER;
 
 export function setEtapa(id, etapa) {
-  updateProjeto(id, { etapa });
+  return updateProjeto(id, { etapa });
 }
 
 // Move um projeto uma etapa no pipeline (dir = -1 volta, +1 avança).
@@ -204,7 +329,7 @@ export function moverEtapa(id, dir) {
   const p = projetos.find((x) => x.id === id);
   if (!p) return;
   const next = getAdjacentProductionStage(p.etapa, dir);
-  if (next) updateProjeto(id, { etapa: next });
+  if (next) return updateProjeto(id, { etapa: next });
 }
 
 export function addProjeto(data = {}) {
@@ -248,5 +373,5 @@ export function transicionar(id, novaEtapa, { quem = '', obs = '' } = {}) {
   const p = projetos.find((x) => x.id === id);
   if (!p) return;
   const entrada = { etapa: novaEtapa, quem, quando: new Date().toISOString(), obs };
-  updateProjeto(id, { etapa: novaEtapa, historico: [...(p.historico || []), entrada] });
+  return updateProjeto(id, { etapa: novaEtapa, historico: [...(p.historico || []), entrada] });
 }

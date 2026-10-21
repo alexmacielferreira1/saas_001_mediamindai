@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from app.clips.contracts import TranscriptSegment, TranscriptWord
+from app.security.outbound import OutboundUrlRejected, validate_outbound_url
 
 
 class TranscriptionUnavailable(RuntimeError):
@@ -86,10 +87,17 @@ class RemoteTranscriptionAdapter:
             )
         if not source.is_file():
             raise FileNotFoundError("Arquivo de mídia não encontrado.")
+        endpoint = f"{str(self.connection['base_url']).rstrip('/')}/audio/transcriptions"
+        try:
+            validate_outbound_url(endpoint)
+        except OutboundUrlRejected as error:
+            raise TranscriptionUnavailable(
+                "O endereço configurado para a IA não é permitido pelo servidor."
+            ) from error
         try:
             with source.open("rb") as media:
                 response = httpx.post(
-                    f"{str(self.connection['base_url']).rstrip('/')}/audio/transcriptions",
+                    endpoint,
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     data={
                         "model": self.connection.get("transcription_model", "whisper-1"),

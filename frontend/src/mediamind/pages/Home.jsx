@@ -8,8 +8,7 @@ import {
   Users,
 } from 'lucide-react';
 import { getMyDashboard } from '../../api/dashboard';
-import { Panel, Stat, Badge, StatusBadge, Button } from '../ui';
-import { formatDuration } from '../data';
+import { Panel, Stat, StatusBadge } from '../ui';
 import { useMamData } from '../lib/mamData';
 import { useAuth } from '../auth';
 import { readLocalDemoSession } from '../lib/demoAccess';

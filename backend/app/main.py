@@ -13,7 +13,9 @@ from app.api.v1.hub_admin import router as hub_admin_router
 from app.core.config import get_settings
 from app.core.errors import PublicError, error_response
 from app.db.session import database_available, engine
+from app.observability.context import correlation_id_var
 from app.observability.logging import configure_logging
+from app.security.http import apply_security_headers, csrf_violation
 
 SAFE_CORRELATION_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
@@ -52,13 +54,23 @@ def create_app() -> FastAPI:
             received if SAFE_CORRELATION_ID.fullmatch(received) else str(uuid4())
         )
         request.state.request_id = str(uuid4())
+        # Audit rows read the correlation id without receiving the Request (MM-008).
+        correlation_token = correlation_id_var.set(request.state.correlation_id)
         start = perf_counter()
         context = {
             "correlation_id": request.state.correlation_id,
             "request_id": request.state.request_id,
         }
         try:
-            response = await call_next(request)
+            if csrf_violation(request, settings):
+                response = error_response(
+                    request,
+                    403,
+                    "CSRF_ORIGIN_REJECTED",
+                    "Origem da requisição não autorizada.",
+                )
+            else:
+                response = await call_next(request)
         except Exception as exc:
             response = error_response(
                 request, 500, "INTERNAL_ERROR", "Ocorreu um erro interno.", retryable=False
@@ -72,8 +84,11 @@ def create_app() -> FastAPI:
                     "public_reference": request.state.public_reference,
                 },
             )
+        finally:
+            correlation_id_var.reset(correlation_token)
         response.headers["X-Correlation-ID"] = request.state.correlation_id
         response.headers["X-Request-ID"] = request.state.request_id
+        apply_security_headers(response, settings)
         route = request.scope.get("route")
         logger.info(
             "request_completed",

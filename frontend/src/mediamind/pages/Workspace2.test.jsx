@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Workspace2 from './Workspace2';
@@ -184,5 +184,26 @@ describe('Workspace 2 flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar comprovantes de upload' }));
     expect(screen.queryByText('entrevista final.mp4')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mostrar comprovantes de upload' })).toBeInTheDocument();
+  });
+
+  it("opens the media from the /workspace?assetId= deep link (and the ?asset= alias)", async () => {
+    mediaApi.listMediaAssets.mockResolvedValue([
+      { id: "a", title: "Primeira", asset_type: "video", stream_url: "/a" },
+      { id: "b", title: "Entrevista do link", asset_type: "video", stream_url: "/b" },
+    ]);
+    const { unmount } = render(<MemoryRouter initialEntries={["/workspace?assetId=b"]}><Workspace2 /></MemoryRouter>);
+    expect(await screen.findByText("Mídia aberta pelo link: Entrevista do link")).toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("mm_workspace_media_selection") || "[]")).toContain("b"));
+    unmount();
+    localStorage.clear();
+
+    render(<MemoryRouter initialEntries={["/workspace?asset=a"]}><Workspace2 /></MemoryRouter>);
+    expect(await screen.findByText("Mídia aberta pelo link: Primeira")).toBeInTheDocument();
+  });
+
+  it("tells the user when the linked media is not in this company archive", async () => {
+    mediaApi.listMediaAssets.mockResolvedValue([{ id: "a", title: "Primeira", asset_type: "video" }]);
+    render(<MemoryRouter initialEntries={["/workspace?assetId=zzz"]}><Workspace2 /></MemoryRouter>);
+    expect(await screen.findByText("A mídia do link não foi encontrada no Acervo desta empresa.")).toBeInTheDocument();
   });
 });

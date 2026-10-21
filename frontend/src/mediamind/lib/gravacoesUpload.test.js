@@ -76,4 +76,10 @@ describe('upload de materiais de gravação', () => {
     expect(result.failed).toEqual(['empty.mp4']);
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it("guarda fps, resolução e duração reais devolvidos pelo servidor para o XML de edição", async () => {
+    const upload = vi.fn().mockResolvedValue({ id: "a", stream_url: "/s", sha256: "x", fps: 29.97, width: 3840, height: 2160, duration: 12.5 });
+    const { uploaded } = await uploadRecordingFiles([{ name: "c.mov", size: 1 }], upload);
+    expect(uploaded[0]).toMatchObject({ fps: 29.97, width: 3840, height: 2160, duracao: 12.5 });
+  });
 });

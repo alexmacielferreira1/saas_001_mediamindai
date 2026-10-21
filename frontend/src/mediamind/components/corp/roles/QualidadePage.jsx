@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, ClipboardCheck, CheckCircle2, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, ShieldCheck } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
 import { StatCard, StatusBadge } from './RoleShared';
-import { MOCK_CORP_PRODUCAO_PROJETOS, CORP_STATUS_LABELS } from '../../../data';
 
 const QC_TONE = { aprovado: 'bg-emerald-500/15 text-emerald-300', reprovado: 'bg-rose-500/15 text-rose-300', pendente: 'bg-amber-500/15 text-amber-300' };
 const QC_LABEL = { aprovado: 'Aprovado', reprovado: 'Reprovado', pendente: 'Pendente' };
