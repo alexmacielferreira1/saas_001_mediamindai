@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, GraduationCap, ListChecks, Users, BookOpen } from 'lucide-react';
+import { LayoutDashboard, BookOpen } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
 import { StatCard, StatusBadge } from './RoleShared';

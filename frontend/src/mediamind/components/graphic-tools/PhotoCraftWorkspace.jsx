@@ -1,4 +1,6 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { runMMPhotoTool, mmphotoCatalogue } from "./mmphotoMcpTools";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Brush,
@@ -635,7 +637,7 @@ const TOOLS = [
 
 const PAINT_TOOLS = ["Pincel", "Borracha", "Clone"];
 const DEFAULT_TRANSFORM = { x: 0, y: 0, scale: 100, rotation: 0 };
-const BLEND_MODES = [
+export const BLEND_MODES = [
   ["normal", "Normal"],
   ["multiply", "Multiplicar"],
   ["screen", "Tela"],
@@ -671,6 +673,7 @@ function isEditableTarget(target) {
 }
 
 export default function PhotoCraftWorkspace({
+  active = true,
   assets,
   selected,
   onSelect,
@@ -759,10 +762,12 @@ export default function PhotoCraftWorkspace({
   const scaleInputRef = useRef(null);
   const cloneOffset = useRef(null);
   const stateRef = useRef(null);
-  stateRef.current = { layers, activeLayer, docSize, selection, stageScale };
+  stateRef.current = { layers, activeLayer, docSize, selection, stageScale, colors };
   const previousSource = useRef(source?.id);
 
+  const lastNotice = useRef("");
   function notify(text) {
+    lastNotice.current = text;
     setMessage(text);
   }
 
@@ -828,11 +833,11 @@ export default function PhotoCraftWorkspace({
   }
 
   function duplicateLayer() {
-    if (!selectedLayer) return;
+    if (!selectedLayer) return false;
     const copy = { ...selectedLayer, id: crypto.randomUUID(), name: `${selectedLayer.name} cópia`, transform: { ...selectedLayer.transform }, locked: false, ...(selectedLayer.id === "background" ? { type: "raster", bitmap: selectedLayer.bitmap || null } : {}) };
     if (selectedLayer.id === "background" && !selectedLayer.bitmap) {
       const canvas = rasterizeCanvas(selectedLayer);
-      if (!canvas) return;
+      if (!canvas) return false;
       const src = canvas.toDataURL("image/png");
       surfaces.current.set(copy.id, { src, canvas });
       copy.bitmap = src;
@@ -842,6 +847,7 @@ export default function PhotoCraftWorkspace({
       return [...current.slice(0, index), copy, ...current.slice(index)];
     });
     setActiveLayer(copy.id);
+    return true;
   }
 
   function removeLayer() {
@@ -1092,7 +1098,7 @@ export default function PhotoCraftWorkspace({
   function applyPixelOperation(label, operation) {
     const layer = currentLayer();
     const surface = ensureRaster(layer);
-    if (!surface) return;
+    if (!surface) return false;
     try {
       const ctx = context2d(surface);
       const { width, height } = surface;
@@ -1105,8 +1111,10 @@ export default function PhotoCraftWorkspace({
       ctx.putImageData(image, 0, 0);
       finishPixels(layer.id, label);
       notify(`${label} aplicado em "${layer.name}".`);
+      return true;
     } catch (error) {
       notify(`Não foi possível aplicar ${label.toLowerCase()}: ${error.message}`);
+      return false;
     }
   }
 
@@ -1175,7 +1183,10 @@ export default function PhotoCraftWorkspace({
 
   /** Recorte, tamanho e rotação: rasteriza camadas de pixels e reposiciona textos. */
   function transformDocument(label, nextDoc, draw, mapPoint, textPatch = () => ({})) {
-    if (pendingSurfaces().length) return notify("Carregando os pixels das camadas. Tente novamente em instantes.");
+    if (pendingSurfaces().length) {
+      notify("Carregando os pixels das camadas. Tente novamente em instantes.");
+      return false;
+    }
     const { docSize: doc, stageScale: scale, layers: current } = stateRef.current;
     try {
       const next = current.map((layer) => {
@@ -1216,15 +1227,18 @@ export default function PhotoCraftWorkspace({
       commit(label, next, nextDoc);
       setSelection(null);
       notify(`${label}: documento com ${nextDoc.w} × ${nextDoc.h} px.`);
+      return true;
     } catch (error) {
       notify(`${label} não aplicado: ${error.message}`);
+      return false;
     }
   }
 
   function cropDocument(rect) {
+    const { docSize } = stateRef.current;
     const r = clampRect(rect, docSize.w, docSize.h);
-    if (r.w < 2 || r.h < 2) return;
-    transformDocument("Recortar", { w: r.w, h: r.h }, (ctx, baked) => ctx.drawImage(baked, -r.x, -r.y), (p) => ({ x: p.x - r.x, y: p.y - r.y }));
+    if (r.w < 2 || r.h < 2) return false;
+    return transformDocument("Recortar", { w: r.w, h: r.h }, (ctx, baked) => ctx.drawImage(baked, -r.x, -r.y), (p) => ({ x: p.x - r.x, y: p.y - r.y }));
   }
 
   function resizeImage() {
@@ -1232,9 +1246,14 @@ export default function PhotoCraftWorkspace({
     if (answer == null) return;
     const width = Math.round(Number(answer));
     if (!Number.isFinite(width) || width < 1 || width > 16000) return notify("Largura inválida. Informe um número entre 1 e 16000.");
+    resizeDocument(width);
+  }
+
+  function resizeDocument(width) {
+    const { docSize, stageScale } = stateRef.current;
     const k = width / docSize.w;
     const next = { w: width, h: Math.max(1, Math.round(docSize.h * k)) };
-    transformDocument("Tamanho da imagem", next, (ctx, baked) => {
+    return transformDocument("Tamanho da imagem", next, (ctx, baked) => {
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(baked, 0, 0, next.w, next.h);
     }, (p) => ({ x: p.x * k, y: p.y * k }), (layer) => ({ fontSize: (layer.fontSize || 30 / stageScale) * k }));
@@ -1245,9 +1264,14 @@ export default function PhotoCraftWorkspace({
     if (answer == null) return;
     const angle = Number(answer);
     if (![90, -90, 180].includes(angle)) return notify("Ângulo inválido. Use 90, -90 ou 180.");
+    rotateDocument(angle);
+  }
+
+  function rotateDocument(angle) {
+    const { docSize } = stateRef.current;
     const next = angle === 180 ? { ...docSize } : { w: docSize.h, h: docSize.w };
     const rad = (angle * Math.PI) / 180;
-    transformDocument("Rotação da imagem", next, (ctx, baked) => {
+    return transformDocument("Rotação da imagem", next, (ctx, baked) => {
       ctx.translate(next.w / 2, next.h / 2);
       ctx.rotate(rad);
       ctx.drawImage(baked, -docSize.w / 2, -docSize.h / 2);
@@ -1359,6 +1383,53 @@ export default function PhotoCraftWorkspace({
     else if (command === "Atalhos do MMPhoto") notify(SHORTCUTS_TEXT);
     else if (command === "Sobre o MMPhoto") notify("MMPhoto — editor de imagens em camadas do MediaMind, executado no navegador (canvas 2D). Comportamento das ferramentas inspirado no PhotoCraft (Apache-2.0).");
   }
+
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre o estado atual
+  // e aplicam pelos mesmos caminhos do app (commit, pixels da camada ativa, documento), com desfazer.
+  const toolActions = useRef(null);
+  toolActions.current = { commit, applyPixelOperation, duplicateLayer, rotateDocument, resizeDocument, cropDocument, undo, setActiveLayer, notify, canUndo: history.length > 0 };
+  useEffect(() => {
+    if (!active) return undefined;
+    const strip = ({ layers: _layers, activeLayer: _active, pixels: _pixels, document: _document, label: _label, duplicateBackground: _duplicate, ...result }) => result;
+    const plan = (toolId, params) => runMMPhotoTool(toolId, stateRef.current, params);
+    return registerMCPActions({
+      source: "mmphoto",
+      label: "MMPhoto",
+      catalogue: mmphotoCatalogue,
+      analyze: async (toolId, params) => {
+        const result = plan(toolId, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = plan(toolId, params);
+        if (!result.ok) return strip(result);
+        const actions = toolActions.current;
+        let done = true;
+        if (result.layers) {
+          actions.commit(result.label, result.layers);
+          if (result.activeLayer !== undefined) {
+            stateRef.current = { ...stateRef.current, activeLayer: result.activeLayer };
+            actions.setActiveLayer(result.activeLayer);
+          }
+        } else if (result.duplicateBackground) done = actions.duplicateLayer();
+        else if (result.pixels) done = actions.applyPixelOperation(result.label, result.pixels);
+        else if (result.document.kind === "rotate") done = actions.rotateDocument(result.document.angle);
+        else if (result.document.kind === "resize") done = actions.resizeDocument(result.document.width);
+        else done = actions.cropDocument(result.document.rect);
+        if (!done) return { ok: false, summary: lastNotice.current };
+        actions.canUndo = true;
+        actions.notify(`MCP · ${result.summary}`);
+        return strip(result);
+      },
+      undo: () => {
+        if (!toolActions.current.canUndo) return false;
+        toolActions.current.undo();
+        return true;
+      },
+      canUndo: () => toolActions.current.canUndo,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   // ------------------------------ ferramentas no documento ------------------------------
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWorkDraftState, useWorkStorageKey } from '../lib/workProtection';
 
 const HISTORY_LIMIT = 100;

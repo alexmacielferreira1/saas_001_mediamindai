@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  BarChart3, BriefcaseBusiness, Building2, Check, ChevronRight, CircleUserRound,
+  BarChart3, BriefcaseBusiness, Building2, ChevronRight, CircleUserRound,
   Database, FileClock, FileText, KeyRound, Layers3, LockKeyhole, Pencil, Plus,
   Search, Settings, ShieldCheck, Users, Video, X,
 } from 'lucide-react';

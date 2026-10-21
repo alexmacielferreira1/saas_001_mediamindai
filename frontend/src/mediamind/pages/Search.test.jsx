@@ -1,9 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 const state = { assets: [] };
 vi.mock('../lib/mamData', () => ({ useMamData: () => ({ assets: state.assets, loading: false }) }));
+const filterMock = vi.fn();
+vi.mock('@/api/base44Client', () => ({
+  base44: { entities: { TranscricaoSegmento: { filter: (...args) => filterMock(...args) } } },
+}));
 
 import SearchPage, { clipDuration } from './Search';
 
@@ -48,5 +52,43 @@ describe('Pesquisa', () => {
     for (const name of [/Filtros avançados/, /Editar informações/, /Período/, /Mais relevantes/, 'Reproduzir', 'Tela cheia']) {
       expect(screen.getByRole('button', { name })).toBeDisabled();
     }
+  });
+
+  it('mostra a transcrição real salva no servidor, sem texto inventado', async () => {
+    filterMock.mockReset();
+    filterMock.mockResolvedValue([{ id: 's1', start_ms: 75000, end_ms: 80000, texto: 'Fala real do prefeito' }]);
+    renderPage([VIDEO]);
+    expect(filterMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Transcrição' }));
+    expect(await screen.findByText('Fala real do prefeito')).toBeInTheDocument();
+    expect(screen.getByText('00:01:15')).toBeInTheDocument();
+    expect(filterMock).toHaveBeenCalledWith({ asset_id: 'a1' }, 'start_ms', 500);
+    expect(screen.queryByText(/região central recebeu novas obras/)).not.toBeInTheDocument();
+  });
+
+  it('diz com honestidade quando não há transcrição ou ela falha', async () => {
+    filterMock.mockReset();
+    filterMock.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('offline'));
+    const view = renderPage([VIDEO, DOC]);
+    fireEvent.click(screen.getByRole('button', { name: 'Transcrição' }));
+    expect(await screen.findByText('Esta mídia ainda não tem transcrição.')).toBeInTheDocument();
+    fireEvent.click(within(view.container.querySelector('aside')).getByText('Pauta impressa'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar a transcrição: offline');
+    fireEvent.click(screen.getByRole('button', { name: 'Capítulos' }));
+    expect(screen.getByText('Capítulos ainda não disponíveis para esta mídia.')).toBeInTheDocument();
+  });
+
+  it('metadados sem valor aparecem vazios, sem programa ou direitos fictícios', () => {
+    renderPage([VIDEO]);
+    expect(screen.queryByText('Jornal da Cidade')).not.toBeInTheDocument();
+    expect(screen.queryByText('Uso interno')).not.toBeInTheDocument();
+    expect(screen.getByText('Programa').nextSibling).toHaveTextContent('—');
+    expect(screen.getByText('Direitos').nextSibling).toHaveTextContent('—');
+  });
+
+  it('metadados reais do asset são exibidos', () => {
+    renderPage([{ ...VIDEO, program_name: 'Programa Real', rights: 'Licenciado' }]);
+    expect(screen.getByText('Programa Real')).toBeInTheDocument();
+    expect(screen.getByText('Licenciado')).toBeInTheDocument();
   });
 });

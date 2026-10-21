@@ -1,12 +1,15 @@
+from time import perf_counter
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import PublicError
 from app.db.session import get_session
 from app.models.identity import TenantRecord
+from app.tenancy.access_policy import SCREEN_ROUTES, require_screen
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 
 router = APIRouter(prefix="/management", tags=["management"])
@@ -16,6 +19,32 @@ Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 
 def _status(data: dict[str, Any]) -> str:
     return str(data.get("status") or data.get("situacao") or "").strip().lower()
+
+
+def _database_service(session: Session) -> dict[str, Any]:
+    """Measure the database with a trivial query; never expose driver errors."""
+    start = perf_counter()
+    try:
+        healthy = session.execute(text("SELECT 1")).scalar() == 1
+    except SQLAlchemyError:
+        session.rollback()
+        healthy = False
+    latency_ms = round((perf_counter() - start) * 1000, 2)
+    if not healthy:
+        return {
+            "key": "database",
+            "label": "Banco de dados",
+            "status": "error",
+            "detail": "Sem resposta do banco de dados",
+            "latency_ms": None,
+        }
+    return {
+        "key": "database",
+        "label": "Banco de dados",
+        "status": "ok",
+        "detail": f"Respondeu em {latency_ms} ms",
+        "latency_ms": latency_ms,
+    }
 
 
 @router.get("/overview")
@@ -33,6 +62,8 @@ def management_overview(current: Authenticated, session: DbSession):
         raise PublicError(
             403, "PERMISSION_DENIED", "Seu perfil não acessa os indicadores do acervo."
         )
+    # Tela "gestao" retirada explicitamente do membro também bloqueia a rota (MM-003).
+    require_screen(current, SCREEN_ROUTES["management.overview"])
 
     rows = list(
         session.scalars(
@@ -99,7 +130,8 @@ def management_overview(current: Authenticated, session: DbSession):
         },
         "audit_events": sum(row.entity_type == "LogAuditoria" for row in rows),
         "services": [
-            {"key": "api", "label": "API local", "status": "ok", "detail": "Operacional"},
-            {"key": "database", "label": "Banco de dados", "status": "ok", "detail": "Operacional"},
+            # The API state is this very response: if it is being served, the API answered.
+            {"key": "api", "label": "API", "status": "ok", "detail": "Respondendo"},
+            _database_service(session),
         ],
     }

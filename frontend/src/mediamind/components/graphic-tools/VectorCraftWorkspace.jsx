@@ -1,6 +1,8 @@
 import { useGraphicDraftState, useWorkScope } from "../../lib/graphicDrafts";
 import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { mmvectorCatalogue, runMMVectorTool } from "./mmvectorMcpTools";
 import {
   Circle,
   Crosshair,
@@ -159,8 +161,8 @@ function ReferenceIcon({ name, size = 20, className = "" }) {
 // Geometria vetorial (reimplementação própria em JS; comportamento inspirado no
 // VectorCraft, Apache-2.0). Coordenadas de prancheta em px, 820 × 620.
 // ---------------------------------------------------------------------------
-const ARTBOARD_W = 820;
-const ARTBOARD_H = 620;
+export const ARTBOARD_W = 820;
+export const ARTBOARD_H = 620;
 const BRUSH_RADIUS = 40;
 const ZOOM_STEPS = [25, 33, 50, 66, 72, 100, 125, 150];
 const SELECT_TOOLS = ["Seleção", "Seleção direta", "Laço", "Seleção de grupo", "Transformação livre", "Seleção de pintura ao vivo"];
@@ -672,7 +674,7 @@ function mixColor(a, b, t) {
   if (!ca || !cb) return t < 0.5 ? a : b;
   return rgbToHex(ca.map((value, index) => value + (cb[index] - value) * t));
 }
-function rotateHue(color, degrees) {
+export function rotateHue(color, degrees) {
   const rgb = hexToRgb(color);
   if (!rgb) return color;
   const [r, g, b] = rgb.map((value) => value / 255);
@@ -973,6 +975,7 @@ function pickFile(accept) {
 }
 
 export default function VectorCraftWorkspace({
+  active: appActive = true,
   assets,
   selected,
   onSelect,
@@ -2136,6 +2139,45 @@ export default function VectorCraftWorkspace({
     })));
     setNotice(targets.length === 1 || target === "Alinhar à prancheta" ? "Alinhado à prancheta." : "Seleção alinhada.");
   }
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre os objetos atuais
+  // e gravam pelo setObjects (um passo de desfazer).
+  const toolState = useRef(null);
+  toolState.current = { objects, selectedIds };
+  const toolActions = useRef(null);
+  toolActions.current = { setObjects, undo, setNotice, canUndo: historyRef.current.undo.length > 0 };
+  useEffect(() => {
+    if (!appActive) return undefined;
+    const strip = ({ objects: _objects, ...result }) => result;
+    return registerMCPActions({
+      source: "mmvector",
+      label: "MMVector",
+      catalogue: mmvectorCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMMVectorTool(toolId, toolState.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runMMVectorTool(toolId, toolState.current, params);
+        if (result.ok) {
+          const actions = toolActions.current;
+          toolState.current = { ...toolState.current, objects: result.objects };
+          actions.setObjects(result.objects);
+          objectsRef.current = result.objects;
+          actions.canUndo = true;
+          actions.setNotice(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        if (!toolActions.current.canUndo) return false;
+        toolActions.current.undo();
+        return true;
+      },
+      canUndo: () => toolActions.current.canUndo,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appActive]);
+
   function runCommand(command, options = {}) {
     const object = objectsRef.current.find((item) => item.id === selectedObject);
     if (command.startsWith("align:")) return alignSelection(command.slice(6), options.target);

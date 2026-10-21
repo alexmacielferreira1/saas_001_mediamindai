@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Inbox, Film, ListChecks, Users, ShieldCheck, UserCog, Plus, Search,
-  Activity, MonitorCog, CheckCircle2, AlertTriangle, Archive, Library, ScrollText,
+  Activity, MonitorCog, Archive,
   UsersRound, RotateCcw,
 } from 'lucide-react';
 import CorpPanel from '../CorpPanel';

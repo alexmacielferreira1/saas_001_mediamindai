@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.admin_api.auth import require_hub_command_service, require_hub_service
@@ -127,25 +128,9 @@ def create_command(
     session: DbSession,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
 ) -> HubCommandResponse:
-    existing = session.scalar(
-        select(HubCommand).where(
-            HubCommand.source_service == identity.service,
-            HubCommand.idempotency_key == idempotency_key,
-        )
-    )
+    existing = find_command(session, identity.service, idempotency_key)
     if existing is not None:
-        if (
-            existing.action != body.action
-            or existing.dry_run != body.dry_run
-            or existing.parameters != body.parameters
-        ):
-            raise PublicError(
-                409,
-                "HUB_IDEMPOTENCY_CONFLICT",
-                "A chave de repetição já foi usada por outro comando.",
-            )
-        response.status_code = 200
-        return serialize_command(existing)
+        return replay_command(existing, body, response)
 
     if not body.dry_run:
         raise PublicError(
@@ -168,9 +153,44 @@ def create_command(
         updated_at=completed_at,
     )
     session.add(command)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Concurrent request with the same key won the unique constraint: answer with
+        # the command it recorded (same contract as a replay), never a 500.
+        session.rollback()
+        existing = find_command(session, identity.service, idempotency_key)
+        if existing is None:
+            raise
+        return replay_command(existing, body, response)
     response.status_code = 202
     return serialize_command(command)
+
+
+def find_command(session: Session, service: str, idempotency_key: str) -> HubCommand | None:
+    return session.scalar(
+        select(HubCommand).where(
+            HubCommand.source_service == service,
+            HubCommand.idempotency_key == idempotency_key,
+        )
+    )
+
+
+def replay_command(
+    existing: HubCommand, body: HubCommandCreate, response: Response
+) -> HubCommandResponse:
+    if (
+        existing.action != body.action
+        or existing.dry_run != body.dry_run
+        or existing.parameters != body.parameters
+    ):
+        raise PublicError(
+            409,
+            "HUB_IDEMPOTENCY_CONFLICT",
+            "A chave de repetição já foi usada por outro comando.",
+        )
+    response.status_code = 200
+    return serialize_command(existing)
 
 
 @router.get("/api/hub/v1/commands/{command_id}", response_model=HubCommandResponse)

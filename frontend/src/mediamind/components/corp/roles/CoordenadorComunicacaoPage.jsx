@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard, Network, CheckCircle2, Check, X, AlertTriangle } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard, StatusBadge } from './RoleShared';
+import { StatusBadge } from './RoleShared';
 import { useAprovacoes, decidirAprovacao } from '../../../lib/corpAprovacoes';
 import { useProducaoProjetos } from '../../../lib/producaoStore';
 import { MOCK_CORP_PENDENCIES } from '../../../data';

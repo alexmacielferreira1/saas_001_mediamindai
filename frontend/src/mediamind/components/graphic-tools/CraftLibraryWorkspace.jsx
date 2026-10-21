@@ -1,5 +1,5 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Box,
   Folder,

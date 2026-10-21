@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  AlertTriangle, CalendarClock, CheckCircle2, Clock3, FileClock, KeyRound,
-  LockKeyhole, Mail, Monitor, Settings, ShieldCheck, Smartphone, UserRound,
+  AlertTriangle, CalendarClock, Clock3, FileClock, KeyRound,
+  LockKeyhole, Mail, Monitor, Settings, ShieldCheck, UserRound,
   Users, X,
 } from 'lucide-react';
 

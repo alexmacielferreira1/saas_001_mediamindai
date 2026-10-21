@@ -193,18 +193,18 @@ def test_manager_can_create_group_with_known_permissions(permission_client):
         json={
             "name": "Publicadores",
             "description": "Pode publicar",
-            "permission_codes": ["assets.publish"],
+            "permission_codes": ["publishing.write"],
         },
     )
 
     assert response.status_code == 201
-    assert response.json()["permission_codes"] == ["assets.publish"]
+    assert response.json()["permission_codes"] == ["publishing.write"]
 
 
 def test_create_rejects_duplicate_name_and_unknown_permission(permission_client):
     client, _ = permission_client
     login(client)
-    body = {"name": "Publicadores", "permission_codes": ["assets.publish"]}
+    body = {"name": "Publicadores", "permission_codes": ["publishing.write"]}
     assert client.post("/api/v1/permission-groups", json=body).status_code == 201
 
     duplicate = client.post("/api/v1/permission-groups", json=body)
@@ -241,13 +241,13 @@ def test_manager_can_update_and_soft_delete_group(permission_client):
 
     updated = client.patch(
         f"/api/v1/permission-groups/{created['id']}",
-        json={"description": "Edição", "permission_codes": ["assets.publish"]},
+        json={"description": "Edição", "permission_codes": ["publishing.write"]},
     )
     deleted = client.delete(f"/api/v1/permission-groups/{created['id']}")
 
     assert updated.status_code == 200
     assert updated.json()["name"] == "Editores"
-    assert updated.json()["permission_codes"] == ["assets.publish"]
+    assert updated.json()["permission_codes"] == ["publishing.write"]
     assert deleted.status_code == 204
 
 
@@ -256,7 +256,7 @@ def test_manager_can_assign_group_to_membership_and_delete_unassigns_it(permissi
     login(client)
     created = client.post(
         "/api/v1/permission-groups",
-        json={"name": "Editores", "permission_codes": ["assets.publish"]},
+        json={"name": "Editores", "permission_codes": ["publishing.write"]},
     ).json()
 
     assigned = client.put(
@@ -468,3 +468,76 @@ def test_mutation_of_missing_group_is_not_found(permission_client, method):
 
     assert response.status_code == 404
     assert response.json()["error_code"] == "PERMISSION_GROUP_NOT_FOUND"
+
+
+def _groups(client):
+    groups = client.get("/api/v1/permission-groups").json()["permission_groups"]
+    return {item["name"]: item for item in groups}
+
+
+def _only_admin_manages_users(client):
+    cedoc = _groups(client)["Gestores CEDOC"]
+    assert client.delete(f"/api/v1/permission-groups/{cedoc['id']}").status_code == 204
+    return _groups(client)["Administradores"]
+
+
+def test_group_edit_cannot_leave_company_without_user_manager(permission_client):
+    client, _ = permission_client
+    login(client)
+    admins = _only_admin_manages_users(client)
+    codes = [code for code in admins["permission_codes"] if code != "users.manage"]
+
+    response = client.patch(
+        f"/api/v1/permission-groups/{admins['id']}", json={"permission_codes": codes}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "LAST_USER_MANAGER"
+    assert "users.manage" in _groups(client)["Administradores"]["permission_codes"]
+    logs = client.get("/api/v1/records/LogAuditoria").json()["records"]
+    assert not [log for log in logs if log["action"] == "permission_group.updated"]
+
+
+def test_group_deactivation_cannot_remove_last_user_manager(permission_client):
+    client, _ = permission_client
+    login(client)
+    admins = _only_admin_manages_users(client)
+
+    response = client.delete(f"/api/v1/permission-groups/{admins['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "LAST_USER_MANAGER"
+    assert _groups(client)["Administradores"]["is_active"] is True
+
+
+def test_reassigning_last_manager_to_no_group_is_refused(permission_client):
+    client, _ = permission_client
+    login(client)
+    _only_admin_manages_users(client)
+    memberships = client.get("/api/v1/memberships").json()["memberships"]
+    own = next(item for item in memberships if item["email"] == "admin@mediamind.ai")
+
+    response = client.put(
+        f"/api/v1/memberships/{own['id']}/permission-group",
+        json={"permission_group_id": None},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "LAST_USER_MANAGER"
+    memberships = client.get("/api/v1/memberships").json()["memberships"]
+    own_after = next(item for item in memberships if item["email"] == "admin@mediamind.ai")
+    assert own_after["permission_group_id"] == own["permission_group_id"]
+
+
+def test_removing_users_manage_is_allowed_while_another_manager_remains(permission_client):
+    client, _ = permission_client
+    login(client)
+    cedoc = _groups(client)["Gestores CEDOC"]
+
+    response = client.patch(
+        f"/api/v1/permission-groups/{cedoc['id']}",
+        json={"permission_codes": ["permissions.manage"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["permission_codes"] == ["permissions.manage"]

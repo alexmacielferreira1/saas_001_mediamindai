@@ -4,7 +4,7 @@ import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { DragDropContext } from '@hello-pangea/dnd';
 import {
   Lock, Unlock, Upload, Download, Layout as LayoutIcon,
-  PanelLeft, PanelRight, Save, Search as SearchIcon, X,
+  PanelLeft, PanelRight, Save, X,
   FileText, Film, Clapperboard,
 } from 'lucide-react';
 import WorkspaceSearchPanel from '../components/WorkspaceSearchPanel';

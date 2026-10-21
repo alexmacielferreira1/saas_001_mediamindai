@@ -25,3 +25,15 @@ O primeiro adaptador administrativo nativo expõe `/.well-known/hub/manifest` se
 Este contrato não compartilha banco e não torna o MediaMind dependente da Central. Em produção, `HUB_ADMIN_TOKEN` é obrigatório; `HUB_ADMIN_AUDIENCE` e `HUB_PRODUCT_ID` identificam o contrato. Nesta primeira fatia não há comandos nem mutações remotas, e o marco permanece M0 enquanto os gates preexistentes não forem resolvidos.
 
 O inbox de comandos administrativos persiste solicitações com correlação e idempotência por serviço. A allowlist inicial executa somente `system.describe` e `media.count`, sempre em `dry_run`; ações desconhecidas e qualquer tentativa de mutação são recusadas antes da gravação. O retorno HTTP 202 representa a primeira aceitação, enquanto uma repetição idempotente retorna o mesmo comando sem novo efeito.
+
+## Autorização no servidor (telas, entidades sensíveis e concessões)
+
+Esconder tela no menu não é controle de acesso. O mapa explícito fica em `backend/app/tenancy/access_policy.py`:
+
+- Entidades sensíveis da API `records` com permissão também para leitura: `LogAuditoria` exige `users.manage` ou `permissions.manage`.
+- Tela restrita do vínculo (`restricted_screens`) bloqueia, em leitura e escrita, as entidades exclusivas daquela tela: `assessoria` → `Clipping`, `Jornalista`, `Mencao`, `Release`; `gestao` → `LogAuditoria` e `GET /management/overview`. Entidades compartilhadas (produção, ativos, cortes, revisão) ficam fora do mapa para não bloquear o fluxo operacional. Resposta: 403 `SCREEN_ACCESS_DENIED`.
+- Concessão (MM-005): o gestor só cria, altera, desativa ou atribui grupos cujas permissões ele mesmo possui; só libera telas (extra ou retirada de restrição) que ele próprio acessa; só troca cargo para um cargo cujas telas padrão ele acessa; não altera vínculo de administrador sem `users.manage_admin`; cargo `superadmin` só é concedido ou alterado por superadmin. O superadmin não tem esse limite. Resposta: 403 `GRANT_EXCEEDS_AUTHORITY`. O padrão de telas por cargo espelha `frontend/src/mediamind/lib/roleCatalog.js`.
+
+## Auditoria
+
+`add_audit` (`backend/app/api/v1/records.py`) grava `LogAuditoria` com `action`, `entity_type`, `entity_id`, `user_id` e `details` (formato lido pela Gestão) e, de forma aditiva, `actor_role`, `correlation_id` (do cabeçalho `X-Correlation-ID` ou gerado por requisição) e, quando informados, `before`, `after`, `reason` e `target_user_id`. Cargo, grupo, telas, ciclo de grupos de permissão, suspensão/reativação/revogação de sessões e configurações da empresa gravam antes e depois sanitizados (sem segredos). As rotas de cargo, grupo, telas e edição de grupo aceitam `reason` opcional.

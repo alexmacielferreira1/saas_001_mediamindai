@@ -5,12 +5,14 @@ import {
   AlertTriangle, CheckCircle2, Play, FileText, Music, Image,
   ExternalLink, Scissors, X,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, EmptyState, InfoRow } from '../ui';
+import { Panel, Stat, Tabs, Badge, StatusBadge, SearchInput, Loading, InfoRow } from '../ui';
 import { formatDuration, formatSize, formatBytes } from '../data';
 import { base44 } from '@/api/base44Client';
 import { getManagementOverview } from '../../api/management';
 import { buildAcervoSystemSummary } from '../lib/acervoSystemViewModel';
 import { listMemberships, updateMembershipScreens } from '../../api/permissions';
+import { accessErrorMessage } from '../lib/accessErrors';
+import { loadAuditLogs } from '../lib/auditLogAccess';
 import { CARGO_BY_ID } from '../lib/roleCatalog';
 import {
   DEMO_ASSETS,
@@ -47,10 +49,11 @@ export default function Acervo({ embedded = false, localDemo = false }) {
     Promise.all([
       withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
       withDemoFallback(() => base44.entities.Asset.list('-created_date', 500), DEMO_ASSETS),
-      withDemoFallback(() => base44.entities.LogAuditoria.list('-created_date', 100), DEMO_AUDIT_LOGS),
+      // Auditoria: sem fallback de demonstração (403 = sem permissão, falha = erro).
+      loadAuditLogs(100),
       withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
     ])
-      .then(([overview, assets, logs, memberships]) => { if (active) setData({ overview, assets, logs, memberships }); })
+      .then(([overview, assets, audit, memberships]) => { if (active) setData({ overview, assets, logs: audit.logs, logsError: audit.error, memberships }); })
     return () => { active = false; };
   }, [localDemo]);
 
@@ -73,7 +76,7 @@ export default function Acervo({ embedded = false, localDemo = false }) {
 
       {!data && <Loading label="Carregando acervo..." />}
       {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
-      {data && activeTab === 'admin' && <AdminTab logs={data.logs} memberships={data.memberships} localDemo={localDemo} />}
+      {data && activeTab === 'admin' && <AdminTab logs={data.logs} logsError={data.logsError} memberships={data.memberships} localDemo={localDemo} />}
       {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} localDemo={localDemo} />}
     </div>
   );
@@ -233,7 +236,7 @@ function AcervoTab({ assets, summary }) {
               <InfoRow label="Status" value={selectedAsset.status || '—'} />
             </div>
             <div className="flex min-w-48 flex-col gap-2">
-              <button type="button" onClick={() => navigate(`/workspace?asset=${encodeURIComponent(selectedAsset.id)}`)} className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400"><ExternalLink size={14} /> Abrir no Workspace</button>
+              <button type="button" onClick={() => navigate(`/workspace?assetId=${encodeURIComponent(selectedAsset.id)}`)} className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400"><ExternalLink size={14} /> Abrir no Workspace</button>
               <button type="button" onClick={() => navigate(`/social?novo=publicacao&asset=${encodeURIComponent(selectedAsset.id)}`)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"><Scissors size={14} /> Criar corte</button>
               <button type="button" onClick={() => navigate(`/search?q=${encodeURIComponent(selectedAsset.title || selectedAsset.filename || '')}`)} className="flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Localizar relacionados</button>
             </div>
@@ -257,7 +260,7 @@ function AcervoTab({ assets, summary }) {
   );
 }
 
-function AdminTab({ logs, memberships, localDemo = false }) {
+function AdminTab({ logs, logsError = '', memberships, localDemo = false }) {
   const [users, setUsers] = useState(memberships);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [savingAccess, setSavingAccess] = useState(false);
@@ -279,8 +282,8 @@ function AdminTab({ logs, memberships, localDemo = false }) {
       setUsers((current) => current.map((item) => (
         item.id === membership.id ? { ...item, restricted_screens: restrictedScreens } : item
       )));
-    } catch {
-      setAccessError('Não foi possível alterar o acesso ao acervo.');
+    } catch (error) {
+      setAccessError(accessErrorMessage(error, 'Não foi possível alterar o acesso ao acervo.'));
     } finally {
       setSavingAccess(false);
     }
@@ -291,7 +294,7 @@ function AdminTab({ logs, memberships, localDemo = false }) {
         <Stat title="Usuários com acesso" value={users.filter(hasAcervoAccess).length} icon={Shield} tone="sky" />
         <Stat title="Acessos ativos" value={activeUsers} icon={CheckCircle2} tone="emerald" />
         <Stat title="Perfis distintos" value={new Set(users.map((item) => item.role)).size} icon={Shield} tone="violet" />
-        <Stat title="Eventos auditados" value={logs.length} icon={Archive} tone="amber" />
+        <Stat title="Eventos auditados" value={logsError ? "—" : logs.length} icon={Archive} tone="amber" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Usuários e permissões do acervo">
@@ -316,7 +319,8 @@ function AdminTab({ logs, memberships, localDemo = false }) {
         </Panel>
         <Panel title="Logs de auditoria">
           <div className="flex flex-col gap-2">
-            {logs.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum evento de auditoria.</p>}
+            {logsError && <p role="alert" className="py-6 text-center text-sm text-slate-400">{logsError}</p>}
+            {!logsError && logs.length === 0 && <p className="py-6 text-center text-sm text-slate-500">Nenhum evento de auditoria.</p>}
             {logs.map((log) => (
               <div key={log.id} className="flex items-center gap-3 rounded-lg border border-slate-800/50 px-3 py-2 text-sm">
                 <Badge tone="info">{log.action || 'evento'}</Badge>

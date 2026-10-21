@@ -37,7 +37,7 @@ export default function SearchTranscriptResults({ query }) {
           return (
             <button
               key={s.id}
-              onClick={() => navigate(`/workspace?asset=${s.asset_id}&tc=${formatTime((s.start_ms || 0) / 1000)}`)}
+              onClick={() => navigate(`/workspace?assetId=${s.asset_id}&tc=${formatTime((s.start_ms || 0) / 1000)}`)}
               className="flex w-full items-start gap-2.5 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-left hover:border-violet-600/50"
               title="Abrir no workspace neste trecho"
             >

@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url'
 export default defineConfig({
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      '/api': process.env.MEDIAMIND_API_PROXY || 'http://127.0.0.1:8000',
     },
   },
   resolve: {

@@ -71,8 +71,9 @@ export default function GravacoesMateriais() {
       }
       // Auto-avanço: ao subir o primeiro material, o projeto entra na fila Para editar.
       if (modo === 'auto_avanca' && !jaTem && novos.length && !failed.length && isProjectInProductionStage(rec, 'gravacoes')) {
-        transicionar(rec.id, 'para_editar', { quem: editorName, obs: 'Auto-avanço ao subir material' });
-        toast({ title: 'Material recebido — projeto para editar', description: `${rec.titulo} avançou automaticamente.` });
+        // Só anuncia o avanço depois de o servidor confirmar a gravação.
+        const ok = await transicionar(rec.id, 'para_editar', { quem: editorName, obs: 'Auto-avanço ao subir material' });
+        if (ok) toast({ title: 'Material recebido — projeto para editar', description: `${rec.titulo} avançou automaticamente.` });
       }
     } finally {
       setUploading(false);
@@ -99,10 +100,12 @@ export default function GravacoesMateriais() {
   function registrarProblema() {
     if (!problemaObs.trim()) return;
     updateProjeto(rec.id, { grav_status: 'problema' });
-    transicionar(rec.id, 'gravacoes', { quem: editorName, obs: `Problema/regravação: ${problemaObs.trim()}` });
+    const saved = transicionar(rec.id, 'gravacoes', { quem: editorName, obs: `Problema/regravação: ${problemaObs.trim()}` });
     setProblemaOpen(false);
     setProblemaObs('');
-    toast({ title: 'Problema sinalizado', description: 'O produtor/videomaker foi avisado da regravação.' });
+    Promise.resolve(saved).then((ok) => {
+      if (ok) toast({ title: 'Problema sinalizado', description: 'O produtor/videomaker foi avisado da regravação.' });
+    });
   }
 
   return (
@@ -192,6 +195,7 @@ export default function GravacoesMateriais() {
               </label>
               <label className="cursor-pointer rounded-md border border-sky-700/70 bg-sky-950/40 px-3 py-1.5 text-[11px] font-semibold text-sky-200 hover:bg-sky-900/50">
                 <span className="flex items-center gap-1.5"><FolderOpen size={12} /> Selecionar pasta da gravação</span>
+                {/* eslint-disable-next-line react/no-unknown-property -- atributo nao padrao "directory" mantido de proposito junto de webkitdirectory para selecao de pasta */}
                 <input type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => handleFiles(e.target.files)} />
               </label>
             </div>

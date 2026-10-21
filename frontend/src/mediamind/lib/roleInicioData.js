@@ -12,6 +12,7 @@ import { useProducaoProjetos } from './producaoStore';
 import { loadOrSeedPublicacoes } from './corpPublicacoes';
 import { loadOrSeedAprovacoes } from './corpAprovacoes';
 import { loadOrSeedReleases } from './corpAssessoria';
+import { isAccessDenied } from './accessErrors';
 import { loadOrSeedAgenda } from './corpAgenda';
 import { CARGO_BY_ID } from './roleCatalog';
 
@@ -219,7 +220,8 @@ export function useRoleInicioData(roleId) {
         if (!alive) return;
         setItems(loaded.length > 0 ? loaded : (cfg?.items || []));
       })
-      .catch(() => { if (alive) setItems(cfg?.items || []); })
+      // 403 (tela restrita no servidor): lista vazia, sem trocar a recusa por mock.
+      .catch((error) => { if (alive) setItems(isAccessDenied(error) ? [] : (cfg?.items || [])); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [roleId]);

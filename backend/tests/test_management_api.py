@@ -162,10 +162,13 @@ def test_management_returns_real_tenant_aggregates(management_client):
     assert body["assets"] == {"total": 2, "indexed": 1, "failures": 1, "storage_bytes": 50}
     assert body["processing"] == {"total": 3, "active": 1, "completed": 1, "failed": 1}
     assert body["audit_events"] == 1
-    assert body["services"] == [
-        {"key": "api", "label": "API local", "status": "ok", "detail": "Operacional"},
-        {"key": "database", "label": "Banco de dados", "status": "ok", "detail": "Operacional"},
-    ]
+    api, database = body["services"]
+    assert api == {"key": "api", "label": "API", "status": "ok", "detail": "Respondendo"}
+    assert database["key"] == "database"
+    assert database["status"] == "ok"
+    assert isinstance(database["latency_ms"], float)
+    assert database["latency_ms"] >= 0
+    assert database["detail"] == f"Respondeu em {database['latency_ms']} ms"
 
 
 def test_management_zero_denominator_and_superadmin_access(management_client):
@@ -189,3 +192,52 @@ def test_management_zero_denominator_and_superadmin_access(management_client):
     body = client.get("/api/v1/management/overview").json()
     assert body["publications"]["approval_rate"] == 0
     assert body["publications"]["calendar"] == []
+
+
+def test_management_reports_database_failure_without_internal_details(management_client):
+    from app.api.v1.management import _database_service
+    from sqlalchemy.exc import OperationalError
+
+    class BrokenSession:
+        rolled_back = False
+
+        def execute(self, statement):
+            raise OperationalError("SELECT 1", {}, Exception("password=secret host=db"))
+
+        def rollback(self):
+            self.rolled_back = True
+
+    session = BrokenSession()
+    service = _database_service(session)
+
+    assert service == {
+        "key": "database",
+        "label": "Banco de dados",
+        "status": "error",
+        "detail": "Sem resposta do banco de dados",
+        "latency_ms": None,
+    }
+    assert session.rolled_back is True
+    assert "secret" not in str(service)
+
+
+def test_management_overview_is_scoped_to_the_selected_company(management_client):
+    client, factory = management_client
+    with factory() as session:
+        other = session.query(Tenant).filter_by(slug="outra").one()
+        outsider = User(
+            email="outsider@local.test",
+            email_normalized="outsider@local.test",
+            password_hash=hash_password(PASSWORD),
+        )
+        session.add(outsider)
+        session.flush()
+        session.add(Membership(user_id=outsider.id, tenant_id=other.id, role="admin"))
+        session.commit()
+    login(client, "outsider@local.test")
+
+    body = client.get("/api/v1/management/overview").json()
+
+    assert body["assets"] == {"total": 1, "indexed": 1, "failures": 0, "storage_bytes": 999}
+    assert body["audit_events"] == 0
+    assert body["services"][1]["status"] == "ok"

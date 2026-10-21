@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { Plus, X, ArrowRight, Building2, Search, Workflow, FolderOpen, AlertTriangle, Film, CheckCircle2, RotateCcw } from "lucide-react";
+import { Plus, ArrowRight, RotateCcw } from "lucide-react";
 import VideoStudio from "../components/ai-tools/VideoStudio";
 import AgencyMissionControl from "../components/agency/AgencyMissionControl";
 

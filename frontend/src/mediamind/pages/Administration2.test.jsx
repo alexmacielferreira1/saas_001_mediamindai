@@ -112,6 +112,13 @@ describe('Administration2 preview', () => {
     expect(screen.queryByText('Administrador Demo')).not.toBeInTheDocument();
   });
 
+  it('shows the server message when the screen is restricted for the member', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 403, code: 'SCREEN_ACCESS_DENIED', message: 'Esta tela não está liberada para você.' }));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Esta tela não está liberada para você.')).toBeInTheDocument();
+    expect(screen.queryByText('Administrador Demo')).not.toBeInTheDocument();
+  });
+
   it('changes the selected demonstration form preview', async () => {
     render(<MemoryRouter initialEntries={['/administration2?tab=forms']}><Administration2 /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: /Autorização de imagem/i }));

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, CalendarClock, Tv, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { LayoutDashboard, Tv, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
 import { StatCard, StatusBadge } from './RoleShared';

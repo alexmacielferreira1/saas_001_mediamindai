@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, FileText } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { MOCK_CORP_RECORDINGS, MOCK_CORP_DRAFTS } from '../../../data';
 
 // Apresentador / Âncora — vê sua agenda de gravações, briefings e roteiros;

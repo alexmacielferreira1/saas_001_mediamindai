@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Building2, BarChart3, Users, TrendingUp, Calendar, AlertCircle,
-  CheckCircle2, Clock, Activity, ScrollText,
+  Building2, BarChart3, TrendingUp, Calendar, AlertCircle,
+  CheckCircle2, Activity, ScrollText,
 } from 'lucide-react';
-import { Panel, Stat, Tabs, Badge, StatusBadge, InfoRow, Loading, EmptyState } from '../ui';
+import { Panel, Stat, Tabs, Badge, InfoRow, Loading } from '../ui';
 import { getManagementOverview } from '../../api/management';
 import { PUBLICATION_PLATFORM_LABELS, formatBytes } from '../data';
 import ManagementProcessamentosTab from '../components/management/ManagementProcessamentosTab';

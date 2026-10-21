@@ -68,4 +68,25 @@ describe('permission administration API', () => {
       body: { extra_screens: ['cedoc'], restricted_screens: ['producao'] },
     });
   });
+
+  it('forwards an optional trimmed reason and omits it when blank', async () => {
+    requestMock.mockResolvedValue({});
+    await updateMembershipRole('m-1', 'editor', { reason: '  Troca de equipe  ' });
+    await updateMembershipScreens('m-1', [], ['assessoria'], { reason: 'Saiu da assessoria' });
+    await assignPermissionGroup('m-1', 'g-1', { reason: 'Novo perfil' });
+    await updateMembershipRole('m-1', 'editor', { reason: '   ' });
+
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/memberships/m-1/role', {
+      method: 'PUT', body: { role: 'editor', reason: 'Troca de equipe' },
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/memberships/m-1/screens', {
+      method: 'PUT', body: { extra_screens: [], restricted_screens: ['assessoria'], reason: 'Saiu da assessoria' },
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(3, '/memberships/m-1/permission-group', {
+      method: 'PUT', body: { permission_group_id: 'g-1', reason: 'Novo perfil' },
+    });
+    expect(requestMock).toHaveBeenNthCalledWith(4, '/memberships/m-1/role', {
+      method: 'PUT', body: { role: 'editor' },
+    });
+  });
 });

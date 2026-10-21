@@ -108,13 +108,18 @@ def test_replacing_transcript_does_not_change_another_company(permission_client)
         ClipAnalysisService(session).save_transcript(job.id, ids["tenant"], [segment])
         session.flush()
 
-        assert session.get(TenantRecord, old_id) is None
-        assert session.get(TenantRecord, other_id).data["text"] == "outra empresa"
+        # A transcrição anterior é preservada como versão substituída, não apagada.
+        assert session.get(TenantRecord, old_id).data["superseded"] is True
+        assert session.get(TenantRecord, other_id).data == {
+            "analysis_id": str(job.id),
+            "text": "outra empresa",
+        }
         records = session.scalars(
             select(TenantRecord).where(
                 TenantRecord.tenant_id == ids["tenant"],
                 TenantRecord.entity_type == "ClipTranscript",
             )
         ).all()
-        assert [record.data["text"] for record in records] == ["novo"]
+        current = [record for record in records if not record.data.get("superseded")]
+        assert [record.data["text"] for record in current] == ["novo"]
         assert job.data["status"] == "processing"
