@@ -63,8 +63,11 @@ def clean_optional_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
-def test_env_example_copied_as_env_loads(clean_optional_env, tmp_path):
+def test_env_example_copied_as_env_loads(clean_optional_env, monkeypatch, tmp_path):
     from app.core.config import ROOT
+
+    # CI exports ENVIRONMENT=test, which would override the value read from the file.
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
 
     env_file = tmp_path / ".env"
     env_file.write_text((ROOT / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
