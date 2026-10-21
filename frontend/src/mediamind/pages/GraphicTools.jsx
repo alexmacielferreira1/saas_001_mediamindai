@@ -287,6 +287,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "vectorcraft" ? (
         <VectorCraftWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -294,6 +295,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "photocraft" ? (
         <PhotoCraftWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -315,6 +317,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "designcraft" ? (
         <DesignCraftWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -332,7 +335,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
           onOpenFiles={openFiles}
         />
       ) : id === "mmsom" ? (
-        <SoundCraft />
+        <SoundCraft active={active === id} />
       ) : ["word", "excel", "powerpoint"].includes(id) ? (
         <OfficeCraft initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} />
       ) : (

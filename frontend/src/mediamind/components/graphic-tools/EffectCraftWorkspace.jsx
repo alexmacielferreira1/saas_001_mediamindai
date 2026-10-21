@@ -1,4 +1,6 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { mmeffectsCatalogue, runMMEffectsTool } from "./mmeffectsMcpTools";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -953,6 +955,50 @@ export default function EffectCraftWorkspace({
     else if (command === "Excluir camada" && selectedLayer) setLayers(old=>old.filter(layer=>layer.id!==selectedLayer));
     else if (command === "Duplicar camada" && activeLayer) setLayers(old=>[{...activeLayer,id:crypto.randomUUID(),name:`${activeLayer.name} cópia`},...old]);
   }
+
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre o documento atual e
+  // gravam o resultado de uma vez; o histórico por instantâneos registra isso como um passo de desfazer.
+  const toolState = useRef(null);
+  toolState.current = { layers, selectedLayer, transform, propertyKeyframes, markers, appliedEffects, effectParams };
+  const toolActions = useRef(null);
+  toolActions.current = {
+    setters: { layers: setLayers, transform: setTransform, propertyKeyframes: setPropertyKeyframes, markers: setMarkers, appliedEffects: setAppliedEffects, effectParams: setEffectParams },
+    undo,
+    setStatusMessage,
+    canUndo: history.current.undo.length > 0,
+  };
+  useEffect(() => {
+    if (!active) return undefined;
+    const strip = ({ patch: _patch, ...result }) => result;
+    return registerMCPActions({
+      source: "mmeffects",
+      label: "MMEffects",
+      catalogue: mmeffectsCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMMEffectsTool(toolId, toolState.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runMMEffectsTool(toolId, toolState.current, params);
+        if (result.ok) {
+          const actions = toolActions.current;
+          // Atualiza já o estado lido pela próxima operação de uma fila, antes do React redesenhar.
+          toolState.current = { ...toolState.current, ...result.patch };
+          for (const [key, value] of Object.entries(result.patch)) actions.setters[key](value);
+          actions.canUndo = true;
+          actions.setStatusMessage(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        if (!toolActions.current.canUndo) return false;
+        toolActions.current.undo();
+        return true;
+      },
+      canUndo: () => toolActions.current.canUndo,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   function patchLayer(id, key) {
     setLayers((old) =>
