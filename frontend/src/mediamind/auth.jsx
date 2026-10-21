@@ -4,12 +4,22 @@ import { ApiError, request } from '../api/httpClient';
 import { USER_ROLE_LABELS } from './data';
 import { isLocalDemoAvailable } from './lib/demoAccess';
 import { hasCorpAccess } from './lib/permissions';
+import { resetProducaoStore } from './lib/producaoStore';
+import { queryClientInstance } from '@/lib/query-client';
 
 const AuthContext = createContext(null);
 const DEMO_SESSION_KEY = 'mm_demo_session_v1';
 
 function localDemoAvailable() {
   return isLocalDemoAvailable({ dev: import.meta.env.DEV, hostname: window.location.hostname });
+}
+
+// Ao sair (ou quando a sessão expira), descarta dados da empresa guardados em
+// memória: cache do TanStack Query e o store de Produção. Rascunhos de trabalho
+// (WorkProtection) ficam: já são separados por empresa e por usuário.
+export function clearSessionState() {
+  queryClientInstance.clear();
+  resetProducaoStore();
 }
 
 function readDemoUser() {
@@ -45,6 +55,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     function invalidateExpiredSession() {
       localStorage.removeItem(DEMO_SESSION_KEY);
+      clearSessionState();
       setError('');
       setUser(null);
     }
@@ -109,6 +120,7 @@ export function AuthProvider({ children }) {
       await request('/auth/logout', { method: 'POST' });
     } finally {
       localStorage.removeItem(DEMO_SESSION_KEY);
+      clearSessionState();
       setUser(null);
     }
   }, []);

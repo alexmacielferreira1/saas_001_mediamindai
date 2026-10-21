@@ -11,6 +11,7 @@ import {
 } from '../data';
 import { SocialMetrics } from '../components/SocialRightPanel';
 import SocialCortesWorkspace from '../components/corp/SocialCortesWorkspace';
+import { workspaceAssetId } from '../lib/assetIdentity';
 
 const PRIMARY_TABS = [
   { key: 'cortes', label: 'Cortes', icon: Scissors },
@@ -42,8 +43,8 @@ export default function ViralClips({ incomingMedia = null }) {
       setNewClipSignal((n) => n + 1);
       setParams({}, { replace: true });
     }
-    // Pré-seleção de asset vinda do Acervo/Workspace: /social?asset=<id>
-    const asset = params.get('asset');
+    // Pré-seleção de asset vinda do Acervo/Pesquisa: /social?assetId=<id> (alias ?asset=<id>)
+    const asset = workspaceAssetId(params);
     if (asset) {
       setTab('cortes');
       setPreselectedAsset(asset);

@@ -42,8 +42,10 @@ Configurações ficam no .env local, ignorado pelo Git.
 | migrate.ps1 | Aplica migrations ao banco configurado |
 | build.ps1 | Compila o frontend preservado |
 | reset-db.ps1 | Operação destrutiva separada; recusa execução sem confirmação explícita do nome do projeto |
+| backup-db.ps1 | `pg_dump -Fc` do PostgreSQL local (container do `compose.yaml`) para `.runtime/backups/` (ignorado pelo Git) |
+| restore-db.ps1 | Restaura o backup mais recente (ou `-File`) em um banco NOVO `mediamind_restore_check`, compara tabelas e linhas com o principal e apaga só esse banco de verificação; nunca restaura no banco principal |
 
-Não executar reset-db por rotina. O banco persiste no volume do Docker. Logs/PIDs ficam em `.runtime/` e não entram no Git.
+Backup e verificação de restore também rodam por `.venv/Scripts/python.exe scripts/db_backup.py backup` e `... restore-check`. O restore recusa o banco principal e bancos que não terminem em `_restore_check`, e recusa se o banco de verificação já existir. A comparação de contagens supõe que não haja gravações no banco principal entre o backup e a verificação. Não executar reset-db por rotina. O banco persiste no volume do Docker. Logs/PIDs ficam em `.runtime/` e não entram no Git.
 
 ## Retomada e origem
 

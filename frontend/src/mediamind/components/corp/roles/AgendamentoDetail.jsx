@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, Save } from 'lucide-react';
 import { MOCK_CORP_PRECHECKLIST } from '../../../data';
-import { transicionar, updateProjeto } from '../../../lib/producaoStore';
+import { salvarProjeto, transicionar, updateProjeto, useProducaoSaveState } from '../../../lib/producaoStore';
 import ProjectThumbnails from '../../thumbnails/ProjectThumbnails';
 import { isScheduleReady } from '../../../lib/productionWorkflow';
 
@@ -23,13 +23,28 @@ function inputCls() {
 // de preencher; se já tem data, aparece no calendário e pode ser editado aqui.
 export default function AgendamentoDetail({ rec }) {
   const [checked, setChecked] = useState({});
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { setSaved(false); }, [rec?.id]);
+  const [saving, setSaving] = useState(false);
+  const saveState = useProducaoSaveState(rec?.id);
+  useEffect(() => { setSaving(false); }, [rec?.id]);
   if (!rec) return null;
 
-  function salvar() {
-    setSaved(true);
+  // Grava o estado atual no servidor; "salvo" só depois da confirmação.
+  async function salvar() {
+    setSaving(true);
+    try {
+      await salvarProjeto(rec.id);
+    } finally {
+      setSaving(false);
+    }
   }
+  const saveStatus = saving ? 'saving' : saveState?.status;
+  const saveLabel = saveStatus === 'saving'
+    ? 'Salvando…'
+    : saveStatus === 'saved'
+      ? 'Agendamento salvo ✓'
+      : saveStatus === 'error'
+        ? 'Não salvo — tentar de novo'
+        : 'Salvar agendamento';
 
   function confirmar() {
     if (!isScheduleReady(rec)) return;
@@ -149,9 +164,10 @@ export default function AgendamentoDetail({ rec }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 px-4 py-3">
-        <button onClick={salvar} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-4 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400">
-          <Save size={12} /> {saved ? 'Agendamento salvo ✓' : 'Salvar agendamento'}
+        <button onClick={salvar} disabled={saveStatus === 'saving'} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-4 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-wait disabled:opacity-70">
+          <Save size={12} /> {saveLabel}
         </button>
+        {saveStatus === 'error' && <p role="alert" className="text-[10px] text-rose-300">{saveState?.error}</p>}
         <button
           onClick={confirmar}
           disabled={!isScheduleReady(rec)}

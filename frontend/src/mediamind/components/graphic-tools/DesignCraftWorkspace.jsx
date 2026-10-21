@@ -1,5 +1,7 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { useEffect, useRef, useState } from "react";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { mmdesignCatalogue, runMMDesignTool } from "./mmdesignMcpTools";
 import {
   AlignLeft,
   Download,
@@ -29,8 +31,8 @@ const TOOLS = [
   ["H", "Mão", Hand],
   ["Z", "Zoom", ZoomIn],
 ];
-const PAGE_W = 210;
-const PAGE_H = 297;
+export const PAGE_W = 210;
+export const PAGE_H = 297;
 const PT_PX = 0.3528 * (460 / PAGE_W);
 const FONT_CSS = {
   Inter: "Inter, ui-sans-serif, system-ui, sans-serif",
@@ -47,7 +49,7 @@ const TYPE_PRESETS = [
   [900, 72],
 ];
 const LEADING = [1.2, 1, 1.5, 2];
-const STYLES = {
+export const STYLES = {
   "Título principal": { font: "Montserrat", size: 48, weight: 900, leading: 1 },
   Subtítulo: { font: "Montserrat", size: 24, weight: 700, leading: 1.2 },
   Corpo: { font: "Inter", size: 11, weight: 400, leading: 1.5 },
@@ -141,7 +143,7 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-export default function DesignCraftWorkspace({ assets, onOpenFiles }) {
+export default function DesignCraftWorkspace({ active = true, assets, onOpenFiles }) {
   const [tool, setTool] = useGraphicDraftState("DesignCraftWorkspace.jsx:tool", "Seleção");
   const [page, setPage] = useGraphicDraftState("DesignCraftWorkspace.jsx:page", "2–3");
   const [panel, setPanel] = useGraphicDraftState("DesignCraftWorkspace.jsx:panel", "Propriedades");
@@ -182,6 +184,49 @@ export default function DesignCraftWorkspace({ assets, onOpenFiles }) {
   const imageFrames = allFrames.filter((frame) => frame.src);
   const missing = imageFrames.filter((frame) => frame.src.startsWith("blob:") && !assets.some((asset) => asset.url === frame.src));
   const fonts = new Set(["Inter", ...allFrames.filter((f) => f.type === "text").map((f) => f.font)]);
+
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre a publicação atual
+  // e gravam pelo change() (um passo de desfazer).
+  const toolState = useRef(null);
+  toolState.current = { doc, selectedId, pageKey: spreadKeys[0] };
+  const toolActions = useRef(null);
+  toolActions.current = { change, undo, setSelectedId, setStatus, canUndo: past.current.length > 0 };
+  useEffect(() => {
+    if (!active) return undefined;
+    const strip = ({ doc: _doc, selectedId: _selected, ...result }) => result;
+    return registerMCPActions({
+      source: "mmdesign",
+      label: "MMDesign",
+      catalogue: mmdesignCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMMDesignTool(toolId, toolState.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runMMDesignTool(toolId, toolState.current, params);
+        if (result.ok) {
+          const actions = toolActions.current;
+          // Guarda o estado lido pelo planejamento (correto também numa fila, antes do React redesenhar).
+          past.current.push(toolState.current.doc);
+          if (past.current.length > 100) past.current.shift();
+          future.current = [];
+          actions.change(() => result.doc, false);
+          toolState.current = { ...toolState.current, doc: result.doc, ...(result.selectedId ? { selectedId: result.selectedId } : {}) };
+          if (result.selectedId) actions.setSelectedId(result.selectedId);
+          actions.canUndo = true;
+          actions.setStatus(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        if (!toolActions.current.canUndo) return false;
+        toolActions.current.undo();
+        return true;
+      },
+      canUndo: () => toolActions.current.canUndo,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   function toggleLayer(name) {
     setLayers((old) =>

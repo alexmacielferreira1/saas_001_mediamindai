@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { filterActiveSubtabs } from '../../../lib/roleSubtabs';
-import { LayoutDashboard, FileText, Users, Newspaper, Radio, BarChart3, Plus, KanbanSquare } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Newspaper, Radio, BarChart3, Plus, KanbanSquare, ShieldOff } from 'lucide-react';
 import { SubTabsBar, StatCard, StatusBadge, Panel } from './RoleShared';
 import PendenciasHub from '../PendenciasHub';
 import RoleInicio from '../RoleInicio';
 import { useAssessoria } from '../../../lib/corpAssessoria';
 import { MOCK_CORP_PENDENCIES } from '../../../data';
-import { ListSkeleton, EmptyState, ErrorState } from '../../shared';
+import { ListSkeleton, EmptyState } from '../../shared';
+import { accessErrorMessage, NO_AREA_ACCESS_TITLE } from '../../../lib/accessErrors';
 
 const SUBTABS = [
   { id: 'overview', name: 'Visão geral', Icon: LayoutDashboard },
@@ -26,24 +27,28 @@ export default function AssessoriaPage() {
   const [sub, setSub] = useState('overview');
   const tabs = filterActiveSubtabs('assessoria', SUBTABS);
   useEffect(() => { if (!tabs.some((t) => t.id === sub)) setSub(tabs[0]?.id ?? sub); }, []);
-  const { releases, clippings, jornalistas, mencoes, loading, error, reload } = useAssessoria();
+  const { releases, clippings, jornalistas, mencoes, loading, error, forbidden, reload } = useAssessoria();
   const positivo = mencoes.filter((m) => m.tom === 'positivo').length;
 
   return (
     <div className="space-y-4">
       <SubTabsBar tabs={tabs} active={sub} onChange={setSub} />
-      {error && (
+      {error && !forbidden && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-rose-700/40 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
           <span>Não foi possível sincronizar todos os dados da assessoria.</span>
           <button onClick={reload} className="rounded-md border border-rose-700/50 px-2 py-1 text-[11px] font-medium text-rose-100 hover:bg-rose-900/40">Tentar novamente</button>
         </div>
       )}
       <div className="h-[calc(100vh-16rem)]">
-        {sub === 'overview' && (
+        {forbidden && (
+          <EmptyState icon={ShieldOff} title={NO_AREA_ACCESS_TITLE} description={accessErrorMessage(error, 'O acesso à Assessoria não está liberado para você nesta empresa.')} />
+        )}
+
+        {!forbidden && sub === 'overview' && (
           <RoleInicio roleId="assessoria" onNavigate={setSub} />
         )}
 
-        {sub === 'releases' && (
+        {!forbidden && sub === 'releases' && (
           <Panel title="Press releases" action={<button type="button" disabled title="Ainda não disponível" className="flex items-center gap-1 rounded-md bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"><Plus size={11} /> Novo release</button>}>
             {loading ? <ListSkeleton rows={4} /> : releases.length === 0 ? (
               <EmptyState icon={FileText} title="Sem releases" description="Os press releases aparecem aqui." />
@@ -60,7 +65,7 @@ export default function AssessoriaPage() {
           </Panel>
         )}
 
-        {sub === 'mailing' && (
+        {!forbidden && sub === 'mailing' && (
           <div className="h-full overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/40">
             <p className="border-b border-slate-800 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-400">Mailing / CRM de imprensa</p>
             {loading ? <ListSkeleton rows={5} /> : (
@@ -82,7 +87,7 @@ export default function AssessoriaPage() {
           </div>
         )}
 
-        {sub === 'clipping' && (
+        {!forbidden && sub === 'clipping' && (
           <Panel title="Clipping">
             {loading ? <ListSkeleton rows={5} /> : clippings.length === 0 ? (
               <EmptyState icon={Newspaper} title="Sem clippings" description="As menções coletadas aparecem aqui." />
@@ -99,7 +104,7 @@ export default function AssessoriaPage() {
           </Panel>
         )}
 
-        {sub === 'monitoramento' && (
+        {!forbidden && sub === 'monitoramento' && (
           <Panel title="Monitoramento de menções">
             {loading ? <ListSkeleton rows={5} /> : mencoes.length === 0 ? (
               <EmptyState icon={Radio} title="Sem menções" description="O monitoramento aparece aqui." />
@@ -116,7 +121,7 @@ export default function AssessoriaPage() {
           </Panel>
         )}
 
-        {sub === 'relatorios' && (
+        {!forbidden && sub === 'relatorios' && (
           <div className="grid h-full grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard label="Releases no mês" value={releases.length} tone="text-sky-300" />
             <StatCard label="Clippings no mês" value={clippings.length} tone="text-emerald-300" />
@@ -125,7 +130,7 @@ export default function AssessoriaPage() {
           </div>
         )}
 
-        {sub === 'pendencias' && (
+        {!forbidden && sub === 'pendencias' && (
           <div className="h-full"><PendenciasHub segment="Assessoria de Imprensa" pendencias={MOCK_CORP_PENDENCIES.assessoria} /></div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, CheckCircle2, Clock3, FolderOpen, History, Instagram, Layers, Lightbulb, Link2, Send, Sparkles, Youtube } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Clock3, FolderOpen, History, Layers, Lightbulb, Link2, Send, Sparkles } from 'lucide-react';
 import { MOCK_ASSETS, MOCK_PUBLICATION_CALENDAR, MOCK_PUBLICATIONS, MOCK_SOCIAL_METRICS } from '../../../data';
 import { listMediaAssets, uploadMediaAsset } from '../../../../api/media';
 import { createEditorialBar } from '../../../lib/graphicTemplates';

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, Film } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { MOCK_CORP_EDITS, MOCK_CORP_EDIT_APPROVALS } from '../../../data';
 
 const TONE = {

@@ -17,6 +17,7 @@ from app.schemas.admin_users import (
     AdminUserStatusChange,
     AdminUserSummary,
 )
+from app.tenancy.access_policy import ensure_can_manage_target
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
 
@@ -157,6 +158,7 @@ def suspend_admin_user(
         raise PublicError(409, "SELF_STATUS_CHANGE", "Você não pode suspender a própria conta.")
     if _status(membership, user) != "active":
         raise PublicError(409, "USER_STATUS_CONFLICT", "A conta não está ativa.")
+    ensure_can_manage_target(session, current, membership)
     membership.is_active = False
     revoked = _revoke_tenant_sessions(session, user.id, selected.tenant_id)
     add_audit(
@@ -166,6 +168,10 @@ def suspend_admin_user(
         "User",
         str(user.id),
         {"reason": body.reason, "revoked_sessions": revoked},
+        before={"status": "active"},
+        after={"status": _status(membership, user)},
+        reason=body.reason,
+        target_user_id=str(user.id),
     )
     session.commit()
     return _detail(membership, user, profile, last_access_at)
@@ -185,12 +191,24 @@ def reactivate_admin_user(
     )
     if _status(membership, user) != "suspended":
         raise PublicError(409, "USER_STATUS_CONFLICT", "A conta não está suspensa.")
+    ensure_can_manage_target(session, current, membership)
     membership.is_active = True
     if user.account_status == "suspended":
         # Suspensões antigas eram gravadas na conta; a reativação também as desfaz.
         user.account_status = "active"
         user.is_active = True
-    add_audit(session, current, "user.reactivated", "User", str(user.id), {"reason": body.reason})
+    add_audit(
+        session,
+        current,
+        "user.reactivated",
+        "User",
+        str(user.id),
+        {"reason": body.reason},
+        before={"status": "suspended"},
+        after={"status": _status(membership, user)},
+        reason=body.reason,
+        target_user_id=str(user.id),
+    )
     session.commit()
     return _detail(membership, user, profile, last_access_at)
 
@@ -204,9 +222,10 @@ def revoke_admin_user_sessions(
 ):
     selected = require_membership(current)
     require_permission(session, current, "users.manage")
-    _membership, user, _profile, _last = _load_scoped_user(session, selected.tenant_id, user_id)
+    membership, user, _profile, _last = _load_scoped_user(session, selected.tenant_id, user_id)
     if user.id == current.user.id:
         raise PublicError(409, "SELF_SESSION_REVOKE", "Use Sair para encerrar a própria sessão.")
+    ensure_can_manage_target(session, current, membership)
     revoked = _revoke_tenant_sessions(session, user.id, selected.tenant_id)
     add_audit(
         session,
@@ -215,6 +234,8 @@ def revoke_admin_user_sessions(
         "User",
         str(user.id),
         {"reason": body.reason, "revoked_sessions": revoked},
+        reason=body.reason,
+        target_user_id=str(user.id),
     )
     session.commit()
     return AdminUserSessionsRevoked(revoked_sessions=revoked)

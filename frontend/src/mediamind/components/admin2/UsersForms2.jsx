@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  Activity, BarChart3, Building2, CalendarClock, CheckCircle2, ChevronRight,
-  CircleUserRound, ClipboardList, Copy, Edit3, Eye, FileText, FormInput,
-  Globe2, History, KeyRound, Layers3, Link2, LockKeyhole, Mail, MoreVertical,
+  Activity, BarChart3, CalendarClock, ChevronRight, ClipboardList, Copy, Edit3, Eye, FileText, FormInput,
+  Globe2, KeyRound, Layers3, LockKeyhole, Mail,
   Plus, Search, Settings, ShieldCheck, Sparkles, Upload, UserPlus, Users, X,
 } from 'lucide-react';
 import { getDemoUsers } from '../../lib/demoCatalog';

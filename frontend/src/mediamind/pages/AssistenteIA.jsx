@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useWorkDraftState } from '../lib/workProtection';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Send, Loader2, ArrowRight, Mic, MessageSquare, Bot, User as UserIcon } from 'lucide-react';
+import { Sparkles, Send, Loader2, ArrowRight, Bot, User as UserIcon } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '../auth';
 import { filterTabsForUser } from '../lib/permissions';

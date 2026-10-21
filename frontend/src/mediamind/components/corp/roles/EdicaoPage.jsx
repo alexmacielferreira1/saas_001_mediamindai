@@ -3,7 +3,7 @@ import EditingProjectPanels from './EditingProjectPanels';
 import FilmCraftWorkspace from '../../graphic-tools/FilmCraftWorkspace';
 import { GraphicDraftProvider } from '../../../lib/graphicDrafts';
 import { useWorkScope } from '../../../lib/workProtection';
-import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, Clock3, CircleAlert, CircleCheck, Play, Layers3, GitBranch, History, MessageCircle, CheckSquare2, FolderOpen, Upload, MoreHorizontal, Video, AudioLines, Image, Link2, ChevronLeft } from 'lucide-react';
+import { Scissors, Plus, User, Calendar, FileText, Send, Download, FileCode2, Copy, RotateCcw, Clock3, CircleAlert, CircleCheck, Layers3, MessageCircle, FolderOpen, Video, AudioLines, Image, Link2, ChevronLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useProducaoProjetos, addProjeto, updateProjeto, transicionar } from '../../../lib/producaoStore';
@@ -61,16 +61,19 @@ export default function EdicaoPage({ disableBack = false, initialLane = 'em_edic
   function enviarAjuste() {
     if (!ajusteObs.trim()) return;
     updateProjeto(sel.id, { grav_status: 'problema' });
-    transicionar(sel.id, 'gravacoes', { quem: editorName, obs: `Ajuste solicitado pela edição: ${ajusteObs.trim()}` });
+    const saved = transicionar(sel.id, 'gravacoes', { quem: editorName, obs: `Ajuste solicitado pela edição: ${ajusteObs.trim()}` });
     setAjusteOpen(false);
     setAjusteObs('');
-    toast({ title: 'Ajuste solicitado ao videomaker', description: 'O projeto voltou pra Gravação com a observação.' });
+    Promise.resolve(saved).then((ok) => {
+      if (ok) toast({ title: 'Ajuste solicitado ao videomaker', description: 'O projeto voltou pra Gravação com a observação.' });
+    });
   }
 
   function enviarParaAprovacao() {
     if (!sel) return;
-    transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão' });
-    toast({ title: 'Versão enviada para Em revisão', description: 'A entrega já está disponível para conferência.' });
+    Promise.resolve(transicionar(sel.id, 'em_aprovacao', { quem: editorName, obs: 'Versão encaminhada para revisão' })).then((ok) => {
+      if (ok) toast({ title: 'Versão enviada para Em revisão', description: 'A entrega já está disponível para conferência.' });
+    });
   }
 
   function moveToLane(projectId, targetLane) {

@@ -30,15 +30,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { canAccessModule } from "./lib/moduleAccess";
-import { useEmpresa } from "./lib/empresaContext";
 import WorkProtection from "./lib/workProtection";
 import EmpresaSwitcher from "./components/EmpresaSwitcher";
 import CommandPalette from "./components/CommandPalette";
 import QuickActionsButton from "./components/QuickActionsButton";
 import ThemeToggle from "./components/ThemeToggle";
 import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
-import MCPDock from "./components/mcp/MCPDock";
-import MCPExpress from "./components/mcp/MCPExpress";
 import UniversalCopilot from "./components/copilot/UniversalCopilot";
 
 export const NAV_GROUPS = [

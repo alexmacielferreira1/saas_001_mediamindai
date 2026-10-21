@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { LayoutDashboard, Languages } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard } from './RoleShared';
 import { usePublicacoes } from '../../../lib/corpPublicacoes';
 import { PUBLICATION_PLATFORM_LABELS } from '../../../data';
 import { ListSkeleton, EmptyState, ErrorState } from '../../shared';

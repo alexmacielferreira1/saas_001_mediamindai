@@ -139,3 +139,83 @@ def test_production_requires_a_non_default_hub_admin_token():
             google_redirect_uri="https://api.example.com/api/v1/auth/google/callback",
             session_cookie_secure=True,
         )
+
+
+def test_default_server_scopes_match_the_central_contract(monkeypatch):
+    monkeypatch.delenv("HUB_ADMIN_SCOPES", raising=False)
+
+    settings = Settings(_env_file=None, hub_admin_token="token")
+
+    assert settings.hub_admin_scope_set == frozenset({"hub:observe", "hub:command"})
+
+
+def test_unknown_server_scope_is_rejected_at_startup():
+    with pytest.raises(ValidationError, match="HUB_ADMIN_SCOPES"):
+        Settings(_env_file=None, hub_admin_scopes="hub:observe hub:root")
+
+
+def test_observe_only_token_ignores_forged_command_scope_header(hub_client, monkeypatch):
+    monkeypatch.setenv("HUB_ADMIN_SCOPES", "hub:observe")
+    get_settings.cache_clear()
+    headers = {**BASE_HEADERS, "X-Hub-Scopes": "hub:observe hub:command"}
+
+    response = hub_client.post(
+        "/api/hub/v1/commands",
+        headers={**headers, "Idempotency-Key": "forged"},
+        json={"action": "system.describe", "dry_run": True, "parameters": {}},
+    )
+
+    assert response.status_code == 403
+
+
+def test_observation_works_without_scope_header(hub_client):
+    headers = {key: value for key, value in BASE_HEADERS.items() if key != "X-Hub-Scopes"}
+
+    response = hub_client.get("/api/hub/v1/health", headers=headers)
+
+    assert response.status_code == 200
+
+
+def test_expired_service_token_is_rejected(hub_client, monkeypatch):
+    monkeypatch.setenv("HUB_ADMIN_TOKEN_EXPIRES_AT", "2020-01-01T00:00:00")
+    get_settings.cache_clear()
+
+    response = hub_client.get("/api/hub/v1/health", headers=BASE_HEADERS)
+
+    assert response.status_code == 401
+
+
+def test_future_expiry_keeps_service_token_valid(hub_client, monkeypatch):
+    monkeypatch.setenv("HUB_ADMIN_TOKEN_EXPIRES_AT", "2999-01-01T00:00:00+00:00")
+    get_settings.cache_clear()
+
+    response = hub_client.get("/api/hub/v1/health", headers=BASE_HEADERS)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("configured", ["", "   "])
+def test_blank_configured_token_refuses_every_caller(hub_client, monkeypatch, configured):
+    monkeypatch.setenv("HUB_ADMIN_TOKEN", configured)
+    get_settings.cache_clear()
+    headers = {**BASE_HEADERS, "Authorization": f"Bearer {configured}x"}
+
+    response = hub_client.get("/api/hub/v1/health", headers=headers)
+
+    assert response.status_code == 401
+
+
+def test_non_ascii_bearer_token_is_rejected_without_error(hub_client):
+    from app.admin_api.auth import authenticate_hub_service
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
+        authenticate_hub_service(
+            authorization="Bearer tóken",
+            audience="central",
+            scopes_header=None,
+            service=None,
+            required_scope="hub:observe",
+        )
+
+    assert error.value.status_code == 401

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Play, Pause, Save, CheckCircle2, Trash2, MousePointer2, Pen, Highlighter,
+  Play, Pause, CheckCircle2, Trash2, MousePointer2, Pen, Highlighter,
   LogIn, LogOut, MessageSquare, Eraser, ArrowUpRight, Square, Circle, Type, Download, FileVideo, FileText, History, XCircle, RotateCcw,
 } from 'lucide-react';
 

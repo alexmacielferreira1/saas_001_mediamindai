@@ -51,14 +51,16 @@ def update_admin_settings(body: AdminSettingsPatch, current: Authenticated, sess
     tenant = session.get(Tenant, selected.tenant_id)
     submitted = body.model_dump(exclude_none=True)
     changes = dict(submitted)
+    record = _settings_record(session, selected.tenant_id)
+    previous = _settings_response(tenant, record).model_dump()
     if "organization_name" in changes:
         tenant.name = changes.pop("organization_name").strip()
-    record = _settings_record(session, selected.tenant_id)
     if record is None:
         record = TenantRecord(tenant_id=selected.tenant_id, entity_type=SETTINGS_ENTITY, data={})
         session.add(record)
         session.flush()
     record.data = {**SETTINGS_DEFAULTS, **record.data, **changes}
+    current_values = _settings_response(tenant, record).model_dump()
     add_audit(
         session,
         current,
@@ -66,6 +68,9 @@ def update_admin_settings(body: AdminSettingsPatch, current: Authenticated, sess
         SETTINGS_ENTITY,
         str(record.id),
         {"fields": sorted(submitted)},
+        # Configurações da empresa não guardam segredos; registra só os campos enviados.
+        before={field: previous[field] for field in sorted(submitted)},
+        after={field: current_values[field] for field in sorted(submitted)},
     )
     session.commit()
     return _settings_response(tenant, record)

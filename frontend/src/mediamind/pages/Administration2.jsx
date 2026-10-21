@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Activity, AlertTriangle, Archive, Blocks, ClipboardList, ContactRound, Database,
-  FileInput, FileText, FolderKanban, KeyRound, LayoutDashboard, LockKeyhole,
+  Activity, Archive, Blocks, ClipboardList, ContactRound, Database,
+  FileInput, FolderKanban, KeyRound, LayoutDashboard, LockKeyhole,
   PlugZap, Search, Settings, ShieldCheck, SlidersHorizontal, UserCog, Users,
   UsersRound,
 } from 'lucide-react';
 import { getAdminSettings, getAdminUser, listAdminActivity, listAdminUsers, reactivateAdminUser, revokeAdminUserSessions, suspendAdminUser, updateAdminSettings } from '../../api/admin';
 import { ApiError } from '../../api/httpClient';
 import { listPermissionGroups } from '../../api/permissions';
+import { accessErrorMessage } from '../lib/accessErrors';
 import AdminAcessosPage from '../components/corp/roles/AdminAcessosPage';
 import { ProfilesSection, TeamsSection, UsersSection } from '../components/admin2/PeopleAccessSections';
 import { FormsSection, ImportsSection, RecordsSection, RegistrySection } from '../components/admin2/GovernanceSections';
@@ -109,7 +110,7 @@ export default function Administration2() {
         setGroups([]);
         setActivity([]);
         setFallbackKind('forbidden');
-        setError('Sem permissão para consultar os dados administrativos deste tenant.');
+        setError(accessErrorMessage(reason, 'Sem permissão para consultar os dados administrativos deste tenant.'));
       } else {
         setPayload({ items: [], total: 0, page: 1, page_size: 25 });
         setGroups([]);
@@ -140,7 +141,7 @@ export default function Administration2() {
             <h1 className="text-xl font-bold text-slate-50">Administração</h1>
             <Badge tone="success">Área validada</Badge>
           </div>
-          <p className="mt-1 text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança.</p>
+          <p className="mt-1 text-sm text-slate-400">Controle central de usuários, acessos, formulários e segurança. <Link to="/telas2" className="ml-1 text-xs text-sky-400 hover:text-sky-300 hover:underline">Telas 2 (prévia)</Link></p>
           </div>
         </div>
         {!DEMO_DATA_TABS.has(active) && <div data-testid="admin-data-seal" className="rounded-xl border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">

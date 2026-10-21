@@ -7,29 +7,77 @@ function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Padrões usados só quando o projeto/mídia não informa os próprios valores.
+export const DEFAULT_FPS = 25;
+export const DEFAULT_WIDTH = 1920;
+export const DEFAULT_HEIGHT = 1080;
+const DEFAULT_CLIP_FRAMES = 3600;
+
+const NTSC_RATES = [23.976, 29.97, 47.952, 59.94, 119.88];
+
+// Converte o fps real (ex.: 29.97 vindo do ffprobe) em timebase inteiro + flag
+// NTSC do xmeml: 29.97 → timebase 30 com <ntsc>TRUE</ntsc> (30000/1001).
+export function resolveRate(fps) {
+  const value = Number(fps);
+  if (!Number.isFinite(value) || value <= 0) return { timebase: DEFAULT_FPS, ntsc: false, fps: DEFAULT_FPS };
+  const ntscMatch = NTSC_RATES.find((rate) => Math.abs(value - rate) < 0.01);
+  if (ntscMatch) {
+    const timebase = Math.round(ntscMatch * 1.001);
+    return { timebase, ntsc: true, fps: (timebase * 1000) / 1001 };
+  }
+  const timebase = Math.max(1, Math.round(value));
+  return { timebase, ntsc: false, fps: timebase };
+}
+
+function rateXml(rate) {
+  return `<rate><timebase>${rate.timebase}</timebase><ntsc>${rate.ntsc ? 'TRUE' : 'FALSE'}</ntsc></rate>`;
+}
+
+function positiveInt(value, fallback) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value != null && value !== '' && Number(value) > 0);
+}
+
 export function gerarXmlPremiere(projeto) {
   const materiais = projeto.materiais || [];
   const nomeProj = esc(projeto.titulo || 'Produção');
+  const firstMedia = materiais.find((m) => firstDefined(m.fps, m.width, m.height)) || {};
+  const seqRate = resolveRate(firstDefined(projeto.fps, firstMedia.fps));
+  const seqWidth = positiveInt(firstDefined(projeto.width, firstMedia.width), DEFAULT_WIDTH);
+  const seqHeight = positiveInt(firstDefined(projeto.height, firstMedia.height), DEFAULT_HEIGHT);
+  let cursor = 0;
   const clipes = materiais.map((m, i) => {
     const fname = esc(m.nome || `clip_${i + 1}.mp4`);
+    const fileRate = resolveRate(firstDefined(m.fps, projeto.fps, firstMedia.fps));
+    const width = positiveInt(m.width, seqWidth);
+    const height = positiveInt(m.height, seqHeight);
+    const seconds = Number(firstDefined(m.duracao, m.duration));
+    const frames = seconds > 0 ? Math.max(1, Math.round(seconds * seqRate.fps)) : DEFAULT_CLIP_FRAMES;
+    const fileFrames = seconds > 0 ? Math.max(1, Math.round(seconds * fileRate.fps)) : DEFAULT_CLIP_FRAMES;
+    const start = cursor;
+    cursor += frames;
     return `
     <clipitem id="clip-${i + 1}">
       <name>${fname}</name>
       <enabled>TRUE</enabled>
-      <duration>3600</duration>
-      <rate><timebase>25</timebase></rate>
-      <start>0</start>
-      <end>3600</end>
+      <duration>${frames}</duration>
+      ${rateXml(seqRate)}
+      <start>${start}</start>
+      <end>${start + frames}</end>
       <in>0</in>
-      <out>3600</out>
+      <out>${frames}</out>
       <file id="file-${i + 1}">
         <name>${fname}</name>
         <pathurl>file://localhost/${fname}</pathurl>
-        <rate><timebase>25</timebase></rate>
-        <duration>3600</duration>
-        <timecode><rate><timebase>25</timebase></rate><string>00:00:00:00</string><frame>0</frame></timecode>
+        ${rateXml(fileRate)}
+        <duration>${fileFrames}</duration>
+        <timecode>${rateXml(fileRate)}<string>00:00:00:00</string><frame>0</frame></timecode>
         <media>
-          <video><samplecharacteristics><rate><timebase>25</timebase></rate><width>1920</width><height>1080</height></samplecharacteristics></video>
+          <video><samplecharacteristics>${rateXml(fileRate)}<width>${width}</width><height>${height}</height></samplecharacteristics></video>
           <audio><samplecharacteristics><depth>16</depth><samplerate>48000</samplerate></samplecharacteristics></audio>
         </media>
       </file>
@@ -41,10 +89,10 @@ export function gerarXmlPremiere(projeto) {
 <xmeml version="4">
   <sequence id="seq-1">
     <name>${nomeProj}</name>
-    <rate><timebase>25</timebase></rate>
+    ${rateXml(seqRate)}
     <media>
       <video>
-        <format><samplecharacteristics><rate><timebase>25</timebase></rate><width>1920</width><height>1080</height></samplecharacteristics></format>
+        <format><samplecharacteristics>${rateXml(seqRate)}<width>${seqWidth}</width><height>${seqHeight}</height></samplecharacteristics></format>
         <track>${clipes}
         </track>
       </video>
@@ -74,9 +122,10 @@ export function baixarXmlPremiere(projeto) {
 // fiel às decisões tomadas no workspace (IN/OUT, legendas, CGs).
 // ============================================================================
 
-const FPS = 25;
-const ms2f = (ms) => Math.round((Number(ms) || 0) / 1000 * FPS);
-function f2tc(f) {
+// Quadros calculados no fps real (29.97 = 30000/1001); timecode NDF no timebase.
+const ms2f = (ms, rate) => Math.round((Number(ms) || 0) / 1000 * rate.fps);
+function f2tc(f, rate) {
+  const FPS = rate.timebase;
   f = Math.max(0, Math.round(f));
   const h = Math.floor(f / (FPS * 3600));
   const m = Math.floor((f % (FPS * 3600)) / (FPS * 60));
@@ -97,9 +146,12 @@ function fileNameFromUrl(url) {
 
 // XML Premiere para um único corte: master com IN/OUT + faixa de legendas como
 // títulos. Não destrutivo — referencia o arquivo master, não embute mídia.
-export function gerarXmlPremiereClip(clip, { legendas = [], cgs = [] } = {}) {
-  const inF = ms2f(clip.in_ms || 0);
-  const outF = ms2f(clip.out_ms || (clip.in_ms || 0) + 60000);
+export function gerarXmlPremiereClip(clip, { cgs = [], fps, width, height } = {}) {
+  const rate = resolveRate(firstDefined(fps, clip.fps, clip.source_fps));
+  const frameWidth = positiveInt(firstDefined(width, clip.width, clip.source_width), DEFAULT_WIDTH);
+  const frameHeight = positiveInt(firstDefined(height, clip.height, clip.source_height), DEFAULT_HEIGHT);
+  const inF = ms2f(clip.in_ms || 0, rate);
+  const outF = ms2f(clip.out_ms || (clip.in_ms || 0) + 60000, rate);
   const durF = Math.max(1, outF - inF);
   const masterName = esc(fileNameFromUrl(clip.source_url) || 'master.mp4');
   const pathurl = esc(clip.source_url || `file://localhost/${masterName}`);
@@ -107,15 +159,15 @@ export function gerarXmlPremiereClip(clip, { legendas = [], cgs = [] } = {}) {
 
   // CGs como títulos sobrepostos (faixa de vídeo 2), relativos ao início do corte.
   const cgItems = (cgs || []).map((c, i) => {
-    const cIn = Math.max(0, ms2f(c.start_ms) - inF);
-    const cOut = Math.min(durF, ms2f(c.end_ms) - inF);
+    const cIn = Math.max(0, ms2f(c.start_ms, rate) - inF);
+    const cOut = Math.min(durF, ms2f(c.end_ms, rate) - inF);
     if (cOut <= cIn) return '';
     return `
         <clipitem id="cg-${i + 1}">
           <name>${esc(c.titulo || 'CG')}</name>
           <enabled>TRUE</enabled>
           <duration>${cOut - cIn}</duration>
-          <rate><timebase>${FPS}</timebase></rate>
+          ${rateXml(rate)}
           <start>${cIn}</start>
           <end>${cOut}</end>
           <in>${cIn}</in>
@@ -129,16 +181,16 @@ export function gerarXmlPremiereClip(clip, { legendas = [], cgs = [] } = {}) {
 <xmeml version="4">
   <sequence id="seq-clip">
     <name>${title}</name>
-    <rate><timebase>${FPS}</timebase></rate>
+    ${rateXml(rate)}
     <media>
       <video>
-        <format><samplecharacteristics><rate><timebase>${FPS}</timebase></rate><width>1920</width><height>1080</height></samplecharacteristics></format>
+        <format><samplecharacteristics>${rateXml(rate)}<width>${frameWidth}</width><height>${frameHeight}</height></samplecharacteristics></format>
         <track>
           <clipitem id="clip-master">
             <name>${masterName}</name>
             <enabled>TRUE</enabled>
             <duration>${outF}</duration>
-            <rate><timebase>${FPS}</timebase></rate>
+            ${rateXml(rate)}
             <start>0</start>
             <end>${durF}</end>
             <in>${inF}</in>
@@ -146,11 +198,11 @@ export function gerarXmlPremiereClip(clip, { legendas = [], cgs = [] } = {}) {
             <file id="file-master">
               <name>${masterName}</name>
               <pathurl>${pathurl}</pathurl>
-              <rate><timebase>${FPS}</timebase></rate>
+              ${rateXml(rate)}
               <duration>${outF}</duration>
-              <timecode><rate><timebase>${FPS}</timebase></rate><string>${f2tc(inF)}</string><frame>${inF}</frame></timecode>
+              <timecode>${rateXml(rate)}<string>${f2tc(inF, rate)}</string><frame>${inF}</frame></timecode>
               <media>
-                <video><samplecharacteristics><rate><timebase>${FPS}</timebase></rate><width>1920</width><height>1080</height></samplecharacteristics></video>
+                <video><samplecharacteristics>${rateXml(rate)}<width>${frameWidth}</width><height>${frameHeight}</height></samplecharacteristics></video>
                 <audio><samplecharacteristics><depth>16</depth><samplerate>48000</samplerate></samplecharacteristics></audio>
               </media>
             </file>

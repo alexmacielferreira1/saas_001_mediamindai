@@ -47,3 +47,68 @@ def test_production_environment_accepts_secure_login_configuration():
 def test_production_rejects_insecure_auth_settings(overrides, expected_error):
     with pytest.raises(ValidationError, match=expected_error):
         production_settings(**overrides)
+
+
+EMPTY_OPTIONAL_KEYS = (
+    "HUB_ADMIN_TOKEN_EXPIRES_AT",
+    "OUTBOUND_ALLOW_PRIVATE_NETWORKS",
+    "CSRF_TRUSTED_ORIGINS",
+    "HUB_ADMIN_SCOPES",
+)
+
+
+@pytest.fixture
+def clean_optional_env(monkeypatch):
+    for key in EMPTY_OPTIONAL_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_env_example_copied_as_env_loads(clean_optional_env, tmp_path):
+    from app.core.config import ROOT
+
+    env_file = tmp_path / ".env"
+    env_file.write_text((ROOT / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.environment == "local"
+    assert settings.hub_admin_token_expires_at is None
+
+
+def test_empty_optional_variables_mean_not_defined(clean_optional_env, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("\n".join(f"{key}=" for key in EMPTY_OPTIONAL_KEYS), encoding="utf-8")
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.hub_admin_token_expires_at is None
+    assert settings.outbound_allow_private_networks is False
+    assert settings.csrf_trusted_origins == ""
+    assert settings.hub_admin_scopes == "hub:observe hub:command"
+
+
+def test_empty_optional_variables_from_process_environment(clean_optional_env, monkeypatch):
+    for key in EMPTY_OPTIONAL_KEYS:
+        monkeypatch.setenv(key, "  ")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.hub_admin_token_expires_at is None
+    assert settings.outbound_allow_private_networks is False
+    assert settings.hub_admin_scope_set == frozenset({"hub:observe", "hub:command"})
+
+
+def test_defined_optional_variables_are_still_parsed(clean_optional_env, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "HUB_ADMIN_TOKEN_EXPIRES_AT=2027-01-31T23:59:59Z\n"
+        "OUTBOUND_ALLOW_PRIVATE_NETWORKS=true\n"
+        "HUB_ADMIN_SCOPES=hub:observe\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    assert settings.hub_admin_token_expires_at.year == 2027
+    assert settings.outbound_allow_private_networks is True
+    assert settings.hub_admin_scope_set == frozenset({"hub:observe"})

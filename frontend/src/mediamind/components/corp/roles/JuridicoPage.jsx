@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard, StatusBadge } from './RoleShared';
+import { StatusBadge } from './RoleShared';
 import { MOCK_CORP_RELEASES } from '../../../data';
 
 const TONE = { publicado: 'bg-emerald-500/15 text-emerald-300', rascunho: 'bg-slate-500/15 text-slate-300', agendado: 'bg-amber-500/15 text-amber-300' };

@@ -20,8 +20,12 @@ const DIMENSIONS = [
 
 // Converte candidatos reais da análise do CLIPSFREE (/clips/analyses) para o formato do painel.
 // As dimensões vêm do servidor (0–25 cada); nada é preenchido quando ausente.
+// Explicação por dimensão só aparece quando a análise devolve uma; não há texto
+// fixo fingindo ser justificativa da IA.
 export function fromClipsAnalysis(candidate, index) {
   const dims = candidate.dimensions || {};
+  const explanations = candidate.explanations || candidate.dimension_explanations || {};
+  const explain = (key) => (typeof explanations[key] === 'string' ? explanations[key].trim() : '');
   const grade = (value) => (Number.isFinite(Number(value)) ? `${Number(value)}/25` : '');
   return {
     id: candidate.id,
@@ -34,10 +38,10 @@ export function fromClipsAnalysis(candidate, index) {
     transcript: candidate.quote || '',
     reason: candidate.rationale || '',
     evidence: candidate.evidence || [],
-    hook_grade: grade(dims.hook), hook_explanation: 'Gancho: força dos primeiros segundos, avaliada sobre a transcrição.',
-    flow_grade: grade(dims.flow), flow_explanation: 'Fluxo: continuidade do raciocínio dentro do trecho.',
-    value_grade: grade(dims.value), value_explanation: 'Valor: densidade de informação útil.',
-    trend_grade: grade(dims.shareability), trend_explanation: 'Compartilhamento: potencial de o público repassar o trecho (estimativa editorial, não garantia de alcance).',
+    hook_grade: grade(dims.hook), hook_explanation: explain('hook'),
+    flow_grade: grade(dims.flow), flow_explanation: explain('flow'),
+    value_grade: grade(dims.value), value_explanation: explain('value'),
+    trend_grade: grade(dims.shareability), trend_explanation: explain('shareability') || explain('trend'),
     source: 'clipsfree',
   };
 }
@@ -51,7 +55,7 @@ function Grade({ grade, explanation }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-sky-300"
-        title={explanation || 'Ver explicação da IA'}
+        title={explanation || 'A análise não trouxe explicação para esta nota'}
       >
         {grade}
         <Info size={10} className="text-slate-500" />

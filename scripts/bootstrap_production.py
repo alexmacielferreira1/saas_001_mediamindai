@@ -1,3 +1,4 @@
+import argparse
 import os
 
 from app.db.session import SessionLocal
@@ -22,15 +23,44 @@ def required_env(name: str) -> str:
     return value
 
 
-def main() -> None:
-    email = required_env("BOOTSTRAP_ADMIN_EMAIL").casefold()
-    full_name = required_env("BOOTSTRAP_ADMIN_NAME")
+def admin_password() -> str:
     password = required_env("BOOTSTRAP_ADMIN_PASSWORD")
-
     if len(password) < 12:
         raise SystemExit("BOOTSTRAP_ADMIN_PASSWORD deve ter pelo menos 12 caracteres.")
+    return password
 
-    with SessionLocal() as session:
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Bootstrap de produção do MediaMind AI.")
+    parser.add_argument(
+        "--reset-superadmin-password",
+        action="store_true",
+        help=(
+            "Redefine a senha do superadmin existente com BOOTSTRAP_ADMIN_PASSWORD e "
+            "desbloqueia a conta. Sem esta opção a senha só é definida na criação."
+        ),
+    )
+    parser.add_argument(
+        "--reactivate-superadmin",
+        action="store_true",
+        help=(
+            "Reativa o superadmin (usuário, vínculo e suspensão legada da conta) se estiver "
+            "suspenso. Sem esta opção "
+            "(ou --reset-superadmin-password) uma suspensão é preservada a cada deploy."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None, session_factory=SessionLocal) -> None:
+    args = parse_args(argv)
+    email = required_env("BOOTSTRAP_ADMIN_EMAIL").casefold()
+    full_name = required_env("BOOTSTRAP_ADMIN_NAME")
+    if args.reset_superadmin_password:
+        admin_password()
+    reactivate = args.reactivate_superadmin or args.reset_superadmin_password
+
+    with session_factory() as session:
         # 1. Tenant
         tenant = session.scalar(select(Tenant).where(Tenant.slug == TENANT_SLUG))
 
@@ -98,16 +128,37 @@ def main() -> None:
             session.flush()
 
         group.is_active = True
-        group.permissions = permissions
+        # Add missing permissions without removing ones granted later by an admin.
+        for permission in permissions:
+            if permission not in group.permissions:
+                group.permissions.append(permission)
 
         # 4. Usuário
         user = session.scalar(select(User).where(User.email_normalized == email))
+        membership = (
+            session.scalar(
+                select(Membership).where(
+                    Membership.user_id == user.id,
+                    Membership.tenant_id == tenant.id,
+                )
+            )
+            if user is not None
+            else None
+        )
+        # A suspension (e.g. during an incident) must survive redeploys: only an explicit
+        # flag brings the account back. Legacy suspensions live in ``account_status``.
+        suspended = user is not None and (
+            not user.is_active
+            or user.account_status == "suspended"
+            or (membership is not None and not membership.is_active)
+        )
+        keep_suspended = suspended and not reactivate
 
         if user is None:
             user = User(
                 email=email,
                 email_normalized=email,
-                password_hash=hash_password(password),
+                password_hash=hash_password(admin_password()),
                 full_name=full_name,
                 is_active=True,
             )
@@ -117,21 +168,27 @@ def main() -> None:
         else:
             user.email = email
             user.full_name = full_name
-            user.is_active = True
-            user.password_hash = hash_password(password)
-            user.failed_login_attempts = 0
-            user.locked_until = None
-            print("Usuário Superadmin existente atualizado.")
+            if not keep_suspended:
+                user.is_active = True
+                if user.account_status == "suspended":
+                    # Same as admin_users reactivation: also undo the legacy account flag.
+                    user.account_status = "active"
+            # Never rotate credentials silently on a redeploy: only on explicit request.
+            if args.reset_superadmin_password:
+                user.password_hash = hash_password(admin_password())
+                user.failed_login_attempts = 0
+                user.locked_until = None
+                print("Usuário Superadmin existente atualizado; senha redefinida a pedido.")
+            else:
+                print("Usuário Superadmin existente atualizado (senha preservada).")
 
         # 5. Membership
-        membership = session.scalar(
-            select(Membership).where(
-                Membership.user_id == user.id,
-                Membership.tenant_id == tenant.id,
+        if keep_suspended:
+            print(
+                "Superadmin suspenso preservado (conta/vínculo inativos). "
+                "Use --reactivate-superadmin para reativar."
             )
-        )
-
-        if membership is None:
+        elif membership is None:
             membership = Membership(
                 user_id=user.id,
                 tenant_id=tenant.id,

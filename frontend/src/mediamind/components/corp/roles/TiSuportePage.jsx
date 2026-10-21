@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard, ServerCog } from 'lucide-react';
 import RolePageShell from './RolePageShell';
 import CorpPanel from '../CorpPanel';
-import { StatCard, StatusBadge } from './RoleShared';
+import { StatusBadge } from './RoleShared';
 import { MOCK_MONITORING } from '../../../data';
 
 const TONE = { ok: 'bg-emerald-500/15 text-emerald-300', warning: 'bg-amber-500/15 text-amber-300', error: 'bg-rose-500/15 text-rose-300' };

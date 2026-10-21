@@ -7,7 +7,6 @@ import {
   FileText,
   FolderPlus,
   Grid3X3,
-  Image as ImageIcon,
   Layers3,
   MousePointer2,
   PenTool,

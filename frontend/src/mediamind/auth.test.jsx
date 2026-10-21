@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../api/httpClient';
 import { AuthProvider, mapSessionUser, useAuth } from './auth';
+import { queryClientInstance } from '@/lib/query-client';
 
 const requestMock = vi.fn();
+const { resetProducaoStore } = vi.hoisted(() => ({ resetProducaoStore: vi.fn() }));
+vi.mock('./lib/producaoStore', () => ({ resetProducaoStore }));
 
 vi.mock('../api/httpClient', async (importOriginal) => {
   const original = await importOriginal();
@@ -214,6 +217,34 @@ describe('MediaMind local authentication', () => {
     await expect(result.current.loginDemo('editor@mediamind.ai')).rejects.toThrow(
       'O acesso rápido está disponível somente no ambiente local.',
     );
+    expect(result.current.user).toBeNull();
+  });
+
+  it('clears the query cache and in-memory production data on logout', async () => {
+    requestMock.mockResolvedValueOnce(session);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    queryClientInstance.setQueryData(['media', 'tenant-1'], [{ id: 'privado' }]);
+    resetProducaoStore.mockClear();
+
+    requestMock.mockResolvedValueOnce(null);
+    await act(() => result.current.logout());
+
+    expect(queryClientInstance.getQueryData(['media', 'tenant-1'])).toBeUndefined();
+    expect(resetProducaoStore).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears cached data when the server reports the session expired', async () => {
+    requestMock.mockResolvedValueOnce(session);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    queryClientInstance.setQueryData(['x'], 1);
+    resetProducaoStore.mockClear();
+
+    act(() => { window.dispatchEvent(new Event('mediamind:authentication-required')); });
+
+    expect(queryClientInstance.getQueryData(['x'])).toBeUndefined();
+    expect(resetProducaoStore).toHaveBeenCalledTimes(1);
     expect(result.current.user).toBeNull();
   });
 
