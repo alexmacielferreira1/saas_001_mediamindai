@@ -40,6 +40,36 @@ export function useMCPActions() {
   return provider;
 }
 
+// Última ação aplicada por aplicativo (barra "Última ação · Desfazer"), compartilhada entre painel e fila.
+const LAST_EVENT = "mm:mcp-last-action";
+const lastActions = new Map();
+const clock = (date) => `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+export function recordLastAction(source, label, date = new Date()) {
+  const action = { label, time: clock(date) };
+  lastActions.set(source, action);
+  window.dispatchEvent(new CustomEvent(LAST_EVENT, { detail: { source, action } }));
+  return action;
+}
+
+export function clearLastAction(source) {
+  lastActions.delete(source);
+  window.dispatchEvent(new CustomEvent(LAST_EVENT, { detail: { source, action: null } }));
+}
+
+export function useLastAction(source) {
+  const [action, setAction] = useState(() => lastActions.get(source) || null);
+  useEffect(() => {
+    setAction(lastActions.get(source) || null);
+    const receive = (event) => {
+      if (event.detail.source === source) setAction(event.detail.action);
+    };
+    window.addEventListener(LAST_EVENT, receive);
+    return () => window.removeEventListener(LAST_EVENT, receive);
+  }, [source]);
+  return action;
+}
+
 /** Valores iniciais dos parâmetros declarados por uma ferramenta. */
 export function defaultParams(tool) {
   return Object.fromEntries((tool?.params || []).map((param) => [param.key, param.default]));
@@ -52,7 +82,7 @@ export function describeParams(tool, values = {}) {
     .map((param) => {
       const value = values[param.key] ?? param.default;
       if (param.type === "toggle") return value ? param.label : null;
-      if (param.type === "select") return `${param.label}: ${param.options.find(([option]) => option === value)?.[1] ?? value}`;
+      if (param.type === "select" || param.type === "chips") return `${param.label}: ${param.options.find(([option]) => option === value)?.[1] ?? value}`;
       if (param.type === "multi") return `${param.label}: ${(value || []).length}`;
       return `${param.label} ${String(value).replace(".", ",")}${param.unit ? ` ${param.unit}` : ""}`;
     })

@@ -67,7 +67,7 @@ describe("formatação", () => {
     expect(sfx.params.find((param) => param.key === "cutSounds").options).toEqual([["s1", "Whoosh"], ["s2", "Pop (offline)"]]);
     expect(catalogue.tools.map((tool) => tool.id)).toContain("autoedit");
     expect(mmfilmCatalogue().tools).toHaveLength(catalogue.tools.length);
-    expect(mmfilmCatalogue({}).tools.find((tool) => tool.id === "sfx.auto").params[1].options).toEqual([]);
+    expect(mmfilmCatalogue({}).tools.find((tool) => tool.id === "sfx.auto").params.find((param) => param.key === "cutSounds").options).toEqual([]);
   });
 });
 
@@ -125,7 +125,9 @@ describe("silêncios", () => {
 
   it("limiar manual: sem trechos abaixo dele, nada é removido", async () => {
     const result = await runMMFilmTool("silence.remove", base(), { thresholdMode: "manual", threshold: -70 }, envWith({ voz: speechWithGap }));
-    expect(result).toEqual({ ok: true, count: 0, summary: "Nenhum silêncio encontrado (limiar -70,0 dB, manual). Tente aumentar a sensibilidade." });
+    expect(result).toMatchObject({ ok: true, count: 0, summary: "Nenhum silêncio encontrado (limiar -70,0 dB, manual). Tente aumentar a sensibilidade." });
+    expect(result.waveform.regions).toEqual([]);
+    expect(result.clips).toBeUndefined();
   });
 
   it("explica quando não há o que analisar", async () => {
@@ -167,7 +169,7 @@ describe("cortes nas pausas", () => {
   it("sem pausas não altera a timeline", async () => {
     const result = await runMMFilmTool("cuts.pauses", base(), {}, envWith({ voz: fakeBuffer([[4.4, LOUD]]) }));
     expect(result).toMatchObject({ ok: true, count: 0 });
-    expect(result.summary).toMatch(/^Nenhuma pausa encontrada/);
+    expect(result.summary).toBe("Nenhum ponto de corte encontrado nas pausas da fala.");
     expect(result.clips).toBeUndefined();
   });
 });
@@ -315,7 +317,7 @@ describe("ducking", () => {
     ]);
 
   it("cria a curva de volume nos clipes de música durante a voz", async () => {
-    const result = await runMMFilmTool("audio.duck", base(), { voiceTracks: ["A1", "A2"] }, envWith({ voz: speechWithGap }));
+    const result = await runMMFilmTool("audio.duck", base(), { autoDetect: false, voiceTracks: ["A1", "A2"] }, envWith({ voz: speechWithGap }));
     expect(result).toMatchObject({ ok: true, count: 2, summary: "Música abaixa -12,0 dB em 2 trecho(s) de voz · 1 clipe(s) de música" });
     expect(result.details).toEqual(["Voz 00:00,00 → 00:01,00", "Voz 00:02,00 → 00:03,00"]);
     const byId = Object.fromEntries(result.clips.map((item) => [item.id, item]));
@@ -326,12 +328,12 @@ describe("ducking", () => {
 
   it("sem música desbloqueada, sem faixas de voz ou sem voz", async () => {
     const locked = { ...base(), trackState: { A2: { locked: true } } };
-    expect((await runMMFilmTool("audio.duck", locked, {}, envWith({ voz: speechWithGap }))).summary).toBe(
+    expect((await runMMFilmTool("audio.duck", locked, { autoDetect: false }, envWith({ voz: speechWithGap }))).summary).toBe(
       "Nenhum clipe de música nas faixas escolhidas (desbloqueadas).",
     );
-    expect((await runMMFilmTool("audio.duck", base(), { musicTracks: null }, envWith({}))).ok).toBe(false);
-    expect((await runMMFilmTool("audio.duck", base(), { voiceTracks: null }, envWith({}))).summary).toMatch(/^Nenhum clipe com som/);
-    expect(await runMMFilmTool("audio.duck", base(), { thresholdMode: "manual", threshold: 0 }, envWith({ voz: speechWithGap }))).toEqual({
+    expect((await runMMFilmTool("audio.duck", base(), { autoDetect: false, musicTracks: null }, envWith({}))).ok).toBe(false);
+    expect((await runMMFilmTool("audio.duck", base(), { autoDetect: false, voiceTracks: null }, envWith({}))).summary).toMatch(/^Nenhum clipe com som/);
+    expect(await runMMFilmTool("audio.duck", base(), { autoDetect: false, thresholdMode: "manual", threshold: 0 }, envWith({ voz: speechWithGap }))).toEqual({
       ok: true,
       count: 0,
       summary: "Nenhum trecho de voz encontrado nas faixas de voz.",
@@ -435,14 +437,15 @@ describe("Auto Edit", () => {
     state([clip("voz", "A1", 0, 3), clip("cam", "V1", 0, 3, { url: "" }), ...extra], { markers: [2.5] });
 
   it("roda as etapas padrão em sequência, explica as puladas e vira uma só alteração", async () => {
-    const result = await runMMFilmTool("autoedit", timeline([clip("musica", "A2", 0, 3)]), {}, envWith({ voz: speechWithGap }));
+    const steps = { sync: false, fillers: false, cuts: false, captions: false, titles: false, normalize: true };
+    const result = await runMMFilmTool("autoedit", timeline([clip("musica", "A2", 0, 3)]), steps, envWith({ voz: speechWithGap, musica: fakeBuffer([[3, LOUD]]) }));
     expect(result.ok).toBe(true);
     expect(result.count).toBe(4);
     expect(result.summary).toBe("Auto Edit concluído em 4 etapa(s) · um único “Desfazer” volta tudo");
     expect(result.details[0]).toMatch(/^Remover silêncios: 1 silêncio\(s\)/);
-    expect(result.details[1]).toBe("Zoom automático: Nenhum take longo o bastante para o zoom (mínimo 1 s).");
-    expect(result.details[2]).toMatch(/^Normalizar voz: 2 clipe\(s\) nivelado\(s\)/);
-    expect(result.details[3]).toMatch(/^Ducking da música: Música abaixa/);
+    expect(result.details[1]).toBe("Auto Zoom: Nenhum take longo o bastante para o zoom (mínimo 1 s).");
+    expect(result.details[2]).toMatch(/^Auto Ducking: Música abaixa/);
+    expect(result.details[3]).toMatch(/^Normalizar áudio: \d clipe\(s\) nivelado\(s\)/);
     expect(result.markers.map((time) => Math.round(time * 100) / 100)).toEqual([1.77]);
     const music = result.clips.find((item) => item.id === "musica");
     expect(music.duration).toBe(3);
@@ -450,15 +453,19 @@ describe("Auto Edit", () => {
   });
 
   it("etapa sem condição é pulada com a explicação", async () => {
-    const result = await runMMFilmTool("autoedit", timeline(), { silences: false, zoom: false, normalize: false, cuts: true }, envWith({ voz: fakeBuffer([[3, LOUD]]) }));
-    expect(result.details).toEqual(["Cortar nas pausas: Nenhuma pausa encontrada (limiar -12,0 dB).", "Ducking da música: pulado — Nenhum clipe de música nas faixas escolhidas (desbloqueadas)."]);
+    const steps = { sync: false, silences: false, fillers: false, zoom: false, captions: false, titles: false, normalize: false, cuts: true };
+    const result = await runMMFilmTool("autoedit", timeline(), steps, envWith({ voz: fakeBuffer([[3, LOUD]]) }));
+    expect(result.details).toEqual([
+      "Detectar cortes: Nenhum ponto de corte encontrado nas pausas da fala.",
+      expect.stringMatching(/^Auto Ducking: pulado — Nenhuma trilha de voz detectada/),
+    ]);
     expect(result.summary).toBe("Auto Edit não alterou a timeline.");
     expect(result.clips).toBeUndefined();
     expect(result.markers).toBeUndefined();
   });
 
   it("sem etapas ligadas não há o que fazer", async () => {
-    const off = { silences: false, cuts: false, zoom: false, normalize: false, ducking: false, sfx: false };
+    const off = { sync: false, silences: false, fillers: false, cuts: false, multicam: false, zoom: false, captions: false, titles: false, ducking: false, normalize: false, sfx: false };
     expect(await runMMFilmTool("autoedit", timeline(), off, envWith({}))).toEqual({ ok: false, summary: "Ligue pelo menos uma etapa do Auto Edit." });
   });
 });
