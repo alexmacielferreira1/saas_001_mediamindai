@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MMPHOTO_TABS, autoContrast, autoLevels, grayWorld, mmphotoCatalogue, runMMPhotoTool } from "./mmphotoMcpTools";
+import { MMPHOTO_TABS, applyMaskResampled, autoContrast, autoLevels, grayWorld, mmphotoCatalogue, planVariants, removeFlatBackground, runMMPhotoTool } from "./mmphotoMcpTools";
 
 const layer = (id, extra = {}) => ({ id, name: id, kind: "▧", visible: true, locked: false, opacity: 100, blendMode: "normal", transform: { x: 0, y: 0, scale: 100, rotation: 0 }, ...extra });
 const state = (extra = {}) => ({
@@ -276,5 +276,106 @@ describe("documento · formato de redes sociais", () => {
     expect(run("doc.social", state(), { format: "9:16", anchor: "start" }).document.rect).toEqual({ x: 0, y: 0, w: 450, h: 800 });
     expect(run("doc.social", state(), { format: "3:1", anchor: "end" }).document.rect).toEqual({ x: 0, y: 400, w: 1200, h: 400 });
     expect(run("doc.social", state({ docSize: { w: 1600, h: 900 } }), { format: "16:9" })).toEqual({ ok: false, summary: "O documento já está no formato 16:9." });
+  });
+});
+
+// Imagem w×h com fundo (bg) e um quadrado central (fg) de lado `size`.
+function scene(w, h, bg, fg, size) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y += 1)
+    for (let x = 0; x < w; x += 1) {
+      const inside = Math.abs(x - (w - 1) / 2) < size / 2 && Math.abs(y - (h - 1) / 2) < size / 2;
+      data.set([...(inside ? fg : bg), 255], (y * w + x) * 4);
+    }
+  return data;
+}
+const alpha = (data) => [...data].filter((_, i) => i % 4 === 3);
+
+describe("remover fundo", () => {
+  it("fundo liso: apaga a cor da borda conectada e mantém o objeto", () => {
+    const data = scene(10, 10, [250, 250, 250], [200, 20, 20], 4);
+    expect(removeFlatBackground(data, 10, 10, 30, 0)).toBe(84);
+    const a = alpha(data);
+    expect(a[0]).toBe(0);
+    expect(a[55]).toBe(255);
+  });
+
+  it("fundo liso: contorno suave em tons intermediários e não atravessa o objeto", () => {
+    // Linha: fundo branco, pixel de transição, objeto escuro, fundo branco do outro lado do objeto (ilha fechada).
+    const data = new Uint8ClampedArray([255, 255, 255, 255, 240, 240, 240, 255, 0, 0, 0, 255, 255, 255, 255, 255]);
+    expect(removeFlatBackground(data, 4, 1, 20, 1)).toBe(2);
+    expect(alpha(data)).toEqual([0, 76, 255, 0]);
+    const hollow = scene(5, 5, [255, 255, 255], [0, 0, 0], 3);
+    hollow.set([255, 255, 255, 255], 12 * 4);
+    removeFlatBackground(hollow, 5, 5, 10, 0);
+    expect(alpha(hollow)[12]).toBe(255);
+  });
+
+  it("fundo liso: borda transparente ou cor diferente não apaga nada", () => {
+    expect(removeFlatBackground(new Uint8ClampedArray(4 * 4), 2, 2)).toBe(0);
+    const mixed = new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 128, 0, 0, 0]);
+    expect(removeFlatBackground(mixed, 2, 2, 10)).toBe(2);
+  });
+
+  it("aplica máscara de outro tamanho ao alfa (vizinho mais próximo)", () => {
+    const data = new Uint8ClampedArray(4 * 4).fill(255);
+    applyMaskResampled(data, 4, 1, { width: 2, height: 1, values: new Float32Array([0, 1]) });
+    expect(alpha(data)).toEqual([0, 0, 255, 255]);
+    const half = new Uint8ClampedArray([9, 9, 9, 200]);
+    expect(alpha(applyMaskResampled(half, 1, 1, { width: 1, height: 1, values: [0.5] }))).toEqual([100]);
+  });
+
+  it("ferramentas de fundo planejam na camada ativa e explicam quando não dá", () => {
+    const person = run("bg.person", state());
+    expect(person).toMatchObject({ ok: true, segmentPerson: true, summary: 'Remover fundo (pessoa, IA local) em "Pessoa" · camada inteira' });
+    expect(person.pixels).toBeUndefined();
+    expect(run("bg.person", state({ activeLayer: "adjust" })).ok).toBe(false);
+
+    const flat = run("bg.flat", state());
+    expect(flat.summary).toBe('Remover fundo liso (tolerância 40) em "Pessoa" · camada inteira');
+    const photo = scene(20, 20, [255, 255, 255], [10, 120, 10], 8);
+    flat.pixels(photo, 20, 20);
+    expect(alpha(photo)[0]).toBe(0);
+    // Textura sem cor de fundo única: cada pixel muda bastante do vizinho.
+    const noisy = new Uint8ClampedArray(40 * 40 * 4).map((_, i) => (i % 4 === 3 ? 255 : ((i >> 2) * 37) % 256));
+    expect(() => run("bg.flat", state(), { tolerance: 5 }).pixels(noisy, 40, 40)).toThrow(/não achei um fundo/);
+    expect(() => flat.pixels(scene(4, 4, [255, 255, 255], [255, 255, 255], 2), 4, 4)).toThrow(/imagem inteira parece ser fundo/);
+  });
+});
+
+describe("exportar variações", () => {
+  it("planeja recortes por formato, reduzindo até a largura máxima (nunca amplia)", () => {
+    const files = planVariants({ w: 2000, h: 1000 }, { variants: ["original", "1:1", "9:16"], format: "jpg", maxWidth: 1080, anchor: "start" });
+    expect(files).toEqual([
+      { name: "original-1080x540.jpg", rect: { x: 0, y: 0, w: 2000, h: 1000 }, width: 1080, height: 540 },
+      { name: "1x1-1000x1000.jpg", rect: { x: 0, y: 0, w: 1000, h: 1000 }, width: 1000, height: 1000 },
+      { name: "9x16-562x999.jpg", rect: { x: 0, y: 0, w: 562, h: 999 }, width: 562, height: 999 },
+    ]);
+    expect(planVariants({ w: 100, h: 100 }, { variants: ["16:9"], format: "png", maxWidth: 400 })[0]).toMatchObject({ name: "16x9-100x56.png", rect: { x: 0, y: 22 } });
+  });
+
+  it("ferramenta lista os arquivos e exige ao menos uma variação", () => {
+    const result = run("doc.export", state());
+    expect(result).toMatchObject({ ok: true, count: 4, summary: "4 variação(ões) em JPG num arquivo .zip", exportZip: { format: "jpg" } });
+    expect(result.details[0]).toBe("original-1080x720.jpg");
+    expect(run("doc.export", state(), { variants: [] })).toEqual({ ok: false, summary: "Escolha ao menos uma variação para exportar." });
+    expect(run("doc.export", state(), { variants: undefined }).ok).toBe(false);
+  });
+});
+
+describe("recortar objeto (IA por ponto)", () => {
+  it("usa o centro da seleção ou o ponto dos controles e explica o que vai manter", () => {
+    const selection = { type: "rect", rect: { x: 300, y: 200, w: 600, h: 400 } };
+    expect(run("bg.object", state({ selection }))).toMatchObject({
+      ok: true,
+      label: "Recortar objeto",
+      summary: 'Recortar objeto (fundo transparente) em "Pessoa" · IA local · centro da seleção',
+      segmentObject: { x: 0.5, y: 0.5, keepObject: true },
+    });
+    const manual = run("bg.object", state({ selection }), { useSelection: false, x: 25, y: 100, keep: "background" });
+    expect(manual).toMatchObject({ label: "Apagar objeto", summary: 'Apagar objeto em "Pessoa" · IA local · ponto 25% × 100%', segmentObject: { x: 0.25, y: 0.999, keepObject: false } });
+    expect(run("bg.object", state()).segmentObject).toEqual({ x: 0.5, y: 0.5, keepObject: true });
+    expect(run("bg.object", state(), { x: -5 }).segmentObject.x).toBe(0);
+    expect(run("bg.object", state({ activeLayer: "adjust" })).ok).toBe(false);
   });
 });

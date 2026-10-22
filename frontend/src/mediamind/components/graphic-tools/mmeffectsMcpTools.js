@@ -4,6 +4,8 @@
 // Condições não atendidas viram { ok: false, summary } com a explicação; nada é simulado.
 import {
   ArrowDownToLine,
+  Keyboard,
+  TextCursorInput,
   ArrowRightFromLine,
   ListOrdered,
   Minimize2,
@@ -32,6 +34,7 @@ import {
 
 export const MMEFFECTS_TABS = [
   { id: "animacao", label: "Animação" },
+  { id: "texto", label: "Texto" },
   { id: "efeitos", label: "Efeitos" },
   { id: "camada", label: "Camada" },
   { id: "marcadores", label: "Marcadores" },
@@ -186,6 +189,37 @@ function clearAnimation(state) {
   const next = { ...layerFrames };
   TRANSFORM_PROPERTIES.forEach((property) => delete next[property]);
   return { ok: true, count, summary: `${count} quadro(s)-chave removido(s) de "${layer.name}"`, patch: { propertyKeyframes: { ...state.propertyKeyframes, [layer.id]: next } } };
+}
+
+// ---------- texto (animação por letra/palavra, lida por textAt no visualizador e na exportação) ----------
+function typewriter(mode) {
+  return (state, params) => {
+    const layer = editableOf(state);
+    const [start, end] = layerSpan(layer);
+    const text = layer.text ?? "MMEffect";
+    const units = mode === "words" ? (text.match(/\S+\s*/g) || []).length : [...text].length;
+    if (!units) throw new ToolError(`A camada "${layer.name}" não tem texto para animar.`);
+    const duration = round(Math.min(end - start, params.speed === "fixed" ? params.duration : units / params.rate));
+    return {
+      ok: true,
+      count: units,
+      summary: `${mode === "words" ? "Palavra por palavra" : "Máquina de escrever"} em "${layer.name}": ${units} ${mode === "words" ? "palavra(s)" : "letra(s)"} em ${secondsText(duration)} (a partir de ${secondsText(start)})`,
+      patch: {
+        layers: state.layers.map((item) => (item.id === layer.id ? { ...item, textAnimation: { mode, start, duration, cursor: Boolean(params.cursor) } } : item)),
+      },
+    };
+  };
+}
+
+function clearText(state) {
+  const layer = editableOf(state);
+  if (!layer.textAnimation) return { ok: false, summary: `"${layer.name}" não tem animação de texto.` };
+  return {
+    ok: true,
+    count: 1,
+    summary: `Animação de texto removida de "${layer.name}" (o texto aparece inteiro)`,
+    patch: { layers: state.layers.map((item) => (item.id === layer.id ? { ...item, textAnimation: null } : item)) },
+  };
 }
 
 // ---------- efeitos (filtros reais no visualizador e na exportação) ----------
@@ -432,6 +466,34 @@ export function mmeffectsCatalogue() {
       run: easing,
     },
     { id: "anim.clear", tab: "animacao", label: "Limpar animação", icon: Eraser, description: "Remove os quadros-chave de transformação da camada selecionada.", params: [], run: clearAnimation },
+    ...[
+      ["text.typewriter", "letters", "Máquina de escrever", Keyboard, "O texto da camada aparece letra por letra, como digitado.", 20, "letras/s"],
+      ["text.words", "words", "Palavra por palavra", TextCursorInput, "O texto aparece uma palavra de cada vez (bom para legendas e frases de impacto).", 3, "palavras/s"],
+    ].map(([id, mode, label, icon, description, rate, unit]) => ({
+      id,
+      tab: "texto",
+      label,
+      icon,
+      description,
+      how: "Grava a animação na camada selecionada (início = começo da camada). O visualizador e a exportação mostram só o trecho já digitado em cada instante.",
+      params: [
+        {
+          key: "speed",
+          label: "Tempo",
+          type: "select",
+          default: "rate",
+          options: [
+            ["rate", "Pela velocidade"],
+            ["fixed", "Duração fixa"],
+          ],
+        },
+        { key: "rate", label: "Velocidade", type: "range", min: 1, max: mode === "words" ? 10 : 60, step: 1, default: rate, unit },
+        duration(2),
+        { key: "cursor", label: "Cursor piscando", type: "toggle", default: mode === "letters" },
+      ],
+      run: typewriter(mode),
+    })),
+    { id: "text.clear", tab: "texto", label: "Texto inteiro", icon: Eraser, description: "Remove a animação de texto: a camada volta a mostrar o texto inteiro.", params: [], run: clearText },
     {
       id: "fx.blur",
       tab: "efeitos",

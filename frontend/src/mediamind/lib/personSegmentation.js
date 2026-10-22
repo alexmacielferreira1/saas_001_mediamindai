@@ -31,6 +31,31 @@ export function applyPersonMask(pixels, mask) {
     );
   return pixels;
 }
+/**
+ * Máscara de pessoa (probabilidade 0–1 por pixel) de uma imagem já desenhada num canvas.
+ * Usa o mesmo modelo local e a mesma fila de removePersonBackground.
+ */
+export function segmentPersonCanvas(canvas) {
+  const run = async () => {
+    try {
+      const model = await getSegmenter();
+      let found;
+      model.segment(canvas, (result) => {
+        const masks = result.confidenceMasks || [];
+        const mask = masks[masks.length === 1 ? 0 : 1];
+        if (mask) found = { values: Float32Array.from(mask.getAsFloat32Array()), width: mask.width, height: mask.height };
+      });
+      if (!found) throw new Error("Não foi possível identificar a pessoa.");
+      return found;
+    } catch (error) {
+      throw new Error(`Não foi possível remover o fundo. ${error.message || "Verifique sua conexão e tente novamente."}`);
+    }
+  };
+  const result = queue.then(run, run);
+  queue = result.catch(() => {});
+  return result;
+}
+
 export async function removePersonBackground(file) {
   const run = async () => {
     const url = URL.createObjectURL(file);

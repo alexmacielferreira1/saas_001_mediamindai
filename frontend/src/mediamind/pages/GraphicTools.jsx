@@ -303,6 +303,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "lightcraft" ? (
         <LightCraftWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -310,6 +311,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
         />
       ) : id === "pdfcraft" ? (
         <PdfCraftWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -324,11 +326,12 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
           onOpenFiles={openFiles}
         />
       ) : id === "figcraft" ? (
-        <FigCraftWorkspace />
+        <FigCraftWorkspace active={active === id} />
       ) : id === "threecraft" ? (
-        <ThreeDCraftWorkspace />
+        <ThreeDCraftWorkspace active={active === id} />
       ) : id === "craft-libs" ? (
         <CraftLibraryWorkspace
+          active={active === id}
           assets={assets}
           selected={selected}
           onSelect={setSelected}
@@ -337,7 +340,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
       ) : id === "mmsom" ? (
         <SoundCraft active={active === id} />
       ) : ["word", "excel", "powerpoint"].includes(id) ? (
-        <OfficeCraft initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} />
+        <OfficeCraft active={active === id} initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} />
       ) : (
         <FilmCraftWorkspace />
       )}

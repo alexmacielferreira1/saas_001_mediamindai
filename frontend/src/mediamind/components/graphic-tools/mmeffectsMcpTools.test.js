@@ -228,3 +228,27 @@ describe("saídas, suavização e sequência", () => {
     expect(run("layer.sequence", state())).toEqual({ ok: false, summary: "Precisa de duas ou mais camadas visíveis e desbloqueadas para sequenciar." });
   });
 });
+
+describe("texto animado", () => {
+  it("máquina de escrever pela velocidade ou duração fixa, limitada à camada", () => {
+    const current = state({ layers: [layer("titulo", { name: "Título", text: "Oi gente", start: 2, duration: 4 })] });
+    const typing = run("text.typewriter", current);
+    expect(typing.summary).toBe('Máquina de escrever em "Título": 8 letra(s) em 0,4 s (a partir de 2 s)');
+    expect(typing.patch.layers[0].textAnimation).toEqual({ mode: "letters", start: 2, duration: 0.4, cursor: true });
+    expect(run("text.typewriter", current, { speed: "fixed", duration: 3 }).patch.layers[0].textAnimation.duration).toBe(3);
+    expect(run("text.typewriter", current, { speed: "fixed", duration: 30 }).patch.layers[0].textAnimation.duration).toBe(4);
+    const words = run("text.words", current);
+    expect(words.summary).toBe('Palavra por palavra em "Título": 2 palavra(s) em 0,67 s (a partir de 2 s)');
+    expect(words.patch.layers[0].textAnimation).toMatchObject({ mode: "words", cursor: false });
+    expect(run("text.words", state()).count).toBe(1);
+    expect(run("text.words", state({ layers: [layer("titulo", { text: "   " })] })).summary).toMatch(/não tem texto/);
+    expect(run("text.typewriter", state({ layers: [layer("titulo", { text: "" })] })).ok).toBe(false);
+  });
+
+  it("volta a mostrar o texto inteiro", () => {
+    const animated = state({ layers: [layer("titulo", { name: "Título", textAnimation: { mode: "letters" } }), layer("outra")] });
+    expect(run("text.clear", animated).patch.layers[0].textAnimation).toBeNull();
+    expect(run("text.clear", animated).patch.layers[1]).toBe(animated.layers[1]);
+    expect(run("text.clear", state())).toEqual({ ok: false, summary: '"Título" não tem animação de texto.' });
+  });
+});

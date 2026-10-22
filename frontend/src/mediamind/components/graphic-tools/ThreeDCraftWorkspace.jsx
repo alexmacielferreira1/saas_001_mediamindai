@@ -1,5 +1,7 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { interpolate, mm3dCatalogue, runMM3DTool } from "./mm3dMcpTools";
 import { Box, Camera, Circle, Copy, Cuboid, Eye, EyeOff, Grid3X3, Move3D, Play, Rotate3D, Scale3D, Square, Sun, Trash2, Video } from "lucide-react";
 
 const seed = [
@@ -10,18 +12,7 @@ const seed = [
 
 const objectIcons = { camera: Camera, cube: Cuboid, sphere: Circle, plane: Square, light: Sun };
 
-function interpolate(frames, time, fallback) {
-  if (!frames?.length) return fallback;
-  const ordered = [...frames].sort((a, b) => a.time - b.time);
-  if (time <= ordered[0].time) return ordered[0].value;
-  if (time >= ordered.at(-1).time) return ordered.at(-1).value;
-  const rightIndex = ordered.findIndex((frame) => frame.time >= time);
-  const left = ordered[rightIndex - 1];
-  const right = ordered[rightIndex];
-  return left.value + ((right.value - left.value) * (time - left.time)) / (right.time - left.time);
-}
-
-export default function ThreeDCraftWorkspace() {
+export default function ThreeDCraftWorkspace({ active = true }) {
   const [objects, setObjects] = useGraphicDraftState("ThreeDCraftWorkspace.jsx:objects", seed);
   const [selectedId, setSelectedId] = useGraphicDraftState("ThreeDCraftWorkspace.jsx:selectedId", "cube");
   const [tool, setTool] = useGraphicDraftState("ThreeDCraftWorkspace.jsx:tool", "move");
@@ -109,11 +100,64 @@ export default function ThreeDCraftWorkspace() {
     setTime((value) => value >= 10 ? 0 : Math.min(10, value + 1));
   }
 
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre a cena atual
+  // e gravam pelos mesmos estados do editor. O MM3D não tem desfazer próprio: o MCP guarda a cena
+  // anterior a cada aplicação e só desfaz se ninguém mexeu na cena depois.
+  const [notice, setNotice] = useState("");
+  const sceneRef = useRef(null);
+  sceneRef.current = { objects, selectedId, keyframes, world, time };
+  const settersRef = useRef(null);
+  settersRef.current = { objects: setObjects, selectedId: setSelectedId, keyframes: setKeyframes, world: setWorld };
+  const mcpHistory = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const FIELDS = ["objects", "selectedId", "keyframes", "world"];
+    const strip = ({ objects: _o, selectedId: _s, keyframes: _k, world: _w, ...result }) => result;
+    const snapshot = (scene) => Object.fromEntries(FIELDS.map((field) => [field, scene[field]]));
+    const write = (scene) => {
+      sceneRef.current = { ...sceneRef.current, ...scene };
+      for (const field of FIELDS) if (field in scene) settersRef.current[field](scene[field]);
+    };
+    return registerMCPActions({
+      source: "mm3d",
+      label: "MM3D",
+      catalogue: mm3dCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMM3DTool(toolId, sceneRef.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runMM3DTool(toolId, sceneRef.current, params);
+        if (result.ok) {
+          const before = snapshot(sceneRef.current);
+          write(Object.fromEntries(FIELDS.filter((field) => field in result).map((field) => [field, result[field]])));
+          mcpHistory.current.push({ before, after: snapshot(sceneRef.current) });
+          setNotice(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = mcpHistory.current.at(-1);
+        if (!last) return false;
+        if (["objects", "keyframes", "world"].some((field) => sceneRef.current[field] !== last.after[field])) {
+          mcpHistory.current = [];
+          setNotice("A cena mudou depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        mcpHistory.current.pop();
+        write(last.before);
+        setNotice("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => mcpHistory.current.length > 0,
+    });
+  }, [active]);
+
   return (
     <div className="overflow-hidden border border-[#333] bg-[#181818] text-[12px] text-[#c8c8c8]" aria-label="Editor MM3D">
       <div className="flex h-10 items-center justify-between border-b border-[#343434] bg-[#202020] px-3">
         <div className="flex items-center gap-5"><h2 className="text-sm font-semibold text-white">MM3D</h2><span>Arquivo</span><span>Outliner</span><span>Atalhos</span></div>
-        <div className="flex items-center gap-2"><button disabled title="Ainda não disponível" className="rounded bg-[#303030] px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50">Construir</button><button disabled title="Ainda não disponível" className="rounded bg-red-600 px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50"><Video size={13} className="mr-1 inline" />Gravar</button></div>
+        <div className="flex items-center gap-2">{notice && <span role="status" className="max-w-[360px] truncate text-[11px] text-sky-300">{notice}</span>}<button disabled title="Ainda não disponível" className="rounded bg-[#303030] px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50">Construir</button><button disabled title="Ainda não disponível" className="rounded bg-red-600 px-3 py-1 text-white disabled:cursor-not-allowed disabled:opacity-50"><Video size={13} className="mr-1 inline" />Gravar</button></div>
       </div>
       <div className="grid min-h-[650px] grid-cols-[52px_220px_minmax(0,1fr)_250px]">
         <aside className="border-r border-[#343434] bg-[#202020] py-2" aria-label="Ferramentas 3D">

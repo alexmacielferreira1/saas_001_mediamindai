@@ -170,3 +170,16 @@ describe("UniversalCopilot · ferramentas locais em ícones", () => {
     expect(screen.queryByText("Projeto e destino")).toBeNull();
   });
 });
+describe("UniversalCopilot · rótulo do app aberto", () => {
+  beforeEach(() => {
+    localStorage.setItem("mm_copilot_open", "1");
+    listMCPTools.mockResolvedValue({ tools: [] });
+  });
+  afterEach(() => vi.clearAllMocks());
+
+  it("mostra o MMFig (não o MMFilm) quando a ferramenta aberta é o figcraft", async () => {
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=figcraft"]}><UniversalCopilot /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: /MCP · MMFig · Interfaces/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /MCP · MMFilm/ })).toBeNull();
+  });
+});

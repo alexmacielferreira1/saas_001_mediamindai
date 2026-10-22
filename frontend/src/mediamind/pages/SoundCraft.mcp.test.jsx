@@ -8,10 +8,10 @@ beforeEach(() => localStorage.clear());
 const pan = (name) => screen.getByLabelText(`Pan ${name}`);
 
 describe("MMSom · ferramentas de um clique do MCP", () => {
-  it("registra só com a Mesa integrada aberta e a aba ativa; aplica e desfaz", async () => {
+  it("registra com a aba ativa (também no MMSOM completo), aplica abrindo a mesa e desfaz", async () => {
     const { rerender } = render(<SoundCraft active />);
-    expect(currentMCPActions()).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "Mesa integrada" }));
+    // O "MMSOM completo" (iframe) abre por padrão: a grade já aparece e aplicar mostra a Mesa integrada.
+    expect(screen.getByRole("tab", { name: "MMSOM completo" })).toHaveAttribute("aria-selected", "true");
     const provider = currentMCPActions();
     expect(provider).toMatchObject({ source: "mmsom", label: "MMSom" });
     expect(provider.catalogue().tools.find((tool) => tool.id === "inserts.voice").params[0].default).toEqual(["1"]);
@@ -24,7 +24,9 @@ describe("MMSom · ferramentas de um clique do MCP", () => {
     expect(pan("Voz principal")).toHaveValue("0");
     expect(await act(() => provider.analyze("mix.center", {}))).toEqual({ ok: false, summary: "Todas as faixas já estão no centro." });
 
+    expect(screen.getByRole("tab", { name: "MMSOM completo" })).toHaveAttribute("aria-selected", "true");
     const result = await act(() => provider.apply("mix.spread", { width: 60 }));
+    expect(screen.getByRole("tab", { name: "Mesa integrada" })).toHaveAttribute("aria-selected", "true");
     expect(result).toEqual({ ok: true, count: 2, summary: "Estéreo aberto de -60 a 60 (2 faixas)" });
     expect(pan("Voz principal")).toHaveValue("-60");
     expect(pan("Trilha musical")).toHaveValue("60");

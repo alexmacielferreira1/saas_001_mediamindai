@@ -85,3 +85,36 @@ describe('local background removal pipeline', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:source');
   });
 });
+
+describe("segmentPersonCanvas", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    adapter.resolve.mockReset().mockResolvedValue({});
+  });
+
+  it("devolve a máscara de pessoa do canvas (cópia dos valores do modelo)", async () => {
+    const values = new Float32Array([0.1, 0.9]);
+    adapter.create.mockReset().mockResolvedValue({ segment: vi.fn((_image, callback) => callback({ confidenceMasks: [{ width: 2, height: 1, getAsFloat32Array: () => values }] })) });
+    const { segmentPersonCanvas } = await import("./personSegmentation");
+    const result = await segmentPersonCanvas(document.createElement("canvas"));
+    expect(result.width).toBe(2);
+    expect([...result.values]).toEqual([...values]);
+    expect(result.values).not.toBe(values);
+  });
+
+  it("usa a segunda máscara quando o modelo devolve categorias e explica falhas", async () => {
+    adapter.create.mockReset().mockResolvedValue({ segment: vi.fn((_image, callback) => callback({ confidenceMasks: [{ width: 1, height: 1, getAsFloat32Array: () => new Float32Array([0]) }, { width: 1, height: 1, getAsFloat32Array: () => new Float32Array([1]) }] })) });
+    let mod = await import("./personSegmentation");
+    expect([...(await mod.segmentPersonCanvas(document.createElement("canvas"))).values]).toEqual([1]);
+
+    vi.resetModules();
+    adapter.create.mockReset().mockResolvedValue({ segment: vi.fn((_image, callback) => callback({})) });
+    mod = await import("./personSegmentation");
+    await expect(mod.segmentPersonCanvas(document.createElement("canvas"))).rejects.toThrow("Não foi possível remover o fundo. Não foi possível identificar a pessoa.");
+
+    vi.resetModules();
+    adapter.create.mockReset().mockRejectedValue({});
+    mod = await import("./personSegmentation");
+    await expect(mod.segmentPersonCanvas(document.createElement("canvas"))).rejects.toThrow("Verifique sua conexão");
+  });
+});

@@ -40,6 +40,8 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
+import { registerMCPActions } from "../../lib/mcpActions";
+import { mmfigCatalogue, runMMFigTool } from "./mmfigMcpTools";
 
 /* ------------------------------------------------------------------ */
 /* Modelo do documento                                                 */
@@ -73,7 +75,7 @@ export const FRAME_PRESETS = [
   { id: "android", label: "Android", w: 360, h: 800 },
 ];
 
-const FONTS = ["Inter", "Roboto", "Arial", "Georgia", "Courier New"];
+export const FONTS = ["Inter", "Roboto", "Arial", "Georgia", "Courier New"];
 const TYPE_LABEL = {
   frame: "Frame",
   rect: "Retângulo",
@@ -270,7 +272,7 @@ export function absBounds(doc, id) {
   const n = doc.nodes[id];
   return boundsOf(absMatrix(doc, id), n.w, n.h);
 }
-function unionBounds(list) {
+export function unionBounds(list) {
   if (!list.length) return { x: 0, y: 0, w: 0, h: 0 };
   const x = Math.min(...list.map((b) => b.x));
   const y = Math.min(...list.map((b) => b.y));
@@ -282,7 +284,7 @@ const intersects = (a, b) => a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y 
 function worldToLocal(doc, id, p) {
   return apply(invert(absMatrix(doc, id)), p.x, p.y);
 }
-function moveByWorld(doc, id, dx, dy) {
+export function moveByWorld(doc, id, dx, dy) {
   const n = doc.nodes[id];
   const inv = invert(parentMatrix(doc, id));
   n.x = round2(n.x + inv[0] * dx + inv[2] * dy);
@@ -300,7 +302,7 @@ export function pageOfNode(doc, id) {
   if (!n) return null;
   return doc.pages.find((p) => doc.roots[p.id]?.includes(n.id))?.id || null;
 }
-function descendants(doc, id, out = []) {
+export function descendants(doc, id, out = []) {
   (doc.nodes[id]?.children || []).forEach((childId) => {
     out.push(childId);
     descendants(doc, childId, out);
@@ -315,7 +317,7 @@ function isAncestor(doc, ancestorId, id) {
   }
   return false;
 }
-function containerList(doc, pageId, parentId) {
+export function containerList(doc, pageId, parentId) {
   return parentId ? doc.nodes[parentId].children : doc.roots[pageId];
 }
 function removeFromParent(doc, id) {
@@ -328,7 +330,7 @@ function removeFromParent(doc, id) {
   if (index >= 0) list.splice(index, 1);
   return index;
 }
-function insertInto(doc, pageId, parentId, id, index) {
+export function insertInto(doc, pageId, parentId, id, index) {
   const list = containerList(doc, pageId, parentId);
   list.splice(index == null || index < 0 ? list.length : Math.min(index, list.length), 0, id);
   doc.nodes[id].parentId = parentId || null;
@@ -341,7 +343,7 @@ function reparentKeep(doc, pageId, id, newParentId, index) {
   Object.assign(n, decompose(mul(invert(pm), m), n.w, n.h));
   insertInto(doc, pageId, newParentId, id, index);
 }
-function orderIndex(doc, pageId) {
+export function orderIndex(doc, pageId) {
   const order = new Map();
   let i = 0;
   const visit = (ids) =>
@@ -353,14 +355,14 @@ function orderIndex(doc, pageId) {
   visit(doc.roots[pageId] || []);
   return order;
 }
-function topLevel(doc, pageId, ids) {
+export function topLevel(doc, pageId, ids) {
   const set = new Set(ids);
   const order = orderIndex(doc, pageId);
   return ids
     .filter((id) => doc.nodes[id] && !ids.some((other) => other !== id && set.has(other) && isAncestor(doc, other, id)))
     .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
-function nextName(doc, type, label = TYPE_LABEL[type]) {
+export function nextName(doc, type, label = TYPE_LABEL[type]) {
   const count = Object.values(doc.nodes).filter((n) => n.type === type).length;
   return `${label} ${count + 1}`;
 }
@@ -603,7 +605,7 @@ export function normalize(doc) {
 }
 
 /* Operações estruturais */
-function cloneSubtree(src, id, out, asInstance, map = {}) {
+export function cloneSubtree(src, id, out, asInstance, map = {}) {
   const s = src.nodes[id];
   if (asInstance && s.type === "frame" && s.isComponent) {
     const inst = baseNode("instance", {
@@ -732,7 +734,7 @@ export function ungroup(doc, pageId, id) {
   delete doc.nodes[id];
   return kids;
 }
-function sortFlow(doc, f) {
+export function sortFlow(doc, f) {
   const horizontal = f.autoLayout.direction !== "vertical";
   f.children.sort((a, b) => (horizontal ? doc.nodes[a].x - doc.nodes[b].x : doc.nodes[a].y - doc.nodes[b].y));
 }
@@ -1121,6 +1123,19 @@ function downloadBlob(blob, filename) {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
+/** Gera e baixa PNG/SVG das camadas; devolve o resultado real (o nome do arquivo ou a falha). */
+async function exportToFile(d, targets, name, opts) {
+  try {
+    const { markup, width, height } = exportSvgMarkup(d, targets);
+    const scale = opts.format === "png" ? opts.scale : 1;
+    const blob = opts.format === "svg" ? new Blob([markup], { type: "image/svg+xml" }) : await svgToPng(markup, width, height, scale);
+    const file = `${slug(name)}${scale !== 1 ? `@${scale}x` : ""}.${opts.format}`;
+    downloadBlob(blob, file);
+    return { ok: true, summary: `Arquivo ${file} gerado (${Math.round(width * scale)}×${Math.round(height * scale)} px).` };
+  } catch (error) {
+    return { ok: false, summary: `Falha ao exportar: ${error.message}` };
+  }
+}
 const slug = (s) =>
   String(s || "mmfig")
     .normalize("NFD")
@@ -1391,7 +1406,7 @@ function Presentation({ doc, pageId, startId, onClose }) {
   );
 }
 
-export default function FigCraftWorkspace() {
+export default function FigCraftWorkspace({ active = true } = {}) {
   const [doc, setDoc] = useGraphicDraftState(`${KEY}:doc`, createDocument);
   const [storedPage, setStoredPage] = useGraphicDraftState(`${KEY}:page`, null);
   const [view, setViewState] = useGraphicDraftState(`${KEY}:view`, { zoom: 0.5, x: 80, y: 80 });
@@ -2282,16 +2297,7 @@ export default function FigCraftWorkspace() {
       setStatus("Nada para exportar nesta página.");
       return;
     }
-    try {
-      const { markup, width, height } = exportSvgMarkup(d, targets);
-      const scale = opts.format === "png" ? opts.scale : 1;
-      const blob = opts.format === "svg" ? new Blob([markup], { type: "image/svg+xml" }) : await svgToPng(markup, width, height, scale);
-      const file = `${slug(name)}${scale !== 1 ? `@${scale}x` : ""}.${opts.format}`;
-      downloadBlob(blob, file);
-      setStatus(`Arquivo ${file} gerado (${Math.round(width * scale)}×${Math.round(height * scale)} px).`);
-    } catch (error) {
-      setStatus(`Falha ao exportar: ${error.message}`);
-    }
+    setStatus((await exportToFile(d, targets, name, opts)).summary);
   }
   function downloadProject() {
     const payload = JSON.stringify({ schema: SCHEMA, exportedAt: new Date().toISOString(), document: docRef.current }, null, 2);
@@ -2505,6 +2511,65 @@ export default function FigCraftWorkspace() {
     if (tool === "pen" && id !== "pen" && pen) finishPen(false);
     setTool(id);
   }
+
+  /* MCP: ferramentas de um clique (grade de ícones no Copiloto). Planejam sobre o documento atual e gravam
+     pelo histórico do MMFig (Ctrl+Z). Refs porque a fila executa várias ações antes do React redesenhar. */
+  const mcpState = useRef(null);
+  mcpState.current = { pageId };
+  const mcpActions = useRef(null);
+  mcpActions.current = { pushHistory, undo, setDoc, setSel, setStatus };
+  const mcpHistory = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const current = () => {
+      const d = docRef.current;
+      const wanted = mcpState.current.pageId;
+      return { doc: d, pageId: d.pages.some((p) => p.id === wanted) ? wanted : d.pages[0].id, selection: selRef.current };
+    };
+    const strip = ({ doc: _doc, selection: _selection, exportJob: _exportJob, ...result }) => result;
+    return registerMCPActions({
+      source: "mmfig",
+      label: "MMFig",
+      catalogue: () => mmfigCatalogue(current()),
+      analyze: async (toolId, params) => {
+        const result = runMMFigTool(toolId, current(), params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const state = current();
+        const result = runMMFigTool(toolId, state, params);
+        const actions = mcpActions.current;
+        if (!result.ok) return strip(result);
+        if (result.exportJob) {
+          const { ids, name, ...opts } = result.exportJob;
+          const outcome = await exportToFile(state.doc, ids, name, opts);
+          actions.setStatus(outcome.ok ? `MCP · ${outcome.summary}` : outcome.summary);
+          return { ...outcome, count: ids.length };
+        }
+        actions.pushHistory(state.doc);
+        docRef.current = result.doc;
+        actions.setDoc(result.doc);
+        if (result.selection) actions.setSel(result.selection);
+        mcpHistory.current.push(result.doc);
+        actions.setStatus(`MCP · ${result.summary}`);
+        return strip(result);
+      },
+      undo: () => {
+        const last = mcpHistory.current.at(-1);
+        if (!last) return false;
+        if (docRef.current !== last) {
+          mcpHistory.current = [];
+          mcpActions.current.setStatus("O projeto mudou depois da ação do MCP: desfazer cancelado para não perder suas alterações (use Ctrl+Z no MMFig).");
+          return false;
+        }
+        mcpHistory.current.pop();
+        mcpActions.current.undo();
+        mcpActions.current.setStatus("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => mcpHistory.current.length > 0,
+    });
+  }, [active]);
 
   /* Menus */
   const hst = historyRef.current;
