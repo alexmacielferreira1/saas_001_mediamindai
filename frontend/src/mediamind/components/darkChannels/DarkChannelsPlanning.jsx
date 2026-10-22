@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { ExternalLink, Network, Plus, Save, Tag } from "lucide-react";
-import { createDarkChannel, getDarkStructure, listDarkChannels, updateDarkChannel } from "../../api/darkChannels";
-import { useEmpresa } from "../lib/empresaContext";
-import DarkStructureDialog from "../components/darkChannels/DarkStructureDialog";
-import DarkDecisions, { isDecided } from "../components/darkChannels/DarkDecisions";
-import DarkStructureEditor from "../components/darkChannels/DarkStructureEditor";
+import { useEffect, useState } from "react";
+import { Plus, Save, Tag } from "lucide-react";
+import { createDarkChannel, updateDarkChannel } from "../../../api/darkChannels";
+import { isDecided } from "./DarkDecisions";
 
 const input = "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500";
 const panel = "rounded-xl border border-slate-800 bg-slate-950/60 p-4";
 const label = "block text-xs text-slate-300";
 const CUSTOM_OPTION = "__custom__";
-const ALL = "all";
+export const ALL = "all";
 const DEFAULT_LANGUAGE = "pt-BR";
 const EXTERNAL_ID_PATTERN = "[a-z0-9][a-z0-9\\-]{0,79}";
 
@@ -24,10 +21,9 @@ const lifecycleBadge = {
 };
 const platformLabels = { youtube: "YouTube", instagram: "Instagram", tiktok: "TikTok", facebook: "Facebook" };
 const formatLabels = { long: "Vídeos longos", shorts: "Shorts", both: "Longos e Shorts" };
-const emptyFilters = { niche: ALL, language: ALL, status: ALL, query: "" };
+export const emptyFilters = { niche: ALL, language: ALL, status: ALL, query: "" };
 const PLACEHOLDER_PREFIX = "[A DEFINIR]";
 const isPlaceholderName = (name) => String(name || "").trim().toUpperCase().startsWith(PLACEHOLDER_PREFIX);
-const sections = [["canais", "Canais"], ["decisoes", "Decisões"], ["estrutura", "Nichos e idiomas"]];
 
 const emptyPlanning = () => ({ lifecycle_status: "ativo", launch_wave: "", weekly_target: "0", target_platforms: [], alt_names: "", notes: "", topic_folders: "" });
 const emptyForm = () => ({
@@ -72,6 +68,22 @@ function countBy(items, keyOf, labelOf) {
   return [...groups.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label, "pt-BR"));
 }
 
+/** Visão derivada da rede: canais visíveis, rótulos de nicho/idioma e agrupamentos usados no resumo e nos filtros. */
+export function networkView(channels, structure) {
+  const languages = structure?.languages || [];
+  const niches = structure?.niches || [];
+  const visible = channels.filter((channel) => !channel.archived);
+  const nicheLabel = (channel) => niches.find((niche) => niche.code === channel.niche_code)?.name || channel.niche || "Sem nicho";
+  const languageLabel = (code) => { const language = languages.find((item) => item.code === code); return language ? `${language.name} (${code})` : code; };
+  return {
+    languages, niches, visible, nicheLabel, languageLabel,
+    byNiche: countBy(visible, channelNicheKey, nicheLabel),
+    byLanguage: countBy(visible, channelLanguage, (channel) => languageLabel(channelLanguage(channel))),
+    byStatus: countBy(visible, channelStatus, (channel) => lifecycleLabels[channelStatus(channel)] || channelStatus(channel)),
+    pendingDecisions: (structure?.decisions || []).filter((decision) => !isDecided(decision)).length,
+  };
+}
+
 function PlanningFields({ value, onChange }) {
   const set = (patch) => onChange({ ...value, ...patch });
   return <>
@@ -96,70 +108,50 @@ function SummaryList({ title, items, onPick }) {
   );
 }
 
-export default function DarkChannels2() {
-  const { currentEmpresa } = useEmpresa();
-  const [channels, setChannels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [structure, setStructure] = useState(null);
-  const [structureError, setStructureError] = useState("");
-  const [showStructure, setShowStructure] = useState(false);
-  const [filters, setFilters] = useState(emptyFilters);
-  const [showForm, setShowForm] = useState(false);
+/** Resumo da rede: blocos de contagem (incluindo decisões pendentes) e distribuição por nicho, idioma e status. */
+export function DarkNetworkSummary({ network, onOpenDecisions, onFilter }) {
+  const { visible, pendingDecisions } = network;
+  const inLaunch = visible.filter((channel) => ["implementacao", "lancamento"].includes(channelStatus(channel))).length;
+  const weeklyTotal = visible.reduce((total, channel) => total + (Number(channel.weekly_target) || 0), 0);
+  return (
+    <section aria-label="Resumo da rede" className={`${panel} space-y-3`}>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <button type="button" onClick={onOpenDecisions} className={`rounded-lg border p-3 text-left ${pendingDecisions ? "border-amber-800/70 bg-amber-950/10 hover:border-amber-600" : "border-slate-800 hover:border-slate-600"}`}><p className="text-xs text-slate-400">Decisões pendentes</p><p className={`text-2xl font-black ${pendingDecisions ? "text-amber-300" : "text-white"}`}>{pendingDecisions}</p></button>
+        {[["Canais", visible.length], ["Ativos", visible.filter((channel) => channelStatus(channel) === "ativo").length], ["Em implementação ou lançamento", inLaunch], ["Meta semanal total", weeklyTotal]].map(([title, value]) => <div key={title} className="rounded-lg border border-slate-800 p-3"><p className="text-xs text-slate-400">{title}</p><p className="text-2xl font-black text-white">{value}</p></div>)}
+      </div>
+      {visible.length > 0 && <div className="grid gap-2 md:grid-cols-3">
+        <SummaryList title="Nicho" items={network.byNiche} onPick={(key) => onFilter({ ...emptyFilters, niche: key })}/>
+        <SummaryList title="Idioma" items={network.byLanguage} onPick={(key) => onFilter({ ...emptyFilters, language: key })}/>
+        <SummaryList title="Status" items={network.byStatus} onPick={(key) => onFilter({ ...emptyFilters, status: key })}/>
+      </div>}
+    </section>
+  );
+}
+
+/**
+ * Aba "Canais" do Canais Dark: cadastro com idioma/nicho/subnicho e planejamento, filtros, cartões ordenados
+ * e detalhes do canal selecionado. A seleção é controlada pela página e compartilhada com as etapas do pipeline.
+ */
+export default function DarkChannelsPlanning({
+  network, loading, filters, onFiltersChange, selectedId, onSelect, showForm, onCloseForm,
+  saving, onSavingChange, onError, onNotice, onChannelCreated, onChannelUpdated, detailActions, detailOverview,
+}) {
   const [form, setForm] = useState(emptyForm);
   const [nicheCustom, setNicheCustom] = useState(false);
   const [languageCustom, setLanguageCustom] = useState(false);
-  const [selectedId, setSelectedId] = useState("");
   const [planning, setPlanning] = useState(emptyPlanning);
-  const [section, setSection] = useState("canais");
-  const [structureDirty, setStructureDirty] = useState(false);
-
-  const loadChannels = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await listDarkChannels();
-      setChannels(result.channels || []);
-    } catch (loadError) {
-      setError(loadError.message || "Não foi possível carregar os canais.");
-    } finally { setLoading(false); }
-  }, []);
-
-  const loadStructure = useCallback(async () => {
-    try {
-      setStructure(await getDarkStructure());
-      setStructureError("");
-    } catch (loadError) {
-      setStructure(null);
-      setStructureError(loadError.message || "Não foi possível carregar a estrutura de nichos e idiomas.");
-    }
-  }, []);
-
-  useEffect(() => { setError(""); void loadChannels(); void loadStructure(); }, [loadChannels, loadStructure, currentEmpresa?.id]);
-
-  const languages = structure?.languages || [];
-  const niches = structure?.niches || [];
+  const { languages, niches, visible, nicheLabel, languageLabel } = network;
   const languageOptions = languages.some((language) => language.code === DEFAULT_LANGUAGE) ? languages : [{ code: DEFAULT_LANGUAGE, name: "Português (Brasil)" }, ...languages];
   const selectedNiche = niches.find((niche) => niche.code === form.niche_code) || null;
-  const visible = channels.filter((channel) => !channel.archived);
   const selected = visible.find((channel) => channel.id === selectedId) || null;
-  const nicheLabel = (channel) => niches.find((niche) => niche.code === channel.niche_code)?.name || channel.niche || "Sem nicho";
-  const languageLabel = (code) => { const language = languages.find((item) => item.code === code); return language ? `${language.name} (${code})` : code; };
-  const byNiche = countBy(visible, channelNicheKey, nicheLabel);
-  const byLanguage = countBy(visible, channelLanguage, (channel) => languageLabel(channelLanguage(channel)));
-  const byStatus = countBy(visible, channelStatus, (channel) => lifecycleLabels[channelStatus(channel)] || channelStatus(channel));
   const query = filters.query.trim().toLocaleLowerCase("pt-BR");
   const filtered = visible.filter((channel) => (filters.niche === ALL || channelNicheKey(channel) === filters.niche)
     && (filters.language === ALL || channelLanguage(channel) === filters.language)
     && (filters.status === ALL || channelStatus(channel) === filters.status)
     && (!query || [channel.name, channel.external_id, ...(channel.alt_names || [])].some((text) => String(text || "").toLocaleLowerCase("pt-BR").includes(query))));
-  const weeklyTotal = visible.reduce((total, channel) => total + (Number(channel.weekly_target) || 0), 0);
   const sortedChannels = [...filtered].sort((left, right) => (left.launch_wave ?? Infinity) - (right.launch_wave ?? Infinity)
     || nicheLabel(left).localeCompare(nicheLabel(right), "pt-BR")
     || channelName(left).localeCompare(channelName(right), "pt-BR"));
-  const pendingDecisions = (structure?.decisions || []).filter((decision) => !isDecided(decision)).length;
-  const inLaunch = visible.filter((channel) => ["implementacao", "lancamento"].includes(channelStatus(channel))).length;
 
   useEffect(() => { if (selected) setPlanning(planningFromChannel(selected)); }, [selectedId, selected?.updated_at]);
 
@@ -179,7 +171,7 @@ export default function DarkChannels2() {
     event.preventDefault();
     const nicheName = selectedNiche ? selectedNiche.name : form.niche.trim();
     if (!form.name.trim() || !nicheName || saving) return;
-    setSaving(true); setError(""); setNotice("");
+    onSavingChange(true); onError(""); onNotice("");
     const body = {
       name: form.name.trim(), niche: nicheName, audience: form.audience.trim(), language: form.language.trim() || DEFAULT_LANGUAGE,
       format: form.format, publishing_mode: form.publishing_mode, ...planningPayload(form),
@@ -190,50 +182,42 @@ export default function DarkChannels2() {
     if (selectedNiche && form.subniche) body.subniche = form.subniche;
     try {
       const created = await createDarkChannel(body);
-      setChannels((items) => [created, ...items]);
-      setSelectedId(created.id);
-      setForm(emptyForm()); setNicheCustom(false); setLanguageCustom(false); setShowForm(false);
-      setNotice(`Canal “${created.name}” criado.`);
-    } catch (saveError) { setError(saveError.message || "Não foi possível criar o canal."); }
-    finally { setSaving(false); }
+      setForm(emptyForm()); setNicheCustom(false); setLanguageCustom(false);
+      onChannelCreated(created);
+      onNotice(`Canal “${created.name}” criado.`);
+    } catch (saveError) { onError(saveError.message || "Não foi possível criar o canal."); }
+    finally { onSavingChange(false); }
   }
 
   async function savePlanning(event) {
     event.preventDefault();
     if (!selected || saving) return;
-    setSaving(true); setError(""); setNotice("");
+    onSavingChange(true); onError(""); onNotice("");
     try {
       const updated = await updateDarkChannel(selected.id, planningPayload(planning));
-      setChannels((items) => items.map((item) => item.id === updated.id ? updated : item));
+      onChannelUpdated(updated);
       setPlanning(planningFromChannel(updated));
-      setNotice("Planejamento do canal salvo.");
-    } catch (saveError) { setError(saveError.message || "Não foi possível salvar o planejamento."); }
-    finally { setSaving(false); }
+      onNotice("Planejamento do canal salvo.");
+    } catch (saveError) { onError(saveError.message || "Não foi possível salvar o planejamento."); }
+    finally { onSavingChange(false); }
   }
 
   async function adoptAltName(altName) {
     const previous = selected.name;
     const altNames = selected.alt_names.filter((name) => name !== altName);
     if (!isPlaceholderName(previous) && !altNames.includes(previous)) altNames.push(previous);
-    setSaving(true); setError(""); setNotice("");
+    onSavingChange(true); onError(""); onNotice("");
     try {
       const updated = await updateDarkChannel(selected.id, { name: altName, alt_names: altNames });
-      setChannels((items) => items.map((item) => item.id === updated.id ? updated : item));
+      onChannelUpdated(updated);
       setPlanning(planningFromChannel(updated));
-      setNotice(`Canal renomeado para “${updated.name}”.`);
-    } catch (saveError) { setError(saveError.message || "Não foi possível renomear o canal."); }
-    finally { setSaving(false); }
-  }
-
-  function openSection(next) {
-    if (next === section) return;
-    if (section === "estrutura" && structureDirty && !window.confirm("Há alterações não salvas em Nichos e idiomas. Descartar e sair?")) return;
-    if (section === "estrutura") setStructureDirty(false);
-    setSection(next);
+      onNotice(`Canal renomeado para “${updated.name}”.`);
+    } catch (saveError) { onError(saveError.message || "Não foi possível renomear o canal."); }
+    finally { onSavingChange(false); }
   }
 
   const filterSelect = (key, title, options) => (
-    <label className="text-xs text-slate-300">{title}<select aria-label={`Filtrar por ${title.toLowerCase()}`} className={`${input} mt-1 w-auto`} value={filters[key]} onChange={(event) => setFilters({ ...filters, [key]: event.target.value })}>
+    <label className="text-xs text-slate-300">{title}<select aria-label={`Filtrar por ${title.toLowerCase()}`} className={`${input} mt-1 w-auto`} value={filters[key]} onChange={(event) => onFiltersChange({ ...filters, [key]: event.target.value })}>
       <option value={ALL}>Todos ({visible.length})</option>
       {options.map((option) => <option key={option.key} value={option.key}>{option.label} ({option.count})</option>)}
       {filters[key] !== ALL && !options.some((option) => option.key === filters[key]) && <option value={filters[key]}>{filters[key]} (0)</option>}
@@ -241,41 +225,7 @@ export default function DarkChannels2() {
   );
 
   return (
-    <main className="space-y-4" aria-label="Canais Dark 2">
-      <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-cyan-900/60 bg-slate-950/70 px-5 py-4">
-        <div className="flex items-start gap-3"><span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500 text-slate-950"><Network size={21}/></span><div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-400">Estrutura e planejamento</p><h1 className="mt-0.5 text-2xl font-black text-white">Canais Dark 2</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-400">Organize a rede de canais por nicho, idioma e fase de lançamento. Use o modelo padrão ou importe a estrutura da sua operação; a produção continua no Canais Dark.</p>
-        </div></div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setShowStructure(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500"><Network size={16}/>Estrutura</button>
-          <button type="button" onClick={() => { openSection("canais"); setShowForm((shown) => !shown); }} className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950"><Plus size={16}/>{showForm ? "Fechar cadastro" : "Novo canal"}</button>
-        </div>
-      </header>
-
-      {error && <p role="alert" className="rounded-lg border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-200">{error}</p>}
-      {notice && <p role="status" className="rounded-lg border border-emerald-800 bg-emerald-950/20 p-3 text-sm text-emerald-200">{notice}</p>}
-
-      <section aria-label="Resumo da rede" className={`${panel} space-y-3`}>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <button type="button" onClick={() => openSection("decisoes")} className={`rounded-lg border p-3 text-left ${pendingDecisions ? "border-amber-800/70 bg-amber-950/10 hover:border-amber-600" : "border-slate-800 hover:border-slate-600"}`}><p className="text-xs text-slate-400">Decisões pendentes</p><p className={`text-2xl font-black ${pendingDecisions ? "text-amber-300" : "text-white"}`}>{pendingDecisions}</p></button>
-          {[["Canais", visible.length], ["Ativos", visible.filter((channel) => channelStatus(channel) === "ativo").length], ["Em implementação ou lançamento", inLaunch], ["Meta semanal total", weeklyTotal]].map(([title, value]) => <div key={title} className="rounded-lg border border-slate-800 p-3"><p className="text-xs text-slate-400">{title}</p><p className="text-2xl font-black text-white">{value}</p></div>)}
-        </div>
-        {visible.length > 0 && <div className="grid gap-2 md:grid-cols-3">
-          <SummaryList title="Nicho" items={byNiche} onPick={(key) => { openSection("canais"); setFilters({ ...emptyFilters, niche: key }); }}/>
-          <SummaryList title="Idioma" items={byLanguage} onPick={(key) => { openSection("canais"); setFilters({ ...emptyFilters, language: key }); }}/>
-          <SummaryList title="Status" items={byStatus} onPick={(key) => { openSection("canais"); setFilters({ ...emptyFilters, status: key }); }}/>
-        </div>}
-      </section>
-
-      <nav role="tablist" aria-label="Seções do Canais Dark 2" className="flex gap-1 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 p-1">
-        {sections.map(([id, text]) => <button key={id} type="button" role="tab" aria-selected={section === id} aria-controls={`dark2-panel-${id}`} onClick={() => openSection(id)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${section === id ? "bg-cyan-500 text-slate-950" : "text-slate-300 hover:bg-slate-800"}`}>{text}{id === "decisoes" && pendingDecisions > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-black text-slate-950">{pendingDecisions}</span>}{id === "estrutura" && structureDirty && <span className="text-[10px] text-amber-300">(não salvo)</span>}</button>)}
-      </nav>
-
-      {section === "decisoes" && <div id="dark2-panel-decisoes" role="tabpanel" aria-label="Painel de decisões" className={panel}><DarkDecisions structure={structure} onStructureChange={setStructure}/></div>}
-      {section === "estrutura" && <div id="dark2-panel-estrutura" role="tabpanel" aria-label="Painel de nichos e idiomas" className={panel}><DarkStructureEditor structure={structure} onStructureChange={setStructure} onDirtyChange={setStructureDirty}/></div>}
-
-      {section === "canais" && <div id="dark2-panel-canais" role="tabpanel" aria-label="Painel de canais" className="space-y-4">
+    <>
       {showForm && <form aria-label="Novo canal" onSubmit={submitChannel} className={`${panel} grid gap-3 md:grid-cols-2`}>
         <h2 className="font-bold text-white md:col-span-2">Novo canal</h2>
         <label className={label}>Nome do canal<input aria-label="Nome do canal" className={`${input} mt-1`} maxLength={120} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Histórias sem rosto"/></label>
@@ -296,18 +246,18 @@ export default function DarkChannels2() {
           <label className={label}>Publicação<select aria-label="Modo de publicação" className={`${input} mt-1`} value={form.publishing_mode} onChange={(event) => setForm({ ...form, publishing_mode: event.target.value })}><option value="manual">Manual</option><option value="automatic">Automática</option></select></label>
         </div>
         <PlanningFields value={form} onChange={(next) => setForm(next)}/>
-        <div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"><Plus size={16} className="mr-1 inline"/>Criar canal</button></div>
+        <div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={onCloseForm} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"><Plus size={16} className="mr-1 inline"/>Criar canal</button></div>
       </form>}
 
       <section aria-label="Canais da rede" className={`${panel} space-y-3`}>
         <div role="group" aria-label="Filtros de canais" className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-slate-300">Buscar<input aria-label="Buscar canal" className={`${input} mt-1 w-56`} value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} placeholder="Nome, código ou nome alternativo"/></label>
-          {filterSelect("niche", "Nicho", byNiche)}
-          {filterSelect("language", "Idioma", byLanguage)}
-          {filterSelect("status", "Status", byStatus)}
+          <label className="text-xs text-slate-300">Buscar<input aria-label="Buscar canal" className={`${input} mt-1 w-56`} value={filters.query} onChange={(event) => onFiltersChange({ ...filters, query: event.target.value })} placeholder="Nome, código ou nome alternativo"/></label>
+          {filterSelect("niche", "Nicho", network.byNiche)}
+          {filterSelect("language", "Idioma", network.byLanguage)}
+          {filterSelect("status", "Status", network.byStatus)}
           <p className="pb-2 text-xs text-slate-500">Mostrando {filtered.length} de {visible.length} canais</p>
         </div>
-        {loading ? <p className="text-sm text-slate-400">Carregando canais…</p> : filtered.length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{sortedChannels.map((channel) => <button key={channel.id} type="button" aria-pressed={channel.id === selectedId} onClick={() => setSelectedId(channel.id)} className={`rounded-lg border p-3 text-left ${channel.id === selectedId ? "border-cyan-500 bg-cyan-950/30" : "border-slate-800 hover:border-slate-600"}`}>
+        {loading ? <p className="text-sm text-slate-400">Carregando canais…</p> : filtered.length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{sortedChannels.map((channel) => <button key={channel.id} type="button" aria-pressed={channel.id === selectedId} onClick={() => onSelect(channel.id)} className={`rounded-lg border p-3 text-left ${channel.id === selectedId ? "border-cyan-500 bg-cyan-950/30" : "border-slate-800 hover:border-slate-600"}`}>
           <span className="block font-semibold text-white">{channel.name}</span>
           {isPlaceholderName(channel.name) && <span className="mt-1 inline-block rounded-full border border-amber-800 px-2 py-0.5 text-[10px] font-semibold text-amber-300">nome a definir</span>}
           {channel.external_id && <span className="block truncate text-[10px] text-slate-500">{channel.external_id}</span>}
@@ -318,7 +268,7 @@ export default function DarkChannels2() {
             {channel.launch_wave != null && <span className="rounded-full border border-cyan-900 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">Onda {channel.launch_wave}</span>}
             {!!channel.weekly_target && <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{channel.weekly_target}/semana</span>}
           </span>
-        </button>)}</div> : visible.length ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-400"><span>Nenhum canal corresponde aos filtros.</span><button type="button" onClick={() => setFilters(emptyFilters)} className="text-cyan-300 underline">Limpar filtros</button></div>
+        </button>)}</div> : visible.length ? <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-400"><span>Nenhum canal corresponde aos filtros.</span><button type="button" onClick={() => onFiltersChange(emptyFilters)} className="text-cyan-300 underline">Limpar filtros</button></div>
           : <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-400">Nenhum canal cadastrado ainda. Crie um canal ou aplique um modelo em “Estrutura”.</p>}
       </section>
 
@@ -329,17 +279,15 @@ export default function DarkChannels2() {
             {!!(selected.target_platforms || []).length && <p className="mt-1 text-xs text-slate-400">Plataformas: {selected.target_platforms.map((key) => platformLabels[key] || key).join(", ")}</p>}
             {!!(selected.alt_names || []).length && <div role="group" aria-label="Nomes alternativos do canal" className="mt-2 flex flex-wrap items-center gap-2"><span className="text-xs text-slate-400">{isPlaceholderName(selected.name) ? "Escolha o nome:" : "Nomes alternativos:"}</span>{selected.alt_names.map((altName) => <span key={altName} className="inline-flex items-center gap-1 rounded-full border border-slate-700 py-0.5 pl-2 pr-1 text-xs text-slate-200">{altName}<button type="button" aria-label={`Usar “${altName}” como nome`} disabled={saving} onClick={() => void adoptAltName(altName)} className="inline-flex items-center gap-1 rounded-full bg-cyan-950 px-2 py-0.5 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-900 disabled:opacity-50"><Tag size={11}/>Usar como nome</button></span>)}</div>}
           </div>
-          <a href="/canais-dark" className="inline-flex items-center gap-2 rounded-lg border border-cyan-800 px-3 py-2 text-sm text-cyan-200 hover:border-cyan-500"><ExternalLink size={15}/>Abrir no pipeline (Canais Dark)</a>
+          {detailActions}
         </div>
+        {detailOverview}
         <form aria-label="Planejamento do canal" onSubmit={savePlanning} className="grid gap-3 border-t border-slate-800 pt-3 md:grid-cols-2">
           <h3 className="font-semibold text-white md:col-span-2">Planejamento</h3>
           <PlanningFields value={planning} onChange={setPlanning}/>
           <div className="flex justify-end md:col-span-2"><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"><Save size={15}/>Salvar planejamento</button></div>
         </form>
       </section>}
-      </div>}
-
-      <DarkStructureDialog open={showStructure} onOpenChange={setShowStructure} structure={structure} structureError={structureError} channelsCount={visible.length} onImported={async () => { await Promise.all([loadChannels(), loadStructure()]); }}/>
-    </main>
+    </>
   );
 }

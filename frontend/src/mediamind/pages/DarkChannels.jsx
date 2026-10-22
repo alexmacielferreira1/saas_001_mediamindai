@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clapperboard, Plus, Save, Settings2, Sparkles } from "lucide-react";
+import { Clapperboard, FolderOpen, Network, Plus, Save, Settings2, Sparkles } from "lucide-react";
 import {
-  createDarkChannel,
   createDarkChannelScript,
+  getDarkStructure,
   listDarkChannels,
   listDarkChannelScripts,
   updateDarkChannel,
@@ -12,11 +12,17 @@ import VideoGeneration from "./VideoGeneration";
 import ClipsFree from "./ClipsFree";
 import ThumbnailStudio from "./ThumbnailStudio";
 import { useEmpresa } from "../lib/empresaContext";
+import DarkStructureDialog from "../components/darkChannels/DarkStructureDialog";
+import DarkDecisions from "../components/darkChannels/DarkDecisions";
+import DarkStructureEditor from "../components/darkChannels/DarkStructureEditor";
+import DarkChannelsPlanning, { DarkNetworkSummary, emptyFilters, networkView } from "../components/darkChannels/DarkChannelsPlanning";
 
 const input = "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500";
 const panel = "rounded-xl border border-slate-800 bg-slate-950/60 p-4";
-const workflowTabs = [
-  ["channels", "Canais"], ["scripts", "Pastas e roteiros"], ["materials", "Materiais"],
+const planningTabs = ["channels", "decisions", "structure"];
+/** Ordem das abas: planejamento da rede primeiro, depois as etapas do pipeline de produção. */
+export const workflowTabs = [
+  ["channels", "Canais"], ["decisions", "Decisões"], ["structure", "Nichos e idiomas"], ["scripts", "Pastas e roteiros"], ["materials", "Materiais"],
   ["video", "Gerar vídeos"], ["thumbs", "Thumbs"], ["cuts", "Cortes"],
   ["review", "Revisão final"], ["published", "Agendados e publicados"], ["analytics", "Analytics"],
 ];
@@ -41,8 +47,12 @@ export default function DarkChannels() {
   const [selectedChannelId, setSelectedChannelId] = useState("");
   const [scripts, setScripts] = useState([]);
   const [selectedScriptId, setSelectedScriptId] = useState("");
-  const [channelForm, setChannelForm] = useState({ name: "", niche: "", audience: "", language: "pt-BR", format: "long", publishing_mode: "manual" });
   const [showChannelForm, setShowChannelForm] = useState(false);
+  const [structure, setStructure] = useState(null);
+  const [structureError, setStructureError] = useState("");
+  const [showStructure, setShowStructure] = useState(false);
+  const [structureDirty, setStructureDirty] = useState(false);
+  const [filters, setFilters] = useState(emptyFilters);
   const [showQuickScriptForm, setShowQuickScriptForm] = useState(false);
   const [topic, setTopic] = useState("");
   const [scriptText, setScriptText] = useState("");
@@ -50,7 +60,6 @@ export default function DarkChannels() {
   const [activeStage, setActiveStage] = useState("channels");
   const [folderDraft, setFolderDraft] = useState("");
   const [materialDraft, setMaterialDraft] = useState({ title: "", reference: "", kind: "link" });
-  const [cutDraft, setCutDraft] = useState({ label: "", start_seconds: "0", end_seconds: "30" });
   const [workflowDraft, setWorkflowDraft] = useState(emptyWorkflow);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,6 +74,8 @@ export default function DarkChannels() {
     .filter((script) => script.workflow?.scheduled_at || script.workflow?.published_at || script.workflow?.publication_url)
     .sort((left, right) => (left.workflow?.scheduled_at || left.workflow?.published_at || "").localeCompare(right.workflow?.scheduled_at || right.workflow?.published_at || ""));
 
+  const network = networkView(channels, structure);
+
   const loadChannels = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -72,7 +83,7 @@ export default function DarkChannels() {
       const result = await listDarkChannels();
       const available = result.channels || [];
       setChannels(available);
-      setSelectedChannelId((current) => available.some((channel) => channel.id === current) ? current : available[0]?.id || "");
+      setSelectedChannelId((current) => available.some((channel) => channel.id === current) ? current : available.find((channel) => !channel.archived)?.id || "");
     } catch (loadError) {
       setError(loadError.message || "Não foi possível carregar os canais.");
     } finally {
@@ -80,7 +91,17 @@ export default function DarkChannels() {
     }
   }, []);
 
-  useEffect(() => { void loadChannels(); }, [loadChannels, currentEmpresa?.id]);
+  const loadStructure = useCallback(async () => {
+    try {
+      setStructure(await getDarkStructure());
+      setStructureError("");
+    } catch (loadError) {
+      setStructure(null);
+      setStructureError(loadError.message || "Não foi possível carregar a estrutura de nichos e idiomas.");
+    }
+  }, []);
+
+  useEffect(() => { void loadChannels(); void loadStructure(); }, [loadChannels, loadStructure, currentEmpresa?.id]);
 
   useEffect(() => {
     let active = true;
@@ -109,22 +130,20 @@ export default function DarkChannels() {
     if (pending) void updateDarkChannelScript(pending.channelId, pending.scriptId, { script: pending.value });
   }, []);
 
-  async function submitChannel(event) {
-    event.preventDefault();
-    if (!channelForm.name.trim() || !channelForm.niche.trim() || saving) return;
-    setSaving(true); setError(""); setNotice("");
-    try {
-      const created = await createDarkChannel({ ...channelForm, name: channelForm.name.trim(), niche: channelForm.niche.trim(), audience: channelForm.audience.trim() });
-      setChannels((items) => [created, ...items]);
-      setSelectedChannelId(created.id);
-      setScripts([]);
-      setSelectedScriptId("");
-      setChannelForm((form) => ({ ...form, name: "", niche: "", audience: "" }));
-      setShowChannelForm(false);
-      setActiveStage("scripts");
-      setNotice("Canal salvo. Agora você pode armazenar ideias e roteiros por tema.");
-    } catch (saveError) { setError(saveError.message || "Não foi possível criar o canal."); }
-    finally { setSaving(false); }
+  function selectChannel(channelId) {
+    void flushScriptSave().catch(() => {});
+    setSelectedChannelId(channelId);
+    setPipelineScriptId("");
+  }
+
+  function channelCreated(created) {
+    setChannels((items) => [created, ...items]);
+    selectChannel(created.id);
+    setShowChannelForm(false);
+  }
+
+  function channelUpdated(updated) {
+    setChannels((items) => items.map((item) => item.id === updated.id ? updated : item));
   }
 
   async function submitScript(event) {
@@ -251,13 +270,6 @@ export default function DarkChannels() {
     finally { setSaving(false); }
   }
 
-  async function addCut(event) {
-    event.preventDefault();
-    const next = { ...workflowDraft, cuts: [...workflowDraft.cuts, { label: cutDraft.label.trim() || `Corte ${workflowDraft.cuts.length + 1}`, start_seconds: Number(cutDraft.start_seconds), end_seconds: Number(cutDraft.end_seconds) }] };
-    setWorkflowDraft(next);
-    await saveWorkflow(next);
-  }
-
   async function updatePublishingMode(mode) {
     if (!selectedChannel) return;
     setSaving(true); setError("");
@@ -274,6 +286,9 @@ export default function DarkChannels() {
   }
 
   function saveAndSetStage(stage) {
+    if (stage === activeStage) return;
+    if (activeStage === "structure" && structureDirty && !window.confirm("Há alterações não salvas em Nichos e idiomas. Descartar e sair?")) return;
+    if (activeStage === "structure") setStructureDirty(false);
     setActiveStage(stage);
     if (selectedScript && pendingScriptSave.current) void flushScriptSave().catch(() => {});
   }
@@ -291,42 +306,49 @@ export default function DarkChannels() {
     format: selectedChannel?.format || "long",
   } : null, [pipelineScript, selectedChannel]);
 
+  const isPlanningStage = planningTabs.includes(activeStage);
+  const publishingSelect = selectedChannel && <label className="text-xs text-slate-300">Modo de publicação<select aria-label="Publicação do canal" className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" disabled={saving} value={selectedChannel.publishing_mode || "manual"} onChange={(event) => void updatePublishingMode(event.target.value)}><option value="manual">Manual</option><option value="automatic">Automática (requer integração)</option></select></label>;
+
   return (
     <main className="space-y-4" aria-label="Canais Dark">
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-cyan-900/60 bg-slate-950/70 px-5 py-4">
         <div className="flex items-start gap-3"><span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500 text-slate-950"><Clapperboard size={21}/></span><div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-400">Estúdio de canais</p><h1 className="mt-0.5 text-2xl font-black text-white">Canais Dark</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-400">Organize canais, ideias e roteiros; desenvolva cada roteiro no pipeline de vídeo e valide antes de publicar.</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-400">Organize a rede de canais por nicho, idioma e fase de lançamento; guarde ideias e roteiros, desenvolva cada roteiro no pipeline de vídeo e valide antes de publicar.</p>
         </div></div>
-        <a className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500" href="/configuracoes/ia"><Settings2 size={16}/> Configurar provedores de IA</a>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setShowStructure(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500"><Network size={16}/>Estrutura</button>
+          <button type="button" onClick={() => { saveAndSetStage("channels"); setShowChannelForm((shown) => !shown); }} className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950"><Plus size={16}/>{showChannelForm ? "Fechar cadastro" : "Novo canal"}</button>
+          <a className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-cyan-500" href="/configuracoes/ia"><Settings2 size={16}/> Configurar provedores de IA</a>
+        </div>
       </header>
 
       {error && <p role="alert" className="rounded-lg border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-200">{error}</p>}
       {notice && <p role="status" className="rounded-lg border border-emerald-800 bg-emerald-950/20 p-3 text-sm text-emerald-200">{notice}</p>}
 
-      <div className="space-y-4">
-        {activeStage === "channels" && <section className={`${panel} space-y-3`}>
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-white">Canais cadastrados</h2><p className="mt-1 text-xs text-slate-400">Cada canal mantém seus próprios roteiros e materiais.</p></div><button type="button" onClick={() => setShowChannelForm((shown) => !shown)} className="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950"><Plus size={16}/>{showChannelForm ? "Fechar cadastro" : "Novo canal"}</button></div>
-          {loading ? <p className="text-sm text-slate-400">Carregando canais…</p> : channels.filter((item) => !item.archived).length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{channels.filter((item) => !item.archived).map((channel) => <button key={channel.id} type="button" aria-pressed={channel.id === selectedChannelId} onClick={() => { void flushScriptSave().catch(() => {}); setSelectedChannelId(channel.id); setPipelineScriptId(""); }} className={`rounded-lg border p-3 text-left ${channel.id === selectedChannelId ? "border-cyan-500 bg-cyan-950/30" : "border-slate-800 hover:border-slate-600"}`}><span className="block font-semibold text-white">{channel.name}</span><span className="mt-1 block text-xs text-slate-400">{channel.niche} · {channel.format === "shorts" ? "Shorts" : channel.format === "both" ? "Longos e Shorts" : "Vídeos longos"}</span></button>)}</div> : <p className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-sm text-slate-400">Nenhum canal cadastrado ainda.</p>}
-          {showChannelForm && <form onSubmit={submitChannel} className="grid gap-3 border-t border-slate-800 pt-3 md:grid-cols-2">
-            <label className="block text-xs text-slate-300">Nome do canal<input aria-label="Nome do canal" className={`${input} mt-1`} maxLength={120} required value={channelForm.name} onChange={(event) => setChannelForm({ ...channelForm, name: event.target.value })} placeholder="Ex.: Histórias sem rosto"/></label>
-            <label className="block text-xs text-slate-300">Nicho do canal<input aria-label="Nicho do canal" className={`${input} mt-1`} maxLength={120} required value={channelForm.niche} onChange={(event) => setChannelForm({ ...channelForm, niche: event.target.value })} placeholder="Ex.: história, ciência, curiosidades"/></label>
-            <label className="block text-xs text-slate-300">Público-alvo<input aria-label="Público-alvo" className={`${input} mt-1`} maxLength={240} value={channelForm.audience} onChange={(event) => setChannelForm({ ...channelForm, audience: event.target.value })} placeholder="Opcional"/></label>
-            <div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-300">Formato<select aria-label="Formato do canal" className={`${input} mt-1`} value={channelForm.format} onChange={(event) => setChannelForm({ ...channelForm, format: event.target.value })}><option value="long">Vídeos longos</option><option value="shorts">Shorts</option><option value="both">Ambos</option></select></label>
-              <label className="text-xs text-slate-300">Publicação<select aria-label="Modo de publicação" className={`${input} mt-1`} value={channelForm.publishing_mode} onChange={(event) => setChannelForm({ ...channelForm, publishing_mode: event.target.value })}><option value="manual">Manual</option><option value="automatic">Automática</option></select></label></div>
-            <div className="flex justify-end gap-2 md:col-span-2"><button type="button" onClick={() => setShowChannelForm(false)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"><Plus size={16} className="mr-1 inline"/>Criar canal</button></div>
-          </form>}
-        </section>}
+      <DarkNetworkSummary network={network} onOpenDecisions={() => saveAndSetStage("decisions")} onFilter={(next) => { saveAndSetStage("channels"); setFilters(next); }}/>
 
-        <section className="min-w-0 space-y-4">
-          {selectedChannel && <section className={`${panel} flex flex-wrap items-center justify-between gap-3`}><div><h2 className="text-lg font-bold text-white">{selectedChannel.name}</h2><p className="text-xs text-slate-400">Espaço independente do Canais Dark · dados organizados por canal e roteiro.</p></div><label className="text-xs text-slate-300">Modo de publicação<select aria-label="Publicação do canal" className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs" disabled={saving} value={selectedChannel.publishing_mode || "manual"} onChange={(event) => void updatePublishingMode(event.target.value)}><option value="manual">Manual</option><option value="automatic">Automática (requer integração)</option></select></label></section>}
-          <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 p-1" role="tablist" aria-label="Etapas do canal">
-            {workflowTabs.map(([id, label]) => {
-              const needsFirstScript = id === "materials" && scripts.length === 0;
-              return <button key={id} type="button" role="tab" disabled={needsFirstScript} aria-selected={activeStage === id} aria-controls={`dark-panel-${id}`} onClick={() => saveAndSetStage(id)} title={needsFirstScript ? "Crie o primeiro roteiro antes de seguir para as etapas de produção." : undefined} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold ${activeStage === id ? "bg-cyan-500 text-slate-950" : "text-slate-300 hover:bg-slate-800"} disabled:cursor-not-allowed disabled:opacity-35`}>{label}</button>;
-            })}
-          </nav>
-          {selectedChannel && activeStage !== "channels" && <section aria-label="Roteiros deste canal" className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2">
+      <div className="space-y-4">
+        <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 p-1" role="tablist" aria-label="Seções do Canais Dark">
+          {workflowTabs.map(([id, label]) => {
+            const needsFirstScript = id === "materials" && scripts.length === 0;
+            return <button key={id} type="button" role="tab" disabled={needsFirstScript} aria-selected={activeStage === id} aria-controls={`dark-panel-${id}`} onClick={() => saveAndSetStage(id)} title={needsFirstScript ? "Crie o primeiro roteiro antes de seguir para as etapas de produção." : undefined} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${activeStage === id ? "bg-cyan-500 text-slate-950" : "text-slate-300 hover:bg-slate-800"} disabled:cursor-not-allowed disabled:opacity-35`}>{label}{id === "decisions" && network.pendingDecisions > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-black text-slate-950">{network.pendingDecisions}</span>}{id === "structure" && structureDirty && <span className="text-[10px] text-amber-300">(não salvo)</span>}</button>;
+          })}
+        </nav>
+
+        {activeStage === "channels" && <div id="dark-panel-channels" role="tabpanel" aria-label="Canais" className="space-y-4">
+          <DarkChannelsPlanning network={network} loading={loading} filters={filters} onFiltersChange={setFilters} selectedId={selectedChannelId} onSelect={selectChannel}
+            showForm={showChannelForm} onCloseForm={() => setShowChannelForm(false)} saving={saving} onSavingChange={setSaving} onError={setError} onNotice={setNotice}
+            onChannelCreated={channelCreated} onChannelUpdated={channelUpdated}
+            detailActions={<button type="button" onClick={() => saveAndSetStage("scripts")} className="inline-flex items-center gap-2 rounded-lg border border-cyan-800 px-3 py-2 text-sm text-cyan-200 hover:border-cyan-500"><FolderOpen size={15}/>Ir para Pastas e roteiros</button>}
+            detailOverview={selectedChannel && <div aria-label="Visão do canal" role="group" className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3"><p className="text-sm text-slate-400">{(selectedChannel.topic_folders || []).length} pastas · {scripts.length} roteiros · {(selectedChannel.materials || []).length} materiais organizados</p>{publishingSelect}</div>}/>
+        </div>}
+        {activeStage === "decisions" && <div id="dark-panel-decisions" role="tabpanel" aria-label="Decisões" className={panel}><DarkDecisions structure={structure} onStructureChange={setStructure}/></div>}
+        {activeStage === "structure" && <div id="dark-panel-structure" role="tabpanel" aria-label="Nichos e idiomas" className={panel}><DarkStructureEditor structure={structure} onStructureChange={setStructure} onDirtyChange={setStructureDirty}/></div>}
+
+        {!isPlanningStage && <section className="min-w-0 space-y-4">
+          {selectedChannel && <section className={`${panel} flex flex-wrap items-center justify-between gap-3`}><div><h2 className="text-lg font-bold text-white">{selectedChannel.name}</h2><p className="text-xs text-slate-400">Espaço independente do Canais Dark · dados organizados por canal e roteiro.</p></div>{publishingSelect}</section>}
+          {selectedChannel && <section aria-label="Roteiros deste canal" className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2">
             <span className="px-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Roteiros</span>
             <div role="tablist" aria-label="Roteiros do canal" className="flex min-w-0 flex-wrap gap-2">
               <button type="button" role="tab" aria-selected={!selectedScriptId} onClick={() => { void flushScriptSave().catch(() => {}); setSelectedScriptId(""); setPipelineScriptId(""); }} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${!selectedScriptId ? "border-cyan-500 bg-cyan-950/40 text-cyan-200" : "border-slate-700 text-slate-300 hover:border-slate-500"}`}>Todo o canal</button>
@@ -339,8 +361,7 @@ export default function DarkChannels() {
             </form>}
           </section>}
           <section id={`dark-panel-${activeStage}`} role="tabpanel" aria-label={workflowTabs.find(([id]) => id === activeStage)?.[1]} className={`${panel} min-h-[360px] space-y-4`}>
-            {!selectedChannel ? activeStage === "video" ? <div className="space-y-3"><p className="rounded-lg border border-cyan-900/50 bg-cyan-950/10 px-3 py-2 text-sm text-slate-300">O estúdio de geração já pode ser usado. Ao selecionar um canal e roteiro, o contexto deles será enviado ao pipeline automaticamente.</p><VideoGeneration embedded workspaceKey="canais-dark:rascunho-avulso" productLabel="Canais Dark · geração audiovisual" /></div> : <div className="space-y-4"><p className="text-sm text-slate-300">Esta etapa salva dados no canal. Crie ou selecione um canal para organizar materiais, roteiros e entregas sem misturar com o MediaMind.</p><button type="button" onClick={() => { setActiveStage("channels"); setShowChannelForm(true); }} className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950"><Plus size={15} className="mr-1 inline"/>Criar canal</button></div> : <>
-              {activeStage === "channels" && <div className="space-y-3"><div><h3 className="font-bold text-white">Visão do canal</h3><p className="text-sm text-slate-400">{selectedChannel.name} · {selectedChannel.niche} · {(selectedChannel.topic_folders || []).length} pastas · {scripts.length} roteiros · {(selectedChannel.materials || []).length} materiais organizados</p></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{workflowTabs.filter(([id]) => id !== "channels").map(([id, label]) => { const needsFirstScript = id === "materials" && scripts.length === 0; return <button key={id} type="button" disabled={needsFirstScript} title={needsFirstScript ? "Crie o primeiro roteiro antes de cadastrar materiais." : undefined} onClick={() => saveAndSetStage(id)} className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-left text-sm text-slate-200 hover:border-cyan-700 hover:bg-cyan-950/20 disabled:cursor-not-allowed disabled:opacity-35"><span>{label}</span><span aria-hidden="true" className="text-cyan-400">→</span></button>; })}</div></div>}
+            {!selectedChannel ? activeStage === "video" ? <div className="space-y-3"><p className="rounded-lg border border-cyan-900/50 bg-cyan-950/10 px-3 py-2 text-sm text-slate-300">O estúdio de geração já pode ser usado. Ao selecionar um canal e roteiro, o contexto deles será enviado ao pipeline automaticamente.</p><VideoGeneration embedded workspaceKey="canais-dark:rascunho-avulso" productLabel="Canais Dark · geração audiovisual" /></div> : <div className="space-y-4"><p className="text-sm text-slate-300">Esta etapa salva dados no canal. Crie ou selecione um canal para organizar materiais, roteiros e entregas sem misturar com o MediaMind.</p><button type="button" onClick={() => { saveAndSetStage("channels"); setShowChannelForm(true); }} className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950"><Plus size={15} className="mr-1 inline"/>Criar canal</button></div> : <>
               {activeStage === "scripts" && <div className="grid gap-4 lg:grid-cols-[minmax(180px,0.7fr)_minmax(0,1.3fr)]"><div className="space-y-3"><h3 className="font-bold text-white">Pastas de assuntos</h3><form onSubmit={addFolder} className="flex gap-2"><input aria-label="Nome da pasta de assuntos" className={input} maxLength={120} value={folderDraft} onChange={(event) => setFolderDraft(event.target.value)} placeholder="Nova pasta"/><button type="submit" aria-label="Adicionar pasta" disabled={saving || !folderDraft.trim()} className="rounded-lg bg-cyan-500 px-3 text-slate-950"><Plus size={16}/></button></form><div className="space-y-1"><button type="button" aria-pressed={!workflowDraft.folder_name} onClick={() => void assignFolder("")} className="w-full rounded border border-slate-800 p-2 text-left text-sm text-slate-200">Sem pasta</button>{(selectedChannel.topic_folders || []).map((folder) => <button key={folder} type="button" aria-pressed={workflowDraft.folder_name === folder} onClick={() => void assignFolder(folder)} className="w-full rounded border border-slate-800 p-2 text-left text-sm text-slate-200">{folder}</button>)}</div><form onSubmit={submitScript} className="space-y-2 border-t border-slate-800 pt-3"><label className="block text-xs text-slate-300">Tema do roteiro<input aria-label="Tema do roteiro" className={`${input} mt-1`} required maxLength={240} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Tema do próximo vídeo"/></label><button type="submit" disabled={saving} className="rounded-lg border border-cyan-700 px-3 py-2 text-sm text-cyan-200"><Plus size={15} className="mr-1 inline"/>Criar roteiro</button></form></div><div className="space-y-3"><h3 className="font-bold text-white">Roteiros do canal</h3><div className="grid gap-2 sm:grid-cols-2">{scripts.map((script) => <button key={script.id} type="button" aria-pressed={script.id === selectedScriptId} onClick={() => { void flushScriptSave().catch(() => {}); setSelectedScriptId(script.id); setPipelineScriptId(""); }} className={`rounded-lg border p-3 text-left ${script.id === selectedScriptId ? "border-cyan-600 bg-cyan-950/20" : "border-slate-800"}`}><span className="block font-semibold text-white">{script.title || script.topic}</span><span className="mt-1 block text-xs text-slate-400">{script.workflow?.folder_name || "Sem pasta"} · {script.status}</span></button>)}</div>{selectedScript && <div className="space-y-2 border-t border-slate-800 pt-3"><h4 className="font-semibold text-white">{selectedScript.title || selectedScript.topic}</h4><textarea aria-label="Texto do roteiro" className={`${input} min-h-44 resize-y`} maxLength={200000} value={scriptText} onChange={(event) => scheduleScriptSave(selectedScript.id, event.target.value)} onBlur={() => { void flushScriptSave().catch(() => {}); }} placeholder="Escreva ou cole seu roteiro"/><div className="flex flex-wrap gap-2"><button type="button" disabled={saving} onClick={() => void flushScriptSave().then(() => setNotice("Roteiro salvo.")).catch(() => {})} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-2 text-xs"><Save size={13}/>Salvar roteiro</button><button type="button" disabled={saving || !scriptText.trim()} onClick={() => void updateScript({ status: "in_review" })} className="rounded-lg border border-amber-700 px-3 py-2 text-xs text-amber-200">Enviar para validação</button><button type="button" disabled={saving || selectedScript.status !== "in_review"} onClick={() => void updateScript({ status: "approved" })} className="rounded-lg border border-emerald-700 px-3 py-2 text-xs text-emerald-200">Aprovar roteiro</button><button type="button" disabled={saving} onClick={() => { setPipelineScriptId(selectedScript.id); saveAndSetStage("video"); }} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"><Sparkles size={14} className="mr-1 inline"/>Abrir no pipeline</button></div></div>}</div></div>}
               {activeStage === "materials" && <div className="space-y-4"><div><h3 className="font-bold text-white">Materiais próprios do canal</h3><p className="text-xs text-slate-400">Este acervo é exclusivo do Canais Dark. Cadastre referências criadas ou escolhidas para publicar na internet; nada é importado da Produção MediaMind.</p><p className="mt-1 text-xs text-cyan-200">Canal: {selectedChannel.name} · roteiro ativo: {selectedScript?.title || selectedScript?.topic}</p></div><form onSubmit={addMaterial} className="grid gap-2 md:grid-cols-[1fr_2fr_140px_auto]"><input aria-label="Nome do material" className={input} required maxLength={160} value={materialDraft.title} onChange={(event) => setMaterialDraft({ ...materialDraft, title: event.target.value })} placeholder="Nome do material"/><input aria-label="Link do material" className={input} required type="url" value={materialDraft.reference} onChange={(event) => setMaterialDraft({ ...materialDraft, reference: event.target.value })} placeholder="https://…"/><select aria-label="Tipo do material" className={input} value={materialDraft.kind} onChange={(event) => setMaterialDraft({ ...materialDraft, kind: event.target.value })}><option value="link">Link</option><option value="video">Vídeo</option><option value="audio">Áudio</option><option value="image">Imagem</option><option value="document">Documento</option></select><button type="submit" disabled={saving} className="rounded-lg bg-cyan-500 px-3 font-bold text-slate-950">Adicionar material</button></form><div className="grid gap-2 sm:grid-cols-2">{(selectedChannel.materials || []).map((item, index) => { const linked = workflowDraft.materials.some((material) => material.reference === item.reference); return <article key={`${item.reference}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3"><div className="min-w-0"><strong className="block truncate text-sm text-white">{item.title}</strong><span className="text-xs text-slate-400">{item.kind}</span> <a className="ml-2 text-xs text-cyan-300" href={item.reference} target="_blank" rel="noreferrer">Prévia ↗</a></div>{selectedScript && <button type="button" disabled={saving || linked} onClick={() => void attachChannelMaterial(item)} className="shrink-0 rounded border border-cyan-800 px-2 py-1 text-xs text-cyan-200 disabled:opacity-50">{linked ? "No roteiro" : "Vincular ao roteiro"}</button>}</article>; })}</div>{!(selectedChannel.materials || []).length && <p className="rounded-lg border border-dashed border-slate-800 p-4 text-sm text-slate-400">Nenhum material próprio cadastrado neste canal ainda.</p>}{selectedScript && !!workflowDraft.materials.length && <p className="text-xs text-slate-500">{workflowDraft.materials.length} materiais vinculados ao roteiro “{selectedScript.title || selectedScript.topic}”.</p>}</div>}
               {activeStage === "video" && <div className="space-y-3"><div className="rounded-lg border border-cyan-900/50 bg-cyan-950/10 px-3 py-2"><h3 className="font-bold text-white">Geração de vídeo para {selectedChannel.name}</h3><p className="mt-1 text-xs text-slate-400">Este é o pipeline original de 8 etapas. Com um roteiro ativo, tema, texto, nicho, público, idioma, formato e materiais vinculados entram como contexto; sem roteiro ativo, você pode criar um projeto livre neste canal. Cada roteiro e projeto fica separado; apenas a conexão de IA cadastrada é compartilhada.</p></div>{pipelineScript ? <VideoGeneration key={pipelineScript.id} embedded workspaceKey={`canais-dark:${selectedChannel.id}:${pipelineScript.id}`} productLabel="Canais Dark · geração audiovisual" initialDraft={activePipelineDraft} onDraftChange={(value) => scheduleScriptSave(pipelineScript.id, value)} /> : selectedScript ? <VideoGeneration key={selectedScript.id} embedded workspaceKey={`canais-dark:${selectedChannel.id}:${selectedScript.id}`} productLabel="Canais Dark · geração audiovisual" initialDraft={{ id: selectedScript.id, title: selectedScript.title || selectedScript.topic, topic: selectedScript.topic, script: selectedScript.script || "", channelName: selectedChannel.name, channelAudience: selectedChannel.audience || "", language: selectedChannel.language || "pt-BR", availableAssets: scriptMaterialsForVideo(selectedScript), niche: selectedChannel.niche, format: selectedChannel.format || "long" }} onDraftChange={(value) => scheduleScriptSave(selectedScript.id, value)} /> : <VideoGeneration embedded workspaceKey={`canais-dark:${selectedChannel.id}:projeto-livre`} productLabel="Canais Dark · geração audiovisual" initialDraft={{ channelName: selectedChannel.name, channelAudience: selectedChannel.audience || "", language: selectedChannel.language || "pt-BR", niche: selectedChannel.niche, format: selectedChannel.format || "long" }} />}</div>}
@@ -372,8 +393,10 @@ export default function DarkChannels() {
               {activeStage === "analytics" && <div className="space-y-4"><div><h3 className="font-bold text-white">Analytics das redes</h3><p className="text-xs text-slate-400">Este painel só exibirá dados retornados pelas APIs oficiais das contas conectadas.</p></div><div className="rounded-xl border border-amber-800/70 bg-amber-950/20 p-4"><strong className="text-sm text-amber-200">Nenhuma rede social conectada</strong><p className="mt-2 text-sm text-slate-300">Não há integração de publicação/analytics configurada neste produto ainda. Por isso, não mostramos números de demonstração nem métricas digitadas manualmente como se fossem dados reais.</p><p className="mt-2 text-xs text-slate-400">Para ativar, é necessário configurar as credenciais OAuth/API de cada rede e autorizar as contas do canal. A configuração de IA não substitui essas credenciais.</p></div>{selectedScript && <p className="text-xs text-slate-500">Roteiro em contexto: {workflowDraft.final_title || selectedScript.title || selectedScript.topic} · redes desejadas: {(workflowDraft.target_channels || []).join(", ") || "não definidas na Revisão final"}</p>}</div>}
             </>}
           </section>
-        </section>
+        </section>}
       </div>
+
+      <DarkStructureDialog open={showStructure} onOpenChange={setShowStructure} structure={structure} structureError={structureError} channelsCount={network.visible.length} onImported={async () => { await Promise.all([loadChannels(), loadStructure()]); }}/>
     </main>
   );
 }

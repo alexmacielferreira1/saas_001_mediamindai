@@ -8,6 +8,9 @@ const api = vi.hoisted(() => ({
   listDarkChannelScripts: vi.fn(),
   createDarkChannelScript: vi.fn(),
   updateDarkChannelScript: vi.fn(),
+  getDarkStructure: vi.fn(),
+  listDarkStructureTemplates: vi.fn(),
+  updateDarkStructure: vi.fn(),
 }));
 vi.mock("../../api/darkChannels", () => api);
 vi.mock("../lib/empresaContext", () => ({
@@ -23,12 +26,16 @@ vi.mock("./ThumbnailStudio", () => ({
   default: ({ darkChannelId, darkScriptId, workspaceKey, initialTitle }) => <div data-testid="thumbnail-studio" data-channel={darkChannelId} data-script={darkScriptId} data-workspace={workspaceKey} data-title={initialTitle} />,
 }));
 
-import DarkChannels from "./DarkChannels";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import DarkChannels, { workflowTabs } from "./DarkChannels";
 
 describe("Canais Dark", () => {
   beforeEach(() => {
     Object.values(api).forEach((mock) => mock.mockReset());
     api.listDarkChannels.mockResolvedValue({ channels: [{ id: "channel-1", name: "Histórias", niche: "História", format: "long", publishing_mode: "manual" }] });
+    api.getDarkStructure.mockResolvedValue({ languages: [], niches: [], decisions: [] });
+    api.listDarkStructureTemplates.mockResolvedValue({ templates: [] });
     api.listDarkChannelScripts.mockImplementation(async (channelId) => ({ scripts: channelId === "channel-1" ? [{ id: "script-1", channel_id: "channel-1", topic: "A cidade perdida", title: "A cidade perdida", script: "Abertura original", status: "draft", validation_status: "pending" }] : [] }));
   });
 
@@ -45,9 +52,13 @@ describe("Canais Dark", () => {
     fireEvent.click(screen.getByRole("button", { name: "Criar canal" }));
     await waitFor(() => expect(api.createDarkChannel).toHaveBeenCalledWith({
       name: "Mistérios", niche: "Mistérios", audience: "", language: "pt-BR", format: "long", publishing_mode: "manual",
+      lifecycle_status: "ativo", weekly_target: 0, target_platforms: [], alt_names: [], notes: "", topic_folders: [],
     }));
 
     expect(await screen.findByRole("heading", { name: "Mistérios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Mistérios/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Ir para Pastas e roteiros" }));
+    expect(screen.getByRole("tab", { name: "Pastas e roteiros" })).toHaveAttribute("aria-selected", "true");
     fireEvent.click(screen.getByRole("button", { name: "Novo roteiro" }));
     fireEvent.change(screen.getByLabelText("Tema do novo roteiro"), { target: { value: "Novo tema" } });
     fireEvent.click(screen.getByRole("button", { name: "Criar", exact: true }));
@@ -58,7 +69,7 @@ describe("Canais Dark", () => {
     api.listDarkChannels.mockResolvedValue({ channels: [] });
     render(<DarkChannels />);
 
-    expect(await screen.findByText("Nenhum canal cadastrado ainda." )).toBeInTheDocument();
+    expect(await screen.findByText(/Nenhum canal cadastrado ainda/)).toBeInTheDocument();
     expect(screen.queryByText(/Acervo MediaMind|materiais disponíveis no acervo/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Nome do canal")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Novo canal" }));
@@ -154,9 +165,10 @@ describe("Canais Dark", () => {
   it("provides separate workflow tabs for every channel-production stage", async () => {
     render(<DarkChannels />);
 
-    const tabs = await screen.findByRole("tablist", { name: "Etapas do canal" });
-    expect(tabs.querySelectorAll('[role="tab"]')).toHaveLength(9);
+    const tabs = await screen.findByRole("tablist", { name: "Seções do Canais Dark" });
+    expect(tabs.querySelectorAll('[role="tab"]')).toHaveLength(11);
     expect(screen.getByRole("tab", { name: "Canais" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Canais" })).toBeInTheDocument();
 
     const stages = ["Pastas e roteiros", "Materiais", "Gerar vídeos", "Thumbs", "Cortes", "Revisão final", "Agendados e publicados", "Analytics"];
     for (const stage of stages) {
@@ -253,5 +265,106 @@ describe("Canais Dark", () => {
     expect(screen.getByText(/não mostramos números de demonstração/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Visualizações")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Curtidas")).not.toBeInTheDocument();
+  });
+});
+
+describe("Canais Dark · página única (planejamento + pipeline)", () => {
+  const twoChannels = [
+    { id: "channel-1", name: "Histórias", niche: "História", format: "long", publishing_mode: "manual", topic_folders: ["Reis"], materials: [{ title: "M", reference: "https://x/m", kind: "link" }] },
+    { id: "channel-2", name: "Mistérios", niche: "Mistérios", format: "shorts", publishing_mode: "manual", launch_wave: 1 },
+  ];
+
+  beforeEach(() => {
+    Object.values(api).forEach((mock) => mock.mockReset());
+    api.listDarkChannels.mockResolvedValue({ channels: twoChannels });
+    api.getDarkStructure.mockResolvedValue({ languages: [], niches: [], decisions: [] });
+    api.listDarkStructureTemplates.mockResolvedValue({ templates: [] });
+    api.listDarkChannelScripts.mockImplementation(async (channelId) => ({ scripts: channelId === "channel-1" ? [{ id: "script-1", channel_id: "channel-1", topic: "A cidade perdida", title: "A cidade perdida", script: "", status: "draft" }] : [] }));
+  });
+
+  it("puts the planning tabs first and then the original pipeline tabs, in order", async () => {
+    render(<DarkChannels />);
+    const tabs = await screen.findByRole("tablist", { name: "Seções do Canais Dark" });
+    expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Canais", "Decisões", "Nichos e idiomas", "Pastas e roteiros", "Materiais", "Gerar vídeos", "Thumbs", "Cortes", "Revisão final", "Agendados e publicados", "Analytics",
+    ]);
+    expect(workflowTabs.map(([, label]) => label)[0]).toBe("Canais");
+    expect(screen.getByRole("heading", { level: 1, name: "Canais Dark" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Estrutura" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Configurar provedores de IA/ })).toHaveAttribute("href", "/configuracoes/ia");
+    expect(screen.getByRole("region", { name: "Resumo da rede" })).toHaveTextContent("Decisões pendentes");
+  });
+
+  it("shares the channel selected in Canais with every pipeline tab and shows its overview counts", async () => {
+    render(<DarkChannels />);
+    const first = await screen.findByRole("button", { name: /^Histórias/ });
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    const overview = await screen.findByRole("group", { name: "Visão do canal" });
+    await waitFor(() => expect(overview).toHaveTextContent("1 pastas · 1 roteiros · 1 materiais organizados"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Mistérios/ }));
+    expect(screen.getByRole("button", { name: /^Mistérios/ })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(api.listDarkChannelScripts).toHaveBeenLastCalledWith("channel-2"));
+    expect(screen.getByRole("group", { name: "Visão do canal" })).toHaveTextContent("0 pastas · 0 roteiros · 0 materiais organizados");
+    expect(screen.getByRole("tab", { name: "Materiais" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Thumbs" }));
+    expect(await screen.findByTestId("thumbnail-studio")).toHaveAttribute("data-channel", "channel-2");
+    expect(screen.getByRole("heading", { name: "Mistérios" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Canais da rede" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Canais" }));
+    expect(screen.getByRole("button", { name: /^Mistérios/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /^Histórias/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Ir para Pastas e roteiros" }));
+    expect(screen.getByRole("tab", { name: "Pastas e roteiros" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("button", { name: /A cidade perdida/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Materiais" })).toBeEnabled());
+  });
+
+  it("changes the publishing mode from the channel details", async () => {
+    api.updateDarkChannel.mockImplementation(async (id, patch) => ({ ...twoChannels[0], ...patch, id }));
+    render(<DarkChannels />);
+    const details = await screen.findByRole("region", { name: "Detalhes do canal" });
+    fireEvent.change(within(details).getByLabelText("Publicação do canal"), { target: { value: "automatic" } });
+    await waitFor(() => expect(api.updateDarkChannel).toHaveBeenCalledWith("channel-1", { publishing_mode: "automatic" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Publicação automática selecionada");
+  });
+
+  it("sends the user from an empty pipeline stage back to Canais with the new-channel form open", async () => {
+    api.listDarkChannels.mockResolvedValue({ channels: [] });
+    render(<DarkChannels />);
+    await screen.findByText(/Nenhum canal cadastrado ainda/);
+    fireEvent.click(screen.getByRole("tab", { name: "Pastas e roteiros" }));
+    fireEvent.click(screen.getByRole("button", { name: "Criar canal" }));
+    expect(screen.getByRole("tab", { name: "Canais" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("form", { name: "Novo canal" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar cadastro" }));
+    expect(screen.queryByRole("form", { name: "Novo canal" })).not.toBeInTheDocument();
+  });
+
+  it("asks before leaving unsaved Nichos e idiomas for a pipeline tab and ignores clicks on the current tab", async () => {
+    api.getDarkStructure.mockResolvedValue({ languages: [], niches: [{ code: "historia", name: "História", subniches: [] }], decisions: [] });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    render(<DarkChannels />);
+    await screen.findByRole("button", { name: /^Histórias/ });
+    fireEvent.click(screen.getByRole("tab", { name: "Canais" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Nichos e idiomas" }));
+    fireEvent.change(await screen.findByLabelText("Nome do nicho 1"), { target: { value: "Histórias antigas" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Gerar vídeos" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("tab", { name: /Nichos e idiomas/ })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "Gerar vídeos" }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(await screen.findByTestId("video-studio")).toHaveAttribute("data-workspace", "canais-dark:channel-1:script-1");
+    confirm.mockRestore();
+  });
+
+  it("redirects the old Canais Dark 2 route to the single page and no longer ships the separate page", () => {
+    const app = readFileSync(resolve(process.cwd(), "src/App.jsx"), "utf8");
+    expect(app).toContain('<Route path="/canais-dark-2" element={<Navigate to="/canais-dark" replace />} />');
+    expect(app).toContain('<Route path="/canais-dark" element={protectedPage(DarkChannels, "ai_tools")} />');
+    expect(app).not.toContain("DarkChannels2");
+    expect(existsSync(resolve(process.cwd(), "src/mediamind/pages/DarkChannels2.jsx"))).toBe(false);
   });
 });
