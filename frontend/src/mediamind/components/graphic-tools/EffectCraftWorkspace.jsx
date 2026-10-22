@@ -206,6 +206,22 @@ function formatTimecode(time) {
   return `00:00:${String(seconds).padStart(2, "0")}:${String(Math.max(0, frames)).padStart(2, "0")}`;
 }
 
+/**
+ * Texto visível de uma camada no instante `time`, com a animação de texto aplicada
+ * (máquina de escrever por letra ou por palavra). Sem animação, devolve o texto inteiro.
+ */
+export function textAt(layer, time) {
+  const text = layer?.text ?? "MMEffect";
+  const animation = layer?.textAnimation;
+  if (!animation || !["letters", "words"].includes(animation.mode)) return text;
+  const progress = Math.max(0, Math.min(1, (time - animation.start) / Math.max(0.01, animation.duration)));
+  const units = animation.mode === "words" ? text.match(/\S+\s*/g) || [] : [...text];
+  const visible = units.slice(0, Math.floor(progress * units.length + 1e-9)).join("");
+  const typing = progress < 1;
+  const blink = Math.floor(time * 2) % 2 === 0;
+  return animation.cursor && (typing || blink) ? `${visible}|` : visible;
+}
+
 function evaluateKeyframes(frames, time, fallback) {
   if (!frames?.length) return fallback;
   const ordered = [...frames].sort((a, b) => a.time - b.time);
@@ -363,7 +379,7 @@ function drawCompositionFrame(ctx, scene, time, width, height) {
     ctx.font = `${weight} ${size}px ${family}`;
     if ("letterSpacing" in ctx) ctx.letterSpacing = `${(size * 0.04).toFixed(2)}px`;
     const lineHeight = numeric(layer.lineHeight, NaN) > 0 ? numeric(layer.lineHeight) * w / 1920 : size * 1.5;
-    ctx.fillText(layer.text ?? "MMEffect", textX, 16 + (lineHeight - size) / 2);
+    ctx.fillText(textAt(layer, time), textX, 16 + (lineHeight - size) / 2);
     if (scene.composition === "EffectCraft Intro") {
       ctx.shadowBlur = 0;
       ctx.fillStyle = "#67e8f9";
@@ -965,7 +981,8 @@ export default function EffectCraftWorkspace({
     setters: { layers: setLayers, transform: setTransform, propertyKeyframes: setPropertyKeyframes, markers: setMarkers, appliedEffects: setAppliedEffects, effectParams: setEffectParams },
     undo,
     setStatusMessage,
-    canUndo: history.current.undo.length > 0,
+    // O histórico por instantâneos grava depois do redesenho: lê ao vivo (ou a marca da última aplicação).
+    canUndo: false,
   };
   useEffect(() => {
     if (!active) return undefined;
@@ -991,11 +1008,11 @@ export default function EffectCraftWorkspace({
         return strip(result);
       },
       undo: () => {
-        if (!toolActions.current.canUndo) return false;
+        if (!toolActions.current.canUndo && !history.current.undo.length) return false;
         toolActions.current.undo();
         return true;
       },
-      canUndo: () => toolActions.current.canUndo,
+      canUndo: () => toolActions.current.canUndo || history.current.undo.length > 0,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -1476,7 +1493,7 @@ export default function EffectCraftWorkspace({
                 >
                   <div style={{clipPath: maskClipPath(activeLayer), ...layerAlignStyle(activeLayer)}}>
                   <span aria-label="Texto renderizado da camada" className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]" style={layerTextStyle(activeLayer)}>
-                    {activeLayer?.text ?? "MMEffect"}
+                    {textAt(activeLayer, playhead)}
                   </span>
                   {composition === "EffectCraft Intro" && <span className="text-sm tracking-[0.4em] text-cyan-300">
                     MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST

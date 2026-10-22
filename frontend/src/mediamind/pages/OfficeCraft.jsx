@@ -1,9 +1,12 @@
 import { useWorkDraftState, useWorkStorageKey } from "../lib/workProtection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bold, FilePlus2, Italic, LayoutTemplate, Plus, Redo2, Save, Underline, Undo2 } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, FilePlus2, Italic, LayoutTemplate, PaintBucket, Plus, Redo2, Save, Trash2, Underline, Undo2 } from "lucide-react";
+import { registerMCPActions } from "../lib/mcpActions";
+import { runWordTool, wordCatalogue } from "../components/graphic-tools/wordMcpTools";
+import { excelCatalogue, runExcelTool } from "../components/graphic-tools/excelMcpTools";
+import { powerpointCatalogue, runPowerPointTool } from "../components/graphic-tools/powerpointMcpTools";
 
 const apps = ["Word", "Excel", "PowerPoint"];
-const columns = ["A", "B", "C", "D", "E", "F"];
 const ribbonButton = "rounded border px-3 py-2 text-xs";
 const unavailableTab = "Os comandos desta guia ainda não estão disponíveis no navegador.";
 
@@ -276,9 +279,9 @@ export function insertPlainText(root, range, text) {
 
 const DEFAULT_DOCUMENT = "Título do documento\n\nComece a escrever aqui.";
 const wordTabs = ["Arquivo", "Início", "Inserir", "Layout", "Referências", "Revisão", "Exibir"];
-const fontFamilies = { Aptos: "Aptos, Calibri, sans-serif", Arial: "Arial, Helvetica, sans-serif", Georgia: "Georgia, serif" };
+export const fontFamilies = { Aptos: "Aptos, Calibri, sans-serif", Arial: "Arial, Helvetica, sans-serif", Georgia: "Georgia, serif" };
 
-function WordCraft() {
+function WordCraft({ active = true }) {
   const storageKey = useWorkStorageKey("mm-office-word");
   const [document, setDocument] = useWorkDraftState("pages/OfficeCraft.jsx:document", () => readLocal(storageKey, DEFAULT_DOCUMENT));
   const html = useMemo(() => normalizeDocument(document), [document]);
@@ -293,8 +296,9 @@ function WordCraft() {
   const [spell, setSpell] = useState(true);
   const [zoom, setZoom] = useState(100);
   const [status, setStatus] = useState("Salvo neste dispositivo");
-  useEffect(() => { setStatus(writeLocal(storageKey, html) ? "Salvo neste dispositivo" : "Falha ao salvar neste dispositivo — baixe o arquivo"); }, [html, storageKey]);
-  useLayoutEffect(() => { if (editorRef.current) editorRef.current.innerHTML = html; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const statusNote = useRef(null); // aviso do MCP que deve sobreviver ao "Salvo neste dispositivo" da mesma mudança
+  useEffect(() => { const note = statusNote.current; statusNote.current = null; setStatus(writeLocal(storageKey, html) ? note || "Salvo neste dispositivo" : "Falha ao salvar neste dispositivo — baixe o arquivo"); }, [html, storageKey]);
+  useLayoutEffect(() => { if (editorRef.current) editorRef.current.innerHTML = html; }, []);
   useEffect(() => {
     const remember = () => {
       const selection = window.getSelection?.();
@@ -324,6 +328,7 @@ function WordCraft() {
     const clean = sanitizeDocumentHtml(value);
     if (editorRef.current) editorRef.current.innerHTML = clean;
     setDocument(clean); record(clean, false);
+    return clean;
   }
   function travel(step) {
     const state = history.current;
@@ -334,6 +339,53 @@ function WordCraft() {
     setDocument(state.stack[index]);
     setHistoryState({ index, length: state.stack.length });
   }
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto). Lê o conteúdo atual do editor e grava
+  // pelo caminho normal (replaceContent → histórico do WordCraft); o desfazer do MCP só volta um passo
+  // se ninguém editou o documento depois da ação.
+  const mcp = useRef({});
+  mcp.current = { html, replaceContent, travel, setStatus };
+  const mcpAfter = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const read = () => ({ html: editorRef.current?.innerHTML ?? mcp.current.html });
+    const strip = ({ html: _html, ...result }) => result;
+    return registerMCPActions({
+      source: "word",
+      label: "Word",
+      catalogue: () => wordCatalogue(read()),
+      analyze: async (toolId, params) => {
+        const result = runWordTool(toolId, read(), params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runWordTool(toolId, read(), params);
+        if (result.ok && result.html !== undefined) {
+          const before = history.current.index;
+          const clean = mcp.current.replaceContent(result.html);
+          const message = `MCP · ${result.summary}`;
+          if (history.current.index !== before) { mcpAfter.current.push(clean); statusNote.current = message; }
+          mcp.current.setStatus(message);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = mcpAfter.current.at(-1);
+        if (last === undefined) return false;
+        const state = history.current;
+        if (state.stack[state.index] !== last) {
+          mcpAfter.current = [];
+          mcp.current.setStatus("O documento mudou depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        mcpAfter.current.pop();
+        statusNote.current = "MCP · Última ação desfeita.";
+        mcp.current.travel(-1);
+        mcp.current.setStatus(statusNote.current);
+        return true;
+      },
+      canUndo: () => mcpAfter.current.length > 0,
+    });
+  }, [active]);
   function currentRange() {
     const root = editorRef.current;
     const selection = window.getSelection?.();
@@ -401,7 +453,7 @@ function WordCraft() {
   return <div className="flex min-h-[680px] flex-col bg-[#e8e8e8] text-[#242424]">
     <div className="flex h-10 items-center gap-2 border-b border-[#c8c8c8] bg-white px-4"><button title="Desfazer" disabled={historyState.index === 0} onMouseDown={keepSelection} onClick={() => travel(-1)}><Undo2 size={16}/></button><button title="Refazer" disabled={historyState.index >= historyState.length - 1} onMouseDown={keepSelection} onClick={() => travel(1)}><Redo2 size={16}/></button><span className="mx-2 h-5 w-px bg-slate-300"/><button onClick={save} className="rounded bg-[#185abd] px-3 py-1 text-xs text-white"><Save size={14} className="mr-1 inline"/>Salvar</button><span role="status" className="ml-auto text-xs text-slate-500">{status}</span></div>
     <div className="border-b border-[#c8c8c8] bg-white"><div className="flex gap-6 px-5 pt-2 text-xs">{wordTabs.map((x)=><button key={x} aria-pressed={tab===x} onClick={()=>setTab(x)} className={tab===x?"border-b-2 border-[#185abd] pb-2 text-[#185abd]":"pb-2"}>{x}</button>)}</div><div className="flex h-20 items-center gap-3 border-t px-5">{ribbon[tab] || <span className="text-xs text-slate-500">{unavailableTab}</span>}</div></div>
-    <div className="flex flex-1 justify-center overflow-auto p-8"><div ref={editorRef} role="textbox" aria-multiline="true" aria-label="Documento WordCraft" contentEditable suppressContentEditableWarning spellCheck={spell} tabIndex={0} onInput={() => commit(true)} onKeyDown={onKeyDown} onPaste={onPaste} style={zoom === 100 ? undefined : { zoom: zoom / 100 }} className="min-h-[700px] w-[720px] resize-none bg-white px-20 py-16 text-[15px] leading-7 shadow-xl outline-none [&_h1]:text-[26px] [&_h1]:font-bold [&_h1]:leading-snug"/></div>
+    <div className="flex flex-1 justify-center overflow-auto p-8"><div ref={editorRef} role="textbox" aria-multiline="true" aria-label="Documento WordCraft" contentEditable suppressContentEditableWarning spellCheck={spell} tabIndex={0} onInput={() => commit(true)} onKeyDown={onKeyDown} onPaste={onPaste} style={zoom === 100 ? undefined : { zoom: zoom / 100 }} className="min-h-[700px] w-[720px] resize-none bg-white px-20 py-16 text-[15px] leading-7 shadow-xl outline-none [&_h1]:text-[26px] [&_h1]:font-bold [&_h1]:leading-snug [&_h2]:text-[20px] [&_h2]:font-bold [&_h3]:text-[17px] [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-8 [&_ol]:list-decimal [&_ol]:pl-8 [&_blockquote]:border-l-4 [&_blockquote]:border-slate-300 [&_blockquote]:pl-4 [&_blockquote]:italic"/></div>
     <input ref={fileRef} className="hidden" type="file" accept=".txt,.html,.htm,.doc,text/plain,text/html" aria-label="Abrir documento" onChange={(event) => { open(event.target.files?.[0]); event.target.value = ""; }}/>
     <div className="flex h-7 items-center bg-white px-4 text-[11px] text-slate-500"><span>Página 1 de 1</span><span className="ml-5">{words} palavras</span><span className="ml-auto">{zoom}%</span></div>
   </div>;
@@ -423,6 +475,25 @@ export function indexToColumn(index) {
   let value = index + 1, result = "";
   while (value > 0) { const rest = (value - 1) % 26; result = String.fromCharCode(65 + rest) + result; value = Math.floor((value - 1) / 26); }
   return result;
+}
+
+/**
+ * Área mostrada da planilha: no mínimo A–F e 1–18 (como antes) e, se houver dados ou formatos além disso,
+ * até a última coluna/linha usada mais uma de folga (limite de 52 colunas e 500 linhas na tela).
+ */
+export function gridExtent(sheet, { minCols = 6, minRows = 18, maxCols = 52, maxRows = 500 } = {}) {
+  let lastCol = minCols - 1;
+  let lastRow = minRows;
+  for (const key of [...Object.keys(sheet?.cells || {}), ...Object.keys(sheet?.formats || {})]) {
+    const pos = parseCellKey(key);
+    if (!pos) continue;
+    lastCol = Math.max(lastCol, Math.min(maxCols - 1, pos.col + 1));
+    lastRow = Math.max(lastRow, Math.min(maxRows, pos.row + 1));
+  }
+  return {
+    columns: Array.from({ length: lastCol + 1 }, (_, index) => indexToColumn(index)),
+    rows: Array.from({ length: lastRow }, (_, index) => index + 1),
+  };
 }
 
 export function parseCellKey(key) {
@@ -742,6 +813,7 @@ export function evaluateFormula(raw, cells = {}) {
 
 const currencyFormat = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const percentFormat = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 2 });
+const number2Format = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatCellValue(value, format = {}) {
   if (isFormulaError(value)) return value.error;
@@ -750,23 +822,175 @@ export function formatCellValue(value, format = {}) {
   if (typeof value === "number") {
     if (format.numFmt === "currency") return currencyFormat.format(value);
     if (format.numFmt === "percent") return percentFormat.format(value);
+    if (format.numFmt === "number2") return number2Format.format(value);
     return String(Math.round(value * 1e10) / 1e10);
   }
   return String(value);
 }
 
+/* ------------------------------------------------------------------ Excel: cores, regras e gráficos */
+
+export const isHexColor = (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+export const MAX_CONDITIONAL_RULES = 50;
+export const MAX_SHEET_CHARTS = 10;
+export const MAX_CHART_POINTS = 100;
+export const CONDITIONAL_OPS = [[">", "maior que"], ["<", "menor que"], ["between", "entre"], ["=", "igual a"], ["contains", "contém"], ["top", "N maiores"], ["bottom", "N menores"]];
+export const CHART_TYPES = [["bar", "Barras"], ["line", "Linhas"]];
+export const CHART_COLORS = ["#217346", "#2563eb", "#d97706", "#dc2626", "#7c3aed", "#0891b2"];
+
+/** "B2:B20" ou "B2" → { c1, c2, r1, r2 } (colunas a partir de 0); null se inválido. */
+export function parseCellRange(text) {
+  const match = /^\s*([A-Za-z]{1,3}\d+)\s*(?::\s*([A-Za-z]{1,3}\d+))?\s*$/.exec(String(text ?? ""));
+  if (!match) return null;
+  const a = parseCellKey(match[1]);
+  const b = parseCellKey(match[2] || match[1]);
+  if (!a.row || !b.row || Math.max(a.col, b.col) >= MAX_COLUMNS || Math.max(a.row, b.row) > MAX_ROWS) return null;
+  return { c1: Math.min(a.col, b.col), c2: Math.max(a.col, b.col), r1: Math.min(a.row, b.row), r2: Math.max(a.row, b.row) };
+}
+
+export const rangeToText = (range) => `${indexToColumn(range.c1)}${range.r1}:${indexToColumn(range.c2)}${range.r2}`;
+const inRange = (range, pos) => pos.col >= range.c1 && pos.col <= range.c2 && pos.row >= range.r1 && pos.row <= range.r2;
+const ruleNumber = (text) => { const clean = String(text ?? "").trim().replace(",", "."); const number = Number(clean); return clean !== "" && Number.isFinite(number) ? number : null; };
+const ruleText = (value) => (isFormulaError(value) ? value.error : typeof value === "boolean" ? (value ? "VERDADEIRO" : "FALSO") : String(value)).trim().toLocaleLowerCase("pt-BR");
+
+function normalizeRule(rule) {
+  if (!rule || typeof rule !== "object") return null;
+  const range = parseCellRange(rule.range);
+  const fill = isHexColor(rule.fill) ? rule.fill : "";
+  const color = isHexColor(rule.color) ? rule.color : "";
+  if (!range || !CONDITIONAL_OPS.some(([op]) => op === rule.op) || (!fill && !color)) return null;
+  return { range: rangeToText(range), op: rule.op, value: String(rule.value ?? ""), value2: String(rule.value2 ?? ""), fill, color };
+}
+
+function normalizeChart(chart, index) {
+  if (!chart || typeof chart !== "object") return null;
+  const range = parseCellRange(chart.range);
+  if (!range || range.c1 === range.c2) return null;
+  return { id: String(chart.id || `chart-${index + 1}`), range: rangeToText(range), type: chart.type === "line" ? "line" : "bar", title: String(chart.title ?? "").slice(0, 80), header: chart.header !== false };
+}
+
+const listOf = (value, normalize, limit) => (Array.isArray(value) ? value.map(normalize).filter(Boolean).slice(0, limit) : []);
+
+/** Descrição curta de uma regra de formatação condicional ("B2:B9 · maior que “10”"). */
+export function describeRule(rule) {
+  if (rule.op === "between") return `${rule.range} · entre ${rule.value} e ${rule.value2}`;
+  if (rule.op === "top" || rule.op === "bottom") return `${rule.range} · ${rule.value} ${rule.op === "top" ? "maiores" : "menores"}`;
+  return `${rule.range} · ${CONDITIONAL_OPS.find(([op]) => op === rule.op)[1]} “${rule.value}”`;
+}
+
+/** A regra vale para este valor calculado? Em top/bottom, `threshold` é o limite já calculado no intervalo. */
+export function matchesRule(rule, value, threshold) {
+  if (value === null || value === undefined || value === "") return false;
+  const first = ruleNumber(rule.value);
+  const numeric = typeof value === "number";
+  if (rule.op === ">") return numeric && first !== null && value > first;
+  if (rule.op === "<") return numeric && first !== null && value < first;
+  if (rule.op === "between") {
+    const second = ruleNumber(rule.value2);
+    return numeric && first !== null && second !== null && value >= Math.min(first, second) && value <= Math.max(first, second);
+  }
+  const wanted = String(rule.value).trim().toLocaleLowerCase("pt-BR");
+  if (rule.op === "=") return numeric && first !== null ? value === first : ruleText(value) === wanted;
+  if (rule.op === "contains") return wanted !== "" && ruleText(value).includes(wanted);
+  if (!numeric || typeof threshold !== "number") return false;
+  return rule.op === "top" ? value >= threshold : value <= threshold;
+}
+
+/** Cores das regras da planilha por célula ({ B2: { fill, color } }), avaliadas sobre os valores calculados. A última regra vale por cima. */
+export function conditionalFormats(sheet, valueOf) {
+  const styles = {};
+  const positions = Object.keys(sheet.cells || {}).map((key) => [key, parseCellKey(key)]).filter(([, pos]) => pos);
+  (sheet.rules || []).forEach((rule) => {
+    const range = parseCellRange(rule.range);
+    if (!range) return;
+    const inside = positions.filter(([, pos]) => inRange(range, pos)).map(([key]) => [key, valueOf(key)]);
+    let threshold;
+    if (rule.op === "top" || rule.op === "bottom") {
+      const numbers = inside.map(([, value]) => value).filter((value) => typeof value === "number").sort((a, b) => (rule.op === "top" ? b - a : a - b));
+      const wanted = Math.floor(ruleNumber(rule.value) ?? 0);
+      if (wanted >= 1 && numbers.length) threshold = numbers[Math.min(wanted, numbers.length) - 1];
+    }
+    inside.forEach(([key, value]) => {
+      if (matchesRule(rule, value, threshold)) styles[key] = { ...styles[key], ...(rule.fill && { fill: rule.fill }), ...(rule.color && { color: rule.color }) };
+    });
+  });
+  return styles;
+}
+
+/** Estilo da célula: negrito/itálico e cores manuais; a formatação condicional vale por cima das cores manuais. */
+export function gridCellStyle(format, conditional) {
+  if (!format && !conditional) return undefined;
+  return {
+    fontWeight: format?.bold ? 700 : undefined,
+    fontStyle: format?.italic ? "italic" : undefined,
+    backgroundColor: conditional?.fill || (isHexColor(format?.fill) ? format.fill : undefined),
+    color: conditional?.color || (isHexColor(format?.color) ? format.color : undefined),
+  };
+}
+
+/** Dados do gráfico a partir do intervalo: rótulos na 1ª coluna, uma série por coluna seguinte (só números contam). */
+export function chartData(chart, valueOf) {
+  const range = parseCellRange(chart.range);
+  const show = (value) => (value === null ? "" : formatCellValue(value));
+  const first = chart.header ? range.r1 + 1 : range.r1;
+  const series = [];
+  for (let col = range.c1 + 1; col <= range.c2 && series.length < CHART_COLORS.length; col += 1) {
+    const letter = indexToColumn(col);
+    series.push({ name: (chart.header && show(valueOf(`${letter}${range.r1}`))) || `Coluna ${letter}`, color: CHART_COLORS[series.length], values: [] });
+  }
+  const labels = [];
+  for (let row = first; row <= range.r2 && labels.length < MAX_CHART_POINTS; row += 1) {
+    labels.push(show(valueOf(`${indexToColumn(range.c1)}${row}`)) || String(row));
+    series.forEach((item, index) => { const value = valueOf(`${indexToColumn(range.c1 + 1 + index)}${row}`); item.values.push(typeof value === "number" ? value : null); });
+  }
+  return { labels, series };
+}
+
+const round2 = (value) => Math.round(value * 100) / 100;
+
+/** Geometria do gráfico (barras agrupadas ou linhas) em coordenadas de SVG; null quando não há números. */
+export function chartGeometry(data, type, { width = 480, height = 240 } = {}) {
+  const numbers = data.series.flatMap((item) => item.values).filter((value) => value !== null);
+  if (!numbers.length) return null;
+  const min = Math.min(0, ...numbers);
+  const top = Math.max(0, ...numbers);
+  const max = top === min ? min + 1 : top;
+  const plot = { left: 48, top: 12, right: width - 12, bottom: height - 32 };
+  const y = (value) => round2(plot.bottom - ((value - min) / (max - min)) * (plot.bottom - plot.top));
+  const slot = (plot.right - plot.left) / data.labels.length;
+  const center = (index) => round2(plot.left + slot * (index + 0.5));
+  const zero = y(0);
+  const bars = [];
+  const lines = [];
+  if (type === "line") data.series.forEach((item) => lines.push({ name: item.name, color: item.color, points: item.values.flatMap((value, index) => (value === null ? [] : [{ x: center(index), y: y(value), value, label: data.labels[index] }])) }));
+  else {
+    const barWidth = (slot * 0.8) / data.series.length;
+    data.series.forEach((item, seriesIndex) => item.values.forEach((value, index) => {
+      if (value === null) return;
+      bars.push({ x: round2(plot.left + slot * index + slot * 0.1 + barWidth * seriesIndex), y: Math.min(y(value), zero), width: round2(barWidth), height: round2(Math.abs(y(value) - zero)), color: item.color, name: item.name, label: data.labels[index], value });
+    }));
+  }
+  const step = Math.ceil(data.labels.length / 12);
+  return {
+    width, height, plot, zero,
+    ticks: [...new Set([min, 0, max])].map((value) => ({ value, y: y(value) })),
+    labels: data.labels.flatMap((text, index) => (index % step ? [] : [{ text: text.length > 12 ? `${text.slice(0, 11)}…` : text, x: center(index) }])),
+    bars, lines,
+  };
+}
+
 let sheetSeed = 0;
-const newSheet = (name) => ({ id: `sheet-${Date.now().toString(36)}-${(sheetSeed += 1)}`, name, cells: {}, formats: {} });
+const newSheet = (name) => ({ id: `sheet-${Date.now().toString(36)}-${(sheetSeed += 1)}`, name, cells: {}, formats: {}, rules: [], charts: [] });
 
 /** Accepts the legacy {A1: "x"} cell map and returns the multi-sheet workbook shape. */
 export function normalizeWorkbook(value) {
   if (value && Array.isArray(value.sheets) && value.sheets.length) {
-    const sheets = value.sheets.map((sheet, index) => ({ id: String(sheet.id || `sheet-${index + 1}`), name: String(sheet.name || `Planilha${index + 1}`), cells: sheet.cells && typeof sheet.cells === "object" ? sheet.cells : {}, formats: sheet.formats && typeof sheet.formats === "object" ? sheet.formats : {} }));
+    const sheets = value.sheets.map((sheet, index) => ({ id: String(sheet.id || `sheet-${index + 1}`), name: String(sheet.name || `Planilha${index + 1}`), cells: sheet.cells && typeof sheet.cells === "object" ? sheet.cells : {}, formats: sheet.formats && typeof sheet.formats === "object" ? sheet.formats : {}, rules: listOf(sheet.rules, normalizeRule, MAX_CONDITIONAL_RULES), charts: listOf(sheet.charts, normalizeChart, MAX_SHEET_CHARTS) }));
     return { sheets, active: sheets.some((sheet) => sheet.id === value.active) ? value.active : sheets[0].id };
   }
   const cells = {};
   if (value && typeof value === "object") Object.entries(value).forEach(([key, raw]) => { if (parseCellKey(key) && typeof raw === "string") cells[key.toUpperCase()] = raw; });
-  return { sheets: [{ id: "sheet-1", name: "Planilha1", cells, formats: {} }], active: "sheet-1" };
+  return { sheets: [{ id: "sheet-1", name: "Planilha1", cells, formats: {}, rules: [], charts: [] }], active: "sheet-1" };
 }
 
 export function parseDelimited(text, delimiter) {
@@ -813,7 +1037,25 @@ export function sheetToCsv(sheet, evaluator) {
 
 const gridTabs = ["Arquivo", "Página Inicial", "Inserir", "Layout da Página", "Fórmulas", "Dados", "Revisão", "Exibir"];
 
-function GridCraft() {
+/** Gráfico da planilha em SVG próprio; relê o intervalo a cada desenho, então acompanha as mudanças das células. */
+function SheetChart({ chart, valueOf, onRemove }) {
+  const data = chartData(chart, valueOf);
+  const geometry = chartGeometry(data, chart.type);
+  const name = chart.title || `Gráfico de ${chart.range}`;
+  const kind = chart.type === "line" ? "linhas" : "barras";
+  return <figure aria-label={name} className="w-[500px] max-w-full rounded border bg-white p-2 text-[#202020]">
+    <figcaption className="flex items-center gap-2 text-xs"><b>{name}</b><span className="text-slate-500">{chart.range} · {kind}</span><button className="ml-auto rounded p-1 hover:bg-slate-100" aria-label={`Remover gráfico ${name}`} title="Remover gráfico" onClick={onRemove}><Trash2 size={13}/></button></figcaption>
+    {geometry ? <svg role="img" aria-label={`Gráfico de ${kind}: ${data.series.map((item) => item.name).join(", ")}`} viewBox={`0 0 ${geometry.width} ${geometry.height}`} className="h-auto w-full">
+      {geometry.ticks.map((tick) => <g key={tick.value}><line x1={geometry.plot.left} x2={geometry.plot.right} y1={tick.y} y2={tick.y} stroke={tick.value === 0 ? "#9ca3af" : "#e5e7eb"}/><text x={geometry.plot.left - 4} y={tick.y + 3} textAnchor="end" fontSize="9" fill="#6b7280">{formatCellValue(tick.value)}</text></g>)}
+      {geometry.bars.map((bar) => <rect key={`${bar.name}-${bar.x}`} data-testid="chart-bar" x={bar.x} y={bar.y} width={bar.width} height={bar.height} fill={bar.color}><title>{`${bar.label} · ${bar.name}: ${formatCellValue(bar.value)}`}</title></rect>)}
+      {geometry.lines.map((line) => <g key={line.name} data-testid="chart-line"><polyline fill="none" stroke={line.color} strokeWidth="2" points={line.points.map((point) => `${point.x},${point.y}`).join(" ")}/>{line.points.map((point) => <circle key={point.x} cx={point.x} cy={point.y} r="3" fill={line.color}><title>{`${point.label} · ${line.name}: ${formatCellValue(point.value)}`}</title></circle>)}</g>)}
+      {geometry.labels.map((label) => <text key={label.x} x={label.x} y={geometry.plot.bottom + 14} textAnchor="middle" fontSize="9" fill="#374151">{label.text}</text>)}
+    </svg> : <p className="p-4 text-xs text-slate-500">Sem números nas colunas de valores de {chart.range}.</p>}
+    <div className="flex flex-wrap gap-3 text-[10px]">{data.series.map((item) => <span key={item.name} className="flex items-center gap-1"><span className="inline-block h-2 w-3" style={{ backgroundColor: item.color }}/>{item.name}</span>)}</div>
+  </figure>;
+}
+
+function GridCraft({ active = true }) {
   const storageKey = useWorkStorageKey("mm-office-grid");
   const [stored, setStored] = useWorkDraftState("pages/OfficeCraft.jsx:cells", () => normalizeWorkbook(readLocal(storageKey, {})));
   const [selected, setSelected] = useWorkDraftState("pages/OfficeCraft.jsx:selected", "A1");
@@ -826,7 +1068,51 @@ function GridCraft() {
   const sheet = book.sheets.find((item) => item.id === book.active) || book.sheets[0];
   const evaluator = useMemo(() => createWorkbookEvaluator(book), [book]);
   useEffect(() => { if (!writeLocal(storageKey, book)) setStatus("Falha ao salvar neste dispositivo — baixe o CSV"); }, [book, storageKey]);
-  const rows = useMemo(() => Array.from({length: 18}, (_,i)=>i+1), []);
+  const { columns: gridColumns, rows } = useMemo(() => gridExtent(sheet), [sheet]);
+  // Ferramentas de um clique do MCP. O GridCraft não tem histórico próprio: o MCP guarda a pasta anterior
+  // a cada aplicação e só desfaz se ninguém mexeu nela depois (refs: a fila roda antes do React redesenhar).
+  const storedRef = useRef(stored); storedRef.current = stored;
+  const selectedRef = useRef(selected); selectedRef.current = selected;
+  const mcpHistory = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const read = () => ({ book: storedRef.current, selected: selectedRef.current });
+    const strip = ({ book: _book, ...result }) => result;
+    return registerMCPActions({
+      source: "excel",
+      label: "Excel",
+      catalogue: () => excelCatalogue(read()),
+      analyze: async (toolId, params) => {
+        const result = runExcelTool(toolId, read(), params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runExcelTool(toolId, read(), params);
+        if (result.ok && result.book) {
+          mcpHistory.current.push({ before: storedRef.current, after: result.book });
+          storedRef.current = result.book;
+          setStored(result.book);
+          setStatus(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = mcpHistory.current.at(-1);
+        if (!last) return false;
+        if (storedRef.current !== last.after) {
+          mcpHistory.current = [];
+          setStatus("A planilha mudou depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        mcpHistory.current.pop();
+        storedRef.current = last.before;
+        setStored(last.before);
+        setStatus("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => mcpHistory.current.length > 0,
+    });
+  }, [active]);
   const update = (change) => setStored((current) => change(normalizeWorkbook(current)));
   const updateSheet = (change) => update((current) => ({ ...current, sheets: current.sheets.map((item) => item.id === current.active ? change(item) : item) }));
   const setCell = (key, raw) => updateSheet((item) => { const cells = { ...item.cells }; if (raw === "") delete cells[key]; else cells[key] = raw; return { ...item, cells }; });
@@ -911,7 +1197,7 @@ function GridCraft() {
   }
   function moveFrom(key, rowStep) {
     const pos = parseCellKey(key);
-    const next = `${indexToColumn(pos.col)}${Math.min(18, Math.max(1, pos.row + rowStep))}`;
+    const next = `${indexToColumn(pos.col)}${Math.min(rows.length, Math.max(1, pos.row + rowStep))}`;
     window.document.querySelector(`[aria-label="Célula ${next}"]`)?.focus();
   }
   const display = (key) => {
@@ -919,10 +1205,18 @@ function GridCraft() {
     if (editing === key || showFormulas) return raw;
     return formatCellValue(evaluator.value(sheet.id, key), sheet.formats[key]);
   };
-  const cellStyle = (key) => { const item = sheet.formats[key]; return item ? { fontWeight: item.bold ? 700 : undefined, fontStyle: item.italic ? "italic" : undefined } : undefined; };
+  const valueOf = (key) => evaluator.value(sheet.id, key);
+  const conditional = useMemo(() => conditionalFormats(sheet, (key) => evaluator.value(sheet.id, key)), [sheet, evaluator]);
+  const cellStyle = (key) => gridCellStyle(sheet.formats[key], conditional[key]);
+  const setColor = (name, value) => updateSheet((item) => {
+    const { [name]: _old, ...rest } = item.formats[selected] || {};
+    return { ...item, formats: { ...item.formats, [selected]: value ? { ...rest, [name]: value } : rest } };
+  });
+  const removeRule = (index) => updateSheet((item) => ({ ...item, rules: item.rules.filter((_, position) => position !== index) }));
+  const removeChart = (id) => updateSheet((item) => ({ ...item, charts: item.charts.filter((chart) => chart.id !== id) }));
   const ribbon = {
     Arquivo: <><button className={ribbonButton} onClick={newWorkbook}>Nova pasta de trabalho</button><button className={ribbonButton} onClick={() => csvRef.current?.click()}>Abrir CSV</button><button className={ribbonButton} onClick={save}>Baixar CSV</button></>,
-    "Página Inicial": <><button className="rounded border px-3 py-2 text-xs" onClick={pasteFromClipboard}>Colar</button><button className="p-2" aria-label="Negrito" aria-pressed={Boolean(format.bold)} onClick={() => toggleFormat("bold")}><Bold size={16}/></button><button className="p-2" aria-label="Itálico" aria-pressed={Boolean(format.italic)} onClick={() => toggleFormat("italic")}><Italic size={16}/></button><button className="rounded border px-3 py-2 text-xs" aria-pressed={format.numFmt === "currency"} onClick={() => toggleFormat("numFmt", "currency")}>Moeda</button><button className="rounded border px-3 py-2 text-xs" aria-label="Porcentagem" aria-pressed={format.numFmt === "percent"} onClick={() => toggleFormat("numFmt", "percent")}>%</button></>,
+    "Página Inicial": <><button className="rounded border px-3 py-2 text-xs" onClick={pasteFromClipboard}>Colar</button><button className="p-2" aria-label="Negrito" aria-pressed={Boolean(format.bold)} onClick={() => toggleFormat("bold")}><Bold size={16}/></button><button className="p-2" aria-label="Itálico" aria-pressed={Boolean(format.italic)} onClick={() => toggleFormat("italic")}><Italic size={16}/></button><button className="rounded border px-3 py-2 text-xs" aria-pressed={format.numFmt === "currency"} onClick={() => toggleFormat("numFmt", "currency")}>Moeda</button><button className="rounded border px-3 py-2 text-xs" aria-label="Porcentagem" aria-pressed={format.numFmt === "percent"} onClick={() => toggleFormat("numFmt", "percent")}>%</button><span className="h-10 w-px bg-slate-300"/><label className="flex items-center gap-1 text-xs" title="Cor de preenchimento da célula"><PaintBucket size={15}/><input type="color" aria-label="Cor de preenchimento" value={isHexColor(format.fill) ? format.fill : "#ffffff"} onChange={(e) => setColor("fill", e.target.value)} className="h-6 w-8"/></label><label className="flex items-center gap-1 text-xs" title="Cor do texto da célula"><Baseline size={15}/><input type="color" aria-label="Cor do texto" value={isHexColor(format.color) ? format.color : "#202020"} onChange={(e) => setColor("color", e.target.value)} className="h-6 w-8"/></label><button className={ribbonButton} disabled={!format.fill && !format.color} onClick={() => { setColor("fill", ""); setColor("color", ""); }}>Sem cor</button></>,
     Inserir: <><button className={ribbonButton} onClick={addSheet}>Nova planilha</button><button className={ribbonButton} onClick={() => renameSheet(sheet)}>Renomear planilha</button><button className={ribbonButton} onClick={deleteSheet}>Excluir planilha</button></>,
     Fórmulas: <><button className={ribbonButton} onClick={autoSum}>AutoSoma</button><button className={ribbonButton} aria-pressed={showFormulas} onClick={() => setShowFormulas(!showFormulas)}>Mostrar fórmulas</button><span className="text-xs text-slate-500">SUM, AVERAGE, MIN, MAX, COUNT, IF, ROUND (ou SOMA, MÉDIA, SE, ARRED…)</span></>,
   };
@@ -930,7 +1224,11 @@ function GridCraft() {
     <div className="flex h-10 items-center gap-3 bg-[#217346] px-4 text-xs text-white"><b>GridCraft</b><button aria-label="Nova pasta de trabalho" title="Nova pasta de trabalho" onClick={newWorkbook}><FilePlus2 size={15}/></button><button aria-label="Salvar CSV" title="Salvar (baixar CSV da planilha ativa)" onClick={save}><Save size={15}/></button><span role="status" className="ml-auto">{status}</span></div>
     <div className="border-b"><div className="flex gap-6 px-5 pt-2 text-xs">{gridTabs.map((x)=><button key={x} aria-pressed={tab===x} onClick={()=>setTab(x)} className={tab===x?"border-b-2 border-[#217346] pb-2":"pb-2"}>{x}</button>)}</div><div className="flex h-16 items-center gap-2 border-t px-4">{ribbon[tab] || <span className="text-xs text-slate-500">{unavailableTab}</span>}</div></div>
     <div className="flex h-9 items-center border-b bg-[#fafafa] px-3 text-xs"><span className="w-16 font-semibold">{selected}</span><span className="mr-2 text-slate-400">ƒx</span><input aria-label="Barra de fórmulas" value={sheet.cells[selected]||""} onChange={(e)=>setCell(selected, e.target.value)} className="flex-1 border-l bg-transparent px-3 outline-none"/></div>
-    <div className="overflow-auto"><table className="border-collapse text-xs"><thead><tr><th className="sticky left-0 h-7 w-10 border bg-[#f1f1f1]"/>{columns.map(c=><th key={c} className="h-7 min-w-36 border bg-[#f1f1f1] font-normal">{c}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row}><th className="sticky left-0 border bg-[#f1f1f1] font-normal">{row}</th>{columns.map(col=>{const key=`${col}${row}`;return <td key={key} className={`border ${selected===key?"outline outline-2 outline-[#217346]":""}`}><input aria-label={`Célula ${key}`} value={display(key)} style={cellStyle(key)} onFocus={()=>{setSelected(key); setEditing(key);}} onBlur={()=>setEditing((current)=>current===key?null:current)} onChange={(e)=>setCell(key, e.target.value)} onPaste={(e)=>{const text=e.clipboardData?.getData("text/plain")||""; if (/[\t\n]/.test(text.replace(/\r?\n$/, ""))) { e.preventDefault(); pasteTable(text, key); }}} onKeyDown={(e)=>{ if (e.key==="Enter") { e.preventDefault(); moveFrom(key, e.shiftKey?-1:1); } }} className="h-7 w-36 bg-transparent px-2 outline-none"/></td>;})}</tr>)}</tbody></table></div>
+    <div className="overflow-auto"><table className="border-collapse text-xs"><thead><tr><th className="sticky left-0 h-7 w-10 border bg-[#f1f1f1]"/>{gridColumns.map(c=><th key={c} className="h-7 min-w-36 border bg-[#f1f1f1] font-normal">{c}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row}><th className="sticky left-0 border bg-[#f1f1f1] font-normal">{row}</th>{gridColumns.map(col=>{const key=`${col}${row}`;return <td key={key} className={`border ${selected===key?"outline outline-2 outline-[#217346]":""}`}><input aria-label={`Célula ${key}`} value={display(key)} style={cellStyle(key)} onFocus={()=>{setSelected(key); setEditing(key);}} onBlur={()=>setEditing((current)=>current===key?null:current)} onChange={(e)=>setCell(key, e.target.value)} onPaste={(e)=>{const text=e.clipboardData?.getData("text/plain")||""; if (/[\t\n]/.test(text.replace(/\r?\n$/, ""))) { e.preventDefault(); pasteTable(text, key); }}} onKeyDown={(e)=>{ if (e.key==="Enter") { e.preventDefault(); moveFrom(key, e.shiftKey?-1:1); } }} className="h-7 w-36 bg-transparent px-2 outline-none"/></td>;})}</tr>)}</tbody></table></div>
+    {(sheet.rules.length > 0 || sheet.charts.length > 0) && <div className="flex flex-wrap items-start gap-3 border-t bg-[#fafafa] p-3">
+      {sheet.rules.length > 0 && <ul aria-label="Formatação condicional" className="min-w-56 space-y-1 rounded border bg-white p-2 text-xs"><li className="font-semibold">Formatação condicional</li>{sheet.rules.map((rule, index) => <li key={`${index}-${describeRule(rule)}`} className="flex items-center gap-2"><span className="inline-flex h-4 w-6 items-center justify-center rounded border text-[9px] font-bold" style={{ backgroundColor: rule.fill || undefined, color: rule.color || undefined }}>A</span><span>{describeRule(rule)}</span><button className="ml-auto rounded p-1 hover:bg-slate-100" aria-label={`Remover regra ${describeRule(rule)}`} title="Remover regra" onClick={() => removeRule(index)}><Trash2 size={12}/></button></li>)}</ul>}
+      {sheet.charts.map((chart) => <SheetChart key={chart.id} chart={chart} valueOf={valueOf} onRemove={() => removeChart(chart.id)}/>)}
+    </div>}
     <div className="flex h-8 items-center border-t bg-[#f4f4f4] px-3 text-xs"><button className="mr-3 text-lg" aria-label="Nova planilha" title="Nova planilha" onClick={addSheet}>＋</button>{book.sheets.map((item)=><button key={item.id} aria-pressed={item.id===sheet.id} title="Clique duas vezes para renomear" onClick={()=>update((current)=>({...current, active:item.id}))} onDoubleClick={()=>renameSheet(item)} className={item.id===sheet.id?"h-full border-b-2 border-[#217346] px-5":"h-full px-5"}>{item.name}</button>)}</div>
     <input ref={csvRef} className="hidden" type="file" accept=".csv,text/csv" aria-label="Abrir CSV" onChange={(event) => { importCsv(event.target.files?.[0]); event.target.value = ""; }}/>
   </div>;
@@ -949,6 +1247,28 @@ export function moveItem(list, from, to) {
   return next;
 }
 
+export const slideThemes = [
+  { id: "classic", label: "Clássico", background: "#ffffff", color: "#252525" },
+  { id: "dark", label: "Escuro", background: "#1f2937", color: "#f9fafb" },
+  { id: "ocean", label: "Oceano", background: "#0c4a6e", color: "#e0f2fe" },
+  { id: "forest", label: "Floresta", background: "#14532d", color: "#ecfdf5" },
+  { id: "sunset", label: "Pôr do sol", background: "#9a3412", color: "#fff7ed" },
+  { id: "sand", label: "Areia", background: "#fef3c7", color: "#78350f" },
+];
+export const slideAligns = [["auto", "Pelo layout"], ["left", "Esquerda"], ["center", "Centro"], ["right", "Direita"], ["justify", "Justificado"]];
+
+/** Fundo e cor do texto do slide (apresentações antigas não têm tema: ficam no Clássico, branco). */
+export function slideThemeOf(slide) {
+  return { background: isHexColor(slide?.theme?.background) ? slide.theme.background : slideThemes[0].background, color: isHexColor(slide?.theme?.color) ? slide.theme.color : slideThemes[0].color };
+}
+
+export const sameTheme = (a, b) => a.background.toLowerCase() === b.background.toLowerCase() && a.color.toLowerCase() === b.color.toLowerCase();
+
+/** Alinhamento efetivo: o escolhido no slide ou, em "auto", o do layout (Título e conteúdo = esquerda; os outros = centro). */
+export function slideAlignOf(slide) {
+  return slide.align && slide.align !== "auto" ? slide.align : slide.layout === "title-content" ? "left" : "center";
+}
+
 export function normalizeDeck(value) {
   const slides = Array.isArray(value) ? value : Array.isArray(value?.slides) ? value.slides : null;
   if (!slides) return null;
@@ -958,6 +1278,9 @@ export function normalizeDeck(value) {
     layout: slideLayouts.some((layout) => layout.id === slide.layout) ? slide.layout : "title",
     titleStyle: { bold: Boolean(slide.titleStyle?.bold), italic: Boolean(slide.titleStyle?.italic) },
     bodyStyle: { bold: Boolean(slide.bodyStyle?.bold), italic: Boolean(slide.bodyStyle?.italic) },
+    notes: String(slide.notes ?? ""),
+    align: slideAligns.some(([align]) => align === slide.align) ? slide.align : "auto",
+    theme: slideThemeOf(slide),
   }));
   return clean.length ? clean : null;
 }
@@ -966,6 +1289,7 @@ const textStyle = (style, base) => ({ fontWeight: style?.bold ? 800 : base, font
 
 function SlidePresenter({ slides, start, onClose }) {
   const [index, setIndex] = useState(start);
+  const [showNotes, setShowNotes] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
     const element = ref.current;
@@ -983,24 +1307,28 @@ function SlidePresenter({ slides, start, onClose }) {
       else if (event.key === "Home") setIndex(0);
       else if (event.key === "End") setIndex(slides.length - 1);
       else if (event.key === "Escape") onClose();
+      else if (event.key === "n" || event.key === "N") setShowNotes((value) => !value);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [slides.length, onClose]);
   const slide = slides[index];
+  const theme = slideThemeOf(slide);
+  const align = slideAlignOf(slide);
   return <div ref={ref} role="dialog" aria-modal="true" aria-label="Apresentação de slides" tabIndex={-1} onClick={() => setIndex((value) => Math.min(slides.length - 1, value + 1))} className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black outline-none">
-    <div className="flex aspect-video w-full max-w-[min(100vw,177vh)] flex-col justify-center bg-white p-20 text-[#252525]">
-      <h2 className={`text-5xl font-semibold ${slide.layout === "title-content" ? "text-left" : "text-center"}`} style={textStyle(slide.titleStyle)}>{slide.title}</h2>
-      {slide.layout !== "title-only" && <p className={`mt-10 whitespace-pre-wrap text-2xl ${slide.layout === "title-content" ? "text-left" : "text-center"}`} style={textStyle(slide.bodyStyle)}>{slide.body}</p>}
+    <div className="flex aspect-video w-full max-w-[min(100vw,177vh)] flex-col justify-center bg-white p-20 text-[#252525]" style={{ backgroundColor: theme.background, color: theme.color }}>
+      <h2 className="text-5xl font-semibold" style={{ ...textStyle(slide.titleStyle), textAlign: align }}>{slide.title}</h2>
+      {slide.layout !== "title-only" && <p className="mt-10 whitespace-pre-wrap text-2xl" style={{ ...textStyle(slide.bodyStyle), textAlign: align }}>{slide.body}</p>}
     </div>
-    <p className="mt-3 text-xs text-slate-400">Slide {index + 1} de {slides.length} · ← → navegam · Esc encerra</p>
+    {showNotes && <aside aria-label="Anotações do apresentador" onClick={(event) => event.stopPropagation()} className="mt-3 max-h-40 w-full max-w-3xl overflow-auto whitespace-pre-wrap rounded bg-white/10 p-3 text-sm text-white">{slide.notes || "Este slide não tem anotações."}</aside>}
+    <p className="mt-3 text-xs text-slate-400">Slide {index + 1} de {slides.length} · ← → navegam · N mostra/oculta as anotações · Esc encerra</p>
   </div>;
 }
 
-function DeckCraft() {
+function DeckCraft({ active: mcpActive = true }) {
   const storageKey = useWorkStorageKey("mm-office-deck");
   const [stored, setSlides] = useWorkDraftState("pages/OfficeCraft.jsx:slides", () => readLocal(storageKey, [{id:1,title:"Título da apresentação",body:"Clique para adicionar um subtítulo"}]));
-  const slides = useMemo(() => normalizeDeck(stored) || [{ id: 1, title: "Título da apresentação", body: "Clique para adicionar um subtítulo", layout: "title", titleStyle: {}, bodyStyle: {} }], [stored]);
+  const slides = useMemo(() => normalizeDeck(stored) || normalizeDeck([{ id: 1, title: "Título da apresentação", body: "Clique para adicionar um subtítulo" }]), [stored]);
   const [active, setActive] = useState(0);
   const [tab, setTab] = useState("Início");
   const [field, setField] = useState("title");
@@ -1011,6 +1339,52 @@ function DeckCraft() {
   const index = Math.min(active, slides.length - 1);
   const current = slides[index];
   useEffect(() => { if (!writeLocal(storageKey, slides)) setStatus("Falha ao salvar neste dispositivo — baixe o arquivo"); }, [slides, storageKey]);
+  // Ferramentas de um clique do MCP. O DeckCraft não tem histórico próprio: o MCP guarda os slides anteriores
+  // a cada aplicação e só desfaz se ninguém mexeu neles depois (refs: a fila roda antes do React redesenhar).
+  const deckRef = useRef(null);
+  deckRef.current = { stored, slides, index };
+  const mcpHistory = useRef([]);
+  useEffect(() => {
+    if (!mcpActive) return undefined;
+    const read = () => ({ slides: deckRef.current.slides, index: deckRef.current.index });
+    const strip = ({ slides: _slides, index: _index, ...result }) => result;
+    return registerMCPActions({
+      source: "powerpoint",
+      label: "PowerPoint",
+      catalogue: () => powerpointCatalogue(read()),
+      analyze: async (toolId, params) => {
+        const result = runPowerPointTool(toolId, read(), params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const result = runPowerPointTool(toolId, read(), params);
+        if (result.ok && result.slides) {
+          const before = deckRef.current;
+          mcpHistory.current.push({ before: before.stored, index: before.index, after: result.slides });
+          deckRef.current = { stored: result.slides, slides: result.slides, index: result.index };
+          setSlides(result.slides); setActive(result.index);
+          setStatus(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = mcpHistory.current.at(-1);
+        if (!last) return false;
+        if (deckRef.current.stored !== last.after) {
+          mcpHistory.current = [];
+          setStatus("Os slides mudaram depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        mcpHistory.current.pop();
+        const slides = normalizeDeck(last.before) || deckRef.current.slides;
+        deckRef.current = { stored: last.before, slides, index: last.index };
+        setSlides(last.before); setActive(last.index);
+        setStatus("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => mcpHistory.current.length > 0,
+    });
+  }, [mcpActive]);
   const patch = (data) => setSlides(slides.map((s,i)=>i===index?{...s,...data}:s));
   const add = () => { setSlides([...slides,{id:Date.now(),title:"Novo slide",body:"Adicione seu conteúdo",layout:"title",titleStyle:{},bodyStyle:{}}]); setActive(slides.length); };
   const duplicate = () => { setSlides([...slides.slice(0, index + 1), { ...current, id: Date.now(), titleStyle: { ...current.titleStyle }, bodyStyle: { ...current.bodyStyle } }, ...slides.slice(index + 1)]); setActive(index + 1); };
@@ -1022,6 +1396,8 @@ function DeckCraft() {
   const move = (step) => { const to = index + step; if (to < 0 || to >= slides.length) return; setSlides(moveItem(slides, index, to)); setActive(to); };
   const toggleStyle = (name) => { const key = field === "body" ? "bodyStyle" : "titleStyle"; patch({ [key]: { ...current[key], [name]: !current[key]?.[name] } }); };
   const closePresenter = useCallback(() => setPresenting(null), []);
+  const currentTheme = slideThemeOf(current);
+  const align = slideAlignOf(current);
   function save() {
     try { downloadFile("apresentacao-deckcraft.json", JSON.stringify({ schema: "mm-deckcraft/v1", savedAt: new Date().toISOString(), slides }, null, 2), "application/json"); setStatus("apresentacao-deckcraft.json baixado · cópia salva neste dispositivo"); }
     catch { setStatus("Não foi possível gerar o arquivo neste navegador"); }
@@ -1039,22 +1415,23 @@ function DeckCraft() {
     Arquivo: <><button className={ribbonButton} onClick={() => fileRef.current?.click()}>Abrir .json</button><button className={ribbonButton} onClick={save}>Baixar .json</button></>,
     Início: <><button aria-label="Novo slide" onClick={add} className="flex items-center gap-2 rounded border px-3 py-2 text-xs"><Plus size={16}/>Novo slide</button><span className="relative"><button aria-haspopup="menu" aria-expanded={layoutOpen} onClick={() => setLayoutOpen(!layoutOpen)} className="flex items-center gap-2 rounded border px-3 py-2 text-xs"><LayoutTemplate size={16}/>Layout</button>{layoutOpen && <span role="menu" aria-label="Layouts de slide" className="absolute left-0 top-full z-20 mt-1 flex w-44 flex-col rounded border bg-white py-1 text-xs shadow-lg">{slideLayouts.map((layout) => <button key={layout.id} role="menuitemradio" aria-checked={current.layout === layout.id} onClick={() => { patch({ layout: layout.id }); setLayoutOpen(false); }} className={`px-3 py-2 text-left hover:bg-orange-50 ${current.layout === layout.id ? "font-semibold text-[#b7472a]" : ""}`}>{layout.label}</button>)}</span>}</span><span className="h-10 w-px bg-slate-300"/><button aria-label="Negrito" aria-pressed={Boolean((field === "body" ? current.bodyStyle : current.titleStyle)?.bold)} onMouseDown={(event) => event.preventDefault()} onClick={() => toggleStyle("bold")}><Bold size={17}/></button><button aria-label="Itálico" aria-pressed={Boolean((field === "body" ? current.bodyStyle : current.titleStyle)?.italic)} onMouseDown={(event) => event.preventDefault()} onClick={() => toggleStyle("italic")}><Italic size={17}/></button></>,
     Inserir: <><button className={ribbonButton} onClick={add}>Novo slide</button><button className={ribbonButton} onClick={duplicate}>Duplicar slide</button><button className={ribbonButton} onClick={() => remove()}>Excluir slide</button><button className={ribbonButton} disabled={index === 0} onClick={() => move(-1)}>Mover para cima</button><button className={ribbonButton} disabled={index === slides.length - 1} onClick={() => move(1)}>Mover para baixo</button></>,
+    Design: <><span className="text-xs text-slate-500">Tema</span>{slideThemes.map((theme) => <button key={theme.id} aria-label={`Tema ${theme.label}`} title={`Tema ${theme.label}`} aria-pressed={sameTheme(currentTheme, theme)} onClick={() => patch({ theme: { background: theme.background, color: theme.color } })} className={`h-9 w-12 rounded border text-xs font-semibold ${sameTheme(currentTheme, theme) ? "outline outline-2 outline-[#b7472a]" : ""}`} style={{ backgroundColor: theme.background, color: theme.color }}>Aa</button>)}<button className={ribbonButton} onClick={() => setSlides(slides.map((slide) => ({ ...slide, theme: { ...currentTheme } })))}>Tema em todos</button><span className="h-10 w-px bg-slate-300"/>{[["left", "Alinhar à esquerda", AlignLeft], ["center", "Centralizar", AlignCenter], ["right", "Alinhar à direita", AlignRight], ["justify", "Justificar", AlignJustify]].map(([value, label, Icon]) => <button key={value} className="p-2" aria-label={label} title={label} aria-pressed={current.align === value} onClick={() => patch({ align: value })}><Icon size={17}/></button>)}<button className={ribbonButton} aria-pressed={current.align === "auto"} onClick={() => patch({ align: "auto" })}>Alinhar pelo layout</button></>,
     Apresentação: <><button className={ribbonButton} onClick={() => setPresenting(0)}>Apresentar do início</button><button className={ribbonButton} onClick={() => setPresenting(index)}>Apresentar do slide atual</button></>,
   };
   const left = current.layout === "title-content";
   return <div className="flex min-h-[680px] flex-col bg-[#e9e9e9] text-[#252525]">
     <div className="flex h-10 items-center gap-3 bg-[#b7472a] px-4 text-xs text-white"><b>DeckCraft</b><button aria-label="Salvar apresentação" title="Salvar (baixar .json)" onClick={save}><Save size={15}/></button><span role="status" className="ml-auto">{status}</span></div>
     <div className="border-b bg-white"><div className="flex gap-6 px-5 pt-2 text-xs">{deckTabs.map((x)=><button key={x} aria-pressed={tab===x} onClick={()=>{setTab(x); setLayoutOpen(false);}} className={tab===x?"border-b-2 border-[#b7472a] pb-2":"pb-2"}>{x}</button>)}</div><div className="flex h-20 items-center gap-3 border-t px-4">{ribbon[tab] || <span className="text-xs text-slate-500">{unavailableTab}</span>}</div></div>
-    <div className="grid flex-1 grid-cols-[190px_1fr]"><aside className="overflow-auto border-r bg-white p-3">{slides.map((slide,i)=><button key={slide.id} aria-label={`Slide ${i+1}`} title="Delete exclui · Alt+↑/↓ reordena" onClick={()=>setActive(i)} onKeyDown={(event)=>{ if (event.key==="Delete") { event.preventDefault(); remove(i); } else if (event.altKey && (event.key==="ArrowUp"||event.key==="ArrowDown")) { event.preventDefault(); const to=i+(event.key==="ArrowUp"?-1:1); if (to>=0&&to<slides.length) { setSlides(moveItem(slides,i,to)); setActive(to); } } }} className={`mb-3 block w-full rounded p-2 text-left ${i===index?"bg-orange-100 outline outline-2 outline-[#b7472a]":""}`}><span className="mr-2 text-[10px]">{i+1}</span><span className="inline-flex aspect-video w-32 items-center justify-center border bg-white p-2 text-center text-[9px]">{slide.title}</span></button>)}</aside>
-      <main className="flex items-center justify-center p-8"><div className="aspect-video w-full max-w-4xl bg-white p-20 shadow-xl"><input aria-label="Título do slide" value={current.title} onFocus={()=>setField("title")} onChange={(e)=>patch({title:e.target.value})} style={{...textStyle(current.titleStyle), textAlign: left ? "left" : undefined}} className="w-full border border-dashed border-slate-300 p-4 text-center text-4xl font-semibold outline-none"/>{current.layout !== "title-only" && <textarea aria-label="Conteúdo do slide" value={current.body} onFocus={()=>setField("body")} onChange={(e)=>patch({body:e.target.value})} style={{...textStyle(current.bodyStyle), textAlign: left ? "left" : undefined, height: left ? "14rem" : undefined}} className="mt-10 h-28 w-full resize-none border border-dashed border-slate-300 p-4 text-center text-xl outline-none"/>}</div></main></div>
+    <div className="grid flex-1 grid-cols-[190px_1fr]"><aside className="overflow-auto border-r bg-white p-3">{slides.map((slide,i)=><button key={slide.id} aria-label={`Slide ${i+1}`} title="Delete exclui · Alt+↑/↓ reordena" onClick={()=>setActive(i)} onKeyDown={(event)=>{ if (event.key==="Delete") { event.preventDefault(); remove(i); } else if (event.altKey && (event.key==="ArrowUp"||event.key==="ArrowDown")) { event.preventDefault(); const to=i+(event.key==="ArrowUp"?-1:1); if (to>=0&&to<slides.length) { setSlides(moveItem(slides,i,to)); setActive(to); } } }} className={`mb-3 block w-full rounded p-2 text-left ${i===index?"bg-orange-100 outline outline-2 outline-[#b7472a]":""}`}><span className="mr-2 text-[10px]">{i+1}</span><span className="inline-flex aspect-video w-32 items-center border bg-white p-2 text-center text-[9px]" style={{ backgroundColor: slideThemeOf(slide).background, color: slideThemeOf(slide).color, justifyContent: { left: "flex-start", right: "flex-end" }[slideAlignOf(slide)] || "center", textAlign: slideAlignOf(slide) }}>{slide.title}</span>{slide.notes.trim() && <span className="ml-6 block text-[9px] text-slate-500" title={slide.notes}>Com anotações</span>}</button>)}</aside>
+      <main className="flex flex-col items-center justify-center gap-4 p-8"><div data-testid="slide-canvas" className="aspect-video w-full max-w-4xl bg-white p-20 shadow-xl" style={{ backgroundColor: currentTheme.background, color: currentTheme.color }}><input aria-label="Título do slide" value={current.title} onFocus={()=>setField("title")} onChange={(e)=>patch({title:e.target.value})} style={{...textStyle(current.titleStyle), textAlign: align, color: "inherit"}} className="w-full border border-dashed border-slate-300 bg-transparent p-4 text-center text-4xl font-semibold outline-none"/>{current.layout !== "title-only" && <textarea aria-label="Conteúdo do slide" value={current.body} onFocus={()=>setField("body")} onChange={(e)=>patch({body:e.target.value})} style={{...textStyle(current.bodyStyle), textAlign: align, color: "inherit", height: left ? "14rem" : undefined}} className="mt-10 h-28 w-full resize-none border border-dashed border-slate-300 bg-transparent p-4 text-center text-xl outline-none"/>}</div><textarea aria-label="Anotações do slide" value={current.notes} onChange={(e)=>patch({notes:e.target.value})} placeholder="Clique para adicionar anotações do apresentador (aparecem com N no modo apresentação)" className="h-20 w-full max-w-4xl resize-y rounded border border-slate-300 bg-white p-3 text-sm text-[#252525] outline-none"/></main></div>
     <div className="h-7 bg-white px-4 py-1 text-[11px] text-slate-500">Slide {index+1} de {slides.length}<span className="float-right">100%</span></div>
     <input ref={fileRef} className="hidden" type="file" accept=".json,application/json" aria-label="Abrir apresentação" onChange={(event) => { open(event.target.files?.[0]); event.target.value = ""; }}/>
     {presenting !== null && <SlidePresenter slides={slides} start={Math.min(presenting, slides.length - 1)} onClose={closePresenter}/>}
   </div>;
 }
 
-export default function OfficeCraft({ initialApp = "Word" }) {
+export default function OfficeCraft({ initialApp = "Word", active = true }) {
   const [app, setApp] = useState(initialApp);
   useEffect(() => setApp(initialApp), [initialApp]);
-  return <section className="overflow-hidden rounded-xl border border-slate-300 shadow-2xl"><header className="flex h-12 items-center bg-[#24262a] px-4 text-white"><b className="mr-8">Ferramentas de documentos</b><div role="tablist" aria-label="Aplicativos de documentos" className="flex h-full">{apps.map(name=><button key={name} role="tab" aria-selected={app===name} onClick={()=>setApp(name)} className={`px-6 text-sm ${app===name?"border-b-2 border-white bg-white/10":"text-slate-300"}`}>{name}</button>)}</div></header>{app==="Word"?<WordCraft/>:app==="Excel"?<GridCraft/>:<DeckCraft/>}</section>;
+  return <section className="overflow-hidden rounded-xl border border-slate-300 shadow-2xl"><header className="flex h-12 items-center bg-[#24262a] px-4 text-white"><b className="mr-8">Ferramentas de documentos</b><div role="tablist" aria-label="Aplicativos de documentos" className="flex h-full">{apps.map(name=><button key={name} role="tab" aria-selected={app===name} onClick={()=>setApp(name)} className={`px-6 text-sm ${app===name?"border-b-2 border-white bg-white/10":"text-slate-300"}`}>{name}</button>)}</div></header>{app==="Word"?<WordCraft active={active}/>:app==="Excel"?<GridCraft active={active}/>:<DeckCraft active={active}/>}</section>;
 }

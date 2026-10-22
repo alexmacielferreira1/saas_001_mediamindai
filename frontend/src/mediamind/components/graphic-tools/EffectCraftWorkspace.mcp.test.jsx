@@ -28,6 +28,9 @@ describe("MMEffects · ferramentas de um clique do MCP", () => {
     expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(108);
     expect(status()).toHaveTextContent("MCP · Girar");
     expect(provider.canUndo()).toBe(true);
+    // Mesmo depois de outro redesenho (ex.: mover a agulha), o desfazer continua disponível.
+    fireEvent.click(screen.getByLabelText("Marcador da composição em 1.20s"));
+    expect(provider.canUndo()).toBe(true);
     act(() => {
       expect(provider.undo()).toBe(true);
     });
@@ -53,6 +56,19 @@ describe("MMEffects · ferramentas de um clique do MCP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Background" }));
     runLock();
     expect(await act(() => provider.apply("anim.fadein", {}))).toEqual({ ok: false, summary: 'A camada "Background" está bloqueada: desbloqueie para animar.' });
+  });
+
+  it("máquina de escrever muda o texto mostrado conforme a agulha", async () => {
+    render(<EffectCraftWorkspace {...props} />);
+    const provider = currentMCPActions();
+    const rendered = () => screen.getByLabelText("Texto renderizado da camada");
+    expect(rendered()).toHaveTextContent("MMEffect");
+    // Camada Controller (0–10 s), agulha em 3 s: 30% de 8 letras = "MM" e o cursor enquanto digita.
+    const result = await act(() => provider.apply("text.typewriter", { speed: "fixed", duration: 10 }));
+    expect(result.summary).toBe('Máquina de escrever em "Controller": 8 letra(s) em 10 s (a partir de 0 s)');
+    expect(rendered().textContent).toBe("MM|");
+    await act(() => provider.apply("text.clear", {}));
+    expect(rendered().textContent).toBe("MMEffect");
   });
 });
 

@@ -1,6 +1,9 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
+import { zipSync } from "fflate";
 import { registerMCPActions } from "../../lib/mcpActions";
-import { runMMPhotoTool, mmphotoCatalogue } from "./mmphotoMcpTools";
+import { applyMaskResampled, runMMPhotoTool, mmphotoCatalogue } from "./mmphotoMcpTools";
+import { segmentPersonCanvas } from "../../lib/personSegmentation";
+import { segmentObjectCanvas } from "../../lib/objectSegmentation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Brush,
@@ -1307,6 +1310,79 @@ export default function PhotoCraftWorkspace({
     }
   }
 
+  /** Remove o fundo da camada ativa com a máscara de pessoa do modelo local (MediaPipe). */
+  async function removePersonBackgroundFromLayer() {
+    const layer = currentLayer();
+    const surface = ensureRaster(layer);
+    if (!surface) return false;
+    let mask;
+    try {
+      mask = await segmentPersonCanvas(surface);
+    } catch (error) {
+      notify(error.message);
+      return false;
+    }
+    const person = mask.values.reduce((count, value) => count + (value > 0.5 ? 1 : 0), 0);
+    if (person < mask.values.length * 0.005) {
+      notify("Nenhuma pessoa identificada na camada: nada foi alterado. Para objetos em fundo de cor única, use Remover fundo liso.");
+      return false;
+    }
+    return applyPixelOperation("Remover fundo", (data, width, height) => applyMaskResampled(data, width, height, mask));
+  }
+
+  /** Recorta (ou apaga) o objeto sob o ponto, com o modelo local de recorte interativo (MediaPipe). */
+  async function removeObjectFromLayer({ x, y, keepObject }) {
+    const layer = currentLayer();
+    const surface = ensureRaster(layer);
+    if (!surface) return false;
+    let mask;
+    try {
+      mask = await segmentObjectCanvas(surface, { x, y });
+    } catch (error) {
+      notify(error.message);
+      return false;
+    }
+    const inside = mask.values.reduce((count, value) => count + (value > 0.5 ? 1 : 0), 0);
+    if (inside < mask.values.length * 0.002) {
+      notify("A IA não encontrou um objeto nesse ponto: nada foi alterado. Mova o ponto para cima do objeto ou faça uma seleção sobre ele.");
+      return false;
+    }
+    const values = keepObject ? mask.values : mask.values.map((value) => 1 - value);
+    return applyPixelOperation(keepObject ? "Recortar objeto" : "Apagar objeto", (data, width, height) => applyMaskResampled(data, width, height, { ...mask, values }));
+  }
+
+  /** Exporta várias versões do documento achatado num .zip (não altera o documento). */
+  async function exportVariantsZip({ files, format }) {
+    try {
+      await Promise.all(pendingSurfaces());
+      if (source?.type?.startsWith("image") && !backgroundLayer?.bitmap && !sourceReady()) throw new Error("a imagem ainda está carregando");
+      const jpg = format === "jpg";
+      const flat = flatten(jpg ? "#ffffff" : undefined);
+      const entries = {};
+      for (const file of files) {
+        const canvas = createCanvas(file.width, file.height);
+        const ctx = context2d(canvas);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(flat, file.rect.x, file.rect.y, file.rect.w, file.rect.h, 0, 0, file.width, file.height);
+        const blob = await canvasToBlob(canvas, jpg ? "image/jpeg" : "image/png", jpg ? 0.9 : undefined);
+        entries[file.name] = new Uint8Array(await blob.arrayBuffer());
+      }
+      const zip = new Blob([zipSync(entries, { level: 0 })], { type: "application/zip" });
+      const base = (source?.name || "mmphoto-documento").replace(/\.[^.]+$/, "");
+      const url = URL.createObjectURL(zip);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${base}-variacoes.zip`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      notify(`Exportado ${link.download} com ${files.length} arquivo(s).`);
+      return true;
+    } catch (error) {
+      notify(error?.name === "SecurityError" ? "O navegador bloqueou a exportação porque a imagem vem de outra origem." : `Falha ao exportar variações: ${error?.message || error}`);
+      return false;
+    }
+  }
+
   function exportAs() {
     const answer = window.prompt?.("Exportar como — formato (png ou jpg):", "png");
     if (answer == null) return;
@@ -1387,10 +1463,10 @@ export default function PhotoCraftWorkspace({
   // Ferramentas de um clique do MCP (grade de ícones no Copiloto): planejam sobre o estado atual
   // e aplicam pelos mesmos caminhos do app (commit, pixels da camada ativa, documento), com desfazer.
   const toolActions = useRef(null);
-  toolActions.current = { commit, applyPixelOperation, duplicateLayer, rotateDocument, resizeDocument, cropDocument, undo, setActiveLayer, notify, canUndo: history.length > 0 };
+  toolActions.current = { commit, applyPixelOperation, duplicateLayer, exportVariantsZip, removePersonBackgroundFromLayer, removeObjectFromLayer, rotateDocument, resizeDocument, cropDocument, undo, setActiveLayer, notify, canUndo: history.length > 0 };
   useEffect(() => {
     if (!active) return undefined;
-    const strip = ({ layers: _layers, activeLayer: _active, pixels: _pixels, document: _document, label: _label, duplicateBackground: _duplicate, ...result }) => result;
+    const strip = ({ layers: _layers, activeLayer: _active, pixels: _pixels, document: _document, label: _label, duplicateBackground: _duplicate, exportZip: _zip, segmentPerson: _segment, segmentObject: _object, ...result }) => result;
     const plan = (toolId, params) => runMMPhotoTool(toolId, stateRef.current, params);
     return registerMCPActions({
       source: "mmphoto",
@@ -1404,6 +1480,11 @@ export default function PhotoCraftWorkspace({
         const result = plan(toolId, params);
         if (!result.ok) return strip(result);
         const actions = toolActions.current;
+        if (result.exportZip) {
+          // Exportar não altera o documento: não entra no desfazer.
+          if (!(await actions.exportVariantsZip(result.exportZip))) return { ok: false, summary: lastNotice.current };
+          return strip(result);
+        }
         let done = true;
         if (result.layers) {
           actions.commit(result.label, result.layers);
@@ -1412,6 +1493,8 @@ export default function PhotoCraftWorkspace({
             actions.setActiveLayer(result.activeLayer);
           }
         } else if (result.duplicateBackground) done = actions.duplicateLayer();
+        else if (result.segmentPerson) done = await actions.removePersonBackgroundFromLayer();
+        else if (result.segmentObject) done = await actions.removeObjectFromLayer(result.segmentObject);
         else if (result.pixels) done = actions.applyPixelOperation(result.label, result.pixels);
         else if (result.document.kind === "rotate") done = actions.rotateDocument(result.document.angle);
         else if (result.document.kind === "resize") done = actions.resizeDocument(result.document.width);

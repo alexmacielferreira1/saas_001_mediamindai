@@ -154,7 +154,7 @@ let trackSeed = 0;
 const newTrackId = () => `${Date.now().toString(36)}-${(trackSeed += 1)}`;
 const menuItems = ["Arquivo", "Editar", "Faixa", "Clipe", "Evento", "Áudio", "MIDI", "Opções", "Configuração", "Janela", "Ajuda"];
 
-function IntegratedSoundCraft({ active = true, mcpActive = active }) {
+function IntegratedSoundCraft({ active = true, mcpActive = active, onShow }) {
   const storageKey = useWorkStorageKey("mm-soundcraft-session");
   const [tracks, setTracks] = useWorkDraftState("pages/SoundCraft.jsx:tracks", () => readStoredTracks(storageKey));
   const [view, setView] = useWorkDraftState("mmsom:view", "edit"); const [playing, setPlaying] = useState(false); const [time, setTime] = useWorkDraftState("mmsom:time", 0);
@@ -279,7 +279,7 @@ function IntegratedSoundCraft({ active = true, mcpActive = active }) {
         .catch(() => patch(track.id, { missing: true }))
         .finally(() => loading.current.delete(track.id));
     });
-  }, [tracks, ensureContext]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tracks, ensureContext]);
 
   useEffect(() => () => {
     stopVoices();
@@ -404,6 +404,8 @@ function IntegratedSoundCraft({ active = true, mcpActive = active }) {
   // Ferramentas de um clique do MCP (grade de ícones no Copiloto). A mesa não tem histórico próprio:
   // o MCP guarda as faixas anteriores a cada aplicação e só desfaz se ninguém mexeu nelas depois.
   const mcpHistory = useRef([]);
+  const showRef = useRef(onShow);
+  showRef.current = onShow;
   useEffect(() => {
     if (!mcpActive) return undefined;
     const strip = ({ tracks: _tracks, ...result }) => result;
@@ -422,6 +424,8 @@ function IntegratedSoundCraft({ active = true, mcpActive = active }) {
           tracksRef.current = result.tracks;
           setTracks(result.tracks);
           setStatus(`MCP · ${result.summary}`);
+          // Com o "MMSOM completo" (iframe) aberto, mostra a mesa para o resultado ficar à vista.
+          showRef.current?.();
         }
         return strip(result);
       },
@@ -441,7 +445,6 @@ function IntegratedSoundCraft({ active = true, mcpActive = active }) {
       },
       canUndo: () => mcpHistory.current.length > 0,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mcpActive]);
 
   const togglePlay = () => { if (playing) pause(); else play(); };
@@ -503,6 +506,6 @@ export default function SoundCraft({ active = true }) {
       <span className="ml-auto text-[10px] text-slate-400">Projeto local · áudio processado no navegador</span>
     </div>
     <div hidden={experience !== "complete"}><iframe title="MMSOM completo" src="/soundcraft-runtime/index.html" allow="autoplay; microphone; clipboard-read; clipboard-write" className="h-[calc(100vh-11rem)] min-h-[720px] w-full border-0 bg-[#1e1f22]"/></div>
-    <div hidden={experience !== "integrated"}><IntegratedSoundCraft active={experience === "integrated"} mcpActive={active && experience === "integrated"} /></div>
+    <div hidden={experience !== "integrated"}><IntegratedSoundCraft active={experience === "integrated"} mcpActive={active} onShow={() => setExperience("integrated")} /></div>
   </section>;
 }

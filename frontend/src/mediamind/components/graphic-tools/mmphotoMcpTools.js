@@ -5,6 +5,10 @@
 //   - documento: { ok, summary, document: { kind: "rotate"|"resize"|"crop", ... } } → recorte/tamanho/rotação reais do app
 // Condições não atendidas viram { ok: false, summary } com a explicação; nada é simulado.
 import {
+  Archive,
+  MousePointerClick,
+  PaintbrushVertical,
+  UserRound,
   Ban,
   Copy,
   Crosshair,
@@ -52,6 +56,7 @@ import {
 
 export const MMPHOTO_TABS = [
   { id: "auto", label: "Automático" },
+  { id: "fundo", label: "Fundo" },
   { id: "ajustes", label: "Ajustes" },
   { id: "filtros", label: "Filtros" },
   { id: "camadas", label: "Camadas" },
@@ -238,6 +243,95 @@ function autoTool(label, describe, operation) {
   });
 }
 
+// ---------- remover fundo ----------
+/**
+ * Fundo liso: parte de todos os pixels da borda parecidos com a cor dominante da borda e apaga
+ * (alfa 0) a região conectada dentro da tolerância; uma faixa de transição suaviza o contorno.
+ * Devolve quantos pixels ficaram transparentes.
+ */
+export function removeFlatBackground(data, width, height, tolerance = 40, soft = 0.5) {
+  const total = width * height;
+  const border = new Set();
+  for (let x = 0; x < width; x += 1) border.add(x).add((height - 1) * width + x);
+  for (let y = 1; y < height - 1; y += 1) border.add(y * width).add(y * width + width - 1);
+  const visible = [...border].filter((p) => data[p * 4 + 3] > 0);
+  if (!visible.length) return 0;
+  const median = (c) => visible.map((p) => data[p * 4 + c]).sort((a, b) => a - b)[visible.length >> 1];
+  const ref = [median(0), median(1), median(2)];
+  const distance = (p) => Math.hypot(data[p * 4] - ref[0], data[p * 4 + 1] - ref[1], data[p * 4 + 2] - ref[2]);
+  const edge = tolerance * (1 + soft);
+  const seen = new Uint8Array(total);
+  const stack = visible.filter((p) => distance(p) <= tolerance);
+  stack.forEach((p) => (seen[p] = 1));
+  let removed = 0;
+  while (stack.length) {
+    const p = stack.pop();
+    const d = distance(p);
+    if (d <= tolerance) {
+      data[p * 4 + 3] = 0;
+      removed += 1;
+    } else {
+      // Contorno: transparência proporcional à proximidade da cor do fundo; não se espalha a partir daqui.
+      data[p * 4 + 3] = Math.round(data[p * 4 + 3] * ((d - tolerance) / (edge - tolerance)));
+      continue;
+    }
+    const x = p % width;
+    for (const q of [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, p - width, p + width]) {
+      if (q < 0 || q >= total || seen[q] || data[q * 4 + 3] === 0 || distance(q) > edge) continue;
+      seen[q] = 1;
+      stack.push(q);
+    }
+  }
+  return removed;
+}
+
+/** Aplica uma máscara de probabilidade (de outro tamanho) ao alfa dos pixels, por vizinho mais próximo. */
+export function applyMaskResampled(data, width, height, mask) {
+  for (let y = 0; y < height; y += 1) {
+    const my = Math.min(mask.height - 1, Math.floor((y * mask.height) / height));
+    for (let x = 0; x < width; x += 1) {
+      const mx = Math.min(mask.width - 1, Math.floor((x * mask.width) / width));
+      const weight = Math.max(0, Math.min(1, (mask.values[my * mask.width + mx] - 0.12) / 0.76));
+      const i = (y * width + x) * 4 + 3;
+      data[i] = Math.round(data[i] * weight);
+    }
+  }
+  return data;
+}
+
+function flatBackground(state, params) {
+  return pixelTool("Remover fundo liso", (p) => `tolerância ${p.tolerance}`, (data, w, h, p) => {
+    const removed = removeFlatBackground(data, w, h, p.tolerance, p.soft / 100);
+    if (removed < w * h * 0.005) throw new Error("não achei um fundo de cor única encostado nas bordas. Aumente a tolerância ou use o modo Pessoa.");
+    if (removed > w * h * 0.98) throw new Error("a imagem inteira parece ser fundo. Diminua a tolerância.");
+  })(state, params);
+}
+
+// A máscara vem do modelo (assíncrono): o app segmenta a camada e aplica com applyMaskResampled.
+function personBackground(state) {
+  const layer = pixelLayer(state);
+  return { ok: true, count: 1, label: "Remover fundo", summary: `Remover fundo (pessoa, IA local) em "${layer.name}" · ${areaText(state)}`, segmentPerson: true };
+}
+
+/** Recorte de objeto por ponto: o ponto vem do centro da seleção ou dos controles (em % do documento). */
+function objectBackground(state, params) {
+  const layer = pixelLayer(state);
+  const bounds = params.useSelection ? selectionBounds(state.selection) : null;
+  const point = bounds
+    ? { x: (bounds.x + bounds.w / 2) / state.docSize.w, y: (bounds.y + bounds.h / 2) / state.docSize.h }
+    : { x: params.x / 100, y: params.y / 100 };
+  const clamp = (value) => Math.min(0.999, Math.max(0, value));
+  const where = bounds ? "centro da seleção" : `ponto ${params.x}% × ${params.y}%`;
+  const keepObject = params.keep !== "background";
+  return {
+    ok: true,
+    count: 1,
+    label: keepObject ? "Recortar objeto" : "Apagar objeto",
+    summary: `${keepObject ? "Recortar objeto (fundo transparente)" : "Apagar objeto"} em "${layer.name}" · IA local · ${where}`,
+    segmentObject: { x: clamp(point.x), y: clamp(point.y), keepObject },
+  };
+}
+
 // ---------- camadas ----------
 function shadow(state, params) {
   const layer = styledLayer(state);
@@ -358,6 +452,43 @@ function socialCrop(state, params) {
   return { ok: true, count: 1, summary: `${label}: ${w} × ${h} → ${width} × ${height} px`, document: { kind: "crop", rect } };
 }
 
+// ---------- exportar variações (zip) ----------
+const VARIANTS = [
+  ["original", "Original (tamanho do documento)"],
+  ...Object.entries(SOCIAL).map(([key, [, , label]]) => [key, label]),
+];
+
+/** Plano de cada arquivo do zip: recorte no documento achatado e tamanho final (só reduz, nunca amplia). */
+export function planVariants(docSize, params) {
+  const ext = params.format === "jpg" ? "jpg" : "png";
+  const anchor = { start: 0, center: 0.5, end: 1 }[params.anchor || "center"];
+  return params.variants.map((key) => {
+    let rect = { x: 0, y: 0, w: docSize.w, h: docSize.h };
+    if (key !== "original") {
+      const [rw, rh] = SOCIAL[key];
+      const w = Math.min(docSize.w, Math.floor((docSize.h * rw) / rh));
+      const h = Math.min(docSize.h, Math.floor((w * rh) / rw));
+      rect = { x: Math.round((docSize.w - w) * anchor), y: Math.round((docSize.h - h) * anchor), w, h };
+    }
+    const scale = Math.min(1, params.maxWidth / rect.w);
+    const width = Math.max(1, Math.round(rect.w * scale));
+    const height = Math.max(1, Math.round(rect.h * scale));
+    return { name: `${key === "original" ? "original" : key.replace(":", "x")}-${width}x${height}.${ext}`, rect, width, height };
+  });
+}
+
+function exportVariants(state, params) {
+  if (!params.variants?.length) throw new ToolError("Escolha ao menos uma variação para exportar.");
+  const files = planVariants(state.docSize, params);
+  return {
+    ok: true,
+    count: files.length,
+    summary: `${files.length} variação(ões) em ${params.format.toUpperCase()} num arquivo .zip`,
+    details: files.map((file) => file.name),
+    exportZip: { files, format: params.format },
+  };
+}
+
 function cropToSelection(state) {
   const bounds = selectionBounds(state.selection);
   if (!bounds) throw new ToolError("Faça uma seleção para recortar o documento nela.");
@@ -419,6 +550,56 @@ export function mmphotoCatalogue() {
       description: "Balanço de branco e depois auto contraste, num clique só.",
       params: [],
       run: autoTool("Correção rápida", () => "branco + contraste", (data) => [grayWorld(data), autoContrast(data)].some(Boolean)),
+    },
+    {
+      id: "bg.person",
+      tab: "fundo",
+      label: "Remover fundo (pessoa)",
+      icon: UserRound,
+      description: "Recorta a pessoa da camada ativa e deixa o fundo transparente, com IA que roda no próprio navegador.",
+      how: "Usa o modelo MediaPipe Selfie Segmenter (Apache-2.0), servido pelo próprio MediaMind: a foto não sai do computador. Funciona com pessoas; para objetos em fundo de cor única use Remover fundo liso.",
+      params: [],
+      applyLabel: "Remover fundo",
+      run: personBackground,
+    },
+    {
+      id: "bg.object",
+      tab: "fundo",
+      label: "Recortar objeto",
+      icon: MousePointerClick,
+      description: "Recorta qualquer objeto (produto, carro, bicho, logo) a partir de um ponto sobre ele, com IA local. Também pode apagar só o objeto.",
+      how: "Usa o MediaPipe Interactive Segmenter (modelo magic_touch, Apache-2.0) servido pelo próprio MediaMind: a foto não sai do navegador. O ponto é o centro da seleção (se houver) ou o definido nos controles.",
+      params: [
+        { key: "useSelection", label: "Usar o centro da seleção (se houver)", type: "toggle", default: true },
+        { key: "x", label: "Ponto horizontal", type: "range", min: 0, max: 100, step: 1, default: 50, unit: "%" },
+        { key: "y", label: "Ponto vertical", type: "range", min: 0, max: 100, step: 1, default: 50, unit: "%" },
+        {
+          key: "keep",
+          label: "Manter",
+          type: "select",
+          default: "object",
+          options: [
+            ["object", "O objeto (apaga o fundo)"],
+            ["background", "O fundo (apaga o objeto)"],
+          ],
+        },
+      ],
+      applyLabel: "Recortar",
+      run: objectBackground,
+    },
+    {
+      id: "bg.flat",
+      tab: "fundo",
+      label: "Remover fundo liso",
+      icon: PaintbrushVertical,
+      description: "Apaga um fundo de cor única (branco, verde, estúdio) a partir das bordas da camada ativa.",
+      how: "Pega a cor dominante da borda e apaga a região conectada parecida com ela; a suavização cria uma transição no contorno. Respeita a seleção, se houver.",
+      params: [
+        { key: "tolerance", label: "Tolerância", type: "range", min: 5, max: 150, step: 5, default: 40, help: "Mais alta = apaga tons mais diferentes da cor do fundo." },
+        { key: "soft", label: "Suavizar contorno", type: "range", min: 0, max: 100, step: 10, default: 50, unit: "%" },
+      ],
+      applyLabel: "Remover fundo",
+      run: flatBackground,
     },
     ...ADJUSTMENTS.map(([id, preset, label, icon, description]) => ({
       id,
@@ -635,6 +816,41 @@ export function mmphotoCatalogue() {
         },
       ],
       run: socialCrop,
+    },
+    {
+      id: "doc.export",
+      tab: "documento",
+      label: "Exportar variações",
+      icon: Archive,
+      description: "Baixa um .zip com o documento em vários formatos de uma vez (original e redes sociais).",
+      how: "Achata todas as camadas visíveis, recorta cada formato (o maior possível) e reduz até a largura máxima. Não altera o documento.",
+      params: [
+        { key: "variants", label: "Variações", type: "multi", default: ["original", "1:1", "9:16", "16:9"], options: VARIANTS },
+        {
+          key: "format",
+          label: "Formato do arquivo",
+          type: "select",
+          default: "jpg",
+          options: [
+            ["jpg", "JPG (menor, fundo branco)"],
+            ["png", "PNG (com transparência)"],
+          ],
+        },
+        { key: "maxWidth", label: "Largura máxima", type: "range", min: 320, max: 4000, step: 40, default: 1080, unit: "px" },
+        {
+          key: "anchor",
+          label: "Manter no recorte",
+          type: "select",
+          default: "center",
+          options: [
+            ["center", "Centro"],
+            ["start", "Início (esquerda/topo)"],
+            ["end", "Fim (direita/base)"],
+          ],
+        },
+      ],
+      applyLabel: "Exportar .zip",
+      run: exportVariants,
     },
     {
       id: "doc.crop",

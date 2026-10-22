@@ -21,6 +21,15 @@ import {
   paintBrush,
 } from "./lightcraftPipeline";
 import { readPdfInfo } from "./pdfcraftParse";
+import { registerMCPActions } from "../../lib/mcpActions";
+import {
+  LIGHT_COLLECTIONS as COLLECTIONS,
+  LIGHT_COLOR_LABELS as COLOR_LABELS,
+  LIGHT_FOLDERS as FOLDERS,
+  mmlightCatalogue,
+  runMMLightTool,
+} from "./mmlightMcpTools";
+import { mmpdfCatalogue, runMMPdfTool } from "./mmpdfMcpTools";
 
 const LIGHT_KEY = "RemainingCraftWorkspaces.jsx:light";
 const CATALOG = [
@@ -30,9 +39,6 @@ const CATALOG = [
   "Fotos sinalizadas",
   "Cinco estrelas",
 ];
-const FOLDERS = ["2026", "Fronteiras da Saúde", "Eventos", "Institucional"];
-const COLLECTIONS = ["Selecionadas", "Publicação", "Retratos", "SIMERS"];
-const COLOR_LABELS = ["", "Vermelho", "Amarelo", "Verde", "Azul", "Roxo"];
 const COLOR_CLASS = {
   Vermelho: "text-red-400",
   Amarelo: "text-amber-300",
@@ -86,6 +92,7 @@ function downloadBlob(blob, name) {
 }
 
 export function LightCraftWorkspace({
+  active = true,
   assets,
   selected,
   onSelect,
@@ -427,6 +434,66 @@ export function LightCraftWorkspace({
     if (item === "Imprimir") printPhoto();
   }
 
+  // Ferramentas de um clique do MCP (grade de ícones no Copiloto). O MMLight não tem histórico próprio:
+  // o MCP guarda fotos/álbuns anteriores a cada aplicação e só desfaz se ninguém mexeu neles depois.
+  const lightState = useRef(null);
+  lightState.current = {
+    sourceId: source?.id || "",
+    sourceName: source?.name || "",
+    photos,
+    albums,
+    baseAdjust: adjust,
+    image: decoded && decoded.url === source?.url ? decoded.image : null,
+    pickedIds: picked,
+  };
+  const lightActions = useRef(null);
+  lightActions.current = { setPhotos, setAlbums, setStatus };
+  const lightHistory = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const strip = ({ photos: _photos, albums: _albums, ...result }) => result;
+    return registerMCPActions({
+      source: "mmlight",
+      label: "MMLight",
+      catalogue: mmlightCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMMLightTool(toolId, lightState.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const before = lightState.current;
+        const result = runMMLightTool(toolId, before, params);
+        if (result.ok) {
+          const actions = lightActions.current;
+          lightHistory.current.push({ before: { photos: before.photos, albums: before.albums }, after: { photos: result.photos, albums: result.albums } });
+          lightState.current = { ...before, photos: result.photos, albums: result.albums };
+          actions.setPhotos(result.photos);
+          actions.setAlbums(result.albums);
+          actions.setStatus(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = lightHistory.current.at(-1);
+        if (!last) return false;
+        const now = lightState.current;
+        const actions = lightActions.current;
+        if (now.photos !== last.after.photos || now.albums !== last.after.albums) {
+          lightHistory.current = [];
+          actions.setStatus("As fotos mudaram depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        lightHistory.current.pop();
+        lightState.current = { ...now, ...last.before };
+        actions.setPhotos(last.before.photos);
+        actions.setAlbums(last.before.albums);
+        actions.setStatus("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => lightHistory.current.length > 0,
+    });
+  }, [active]);
+
   const preview = (
     <canvas
       ref={canvasRef}
@@ -751,7 +818,7 @@ function annotationView(item) {
   return base;
 }
 
-export function PdfCraftWorkspace({ assets, selected, onSelect, onOpenFiles }) {
+export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, onOpenFiles }) {
   const [mode, setMode] = useGraphicDraftState("RemainingCraftWorkspaces.jsx:mode", "Editar");
   const [annotations, setAnnotations] = useGraphicDraftState(`${PDF_KEY}:annotations`, {});
   const [sideTab, setSideTab] = useState("Miniaturas");
@@ -949,6 +1016,53 @@ export function PdfCraftWorkspace({ assets, selected, onSelect, onOpenFiles }) {
     }
     setDrawing(null);
   }
+
+  // Ferramentas de um clique do MCP: gravam na mesma camada de anotação do painel. Sem histórico próprio,
+  // o MCP guarda as anotações anteriores e só desfaz se ninguém mexeu nelas depois.
+  const pdfState = useRef(null);
+  pdfState.current = { docKey, docName: source?.name || "", page, annotations };
+  const pdfActions = useRef(null);
+  pdfActions.current = { setAnnotations, setStatus };
+  const pdfHistory = useRef([]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const strip = ({ annotations: _annotations, ...result }) => result;
+    return registerMCPActions({
+      source: "mmpdf",
+      label: "PDF",
+      catalogue: mmpdfCatalogue,
+      analyze: async (toolId, params) => {
+        const result = runMMPdfTool(toolId, pdfState.current, params);
+        return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
+      },
+      apply: async (toolId, params) => {
+        const before = pdfState.current;
+        const result = runMMPdfTool(toolId, before, params);
+        if (result.ok) {
+          pdfHistory.current.push({ before: before.annotations, after: result.annotations });
+          pdfState.current = { ...before, annotations: result.annotations };
+          pdfActions.current.setAnnotations(result.annotations);
+          pdfActions.current.setStatus(`MCP · ${result.summary}`);
+        }
+        return strip(result);
+      },
+      undo: () => {
+        const last = pdfHistory.current.at(-1);
+        if (!last) return false;
+        if (pdfState.current.annotations !== last.after) {
+          pdfHistory.current = [];
+          pdfActions.current.setStatus("As anotações mudaram depois da ação do MCP: desfazer cancelado para não perder suas alterações.");
+          return false;
+        }
+        pdfHistory.current.pop();
+        pdfState.current = { ...pdfState.current, annotations: last.before };
+        pdfActions.current.setAnnotations(last.before);
+        pdfActions.current.setStatus("MCP · Última ação desfeita.");
+        return true;
+      },
+      canUndo: () => pdfHistory.current.length > 0,
+    });
+  }, [active]);
 
   const pageCount = info?.pages || Math.max(1, assets.length);
   const frameSrc = source && isPdf(source) ? `${source.url}#page=${page}` : source?.url;

@@ -52,6 +52,7 @@ const GRAPHIC_APPS = {
  lightcraft: {label:'MMLight · Revelação',module:'mmphoto',cards:['Selecionar foto','Ajustar exposição','Corrigir balanço de branco','Aplicar preset','Comparar antes/depois','Exportar fotos']},
  pdfcraft: {label:'PDF · Documentos',module:'ai-tools',cards:['Abrir documento','Organizar páginas','Extrair texto','Combinar PDFs','Revisar documento','Exportar PDF']},
  designcraft: {label:'DesignCraft · Peças',module:'mmphoto',cards:['Selecionar prancheta','Adicionar texto','Inserir imagem','Aplicar identidade visual','Duplicar peça','Exportar design']},
+ figcraft: {label:'MMFig · Interfaces',module:'ai-tools',cards:['Selecionar camada','Alinhar e distribuir','Aplicar auto layout','Criar componente','Ligar telas','Exportar seleção']},
  threecraft: {label:'3D · Cena',module:'ai-tools',cards:['Selecionar objeto 3D','Posicionar câmera','Ajustar iluminação','Aplicar material','Animar objeto','Renderizar cena']},
  'craft-libs': {label:'Bibliotecas criativas',module:'ai-tools',cards:['Localizar recurso','Filtrar biblioteca','Importar recurso','Organizar coleção','Selecionar referência','Vincular ao projeto']},
  mmsom: {label:'MMSom · Áudio',module:'mmsom',cards:['Selecionar faixa','Remover ruído','Equalizar voz','Normalizar volume','Sincronizar áudio','Exportar mixagem']},
