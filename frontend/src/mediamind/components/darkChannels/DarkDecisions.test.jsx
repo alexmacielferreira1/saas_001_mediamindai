@@ -29,7 +29,7 @@ beforeEach(() => {
   onChange.mockReset();
 });
 
-describe("Decisões do Canais Dark 2", () => {
+describe("Decisões do Canais Dark", () => {
   it("lists pending decisions first, with scope chips, recommendation and decided details", () => {
     render(<Harness/>);
     expect(screen.getAllByRole("article").map((item) => item.getAttribute("aria-label"))).toEqual([

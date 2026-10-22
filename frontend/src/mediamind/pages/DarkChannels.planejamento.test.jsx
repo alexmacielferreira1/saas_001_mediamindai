@@ -12,13 +12,21 @@ const api = vi.hoisted(() => ({
   exportDarkStructure: vi.fn(),
   updateDarkStructure: vi.fn(),
   updateDarkDecision: vi.fn(),
+  listDarkChannelScripts: vi.fn(),
+  createDarkChannelScript: vi.fn(),
+  updateDarkChannelScript: vi.fn(),
 }));
 vi.mock("../../api/darkChannels", () => api);
 vi.mock("../lib/empresaContext", () => ({
   useEmpresa: () => ({ currentEmpresa: { id: "tenant-1", nome: "Empresa" } }),
 }));
+vi.mock("./VideoGeneration", () => ({ default: () => <div data-testid="video-studio" /> }));
+vi.mock("./ClipsFree", () => ({ default: () => <div data-testid="clipsfree-studio" /> }));
+vi.mock("./ThumbnailStudio", () => ({ default: ({ darkChannelId }) => <div data-testid="thumbnail-studio" data-channel={darkChannelId} /> }));
 
-import DarkChannels2, { planningPayload } from "./DarkChannels2";
+// Planejamento da rede (antigo "Canais Dark 2"), agora as três primeiras abas da página única /canais-dark.
+import DarkChannels from "./DarkChannels";
+import { planningPayload } from "../components/darkChannels/DarkChannelsPlanning";
 
 const structure = {
   schema: "mediamind.dark-structure/v1", name: "Padrão MediaMind", source: "padrao", is_default: true,
@@ -44,11 +52,12 @@ beforeEach(() => {
   api.listDarkChannels.mockResolvedValue({ channels });
   api.getDarkStructure.mockResolvedValue(structure);
   api.listDarkStructureTemplates.mockResolvedValue({ templates });
+  api.listDarkChannelScripts.mockResolvedValue({ scripts: [] });
 });
 
 async function renderPage() {
-  render(<DarkChannels2 />);
-  await screen.findByRole("button", { name: /Roma Antiga/ });
+  render(<DarkChannels />);
+  await screen.findByRole("button", { name: /^Roma Antiga/ });
   await waitFor(() => expect(api.getDarkStructure).toHaveBeenCalled());
 }
 
@@ -73,7 +82,7 @@ async function openNewChannelForm() {
   return form;
 }
 
-describe("Canais Dark 2 · cadastro", () => {
+describe("Canais Dark · cadastro", () => {
   it("sends language, structured niche, subniche and planning fields when creating a channel", async () => {
     api.createDarkChannel.mockResolvedValue({ id: "new", name: "Medieval EN", niche: "História", niche_code: "historia", subniche: "Medieval", language: "en-US" });
     const form = await openNewChannelForm();
@@ -164,7 +173,7 @@ describe("Canais Dark 2 · cadastro", () => {
   });
 });
 
-describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
+describe("Canais Dark · resumo, filtros e detalhes", () => {
   it("summarizes the network and shows language, lifecycle, wave and code badges on cards", async () => {
     await renderPage();
     const summary = screen.getByRole("region", { name: "Resumo da rede" });
@@ -174,7 +183,7 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
     expect(within(summary).getByText("Meta semanal total").nextSibling).toHaveTextContent("5");
     expect(within(summary).getByRole("button", { name: "Filtrar nicho História" })).toHaveTextContent("2");
 
-    const roma = screen.getByRole("button", { name: /Roma Antiga/ });
+    const roma = screen.getByRole("button", { name: /^Roma Antiga/ });
     expect(roma).toHaveTextContent("his-pt-01");
     expect(roma).toHaveTextContent("História / Antiga");
     expect(roma).toHaveTextContent("Ativo");
@@ -198,7 +207,7 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
 
     fireEvent.change(screen.getByLabelText("Filtrar por idioma"), { target: { value: "en-US" } });
     expect(screen.getByText("Mostrando 1 de 4 canais")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Roma Antiga/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Roma Antiga/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Filtrar por idioma"), { target: { value: "all" } });
     fireEvent.change(screen.getByLabelText("Filtrar por nicho"), { target: { value: "historia" } });
     expect(screen.getByText("Mostrando 2 de 4 canais")).toBeInTheDocument();
@@ -207,7 +216,7 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
     fireEvent.change(screen.getByLabelText("Buscar canal"), { target: { value: "eterna" } });
     expect(screen.getByText("Mostrando 1 de 4 canais")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Roma Antiga/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Roma Antiga/ })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Buscar canal"), { target: { value: "" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Filtrar status Pausado" }));
@@ -236,14 +245,15 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
     await waitFor(() => expect(within(screen.getByLabelText("Filtrar por status")).getByRole("option", { name: "pausado (0)" })).toBeInTheDocument());
   });
 
-  it("shows channel details with a link to the production pipeline and saves planning through PATCH", async () => {
+  it("shows channel details without a link to another page and saves planning through PATCH", async () => {
     api.updateDarkChannel.mockImplementation(async (id, patch) => ({ ...channels[0], ...patch, id }));
     await renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /Roma Antiga/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Roma Antiga/ }));
     const details = screen.getByRole("region", { name: "Detalhes do canal" });
     expect(details).toHaveTextContent("Português (Brasil) (pt-BR) · BR · Vídeos longos · his-pt-01");
     expect(details).toHaveTextContent("Plataformas: YouTube");
-    expect(within(details).getByRole("link", { name: /Abrir no pipeline \(Canais Dark\)/ })).toHaveAttribute("href", "/canais-dark");
+    expect(within(details).queryByRole("link", { name: /Abrir no pipeline/ })).not.toBeInTheDocument();
+    expect(within(details).getByRole("button", { name: "Ir para Pastas e roteiros" })).toBeInTheDocument();
     const form = within(details).getByRole("form", { name: "Planejamento do canal" });
     expect(within(form).getByLabelText("Meta semanal de vídeos")).toHaveValue(3);
     expect(within(form).getByLabelText("Nomes alternativos")).toHaveValue("Roma Eterna");
@@ -257,8 +267,8 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
       lifecycle_status: "em_espera", launch_wave: 1, weekly_target: 3, target_platforms: ["youtube", "instagram"], alt_names: ["Roma Eterna"], notes: "Nota", topic_folders: ["Imperadores"],
     }));
     expect(await screen.findByRole("status")).toHaveTextContent("Planejamento do canal salvo.");
-    expect(screen.getByRole("button", { name: /Roma Antiga/ })).toHaveTextContent("Em espera");
-    expect(screen.getByRole("button", { name: /Roma Antiga/ })).toHaveTextContent("Onda 1");
+    expect(screen.getByRole("button", { name: /^Roma Antiga/ })).toHaveTextContent("Em espera");
+    expect(screen.getByRole("button", { name: /^Roma Antiga/ })).toHaveTextContent("Onda 1");
 
     fireEvent.click(screen.getByRole("button", { name: /Ancient Tales/ }));
     expect(within(screen.getByRole("form", { name: "Planejamento do canal" })).getByLabelText("Onda de lançamento")).toHaveValue(2);
@@ -277,16 +287,16 @@ describe("Canais Dark 2 · resumo, filtros e detalhes", () => {
 
   it("shows empty and error states for the channel list", async () => {
     api.listDarkChannels.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("Falha ao listar."));
-    const { unmount } = render(<DarkChannels2 />);
+    const { unmount } = render(<DarkChannels />);
     expect(await screen.findByText(/Nenhum canal cadastrado ainda/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Filtrar nicho/ })).not.toBeInTheDocument();
     unmount();
-    render(<DarkChannels2 />);
+    render(<DarkChannels />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Falha ao listar.");
   });
 });
 
-describe("Canais Dark 2 · estrutura", () => {
+describe("Canais Dark · estrutura", () => {
   it("lists templates and applies one only after the dry-run preview, then reloads channels and structure", async () => {
     api.getDarkStructureTemplate.mockResolvedValue(pkg);
     api.importDarkStructure.mockImplementation(async (_pkg, { dryRun }) => importResult(dryRun));
@@ -448,8 +458,8 @@ describe("Canais Dark 2 · estrutura", () => {
   it("shows a loading state while the structure has not arrived", async () => {
     api.getDarkStructure.mockReturnValue(new Promise(() => {}));
     api.listDarkStructureTemplates.mockReturnValue(new Promise(() => {}));
-    render(<DarkChannels2 />);
-    await screen.findByRole("button", { name: /Roma Antiga/ });
+    render(<DarkChannels />);
+    await screen.findByRole("button", { name: /^Roma Antiga/ });
     fireEvent.click(screen.getByRole("button", { name: "Estrutura" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Carregando…")).toBeInTheDocument();
@@ -457,13 +467,13 @@ describe("Canais Dark 2 · estrutura", () => {
   });
 });
 
-describe("Canais Dark 2 · dados incompletos e erros sem mensagem", () => {
+describe("Canais Dark · dados incompletos e erros sem mensagem", () => {
   it("handles channels and structures with missing optional data", async () => {
     api.getDarkStructure.mockResolvedValue({ ...structure, languages: [...structure.languages, { code: "fr" }] });
     api.listDarkChannels.mockResolvedValue({ channels: [{ id: "x", name: "Sem dados", target_platforms: ["outra"] }] });
     api.listDarkStructureTemplates.mockResolvedValue([{ id: "vazio", name: "Vazio" }]);
     api.createDarkChannel.mockResolvedValue({ id: "y", name: "Novo" });
-    render(<DarkChannels2 />);
+    render(<DarkChannels />);
     const card = await screen.findByRole("button", { name: /Sem dados/ });
     expect(card).toHaveTextContent("Sem nicho · Vídeos longos");
     fireEvent.click(card);
@@ -549,7 +559,7 @@ describe("Canais Dark 2 · dados incompletos e erros sem mensagem", () => {
   it("uses Portuguese fallback messages when API errors have no message", async () => {
     api.listDarkChannels.mockRejectedValueOnce({});
     api.getDarkStructure.mockRejectedValueOnce({});
-    const first = render(<DarkChannels2 />);
+    const first = render(<DarkChannels />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar os canais.");
     fireEvent.click(screen.getByRole("button", { name: "Estrutura" }));
     expect(await within(await screen.findByRole("dialog")).findByText(/Não foi possível carregar a estrutura de nichos e idiomas./)).toBeInTheDocument();
@@ -557,8 +567,8 @@ describe("Canais Dark 2 · dados incompletos e erros sem mensagem", () => {
 
     api.listDarkStructureTemplates.mockRejectedValueOnce({});
     let dialog;
-    render(<DarkChannels2 />);
-    await screen.findByRole("button", { name: /Roma Antiga/ });
+    render(<DarkChannels />);
+    await screen.findByRole("button", { name: /^Roma Antiga/ });
     fireEvent.click(screen.getByRole("button", { name: "Estrutura" }));
     dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("Não foi possível carregar os modelos.")).toBeInTheDocument();
@@ -598,7 +608,7 @@ describe("Canais Dark 2 · dados incompletos e erros sem mensagem", () => {
   });
 });
 
-describe("Canais Dark 2 · decisões, nichos e idiomas e escolha de nomes", () => {
+describe("Canais Dark · decisões, nichos e idiomas e escolha de nomes", () => {
   const pendingDecision = { id: "d1", title: "Voz do nicho", question: "Qual voz?", options: ["Masculina", "Feminina"], recommendation: "Feminina", scope: "nicho", ref: "historia", status: "pendente", answer: "", notes: "", decided_at: null };
   const decidedDecision = { id: "d2", title: "Formato", question: "?", options: [], scope: "geral", status: "decidida", answer: "Longo", notes: "", decided_at: null };
   const withDecisions = { ...structure, decisions: [pendingDecision, decidedDecision] };
@@ -659,9 +669,9 @@ describe("Canais Dark 2 · decisões, nichos e idiomas e escolha de nomes", () =
 
   it("sorts cards by launch wave, niche and name and marks names still to be defined", async () => {
     api.listDarkChannels.mockResolvedValue({ channels: [...channels, { id: "f", name: "[A DEFINIR] Fé PT", niche: "Fé", launch_wave: 1, alt_names: ["Luz Diária"] }, { id: "g", niche: "Ciência", launch_wave: 1 }, { id: "h", name: "Água", niche: "Ciência", launch_wave: 1 }] });
-    render(<DarkChannels2 />);
-    await screen.findByRole("button", { name: /Roma Antiga/ });
-    const cards = within(screen.getByRole("region", { name: "Canais da rede" })).getAllByRole("button", { pressed: false });
+    render(<DarkChannels />);
+    await screen.findByRole("button", { name: /^Roma Antiga/ });
+    const cards = within(screen.getByRole("region", { name: "Canais da rede" })).getAllByRole("button").filter((card) => card.hasAttribute("aria-pressed"));
     expect(cards.map((card) => card.querySelector("span").textContent)).toEqual(["", "Água", "[A DEFINIR] Fé PT", "Ancient Tales", "Ciência Já", "Livre", "Roma Antiga"]);
     expect(cards[2]).toHaveTextContent("nome a definir");
     expect(cards[1]).not.toHaveTextContent("nome a definir");
@@ -682,7 +692,7 @@ describe("Canais Dark 2 · decisões, nichos e idiomas e escolha de nomes", () =
     expect(screen.getByRole("region", { name: "Detalhes do canal" })).toHaveTextContent("Nomes alternativos:Fé Viva");
     expect(within(screen.getByRole("form", { name: "Planejamento do canal" })).getByLabelText("Nomes alternativos")).toHaveValue("Fé Viva");
 
-    fireEvent.click(screen.getByRole("button", { name: /Roma Antiga/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Roma Antiga/ }));
     fireEvent.click(screen.getByRole("button", { name: "Usar “Roma Eterna” como nome" }));
     await waitFor(() => expect(api.updateDarkChannel).toHaveBeenLastCalledWith("a", { name: "Roma Eterna", alt_names: ["Roma Antiga"] }));
 
@@ -698,7 +708,7 @@ describe("Canais Dark 2 · decisões, nichos e idiomas e escolha de nomes", () =
     api.updateDarkChannel.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     api.listDarkChannels.mockResolvedValue({ channels: [{ ...channels[0], alt_names: ["Roma Eterna", "Roma Antiga"] }] });
     await renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /Roma Antiga/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Roma Antiga/ }));
     fireEvent.click(screen.getByRole("button", { name: "Usar “Roma Eterna” como nome" }));
     fireEvent.click(screen.getByRole("button", { name: "Usar “Roma Antiga” como nome" }));
     expect(api.updateDarkChannel).toHaveBeenCalledTimes(1);
