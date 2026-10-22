@@ -4,6 +4,9 @@
 // MediaRecorder gravam o canvas e a mixagem do Web Audio em tempo real.
 import { clipMediaTime } from "../../lib/mmfilmTimeline";
 import { animatedClip } from "../../lib/mmfilmMotion";
+import { effectiveVisual } from "../../lib/mmfilmMotionPresets";
+import { drawLookOverlays, lookFilter, transitionProgress, transitionState, transitionWindows } from "../../lib/mmfilmLooks";
+import { drawAnimatedText, textAnimationState } from "../../lib/mmfilmTextAnimation";
 import { FilmcraftAudioEngine, audioContextClass, planAudioSegments } from "./filmcraftAudio";
 
 export const SEQUENCE_WIDTH = 1920;
@@ -99,39 +102,134 @@ function sourceSize(element) {
   };
 }
 
+/**
+ * Composição do Programa no tempo `time`: as camadas de `programLayers` com os efeitos das ferramentas em `_fx`
+ * (movimento, canais extras dos motion presets, transição e cor de mergulho). Durante uma transição, os dois
+ * clipes do corte entram (o que sai embaixo); fora dela, o resultado é o mesmo de `programLayers`.
+ */
+export function programComposition(clips = [], time = 0, trackState = {}) {
+  const base = programLayers(clips, time, trackState);
+  const visible = clips.filter(
+    (clip) => VIDEO_TRACK_ORDER.includes(clip.track) && trackState?.[clip.track]?.visible !== false && !clip.type?.startsWith("audio"),
+  );
+  const windows = clips.some((clip) => clip.transition) ? transitionWindows(visible).filter((window) => time >= window.from && time < window.to) : [];
+  const entry = (clip, extra = {}) => ({ ...animatedClip(clip, time), _fx: { visual: effectiveVisual(clip, time), ...extra } });
+  const result = [];
+  base.forEach((clip) => {
+    const window = windows.find((item) => item.outgoingId === clip.id || item.incomingId === clip.id);
+    if (!window) {
+      result.push(entry(clip));
+      return;
+    }
+    if (result.some((item) => item._fx.window === window)) return;
+    const outgoing = clips.find((item) => item.id === window.outgoingId);
+    const incoming = clips.find((item) => item.id === window.incomingId);
+    const state = transitionState(window.transition, transitionProgress(window, time));
+    result.push(entry(outgoing, { window, transition: state.outgoing }), entry(incoming, { window, transition: state.incoming, overlay: state.overlay }));
+  });
+  return result;
+}
+
+const fxOf = (layer) => layer._fx || { visual: { opacityFactor: 1, blur: 0, scaleX: 1, glitch: 0 } };
+
+function drawLayerContent(context, clip, { sources, width, height, fit, time }) {
+  if (clip.type === TITLE_TYPE && clip.textAnimation && time !== undefined) {
+    const style = clip.captionStyle;
+    const scale = height / SEQUENCE_HEIGHT;
+    const state = textAnimationState(clip.textAnimation, style?.uppercase ? String(clip.text || clip.name || "").toUpperCase() : clip.text || clip.name || "", time - clip.start, clip.duration);
+    drawAnimatedText(
+      context,
+      clip.text || clip.name || "",
+      state,
+      width,
+      height,
+      style
+        ? {
+            fontSize: Math.round((style.size || 64) * scale),
+            fontFamily: `"${style.font || "Inter"}", Inter, Arial, sans-serif`,
+            fontWeight: style.weight || 800,
+            color: style.fill || "#fff",
+            y: style.position === "top" ? height * 0.12 : style.position === "bottom" ? height * 0.85 : height / 2,
+          }
+        : {},
+    );
+    return;
+  }
+  if (clip.type === TITLE_TYPE && clip.captionStyle) drawStyledText(context, clip.text || clip.name || "", clip.captionStyle, width, height);
+  else if (clip.type === TITLE_TYPE) drawTitle(context, clip.text || clip.name || "", width, height);
+  else {
+    const element = sources.get(clip.id);
+    const size = sourceSize(element);
+    if (element && size.width && size.height) {
+      const rect = fitRect(size.width, size.height, width, height, fit);
+      context.drawImage(element, rect.x, rect.y, rect.width, rect.height);
+    }
+  }
+}
+
 /** Desenha um quadro do Programa: fundo preto (buracos ficam pretos) e camadas de baixo para cima. */
-export function drawProgramFrame(context, { layers, sources = new Map(), width, height, fit = "Ajustar ao quadro", time }) {
+export function drawProgramFrame(context, { layers, composition, sources = new Map(), width, height, fit = "Ajustar ao quadro", time }) {
   context.save();
   context.globalAlpha = 1;
   context.filter = "none";
   context.fillStyle = "#000";
   context.fillRect(0, 0, width, height);
   context.restore();
-  layers.forEach((layer) => {
+  const sx = width / SEQUENCE_WIDTH;
+  const sy = height / SEQUENCE_HEIGHT;
+  (composition || layers).forEach((layer) => {
     // Movimentos das ferramentas (zoom, shake, pan…) avaliados no instante do quadro.
-    const clip = time === undefined ? layer : animatedClip(layer, time);
+    const clip = composition || time === undefined ? layer : animatedClip(layer, time);
+    const { visual, transition, overlay } = composition ? fxOf(layer) : { visual: time === undefined ? fxOf({}).visual : effectiveVisual(layer, time) };
     const transform = layerTransform(clip, width, height);
     context.save();
-    context.globalAlpha = transform.opacity;
-    context.filter = layerFilter(clip);
+    context.globalAlpha = transform.opacity * visual.opacityFactor * (transition?.opacity ?? 1);
+    const blur = visual.blur + (transition?.blur || 0);
+    context.filter = blur > 0 ? `${lookFilter(clip)} blur(${Math.round(blur * sx * 100) / 100}px)` : lookFilter(clip);
+    if (transition) {
+      context.translate(width / 2 + transition.dx * sx, height / 2 + transition.dy * sy);
+      if (transition.scale !== 1) context.scale(transition.scale, transition.scale);
+      context.translate(-width / 2, -height / 2);
+      if (transition.clip) {
+        context.beginPath();
+        if (transition.clip.shape === "circle") context.arc(transition.clip.cx * sx, transition.clip.cy * sy, transition.clip.r * sx, 0, Math.PI * 2);
+        else context.rect(transition.clip.x * sx, transition.clip.y * sy, transition.clip.width * sx, transition.clip.height * sy);
+        context.clip();
+      }
+    }
     context.translate(transform.originX + transform.translateX, transform.originY + transform.translateY);
     context.rotate(transform.rotation);
-    context.scale(transform.scale, transform.scale);
+    context.scale(transform.scale * visual.scaleX, transform.scale);
     context.translate(-transform.originX, -transform.originY);
     const { crop } = transform;
     context.beginPath();
     context.rect(crop.left, crop.top, Math.max(0, width - crop.left - crop.right), Math.max(0, height - crop.top - crop.bottom));
     context.clip();
-    if (clip.type === TITLE_TYPE) drawTitle(context, clip.text || clip.name || "", width, height);
-    else {
-      const element = sources.get(clip.id);
-      const size = sourceSize(element);
-      if (element && size.width && size.height) {
-        const rect = fitRect(size.width, size.height, width, height, fit);
-        context.drawImage(element, rect.x, rect.y, rect.width, rect.height);
-      }
+    drawLayerContent(context, clip, { sources, width, height, fit, time });
+    const glitch = Math.max(visual.glitch, transition?.glitch || 0);
+    if (glitch > 0) {
+      // Glitch: cópias deslocadas em modo de mistura "lighter" (separação de cor aproximada).
+      context.globalCompositeOperation = "lighter";
+      context.globalAlpha *= 0.35 * glitch;
+      context.translate(14 * glitch * sx, 0);
+      drawLayerContent(context, clip, { sources, width, height, fit, time });
+      context.translate(-28 * glitch * sx, 0);
+      drawLayerContent(context, clip, { sources, width, height, fit, time });
     }
     context.restore();
+    if (clip.look || clip.temperature || clip.tint) {
+      context.save();
+      drawLookOverlays(context, clip, width, height);
+      context.restore();
+    }
+    if (overlay && overlay.alpha > 0) {
+      context.save();
+      context.globalAlpha = overlay.alpha;
+      context.filter = "none";
+      context.fillStyle = overlay.color;
+      context.fillRect(0, 0, width, height);
+      context.restore();
+    }
   });
 }
 
@@ -145,6 +243,43 @@ function drawTitle(context, text, width, height) {
   const lineHeight = size * 1.25;
   const top = height / 2 - ((lines.length - 1) * lineHeight) / 2;
   lines.forEach((line, index) => context.fillText(line, width / 2, top + index * lineHeight));
+}
+
+/**
+ * Legenda/título com estilo de template (fonte, peso, tamanho em px de 1080p, preenchimento, contorno, caixa,
+ * alinhamento e posição), escalado para o tamanho do quadro.
+ */
+export function drawStyledText(context, text, style, width, height) {
+  const scale = height / SEQUENCE_HEIGHT;
+  const size = Math.max(8, Math.round((style.size || 64) * scale));
+  const lines = String(style.uppercase ? String(text).toUpperCase() : text).split("\n");
+  const lineHeight = size * 1.15;
+  context.font = `${style.weight || 800} ${size}px "${style.font || "Inter"}", Inter, Arial, sans-serif`;
+  context.textBaseline = "middle";
+  const align = style.align || "center";
+  context.textAlign = align;
+  const margin = width * 0.05;
+  const x = align === "left" ? margin : align === "right" ? width - margin : width / 2;
+  const block = lines.length * lineHeight;
+  const top = style.position === "top" ? height * 0.08 : style.position === "center" ? height / 2 - block / 2 : height * 0.92 - block;
+  lines.forEach((line, index) => {
+    const y = top + lineHeight * (index + 0.5);
+    if (style.box) {
+      const measured = context.measureText?.(line)?.width ?? line.length * size * 0.6;
+      const pad = size * 0.3;
+      const left = align === "left" ? x - pad : align === "right" ? x - measured - pad : x - measured / 2 - pad;
+      context.fillStyle = style.boxColor || "#000000B3";
+      context.fillRect(left, y - lineHeight / 2, measured + pad * 2, lineHeight);
+    }
+    if (style.strokeWidth > 0) {
+      context.lineWidth = style.strokeWidth * scale * 2;
+      context.strokeStyle = style.stroke || "#000";
+      context.lineJoin = "round";
+      context.strokeText(line, x, y);
+    }
+    context.fillStyle = style.fill || "#fff";
+    context.fillText(line, x, y);
+  });
 }
 
 export function exportSupport(scope = globalThis) {
@@ -341,9 +476,9 @@ export async function renderTimelineToWebm({
       recorder.onerror = (event) => reject(event.error || new Error("falha do MediaRecorder"));
     });
     const draw = (time) => {
-      const layers = programLayers(clips, time, trackState);
-      syncVideos(clips, sources, layers, time);
-      drawProgramFrame(context, { layers, sources, width, height, fit, time });
+      const composition = programComposition(clips, time, trackState);
+      syncVideos(clips, sources, composition, time);
+      drawProgramFrame(context, { composition, sources, width, height, fit, time });
       videoTrack?.requestFrame?.();
     };
     draw(range.start);

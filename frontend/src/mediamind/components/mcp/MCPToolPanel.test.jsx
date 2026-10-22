@@ -107,7 +107,7 @@ describe("Grade de ferramentas MCP", () => {
     fireEvent.click(within(detail).getByRole("button", { name: /Analisar/ }));
     expect(await within(detail).findByText("Prévia: 3 silêncios")).toBeInTheDocument();
     expect(within(detail).getByText("00:01 → 00:02")).toBeInTheDocument();
-    expect(provider.analyze).toHaveBeenCalledWith("silencio", { nivel: 8, margem: 0.5, modo: "manual", musica: false, faixas: ["A2"], sons: [], aviso: undefined });
+    expect(provider.analyze).toHaveBeenCalledWith("silencio", { nivel: 8, margem: 0.5, modo: "manual", musica: false, faixas: ["A2"], sons: [], aviso: undefined }, expect.any(Object));
     expect(provider.apply).not.toHaveBeenCalled();
   });
 
@@ -119,10 +119,10 @@ describe("Grade de ferramentas MCP", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Remover$/ }));
     expect(await screen.findByText("3 silêncios removidos")).toBeInTheDocument();
     expect(onExecuted).toHaveBeenCalledWith(expect.objectContaining({ outcome: { ok: true, summary: "3 silêncios removidos" } }));
-    fireEvent.click(screen.getByRole("button", { name: /Desfazer/ }));
+    fireEvent.click(within(screen.getByLabelText(/^Detalhes: /)).getByRole("button", { name: /Desfazer/ }));
     expect(screen.getByText("Última alteração desfeita.")).toBeInTheDocument();
     provider.undo.mockReturnValueOnce(false);
-    fireEvent.click(screen.getByRole("button", { name: /Desfazer/ }));
+    fireEvent.click(within(screen.getByLabelText(/^Detalhes: /)).getByRole("button", { name: /Desfazer/ }));
     expect(screen.getByText("Nada para desfazer.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remover silêncios", expanded: true }));
     expect(screen.queryByLabelText("Detalhes: Remover silêncios")).toBeNull();
@@ -141,7 +141,7 @@ describe("Grade de ferramentas MCP", () => {
     });
     render(<MCPToolPanel provider={provider} onExecuted={onExecuted} />);
     fireEvent.click(card("Remover silêncios"));
-    expect(screen.getByRole("button", { name: /Desfazer/ })).toBeDisabled();
+    expect(within(screen.getByLabelText(/^Detalhes: /)).getByRole("button", { name: /Desfazer/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /^Remover$/ }));
     expect(await screen.findByText("Web Audio indisponível")).toBeInTheDocument();
     expect(onExecuted).toHaveBeenCalledWith(expect.objectContaining({ outcome: { ok: false, summary: "Web Audio indisponível" } }));
@@ -169,7 +169,7 @@ describe("Grade de ferramentas MCP", () => {
     fireEvent.click(card("Só aplicar"));
     expect(screen.getAllByTestId("icone-proprio").length).toBeGreaterThan(1);
     fireEvent.click(screen.getByRole("button", { name: /Aplicar agora/ }));
-    await waitFor(() => expect(provider.apply).toHaveBeenCalledWith("simples", {}));
+    await waitFor(() => expect(provider.apply).toHaveBeenCalledWith("simples", {}, expect.any(Object)));
     fireEvent.click(card("Volume"));
     expect(screen.getByLabelText(/Ganho/)).toHaveAttribute("step", "1");
     expect(screen.getByText("Nenhuma opção disponível.")).toBeInTheDocument();

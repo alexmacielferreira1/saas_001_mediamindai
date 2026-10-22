@@ -119,16 +119,25 @@ export function detectSilences(envelope, { threshold, minSilence = 0.5, padBefor
 }
 
 /** Pontos de corte no meio das pausas, sem criar pedaços menores que `minClip`. */
-export function detectPauses(envelope, { threshold, minPause = 0.25, minClip = 1.5 }) {
+export function detectPauses(envelope, options) {
+  return pauseCandidates(envelope, options).map((pause) => pause.time);
+}
+
+/**
+ * Pausas com o ponto de corte e a duração: o corte fica no meio da pausa, a pelo menos `padAfter` do fim da
+ * fala e `padBefore` antes de ela voltar; pausas curtas demais para as margens são ignoradas.
+ */
+export function pauseCandidates(envelope, { threshold, minPause = 0.25, minClip = 1.5, padBefore = 0, padAfter = 0 }) {
   const end = envelope.from + envelope.db.length * envelope.windowSeconds;
   const cuts = [];
   let previous = envelope.from;
   quietRuns(envelope, threshold)
-    .filter(([start, stop]) => stop - start >= minPause && start > envelope.from + 1e-9 && stop < end - 1e-9)
+    .filter(([start, stop]) => stop - start >= Math.max(minPause, padBefore + padAfter) && start > envelope.from + 1e-9 && stop < end - 1e-9)
     .forEach(([start, stop]) => {
-      const time = Math.round(((start + stop) / 2) * 1000) / 1000;
+      const middle = Math.min(stop - padBefore, Math.max(start + padAfter, (start + stop) / 2));
+      const time = Math.round(middle * 1000) / 1000;
       if (time - previous >= minClip && end - time >= minClip) {
-        cuts.push(time);
+        cuts.push({ time, length: Math.round((stop - start) * 100) / 100 });
         previous = time;
       }
     });

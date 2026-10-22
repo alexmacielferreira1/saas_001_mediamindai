@@ -3,6 +3,9 @@ import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/m
 import { registerMCPActions } from "../../lib/mcpActions";
 import { leftPart, placeClip, rightPart } from "../../lib/mmfilmEdits";
 import { animatedClip } from "../../lib/mmfilmMotion";
+import { captionStyleCss } from "../../lib/mmfilmCaptions";
+import { lookFilter, overlayStyles, resolveTransition } from "../../lib/mmfilmLooks";
+import { animatedTextStyle, letterSpans, textAnimationState } from "../../lib/mmfilmTextAnimation";
 import { mmfilmCatalogue, runMMFilmTool } from "./mmfilmMcpTools";
 import { useEffect, useRef, useState } from "react";
 import { useTextPrompt } from "./FilmCraftTextPrompt";
@@ -69,6 +72,7 @@ import {
   mbpsToBps,
   parseKbps,
   presetSize,
+  programComposition,
   programLayers,
   renderTimelineToWebm,
 } from "./filmcraftRender";
@@ -225,6 +229,10 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const [insertMode, setInsertMode] = useGraphicDraftState("FilmCraftWorkspace.jsx:insertMode", false);
   const [showClipInfo, setShowClipInfo] = useGraphicDraftState("FilmCraftWorkspace.jsx:showClipInfo", true);
   const [mixer, setMixer] = useGraphicDraftState("FilmCraftWorkspace.jsx:mixer", emptyMixer);
+  // Backups da sequência feitos pelas ferramentas do MCP (os 10 mais recentes) e trilhas alvo do rodapé.
+  const [toolBackups, setToolBackups] = useGraphicDraftState("FilmCraftWorkspace.jsx:toolBackups", []);
+  const [toolTargets, setToolTargets] = useGraphicDraftState("FilmCraftWorkspace.jsx:toolTargets", { sfx: "A3", captions: "V3" });
+  const captionFileInput = useRef(null);
   // Comprimento da timeline: mínimo de 60 s, crescendo com o conteúdo (+10 s de folga, em blocos de 5 s).
   const timelineSeconds = Math.max(60, Math.ceil((clips.reduce((end, clip) => Math.max(end, clip.start + clip.duration), 0) + 10) / 5) * 5);
   const clipboard = useRef([]);
@@ -290,24 +298,44 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     trackState,
     media,
     selectedIds: selectedIds.length ? selectedIds : selected ? [selected] : [],
+    backups: toolBackups,
+    targets: toolTargets,
+    primaryId: selected,
   };
   const toolActions = useRef(null);
-  toolActions.current = { commit, undo, setMarkers, notify, canUndo: history.length > 0 };
+  toolActions.current = { commit, undo, setMarkers, notify, setPlayhead, setToolBackups, setToolTargets, canUndo: history.length > 0, sequenceName };
   useEffect(() => {
     if (!active) return undefined;
-    const env = { loadBuffers: loadToolBuffers };
-    const strip = ({ clips: _clips, markers: _markers, ...result }) => result;
+    const envFor = (onProgress) => ({ loadBuffers: (list) => loadToolBuffers(list, onProgress), sceneChanges: (list, options) => detectSceneChanges(list, options, onProgress) });
+    const strip = ({ clips: _clips, markers: _markers, download: _download, createBackup: _backup, openCaptionFile: _open, ...result }) => result;
+    const saveBackup = (label) => {
+      const now = new Date();
+      const backup = {
+        id: crypto.randomUUID(),
+        label,
+        time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        clips: toolState.current.clips,
+        markers: toolState.current.markers,
+      };
+      toolActions.current.setToolBackups((items) => [backup, ...items].slice(0, 10));
+      toolState.current = { ...toolState.current, backups: [backup, ...toolState.current.backups].slice(0, 10) };
+    };
+    const toolLabel = (toolId) => mmfilmCatalogue(toolState.current).tools.find((tool) => tool.id === toolId)?.label || toolId;
     return registerMCPActions({
       source: "mmfilm",
       label: "MMFilm",
       catalogue: () => mmfilmCatalogue(toolState.current),
-      analyze: async (toolId, params) => {
-        const result = await runMMFilmTool(toolId, toolState.current, params, env);
+      analyze: async (toolId, params, options = {}) => {
+        const result = await runMMFilmTool(toolId, toolState.current, params, envFor(options.onProgress));
         return strip(result.ok ? { ...result, summary: `Prévia (nada foi alterado): ${result.summary}` } : result);
       },
-      apply: async (toolId, params) => {
-        const result = await runMMFilmTool(toolId, toolState.current, params, env);
+      apply: async (toolId, params, options = {}) => {
+        const result = await runMMFilmTool(toolId, toolState.current, params, envFor(options.onProgress));
+        if (result.createBackup) saveBackup(result.createBackup);
+        if (result.openCaptionFile) captionFileInput.current?.click();
+        if (result.download) downloadBlob(new Blob([result.download.text], { type: result.download.type }), result.download.name);
         if (result.ok && result.clips) {
+          if (params?.backup !== false && toolId !== "backup.restore") saveBackup(`Antes de “${toolLabel(toolId)}”`);
           // Atualiza já o estado lido pela próxima operação de uma fila, antes do React redesenhar.
           toolState.current = { ...toolState.current, clips: result.clips, markers: result.markers || toolState.current.markers };
           toolActions.current.commit(result.clips);
@@ -323,16 +351,87 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         return true;
       },
       canUndo: () => toolActions.current.canUndo,
+      seek: (time) => toolActions.current.setPlayhead(Math.max(0, time)),
+      footer: () => {
+        const { clips: current, targets } = toolState.current;
+        const end = current.reduce((value, clip) => Math.max(value, clip.start + clip.duration), 0);
+        const cycle = (key, options) => () =>
+          toolActions.current.setToolTargets((old) => ({ ...old, [key]: options[(options.indexOf(old[key]) + 1) % options.length] }));
+        return {
+          buttons: [
+            { id: "transcrever", label: "Transcrever", icon: Mic, tab: "transcricao" },
+            { id: "srt", label: "Importar SRT", icon: Upload, onClick: () => captionFileInput.current?.click() },
+            { id: "legendas", label: "Legendas", icon: Captions, tab: "legendas" },
+          ],
+          info: `${toolActions.current.sequenceName} · 1920×1080 · 29,97 fps · ${end.toFixed(1).replace(".", ",")} s`,
+          chips: [
+            { id: "sfx", label: `${targets.sfx} SFX`, active: true, onClick: cycle("sfx", ["A3", "A2", "A1"]), hint: "Trilha dos efeitos sonoros (clique para trocar)" },
+            { id: "captions", label: `${targets.captions} Legendas`, active: true, onClick: cycle("captions", ["V3", "V2"]), hint: "Trilha das legendas (clique para trocar)" },
+          ],
+        };
+      },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
-  async function loadToolBuffers(list) {
+  async function loadToolBuffers(list, onProgress) {
     const engine = audioEngine.current;
     if (!engine.ensure()) throw new Error("Este navegador não tem Web Audio: a análise de áudio não está disponível.");
+    const urls = [...new Set(list.map((clip) => clip.url))];
+    let done = 0;
+    onProgress?.(0, `Lendo o áudio (0 de ${urls.length})`);
     const entries = await Promise.all(
-      [...new Set(list.map((clip) => clip.url))].map(async (url) => [url, await engine.buffer(url)]),
+      urls.map(async (url) => {
+        const buffer = await engine.buffer(url);
+        done += 1;
+        onProgress?.(done / urls.length, `Lendo o áudio (${done} de ${urls.length})`);
+        return [url, buffer];
+      }),
     );
     return new Map(entries.filter(([, buffer]) => buffer));
+  }
+  // Mudança de cena: compara quadros reduzidos (32×18) a cada 0,25 s nos clipes de vídeo de V1.
+  async function detectSceneChanges(list, { sensitivity = 5 } = {}, onProgress) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 18;
+    const context = canvas.getContext?.("2d", { willReadFrequently: true });
+    if (!context || !list.length) throw new Error("Não foi possível ler os quadros do vídeo neste navegador.");
+    const limit = 0.35 - (Math.max(1, Math.min(10, sensitivity)) - 5) * 0.03;
+    const scenes = [];
+    for (const [position, clip] of list.entries()) {
+      if (!clip.url || clip.offline) continue;
+      const video = document.createElement("video");
+      video.muted = true;
+      video.preload = "auto";
+      video.src = clip.url;
+      await new Promise((resolve, reject) => {
+        video.onloadeddata = resolve;
+        video.onerror = () => reject(new Error(`não foi possível abrir “${clip.name}”`));
+      });
+      let previous = null;
+      const steps = Math.min(400, Math.floor(clip.duration / 0.25));
+      for (let step = 0; step <= steps; step += 1) {
+        const local = step * 0.25;
+        video.currentTime = clipMediaTime(clip, clip.start + local);
+        await new Promise((resolve) => {
+          video.onseeked = resolve;
+        });
+        context.drawImage(video, 0, 0, 32, 18);
+        const pixels = context.getImageData(0, 0, 32, 18).data;
+        const luma = new Float32Array(32 * 18);
+        for (let index = 0; index < luma.length; index += 1) luma[index] = (pixels[index * 4] * 0.3 + pixels[index * 4 + 1] * 0.59 + pixels[index * 4 + 2] * 0.11) / 255;
+        if (previous) {
+          let difference = 0;
+          for (let index = 0; index < luma.length; index += 1) difference += Math.abs(luma[index] - previous[index]);
+          const score = difference / luma.length;
+          if (score >= limit) scenes.push({ time: Math.round((clip.start + local) * 1000) / 1000, score: Math.min(1, score) });
+        }
+        previous = luma;
+        onProgress?.((position + step / Math.max(1, steps)) / list.length, `Comparando quadros de ${clip.name}`);
+      }
+      video.removeAttribute("src");
+    }
+    return scenes;
   }
   useEffect(() => {
     if (!playing || !active) return;
@@ -416,6 +515,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   // Programa multicamada: V1 embaixo, V3 em cima; `program` é a camada superior (controles do monitor).
   const layers = programLayers(clips, playhead, trackState);
   const program = layers.at(-1);
+  // Camadas do monitor com os efeitos das ferramentas (movimento, motion presets, transições, looks).
+  const composition = programComposition(clips, playhead, trackState);
 
   function commit(next) {
     setClips((current) => {
@@ -1700,6 +1801,17 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               onChange={(event) => load(event.target.files)}
             />
           </label>
+          <input
+            ref={captionFileInput}
+            hidden
+            type="file"
+            accept=".srt,.vtt"
+            aria-label="Importar legendas SRT ou VTT (MCP)"
+            onChange={(event) => {
+              importCaptions(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
           <button
             onClick={() => setMediaLocatorOpen(true)}
             disabled={!media.some((asset) => asset.offline)}
@@ -2128,7 +2240,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <Monitor
                 title="Programa"
                 asset={program}
-                layers={layers}
+                layers={composition}
                 playing={playing}
                 playhead={playhead}
                 onPlayingChange={setPlaying}
@@ -2547,7 +2659,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                               )}
                               {clip.transition && (
                                 <span className="absolute right-1 top-1 rounded bg-black/50 px-1 text-[8px]">
-                                  {clip.transition}
+                                  {resolveTransition(clip.transition)?.name || String(clip.transition?.id ?? clip.transition)}
                                 </span>
                               )}
                               {(clip.keyframes || []).map((time) => (
@@ -3653,8 +3765,39 @@ function ProgramLayer({ clip, zIndex, frameScale, playing, playhead, mediaRef, a
     if (playing) video.play?.()?.catch?.(() => {});
     else video.pause?.();
   }, [clip, playhead, playing, audioMuted, mediaRef]);
-  // Movimentos das ferramentas (zoom, shake, pan…) entram no quadro do instante atual.
-  const style = { ...layerVisualStyle(animatedClip(clip, playhead), frameScale), zIndex };
+  // Movimentos das ferramentas (zoom, shake, pan…) entram no quadro do instante atual; camadas vindas da
+  // composição já chegam animadas e com os efeitos em `_fx` (motion presets, transição, look).
+  const style = { ...fxVisualStyle(clip._fx ? clip : animatedClip(clip, playhead), frameScale), zIndex };
+  const overlays = overlayStyles(clip);
+  const lookLayer = overlays.length ? (
+    <>
+      {overlays.map((overlay, index) => (
+        <div key={`look-${index}`} aria-hidden style={{ ...overlay, position: "absolute", inset: 0, zIndex, pointerEvents: "none" }} />
+      ))}
+    </>
+  ) : null;
+  const fade = clip._fx?.overlay?.alpha > 0 ? (
+    <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: zIndex + 0.5, background: clip._fx.overlay.color, opacity: clip._fx.overlay.alpha, pointerEvents: "none" }} />
+  ) : null;
+  if (clip.type === TITLE_TYPE && (clip.captionStyle || clip.textAnimation)) {
+    const scale = frameScale || 0.4;
+    const shownText = clip.captionStyle?.uppercase ? String(clip.text || clip.name || "").toUpperCase() : clip.text || clip.name;
+    const animation = clip.textAnimation ? textAnimationState(clip.textAnimation, shownText, playhead - clip.start, clip.duration) : null;
+    return (
+      <div style={{ ...style, position: "absolute", inset: 0 }} className="pointer-events-none">
+        <span style={clip.captionStyle ? captionStyleCss(clip.captionStyle, scale) : { position: "absolute", left: "5%", right: "5%", top: "50%", transform: "translateY(-50%)", textAlign: "center", fontWeight: 700, fontSize: 28, color: "#fff" }}>
+          {animation ? (
+            <span style={animatedTextStyle(animation, { pxScale: scale })}>
+              {letterSpans(animation, { pxScale: scale }).map((letter) => (letter.lineBreak ? <br key={letter.key} /> : <span key={letter.key} style={letter.style}>{letter.char}</span>))}
+            </span>
+          ) : (
+            shownText
+          )}
+        </span>
+        {fade}
+      </div>
+    );
+  }
   if (clip.type === TITLE_TYPE)
     return (
       <div style={style} className="col-start-1 row-start-1 whitespace-pre-wrap px-6 text-center text-3xl font-bold text-white">
@@ -3673,19 +3816,54 @@ function ProgramLayer({ clip, zIndex, frameScale, playing, playhead, mediaRef, a
       </div>
     );
   if (clip.type?.startsWith("image"))
-    return <img src={clip.url} alt="" style={style} className="col-start-1 row-start-1 h-full w-full object-contain" />;
+    return (
+      <>
+        <img src={clip.url} alt="" style={style} className="col-start-1 row-start-1 h-full w-full object-contain" />
+        {lookLayer}
+        {fade}
+      </>
+    );
   return (
-    <video
-      ref={(node) => {
-        videoRef.current = node;
-        if (mediaRef) mediaRef.current = node;
-      }}
-      {...videoEvents}
-      src={clip.url}
-      style={style}
-      className="absolute inset-0 h-full w-full object-contain"
-    />
+    <>
+      <video
+        ref={(node) => {
+          videoRef.current = node;
+          if (mediaRef) mediaRef.current = node;
+        }}
+        {...videoEvents}
+        src={clip.url}
+        style={style}
+        className="absolute inset-0 h-full w-full object-contain"
+      />
+      {lookLayer}
+      {fade}
+    </>
   );
+}
+// Estilo da camada com os efeitos da composição: opacidade, desfoque e glitch dos motion presets, look de cor
+// e a transição (deslocamento, escala e recorte retangular/circular), em pixels do monitor.
+function fxVisualStyle(clip, frameScale = 1) {
+  const base = layerVisualStyle(clip, frameScale);
+  const fx = clip._fx;
+  if (!fx) return base;
+  const { visual, transition } = fx;
+  const blur = visual.blur + (transition?.blur || 0);
+  const parts = [];
+  if (transition && (transition.dx || transition.dy)) parts.push(`translate(${transition.dx * frameScale}px, ${transition.dy * frameScale}px)`);
+  if (transition && transition.scale !== 1) parts.push(`scale(${transition.scale})`);
+  parts.push(base.transform);
+  if (visual.scaleX !== 1) parts.push(`scaleX(${visual.scaleX})`);
+  if (visual.glitch > 0) parts.push(`translateX(${Math.round(Math.sin(clip.start * 97 + visual.glitch * 13) * 14 * visual.glitch * frameScale * 100) / 100}px)`);
+  let clipPath = base.clipPath;
+  if (transition?.clip?.shape === "circle") clipPath = `circle(${transition.clip.r * frameScale}px at ${transition.clip.cx * frameScale}px ${transition.clip.cy * frameScale}px)`;
+  else if (transition?.clip) clipPath = `inset(0 ${Math.max(0, 1920 - transition.clip.x - transition.clip.width) / 19.2}% 0 ${transition.clip.x / 19.2}%)`;
+  return {
+    ...base,
+    opacity: base.opacity * visual.opacityFactor * (transition?.opacity ?? 1),
+    transform: parts.join(" "),
+    clipPath,
+    filter: blur > 0 ? `${lookFilter(clip)} blur(${Math.round(blur * frameScale * 100) / 100}px)` : lookFilter(clip),
+  };
 }
 function Monitor({ title, asset, layers, children, playing = false, playhead = 0, onPlayingChange, onSeek, audioMuted = false, onToggleAudio }) {
   const videoRef = useRef(null);
