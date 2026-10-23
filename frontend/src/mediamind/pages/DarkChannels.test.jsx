@@ -368,10 +368,11 @@ describe("Canais Dark · página única (planejamento + pipeline)", () => {
     confirm.mockRestore();
   });
 
-  it("keeps Canais Dark 2 available alongside the unified page until it is retired", () => {
+  it("redirects the old Canais Dark 2 route to the single page and no longer ships the separate page", () => {
     const app = readFileSync(resolve(process.cwd(), "src/App.jsx"), "utf8");
+    expect(app).toContain('<Route path="/canais-dark-2" element={<Navigate to="/canais-dark" replace />} />');
     expect(app).toContain('<Route path="/canais-dark" element={protectedPage(DarkChannels, "ai_tools")} />');
-    expect(app).toContain('<Route path="/canais-dark-2" element={protectedPage(DarkChannels2, "ai_tools")} />');
-    expect(existsSync(resolve(process.cwd(), "src/mediamind/pages/DarkChannels2.jsx"))).toBe(true);
+    expect(app).not.toContain("DarkChannels2");
+    expect(existsSync(resolve(process.cwd(), "src/mediamind/pages/DarkChannels2.jsx"))).toBe(false);
   });
 });
