@@ -9,3 +9,4 @@
 - A sequência de inteligência é RAG audiovisual e Knowledge primeiro, MCP de leitura depois de APIs internas estáveis, ações MCP somente com autorização/auditoria e fine-tuning apenas após dataset real e avaliação reproduzível.
 - O MCP do MediaMind não acessa o banco diretamente e nunca amplia as permissões do usuário representado.
 - Modelos locais, on-premises e externos são opções atrás de contratos neutros; nenhum agente ou modelo específico se torna requisito estrutural.
+- **Canais Dark (2026-10-23):** página única `/canais-dark`. O antigo Canais Dark 2 (planejamento da rede: resumo, Canais, Decisões, Nichos e idiomas) virou as primeiras abas dessa página, seguidas pelas etapas de produção (Pastas e roteiros até Analytics). A tela do 2 foi retirada; `/canais-dark-2` só redireciona. Os dados (canais, decisões, nichos e idiomas) não mudaram e a estrutura do Alex continua entrando por importação, nunca fixa no código. PRs #7, #9 e #14.
