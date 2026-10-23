@@ -94,3 +94,32 @@ O ponto fraco é a **API genérica `/records`**: ela grava JSON livre do cliente
 4. **Em produção, a mídia fica em disco persistente do Render ou vai para storage de objetos?** Recomendação: R2/S3 atrás do `MediaStorage` (o Protocol já existe). Até lá, todas as raízes ficam sob o mesmo disco persistente.
 5. **Qual a retenção de exports, logs de auditoria e eventos de uso?** Recomendação: exports por 7 dias, auditoria por 1–5 anos fora da tabela quente (particionada ou arquivada) e eventos de uso agregados por mês após 90 dias.
 6. **LGPD: como o titular pede exclusão de conta e o que acontece com seus dados em `TenantRecord` (autor de roteiros, comentários e logs)?** Recomendação: definir um fluxo de anonimização (substituir `user_id` e nome por pseudônimo) em vez de apagar trilhas de auditoria.
+
+## 7. Correções aplicadas em 2026-10-23
+
+Branch local `qualidade/kit-revisao-2026-10-23` (sem push). Em cada item, o teste foi escrito antes, rodado e visto falhando, e só depois veio a correção. Backend: 666 testes antes, 701 depois (`pytest backend/tests`). As integrações com PostgreSQL 16 local (`HUB_INTEGRATION=1`, `tests/integration`) passaram 2 de 2. `ruff check` e `ruff format --check` estão limpos em `backend`, `tests`, `alembic` e `scripts`. Frontend: 1845 testes antes e 1847 depois (`vitest run`, 223 arquivos), com `npm run lint` e `npm run build` OK.
+
+| Achado | Commit | Testes |
+|---|---|---|
+| #1 Crítico: leitura arbitrária via `CreativeExport.relative_path` | `23394e7` | `test_creative_tools_api.py::test_generic_records_api_cannot_set_creative_export_path`, `::test_creative_export_download_is_confined_to_tenant_directory` |
+| #2 Alto: `Asset.storage_key` gravável e confinado só à raiz (refatoração A: `SERVER_OWNED_FIELDS` em `tenancy/record_policies.py`) | `f369de8` | `test_media_api.py::test_generic_records_api_cannot_set_asset_storage_key`, `::test_asset_media_is_confined_to_the_session_tenant_directory`, `test_storage_regressions.py::test_media_resolution_with_tenant_rejects_other_tenant_keys` |
+| #3 Alto: SSRF nas chamadas de IA (ao salvar e na hora da chamada; `follow_redirects=False`) | `322fe1a` | `test_ai_outbound_guard.py` (6 testes) |
+| #5 Alto: `ENVIRONMENT` com padrão `local` (falha aberta) | `fe40941` | `test_production_config.py::test_missing_environment_fails_closed`, `::test_blank_environment_fails_closed`, `::test_local_environment_refuses_managed_remote_database`, `::test_local_environment_keeps_local_database` |
+| #6/#7 Alto: conexão do pool presa e event loop bloqueado em trabalho longo | `1a02604` | `test_long_work_releases_db.py` (11 testes) |
+| #8 Alto: dashboard e Gestão carregando todas as linhas; índice composto (migração `0009_tenant_records_list_index`, só `CREATE INDEX CONCURRENTLY IF NOT EXISTS`) | `dd624ad` | `test_dashboard_sql_aggregation.py` (5 testes); upgrade, downgrade e upgrade conferidos em PostgreSQL 16 local |
+| #15 Médio: code splitting por rota | `0016d23` | `frontend/src/App.codeSplitting.test.js`. O JS inicial caiu de cerca de 4.171 kB (gzip 1.160 kB) para cerca de 492 KiB (gzip 153 KiB) |
+
+Comportamentos novos que valem atenção:
+- `/records` agora recusa com 422 `SERVER_OWNED_FIELD` qualquer tentativa de criar ou alterar `Asset.storage_key`, `Asset.sha256`, `Asset.mime_type`, `CreativeExport.relative_path`, `CreativeExport.sha256` e `CreativeExport.size`. Reenviar o mesmo valor num PATCH unitário continua aceito. `Asset.file_size` ficou de fora, porque o cadastro legado de pacotes (`IngestNewPackage`) o envia.
+- Destinos de IA internos agora são recusados com 422 `AI_DESTINATION_BLOCKED`. Uma conexão já gravada com endereço interno deixa de funcionar e precisa ser reconfigurada.
+- Sem `ENVIRONMENT` definido, a API e o Alembic não iniciam. **Antes do próximo deploy, conferir `ENVIRONMENT=production` no Render.** Com `ENVIRONMENT=production`, o validador existente também exige `SESSION_COOKIE_SECURE`, `FRONTEND_URL` HTTPS e `HUB_ADMIN_TOKEN`.
+- A análise de cortes agora é gravada como `queued` antes da transcrição. Se ocorrer uma falha inesperada, ela fica marcada como `failed` em vez de ser descartada.
+
+O que **não** foi feito, e por quê:
+- #4 (superadmin com alcance global em `ai.py`): é pergunta de negócio (seção 6, pergunta 1). Ficou inalterado, aguardando a decisão do Alex.
+- #6, solução estrutural (jobs/worker, refatoração C): fora do escopo, porque só foram aplicadas as mitigações baratas. O FFmpeg continua rodando dentro da requisição, ocupando um worker HTTP, mas sem conexão do banco. Fila de jobs MCP (`execute_queue_record`): a conexão também é liberada durante cada chamada de IA, então a fila fica gravada como `running` antes do fim.
+- #8, parte restante: a coluna continua `JSON`. A migração para `JSONB` com GIN reescreve a tabela (`ALTER TYPE`) e não cabe no limite "só CREATE INDEX". `POST /records/{tipo}/query` com `filters`, `PATCH /bulk` e a paginação de `admin_users` continuam filtrando em Python. Só `GET /records` ordenado por data passou a usar `ORDER BY`/`LIMIT` no SQL.
+- #5, parte restante: `AI_SECRET_KEY` e `THUMBNAIL_SECRET_KEY` não viraram obrigatórias no validador de produção. Isso derrubaria o boot se faltarem no Render, e a IA já falha fechada sem a chave. Fica para o Alex decidir.
+- `thumbnail_settings.configured_cutout` (#10, lock durante o remove.bg) e os demais achados Médio/Baixo (#9, #11–#14, #16) não foram tratados nesta rodada.
+- `frontend/package-lock.json` está fora de sincronia com o `package.json` (faltam `chokidar@5.0.0` e `readdirp@5.1.1`), e `npm ci` falha com npm 10.9. Usei `npm install` só localmente e reverti o lockfile, sem commit.
+- Não verificado: o carregamento sob demanda das páginas no navegador real (só build, lint e vitest) e o comportamento sob carga real do pool (os testes provam que não há transação aberta durante o trabalho longo, mas não medem latência).
