@@ -217,7 +217,7 @@ Abas: Visão Geral, Usuários, Acessos por Função, Perfis e Funções, Permiss
 
 ## Sugestões para Alex decidir (mudanças de fluxo / maiores)
 
-1. Política de dados fictícios: hoje fixtures aparecem sem rótulo em Analytics, Para publicação/Publicado, Em revisão, Home, Administração (Equipes, Formulários, Importações, Segurança). Decidir: selo "Demonstração" por bloco, ou estado vazio quando não houver dado real. É o ponto que mais afeta a confiança de quem usa.
+1. Política de dados fictícios: hoje fixtures aparecem sem rótulo em Analytics, Para publicação/Publicado, Em revisão, Home, Administração (Equipes, Formulários, Importações, Segurança). Decidir: selo "Demonstração" por bloco, ou estado vazio quando não houver dado real. É o ponto que mais afeta a confiança de quem usa. **Atualização 23/10/2026:** os exemplos deixaram de ser gravados no banco das empresas (PR #13); a exibição sem rótulo continua pendente. Ver `docs/RELATORIO_2026-10-23_DADOS_DEMO.md`.
 2. Duas versões de cada tela (rotas independentes /ingest /search /workspace /social x abas de /corp): escolher a canônica, redirecionar a outra e colocar Acervo e Gestão no menu lateral.
 3. Copiloto aberto por padrão consome ~40% da largura: iniciar recolhido (ou 25%) e lembrar a escolha por usuário.
 4. Menu "Novo" e paleta: ou implementar formulários de criação em cada destino (`?novo=`), ou separar em "Criar" e "Ir para".
