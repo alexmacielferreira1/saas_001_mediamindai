@@ -32,10 +32,18 @@ Destino/mídias/ferramentas do servidor continuam disponíveis, recolhidos.
    e devolver o cancelamento no cleanup do `useEffect`. `apply` deve passar pelo histórico do app (desfazer).
 4. Testes: operações puras (unitário), painel/fila já cobertos; integração do app com `currentMCPActions()`.
 
-## MMFilm — ferramentas (todas executam de verdade)
-Auto Edit · Remover silêncios · Cortar nas pausas · Zoom automático · Punch in · Zoom suave · Camera shake · Pan · Rotação ·
-Remover movimento · Normalizar · Auto ducking · Remover ducking · SFX automático (sons importados no projeto) · Limpar SFX.
-Movimentos (`clip.motion`) e ducking (`clip.gainKeys`) aparecem no preview, na reprodução e na exportação WebM.
+## MMFilm — ferramentas (2026-10-23, todas executam de verdade · 55 em 14 abas)
+Histórico, decisões e como retomar: [HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md](HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md).
+- **Auto Edit** (10 etapas + SFX, confirmação, backup, um único Desfazer).
+- **Silêncios · Cortes** (pausa, fim de frase, mudança de cena, lista com checkbox).
+- **Sound FX:** SFX automático (cortes, títulos, palavras fortes), Biblioteca de sons (categorias pelo nome, prévia ▶, inserir no indicador), Limpar SFX.
+- **Legendas / Transcrição:** Transcrever (serviço do Acervo/ClipsFree), Importar SRT, Criar legendas (12 templates próprios), Re-transcrever, Estilo da timeline, Exportar SRT, Vícios de linguagem, Títulos animados.
+- **Áudio:** Normalizar, Auto ducking (detecção automática voz/música), Remover ducking.
+- **Sincronizar · Multicâmera** (forma de onda com confiança e cadeia; até 4 pessoas + geral).
+- **Movimentos:** zoom automático, punch in, zoom suave, shake, pan, rotação, motion blur, pulso de escala, centralizar, rampa de velocidade, clonar estilo, remover movimento.
+- **Motion Presets** (28 em 10 categorias) · **Animação de texto** (27) · **Presets e transições** (16 transições, 17 looks, multi-tela, abertura, créditos).
+- **Configurações:** backup manual e restaurar backup.
+Arquivos: `mmfilmMcpTools.js` (catálogo e núcleo) + `mmfilmMcpTextTools.js`, `mmfilmMcpCameraTools.js`, `mmfilmMcpMotionTools.js`, `mmfilmMcpExtraTools.js`; bibliotecas em `lib/mmfilm*.js`. Tudo (movimento, presets, transições, looks, legendas com estilo, animação de texto, ducking) aparece no preview, na reprodução e na exportação WebM (`programComposition` em `filmcraftRender.js`).
 
 ## MMPhoto — ferramentas (2026-10-22, todas executam de verdade · 34)
 Fundo · Recortar objeto (2026-10-22): MediaPipe Interactive Segmenter com `public/models/magic_touch.tflite` (Apache-2.0, baixado de storage.googleapis.com/mediapipe-models), por ponto (centro da seleção ou X/Y em %); mantém o objeto ou apaga só o objeto. Adaptador em `lib/objectSegmentation.js`.
@@ -88,6 +96,7 @@ Sem desfazer próprio (MMLight, PDF, MM3D, Bibliotecas, Excel, PowerPoint): o MC
 - **PowerPoint (15)** — `powerpointMcpTools.js`: Novo slide, Duplicar, Reordenar, Excluir (confirma), Tópicos em slides, Agenda, Aplicar layout, Padronizar layouts, Negrito/itálico, Caixa dos títulos, Substituir texto, Marcadores. Tema (6 prontos ou personalizado), Alinhar (auto/esquerda/centro/direita/justificado) e Anotações (painel no editor; tecla N no modo apresentação) — campos `theme`, `align`, `notes` por slide, também na aba Design.
 
 ## Pendências conhecidas
-- Vícios de linguagem, legendas reorganizadas e títulos de frases fortes dependem de transcrição (ainda indisponível no MMFilm).
-- Sincronizar câmeras e multicâmera dependem de mais de uma fonte por faixa e ficam para um próximo bloco.
-- A timeline do MMFilm hoje tem indicador limitado a 60 s (comportamento anterior, não alterado).
+- MMFilm: pacotes próprios de sons livres (CC0) na biblioteca, prévia em vídeo de presets/transições, idioma PT/EN no painel.
+- MMFilm: Transcrever só funciona com mídias do Acervo (arquivos do computador não são enviados; para eles, Importar SRT).
+- MMFilm: rampa de velocidade remove o movimento (zoom/shake) do clipe ao dividir em degraus.
+- `eslint.config.js` não analisa `src/mediamind/**` (o "lint OK" não cobre esses arquivos; os testes cobrem).

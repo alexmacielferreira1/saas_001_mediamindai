@@ -1,4 +1,4 @@
-# Matriz de Gaps — atualizada após o bloco 1 (2026-10-21)
+# Matriz de Gaps — atualizada em 2026-10-23 (PRs #6, #10 e #19)
 
 Status: ✅ existe e funciona · 🟡 existe parcial · ❌ não existe
 Base auditada: `origin/main` em 2d427b3 (inclui o MCP do MMFilm, commit 49f5677).
@@ -21,7 +21,7 @@ Base auditada: `origin/main` em 2d427b3 (inclui o MCP do MMFilm, commit 49f5677)
 | 12 | Normalizar (alvo, pico −1 dB) | M03 | ✅ | Normalizar (alvo, pico) | — |
 | 13 | Sincronizar por forma de onda + confiança + cadeia | M04 | ✅ | `mmfilmSync.js` + `sync.waveform`: offset < 2 ms, confiança, referência, cadeia, desligar áudio das câmeras | — |
 | 14 | Multicâmera (até 4 + geral, ritmo, variar) | M05 | ✅ | `mmfilmMulticam.js` + `multicam.cut`: até 4 pessoas + geral, ritmo, variar, planos fora do ar desativados | — |
-| 15 | Transcrição com timestamps por palavra + progresso | M06 | 🟡 | Card “Transcrever” (em breve) + Importar SRT | Ligar ao serviço de transcrição do ClipsFree (configuração de IA de outro chat) |
+| 15 | Transcrição com timestamps por palavra + progresso | M06 | ✅ | `transcribe.run` pelo serviço de transcrição do Acervo/ClipsFree (reaproveita a salva) + Importar SRT | Arquivos do computador seguem com Importar SRT |
 | 16 | Importar SRT | M06 | ✅ | Rodapé e aba Transcrição | — |
 | 17 | Vícios de linguagem (hesitações, repetições) | M06 | ✅ | `fillers.remove` (hesitações, repetições, pausas reais quando há áudio) | Tempo exato por palavra depende da transcrição |
 | 18 | Legendas: formatos (palavra/linhas) | M06 | ✅ | `captions.create`: palavra por palavra ou até 6 linhas, caracteres, MAIÚSCULAS, sem pontuação | Medir largura em pixels |
@@ -29,14 +29,14 @@ Base auditada: `origin/main` em 2d427b3 (inclui o MCP do MMFilm, commit 49f5677)
 | 20 | Legendas: troca de fonte + aviso fonte ausente + controles do template | M06 | ✅ | Fonte, cor, tamanho, alinhamento, caixa + aviso de fonte ausente | — |
 | 21 | Legendas: "da timeline" / nativa / re-transcrever | M06 | ✅ | Re-transcrever, estilo da timeline, exportar SRT | — |
 | 22 | Títulos animados (frases de impacto) | M06 | ✅ | `titles.create` com animação | — |
-| 23 | SFX biblioteca (categorias, prévia, favoritos, pastas próprias) | M07 | 🟡 | Sons do projeto escolhidos por categoria (cortes, títulos, palavras fortes) | Biblioteca própria com pads de prévia e categorias automáticas (sons CC0) |
+| 23 | SFX biblioteca (categorias, prévia, favoritos, pastas próprias) | M07 | ✅ | `sfx.library`: categorias pelo nome do arquivo, prévia ▶, inserir no indicador; favoritos do painel | Pacotes próprios de sons livres (CC0) |
 | 24 | SFX automático (cortes, texto, palavras fortes, espaço mínimo, rotação) | M07 | ✅ | Cortes, textos, palavras fortes, espaço mínimo, alternância | — |
 | 25 | Animação de texto (presets + prévia hover) | M08 | ✅ | 27 animações próprias (Entrada, Digitação, Ênfase, Saída) no preview e no export | Prévia ao passar o mouse |
 | 26 | Motion presets entrada/saída | M08 | ✅ | 28 motion presets em 10 categorias, entrada/saída/ambos | Prévia em vídeo |
-| 27 | Movimentos rápidos com intensidade 1–10 | M08 | ✅ | Zoom suave, punch in, shake, pan, rotação, motion blur, escala, centralizar | Speed ramp (precisa de velocidade variável no player) |
+| 27 | Movimentos rápidos com intensidade 1–10 | M08 | ✅ | Zoom suave, punch in, shake, pan, rotação, motion blur, escala, centralizar, rampa de velocidade | — |
 | 28 | Clonar estilo | M08 | ✅ | `motion.clonestyle` | — |
 | 29 | Auto Zoom | M08 | ✅ | `motion.autozoom` | — |
-| 30 | Packs: transições, LUTs, looks, títulos, créditos, multi-tela + prévias | M09 | 🟡 | 16 transições e 17 looks renderizados, título de abertura e créditos | Multi-tela; prévias em vídeo |
+| 30 | Packs: transições, LUTs, looks, títulos, créditos, multi-tela + prévias | M09 | ✅ | 16 transições, 17 looks, multi-tela (5 layouts), título de abertura e créditos | Prévias em vídeo |
 | 31 | Auto Edit com 10 etapas + confirmação + desfazer único | M10 | ✅ | Auto Edit com as 10 etapas + SFX, idioma, títulos, estilo, confirmação, backup e desfazer único | — |
 
 ## Observações da auditoria

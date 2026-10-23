@@ -1,5 +1,7 @@
 # Estado do projeto
 
+> Editor IA no MCP do MMFilm (20–23/10/2026, PRs #6, #10 e #19): 55 ferramentas em 14 abas no padrão das referências; histórico, decisões e como retomar em [HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md](HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md); matriz em [expansao-editor-ia/checklists/MATRIZ_DE_GAPS.md](expansao-editor-ia/checklists/MATRIZ_DE_GAPS.md).
+
 > MCP em ícones nos 14 apps de Ferramentas Gráficas e documentos (20–23/10/2026, PR #8): histórico, decisões, pendências e como retomar em [HISTORICO_MCP_ICONES_2026-10-20_a_23.md](HISTORICO_MCP_ICONES_2026-10-20_a_23.md); guia técnico em [MCP_FERRAMENTAS_EM_ICONES.md](MCP_FERRAMENTAS_EM_ICONES.md).
 
 > Continuidade em outro computador, pendências de MCP/cobertura e cuidado com publicação automática: [RETOMADA_MCP_E_COBERTURA_2026-10-19.md](RETOMADA_MCP_E_COBERTURA_2026-10-19.md). Os resultados históricos ali não substituem os gates abaixo.
