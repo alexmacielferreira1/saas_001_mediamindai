@@ -44,7 +44,7 @@ describe("MMFilm · provedor do MCP", () => {
   it("rodapé mostra a sequência, troca as trilhas alvo e abre o SRT", async () => {
     const { container, provider } = await setup();
     const footer = provider.footer();
-    expect(footer.info).toBe("Sequência 01 · 1920×1080 · 29,97 fps · 8,0 s");
+    expect(footer.info).toBe("Sequência 01 · 1920×1080 · 29,97 fps · 12,0 s");
     expect(footer.buttons.map((button) => [button.id, button.tab])).toEqual([
       ["transcrever", "transcricao"],
       ["srt", undefined],
