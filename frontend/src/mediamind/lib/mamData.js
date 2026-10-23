@@ -5,12 +5,13 @@ import {
   MOCK_SAVED_SEARCHES, MOCK_RECENT_ACTIVITY, MOCK_LIBRARIES,
   MOCK_INGEST_PACKAGES, MOCK_CLIPS,
 } from '../data';
+import { markDemoRecords } from './demoCatalog';
 
 // ============================================================================
 // Loader do MAM (MediaMind AI original — Home / Search).
-// Carrega cada entidade da Base44; se a entidade estiver vazia, semeia a partir
-// do mock correspondente (bulkCreate) e devolve os registros criados (com ids
-// reais). O contrato dos campos é idêntico ao mock, então as telas não mudam.
+// Carrega cada entidade da Base44; se a entidade estiver vazia ou indisponível,
+// devolve o mock correspondente marcado como demonstração, sem gravá-lo no banco
+// da empresa. O contrato dos campos é idêntico ao mock, então as telas não mudam.
 // Os mocks continuam em data.js para as demais telas (Acervo, Ingest,
 // Workspace, Management...) que ainda não foram migradas.
 // ============================================================================
@@ -19,17 +20,8 @@ export async function loadOrSeed(entityName, mockRows) {
   try {
     const list = await base44.entities[entityName].list('-created_date', 200);
     if (list && list.length) return list;
-  } catch {
-    return mockRows;
-  }
-  const seed = mockRows.map(({ id, ...rest }) => rest);
-  if (!seed.length) return [];
-  try {
-    const created = await base44.entities[entityName].bulkCreate(seed);
-    return created || [];
-  } catch {
-    return mockRows;
-  }
+  } catch { /* exibe o exemplo abaixo */ }
+  return markDemoRecords(mockRows);
 }
 
 export function useMamData() {

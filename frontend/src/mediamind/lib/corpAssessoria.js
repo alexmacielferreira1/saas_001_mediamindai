@@ -4,18 +4,20 @@ import {
   MOCK_CORP_RELEASES, MOCK_CORP_CLIPPINGS, MOCK_CORP_JOURNALISTS, MOCK_CORP_MENTIONS,
 } from '../data';
 import { isAccessDenied } from './accessErrors';
+import { markDemoRecords } from './demoCatalog';
 
 // Assessoria de Imprensa — 4 entidades separadas, cada uma com seu loader
-// load/seed (mesmo padrão de corpAgenda/corpPendencias). O mock preenche o
-// primeiro render (sem flash) e é substituído pela entidade ao carregar.
+// (mesmo padrão de corpAgenda/corpPendencias). O mock preenche o primeiro
+// render (sem flash) e é substituído pela entidade ao carregar; com a entidade
+// vazia, o mock fica como demonstração e nunca é gravado no banco da empresa.
 // Os loaders lançam em caso de falha irrecuperável; os hooks tratam o erro.
 
 export async function loadOrSeedReleases(fallback = MOCK_CORP_RELEASES) {
   const existing = await base44.entities.Release.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || !fallback.length) return [];
-  return await base44.entities.Release.bulkCreate(
-    fallback.map((r, i) => ({
+  return markDemoRecords(
+    (fallback || []).map((r, i) => ({
+      id: r.id,
       titulo: r.titulo || '', status: r.status || 'rascunho',
       veiculos: Number(r.veiculos) || 0, data: r.data || '', ordem: i,
     }))
@@ -25,9 +27,9 @@ export async function loadOrSeedReleases(fallback = MOCK_CORP_RELEASES) {
 export async function loadOrSeedClippings(fallback = MOCK_CORP_CLIPPINGS) {
   const existing = await base44.entities.Clipping.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || !fallback.length) return [];
-  return await base44.entities.Clipping.bulkCreate(
-    fallback.map((c, i) => ({
+  return markDemoRecords(
+    (fallback || []).map((c, i) => ({
+      id: c.id,
       veiculo: c.veiculo || '', titulo: c.titulo || '', tom: c.tom || 'neutro',
       data: c.data || '', ordem: i,
     }))
@@ -37,9 +39,9 @@ export async function loadOrSeedClippings(fallback = MOCK_CORP_CLIPPINGS) {
 export async function loadOrSeedJornalistas(fallback = MOCK_CORP_JOURNALISTS) {
   const existing = await base44.entities.Jornalista.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || !fallback.length) return [];
-  return await base44.entities.Jornalista.bulkCreate(
-    fallback.map((j, i) => ({
+  return markDemoRecords(
+    (fallback || []).map((j, i) => ({
+      id: j.id,
       nome: j.nome || '', veiculo: j.veiculo || '', area: j.area || '', ordem: i,
     }))
   );
@@ -48,9 +50,9 @@ export async function loadOrSeedJornalistas(fallback = MOCK_CORP_JOURNALISTS) {
 export async function loadOrSeedMencoes(fallback = MOCK_CORP_MENTIONS) {
   const existing = await base44.entities.Mencao.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || !fallback.length) return [];
-  return await base44.entities.Mencao.bulkCreate(
-    fallback.map((m, i) => ({
+  return markDemoRecords(
+    (fallback || []).map((m, i) => ({
+      id: m.id,
       veiculo: m.veiculo || '', titulo: m.titulo || '', tom: m.tom || 'neutro',
       data: m.data || '', etapa: m.etapa || 'monitorada', ordem: i,
     }))

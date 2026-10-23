@@ -3,6 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { toast } from '@/components/ui/use-toast';
 import { MOCK_CORP_PRODUCAO_PROJETOS } from '../data';
 import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './productionWorkflow';
+import { isDemoRecord, markDemoRecords } from './demoCatalog';
 
 // Memória compartilhada dos projetos de Produção — o coração do pipeline
 // (Rascunhos, Gravações, Kanban e Em edição leem e escrevem aqui).
@@ -11,7 +12,7 @@ import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './production
 // Agora: a entidade ProducaoProjeto é a fonte de verdade. O seed do mock só
 // preenche o primeiro render (pra não piscar tela vazia) e é substituído pelos
 // registros reais assim que a carga termina; se a entidade estiver vazia, o
-// mock é semeado nela. Toda mutação atualiza a memória na hora (UX instantânea,
+// mock continua na tela como demonstração e nunca é gravado. Toda mutação atualiza a memória na hora (UX instantânea,
 // API síncrona preservada) e persiste em background. A gravação devolve uma
 // Promise<boolean>; falhas não são engolidas: ficam em useProducaoSaveState
 // ('error') e geram aviso. Falha na carga não cai para o mock.
@@ -28,7 +29,7 @@ let loadError = null;
 const listeners = new Set();
 
 function seedMock() {
-  return MOCK_CORP_PRODUCAO_PROJETOS.map((p) => ({
+  return markDemoRecords(MOCK_CORP_PRODUCAO_PROJETOS).map((p) => ({
     ...p,
     gravacao: p.gravacao ? { ...p.gravacao } : null,
     equipe: [...(p.equipe || [])],
@@ -205,11 +206,24 @@ function revertRejectedStage(localId, queue) {
   if (queue.pending) queue.pending.snapshot = { ...queue.pending.snapshot, etapa: conf.etapa, historico: conf.historico };
 }
 
+// Exemplo de demonstração: a alteração fica só na tela e não vira registro real.
+const DEMO_WRITE_MESSAGE = 'Este projeto é um exemplo de demonstração e não é salvo. Crie uma nova produção para gravar no servidor.';
+const warnedDemo = new Set();
+function refuseDemoWrite(localId) {
+  setSaveState(localId, { status: 'error', error: DEMO_WRITE_MESSAGE });
+  if (!warnedDemo.has(localId)) {
+    warnedDemo.add(localId);
+    toast({ title: 'Projeto de demonstração', description: DEMO_WRITE_MESSAGE });
+  }
+  return Promise.resolve(false);
+}
+
 // Persiste o projeto. Resolve true quando o servidor confirmou e false em
 // falha — nunca rejeita, para não quebrar chamadores que ignoram o retorno.
 function persist(localId) {
   const p = projetos.find((x) => x.id === localId);
   if (!p) return Promise.resolve(false);
+  if (isDemoRecord(p)) return refuseDemoWrite(localId);
   const snapshot = toEntityData(p);
   let queue = queues.get(localId);
   if (!queue) {
@@ -275,22 +289,18 @@ export function resetProducaoStore() {
   saveStates = {};
   queues.clear();
   confirmed.clear();
+  warnedDemo.clear();
   emit();
 }
 
-// Carga inicial: entidade é a fonte de verdade. Se vazia, semeia do mock.
+// Carga inicial: entidade é a fonte de verdade. Se vazia, o mock fica na tela
+// como demonstração, sem ser gravado no banco da empresa.
 async function loadOrSeed() {
   try {
     const existing = await base44.entities.ProducaoProjeto.list('ordem', 200);
     if (existing.length > 0) {
       projetos = existing.map(fromEntity);
       for (const p of projetos) rememberConfirmed(p.id, p);
-    } else if (projetos.length > 0) {
-      const created = await base44.entities.ProducaoProjeto.bulkCreate(
-        projetos.map((p, i) => ({ ...toEntityData(p), ordem: i }))
-      );
-      projetos = projetos.map((p, i) => ({ ...p, _entityId: created[i]?.id || null }));
-      for (const p of projetos) if (p._entityId) rememberConfirmed(p.id, p);
     }
     loadError = null;
   } catch (error) {

@@ -1,19 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { MOCK_CORP_PUBLICATIONS } from '../data';
+import { markDemoRecords } from './demoCatalog';
 
 // Carrega as publicações persistentes. Se ainda não existirem registros na
-// entidade Publicacao, semeia a partir do fallback (mock) normalizado para o
-// schema PT (titulo/plataforma/status/views) e retorna os registros criados.
-// Centraliza a carga entre CorpPublications, SocialMediaPage, TradutorPage,
-// ProgramacaoPage e o AgendaUnificadaPanel.
+// entidade Publicacao, devolve o fallback (mock) normalizado para o schema PT
+// (titulo/plataforma/status/views) e marcado como demonstração, sem gravá-lo
+// no banco da empresa. Centraliza a carga entre CorpPublications,
+// SocialMediaPage, TradutorPage, ProgramacaoPage e o AgendaUnificadaPanel.
 // Lança em caso de falha irrecuperável — o hook chamador trata o erro.
 export async function loadOrSeedPublicacoes(fallback = MOCK_CORP_PUBLICATIONS) {
   const existing = await base44.entities.Publicacao.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || fallback.length === 0) return [];
-  return await base44.entities.Publicacao.bulkCreate(
-    fallback.map((p, i) => ({
+  return markDemoRecords(
+    (fallback || []).map((p, i) => ({
+      id: p.id,
       titulo: p.titulo || p.title || '',
       descricao: p.descricao || '',
       plataforma: p.plataforma || p.platform || 'youtube',

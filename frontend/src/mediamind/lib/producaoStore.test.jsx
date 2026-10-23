@@ -210,4 +210,51 @@ describe('production project store loading', () => {
     await expect(last).resolves.toBe(true);
     expect(base44.entities.ProducaoProjeto.update.mock.calls.map(([entityId, data]) => [entityId, data.etapa])).toEqual([["srv-9", "agendamentos"], ["srv-9", "gravacoes"]]);
   });
+
+  it("shows example projects on an empty tenant without writing them to the database", async () => {
+    const { base44: mocked } = await import("@/api/base44Client");
+    mocked.entities.ProducaoProjeto.bulkCreate.mockReset();
+    mocked.entities.ProducaoProjeto.create.mockReset();
+    const store = await import("./producaoStore");
+    const { result } = renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    const { base44 } = await import("@/api/base44Client");
+    expect(result.current.length).toBeGreaterThan(0);
+    expect(result.current.every((p) => p.is_demo === true)).toBe(true);
+    expect(base44.entities.ProducaoProjeto.bulkCreate).not.toHaveBeenCalled();
+    expect(base44.entities.ProducaoProjeto.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save an example project, warns once and never creates it on the server", async () => {
+    const store = await import("./producaoStore");
+    const { result } = renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    const { base44 } = await import("@/api/base44Client");
+    base44.entities.ProducaoProjeto.create.mockReset();
+    base44.entities.ProducaoProjeto.update.mockReset();
+    const demo = result.current[0];
+
+    await expect(store.updateProjeto(demo.id, { titulo: "Editado" })).resolves.toBe(false);
+    await expect(store.setEtapa(demo.id, "gravacoes")).resolves.toBe(false);
+
+    expect(base44.entities.ProducaoProjeto.create).not.toHaveBeenCalled();
+    expect(base44.entities.ProducaoProjeto.update).not.toHaveBeenCalled();
+    expect(store.getSaveState(demo.id)).toEqual(expect.objectContaining({ status: "error" }));
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Projeto de demonstração" }));
+  });
+
+  it("still saves a new production created next to the examples", async () => {
+    const store = await import("./producaoStore");
+    renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    const { base44 } = await import("@/api/base44Client");
+    base44.entities.ProducaoProjeto.create.mockReset().mockResolvedValue({ id: "srv-1", etapa: "rascunho" });
+
+    const id = store.addProjeto({ titulo: "Nova real" });
+
+    await waitFor(() => expect(store.getSaveState(id)?.status).toBe("saved"));
+    expect(base44.entities.ProducaoProjeto.create).toHaveBeenCalledTimes(1);
+    expect(base44.entities.ProducaoProjeto.create.mock.calls[0][0]).not.toHaveProperty("is_demo");
+  });
 });
