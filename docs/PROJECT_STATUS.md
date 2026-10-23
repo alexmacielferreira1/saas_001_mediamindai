@@ -1,5 +1,7 @@
 # Estado do projeto
 
+> 23/10/2026 — Ferramentas Gráficas (timeline do MMFilm, textos editáveis, campos numéricos e barras de todos os clones Adobe) entregues no PR #11; correção do CI pós-merge e pendências em [RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md](RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md).
+
 > Continuidade em outro computador, pendências de MCP/cobertura e cuidado com publicação automática: [RETOMADA_MCP_E_COBERTURA_2026-10-19.md](RETOMADA_MCP_E_COBERTURA_2026-10-19.md). Os resultados históricos ali não substituem os gates abaixo.
 
 Atualização de handoff em 2026-10-19: o teste direcionado de Canais Dark passou (13/13), mas a bateria completa `20261019-190944-208` ainda estava em execução na última conferência. Aguardar e validar seu relatório antes de atualizar qualquer gate. M0 permanece **failed**; detalhes, limites de transferência e próximos passos estão no documento de retomada acima.
