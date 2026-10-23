@@ -155,7 +155,15 @@ function cloneStyleTool(kit) {
     analyze: false,
     run: (state, params) => {
       const source = state.clips.find((clip) => clip.id === (state.primaryId || state.selectedIds[0]));
-      const targets = state.clips.filter((clip) => state.selectedIds.includes(clip.id) && clip.id !== source?.id && !kit.lockedTrack(state, clip.track));
+      // Só clipes visuais recebem o estilo (a seleção vinculada também traz o áudio dos vídeos).
+      const targets = state.clips.filter(
+        (clip) =>
+          state.selectedIds.includes(clip.id) &&
+          clip.id !== source?.id &&
+          clip.track.startsWith("V") &&
+          !clip.type?.startsWith("audio") &&
+          !kit.lockedTrack(state, clip.track),
+      );
       if (!source || !targets.length) throw new kit.ToolError("Selecione o clipe de referência e pelo menos mais um clipe para receber o estilo.");
       const updated = new Map(cloneStyle(source, targets, { parts: params.parts, timing: params.timing }).map((clip) => [clip.id, clip]));
       return {
