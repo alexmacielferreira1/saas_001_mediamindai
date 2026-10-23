@@ -1,0 +1,5 @@
+# Pastas fora das buscas das IAs (ripgrep: Claude Code, Codex, Cursor, opencode).
+# Não afeta o git; os arquivos continuam acessíveis por caminho direto.
+# work/ guarda cópias de terceiros para análise (AI Edita) e tmp/ guarda insumos temporários.
+work/
+tmp/
