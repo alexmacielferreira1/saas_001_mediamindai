@@ -7,9 +7,13 @@ import { captionStyleCss } from "../../lib/mmfilmCaptions";
 import { lookFilter, overlayStyles, resolveTransition } from "../../lib/mmfilmLooks";
 import { animatedTextStyle, letterSpans, textAnimationState } from "../../lib/mmfilmTextAnimation";
 import { mmfilmCatalogue, runMMFilmTool } from "./mmfilmMcpTools";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTextPrompt } from "./FilmCraftTextPrompt";
+import NumericField from "./NumericField";
+import { isEditableTarget } from "../../lib/clipEditorTools";
 import {
+  ArrowLeftRight,
+  ArrowRightToLine,
   AudioLines,
   BarChart3,
   Captions,
@@ -17,19 +21,20 @@ import {
   Copy,
   Flag,
   Eye,
+  Gauge,
   Lock,
   Magnet,
   Mic,
   Hand,
   MousePointer2,
-  Move,
   MoveHorizontal,
   PenTool,
   Pause,
   Play,
   Redo2,
-  SlidersHorizontal,
   Scissors,
+  SlidersHorizontal,
+  SquareSplitHorizontal,
   Trash2,
   Type,
   Undo2,
@@ -96,13 +101,15 @@ const TRACKS = [
   ["A2", "bg-violet-500/70", "audio"],
   ["A3", "bg-amber-500/70", "audio"],
 ];
+const AUDIO_TRACK_IDS = TRACKS.filter(([, , kind]) => kind === "audio").map(([id]) => id);
+const trackKind = (track) => TRACKS.find(([id]) => id === track)?.[2];
 const EDIT_TOOLS = [
   ["V", "Seleção", MousePointer2, false],
-  ["A", "Selecionar faixa", Move, true],
+  ["A", "Selecionar faixa", ArrowRightToLine, true],
   ["B", "Edição ripple", MoveHorizontal, true],
-  ["R", "Rate stretch", SlidersHorizontal, true],
+  ["R", "Rate stretch", Gauge, true],
   ["C", "Razor", Scissors, false],
-  ["Y", "Slip e slide", Copy, true],
+  ["Y", "Slip e slide", ArrowLeftRight, true],
   ["P", "Caneta", PenTool, true],
   ["H", "Mão", Hand, true],
   ["T", "Texto", Type, false],
@@ -128,6 +135,28 @@ const compatible = (asset, kind) =>
     ? asset.type.startsWith("audio") || asset.type.startsWith("video")
     : !asset.type.startsWith("audio");
 const FRAME = 1 / 30;
+const FPS = 30;
+// Largura do cabeçalho das faixas (w-36) e altura da régua: a área de tempo começa depois deles.
+const TRACK_HEADER_W = 144;
+const RULER_H = 74;
+const TRACK_H = 56;
+// Distância (px) em que o ímã encaixa clipes em bordas, indicador e marcadores.
+const SNAP_PX = 8;
+const NOT_AVAILABLE = "Ainda não disponível";
+const CLIP_DRAG_TYPE = "application/x-filmcraft-clip";
+const GRAB_DRAG_TYPE = "application/x-filmcraft-grab";
+// Timecode HH:MM:SS:QQ (quadros a 30 por segundo, como o restante da timeline).
+const timecode = (time) => {
+  const frames = Math.max(0, Math.round((Number(time) || 0) * FPS));
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${pad(Math.floor(frames / (3600 * FPS)))}:${pad(Math.floor(frames / (60 * FPS)) % 60)}:${pad(Math.floor(frames / FPS) % 60)}:${pad(frames % FPS)}`;
+};
+// Campos de texto ficam com o teclado; controles como o slider de zoom deixam os atalhos funcionarem.
+const NON_TYPING_INPUTS = ["range", "checkbox", "radio", "button"];
+function typingTarget(target) {
+  if (!isEditableTarget(target)) return false;
+  return !(String(target.tagName).toUpperCase() === "INPUT" && NON_TYPING_INPUTS.includes(target.type));
+}
 const EPSILON = 1e-6;
 const TITLE_TYPE = "text/title";
 const speedFactor = (clip) => (clip.speed || 100) / 100;
@@ -234,7 +263,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const [toolTargets, setToolTargets] = useGraphicDraftState("FilmCraftWorkspace.jsx:toolTargets", { sfx: "A3", captions: "V3" });
   const captionFileInput = useRef(null);
   // Comprimento da timeline: mínimo de 60 s, crescendo com o conteúdo (+10 s de folga, em blocos de 5 s).
-  const timelineSeconds = Math.max(60, Math.ceil((clips.reduce((end, clip) => Math.max(end, clip.start + clip.duration), 0) + 10) / 5) * 5);
+  // Fim do conteúdo (último quadro do último clipe): a reprodução para aqui.
+  const timelineEnd = clips.reduce((end, clip) => Math.max(end, clip.start + clip.duration), 0);
+  const timelineSeconds = Math.max(60, Math.ceil((timelineEnd + 10) / 5) * 5);
   const clipboard = useRef([]);
   const noticeTimer = useRef(null);
   const workspaceRoot = useRef(null);
@@ -438,17 +469,52 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const timer = setInterval(() => {
       // Com áudio tocando, o relógio do AudioContext manda no indicador (sem deriva entre som e imagem).
       const audioTime = audioEngine.current?.currentTime();
-      setPlayhead((value) =>
-        Math.max(0, Math.min(timelineSeconds, audioTime ?? value + 0.1 * playbackRate)),
-      );
+      const next = audioTime ?? playheadRef.current + 0.1 * playbackRate;
+      // Como no Premiere, a reprodução para no fim do conteúdo (ou no início, tocando para trás).
+      if (playbackRate > 0 && next >= timelineEnd - EPSILON) {
+        playheadRef.current = timelineEnd;
+        setPlayhead(timelineEnd);
+        setPlaying(false);
+        return;
+      }
+      if (playbackRate < 0 && next <= 0) {
+        playheadRef.current = 0;
+        setPlayhead(0);
+        setPlaying(false);
+        return;
+      }
+      playheadRef.current = Math.max(0, Math.min(timelineSeconds, next));
+      setPlayhead(playheadRef.current);
     }, 100);
     return () => clearInterval(timer);
-  }, [playing, playbackRate, active, timelineSeconds]);
+  }, [playing, playbackRate, active, timelineSeconds, timelineEnd]);
+  // Rolagem da timeline: ao mudar o zoom, o indicador fica no mesmo ponto da tela.
+  const lastZoom = useRef(zoom);
+  useLayoutEffect(() => {
+    const scroller = timelineScroll.current;
+    const previous = lastZoom.current;
+    lastZoom.current = zoom;
+    if (!scroller || previous === zoom) return;
+    const offset = playheadRef.current * previous - scroller.scrollLeft;
+    scroller.scrollLeft = Math.max(0, playheadRef.current * zoom - offset);
+  }, [zoom]);
+  // Quando o indicador sai da área visível (reproduzindo ou movido), rola uma página como no Premiere.
+  useLayoutEffect(() => {
+    const scroller = timelineScroll.current;
+    if (!active || !scroller) return;
+    const width = scroller.clientWidth - TRACK_HEADER_W;
+    if (!(width > 0)) return;
+    const x = playhead * zoom;
+    const left = scroller.scrollLeft;
+    if (x < left || x > left + width) scroller.scrollLeft = Math.max(0, x);
+  }, [playhead, zoom, active]);
   useEffect(() => {
     function shortcuts(event) {
       if (!active) return;
-      if (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+      if (typingTarget(event.target)) return;
       const key = event.key.toLowerCase();
+      // No slider (zoom) as setas e Home/End continuam ajustando o próprio controle.
+      if (event.target?.type === "range" && ["arrowleft", "arrowright", "arrowup", "arrowdown", "home", "end"].includes(key)) return;
       if ((event.ctrlKey || event.metaKey) && ["c", "x", "v", "s"].includes(key)) {
         event.preventDefault();
         if (key === "c") copySelection();
@@ -458,8 +524,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         return;
       }
       if (key === " ") {
+        // Evita que o Espaço também "clique" o botão focado (alternaria duas vezes).
         event.preventDefault();
-        setPlaying((value) => !value);
+        togglePlay();
       }
       if (key === "j") {
         setPlaybackRate((value) => (value > 0 ? -1 : Math.max(-4, value - 1)));
@@ -489,7 +556,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         setZoom((value) => Math.min(28, value + 1));
       if (key === "-") setZoom((value) => Math.max(6, value - 1));
       if (key === "home") setPlayhead(0);
-      if (key === "end") setPlayhead(timelineSeconds);
+      if (key === "end") setPlayhead(timelineEnd);
       const toolByKey = Object.fromEntries(
         EDIT_TOOLS.map(([shortcut, name]) => [shortcut.toLowerCase(), name]),
       );
@@ -712,15 +779,18 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     );
   }
   function makeClip(asset, track, start) {
+    // IN/OUT do Monitor de Origem valem só para a mídia aberta nele; as demais entram inteiras.
+    const fromSource = Boolean(source) && String(asset.id) === String(source.id);
+    const mediaLength = Math.max(FRAME, Number(asset.duration) || 8);
     return {
       ...asset,
       assetId: asset.assetId ?? asset.id,
       mediaDuration: asset.mediaDuration ?? asset.duration,
       id: crypto.randomUUID(),
       track,
-      start: snap ? Math.round(start) : start,
-      duration: Math.max(0.5, Math.min(asset.duration, sourceOut - sourceIn)),
-      sourceIn,
+      start: Math.max(0, frameRound(start)),
+      duration: fromSource ? Math.max(0.5, Math.min(mediaLength, sourceOut - sourceIn)) : mediaLength,
+      sourceIn: fromSource ? sourceIn : 0,
       opacity: 100,
       volume: 100,
       speed: 100,
@@ -740,34 +810,80 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       keyframes: [],
     };
   }
-  function insert(asset, track = asset.type.startsWith("audio") ? "A1" : "V1") {
-    const kind = TRACKS.find(([id]) => id === track)?.[2];
-    if (!kind || !compatible(asset, kind) || trackState[track].locked) return;
-    const end = Math.max(
-      0,
-      ...clips
-        .filter((clip) => clip.track === track)
-        .map((clip) => clip.start + clip.duration),
-    );
-    const item = makeClip(asset, track, end);
-    commit((old) => [...old, item]);
-    setSelected(item.id);
+  // Faixa de áudio que recebe o som da mídia: a primeira marcada no Patch de origem (e desbloqueada).
+  function patchedAudioTrack() {
+    return AUDIO_TRACK_IDS.find((id) => trackTargets[id] && !trackState[id]?.locked);
+  }
+  // Como no Premiere: vídeo entra com o áudio vinculado (mesmo recurso, trecho e `linkId`); áudio e imagem
+  // entram sozinhos. Vídeo solto numa faixa de áudio vai para V1 com o áudio na faixa escolhida.
+  function assetPlacement(asset, track, start) {
+    const kind = trackKind(track);
+    if (!kind || !compatible(asset, kind)) return [];
+    if (!asset.type?.startsWith("video")) return trackState[track]?.locked ? [] : [makeClip(asset, track, start)];
+    const videoTrack = kind === "video" ? track : "V1";
+    const audioTrack = kind === "audio" ? track : patchedAudioTrack();
+    const items = [];
+    if (!trackState[videoTrack]?.locked) items.push(makeClip(asset, videoTrack, start));
+    if (audioTrack && !trackState[audioTrack]?.locked) items.push(makeClip(asset, audioTrack, start));
+    if (items.length < 2) return items;
+    const linkId = crypto.randomUUID();
+    return items.map((item) => ({ ...item, linkId }));
+  }
+  function selectPlaced(items) {
+    setSelected(items[0].id);
+    setSelectedIds(items.map((item) => item.id));
+  }
+  function insert(asset, track) {
+    const target = track || (asset.type.startsWith("audio") ? patchedAudioTrack() || "A1" : "V1");
+    const probe = assetPlacement(asset, target, 0);
+    if (!probe.length) return;
+    const tracks = probe.map((item) => item.track);
+    const end = Math.max(0, ...clips.filter((clip) => tracks.includes(clip.track)).map(clipEnd));
+    const items = probe.map((item) => ({ ...item, start: end }));
+    commit((old) => [...old, ...items]);
+    selectPlaced(items);
   }
   function insertAtPlayhead(mode) {
     if (!source) return;
-    const preferred = source.type.startsWith("audio") ? "A1" : targetTrack;
-    const track = compatible(
-      source,
-      TRACKS.find(([id]) => id === preferred)?.[2],
-    )
-      ? preferred
-      : source.type.startsWith("audio")
-        ? "A1"
+    const track = source.type.startsWith("audio")
+      ? patchedAudioTrack() || "A1"
+      : compatible(source, trackKind(targetTrack))
+        ? targetTrack
         : "V1";
-    if (trackState[track].locked) return;
-    const item = makeClip(source, track, playhead);
-    commit((old) => placeClip(old, item, mode));
-    setSelected(item.id);
+    const items = assetPlacement(source, track, playhead);
+    if (!items.length) return;
+    commit((old) => items.reduce((list, item) => placeClip(list, item, mode), old));
+    selectPlaced(items);
+  }
+  // Clipes vinculados ao indicado (mesmo `linkId`), quando a Seleção vinculada está ligada.
+  function linkedPartners(clip, list = clips) {
+    if (!linkedSelection || !clip?.linkId) return [];
+    return list.filter((item) => item.id !== clip.id && item.linkId === clip.linkId && !isLocked(item));
+  }
+  function withLinked(ids, list = clips) {
+    const extra = list.filter((clip) => ids.includes(clip.id)).flatMap((clip) => linkedPartners(clip, list));
+    return [...new Set([...ids, ...extra.map((clip) => clip.id)])];
+  }
+  // Partes do par ainda alinhadas ao clipe (mesmo início e duração) recebem a mesma edição.
+  function syncedPartners(clip) {
+    return linkedPartners(clip).filter(
+      (item) => Math.abs(item.start - clip.start) < 0.002 && Math.abs(item.duration - clip.duration) < 0.002,
+    );
+  }
+  // Cópias (colar/duplicar) ganham vínculos novos: pares copiados juntos continuam pares entre si.
+  function relinkCopies(items) {
+    const ids = new Map();
+    return items.map((item) => {
+      if (!item.linkId) return item;
+      if (!ids.has(item.linkId)) ids.set(item.linkId, crypto.randomUUID());
+      return { ...item, linkId: ids.get(item.linkId) };
+    });
+  }
+  function duplicateClip(clip) {
+    if (!clip || isLocked(clip)) return;
+    const group = clips.filter((item) => withLinked([clip.id]).includes(item.id));
+    const copies = relinkCopies(group).map((item) => ({ ...item, id: crypto.randomUUID(), start: item.start + clip.duration }));
+    commit((old) => [...old, ...copies]);
   }
   function patch(key, value) {
     if (!chosen || trackState[chosen.track].locked) return;
@@ -787,6 +903,17 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       return;
     razorAt(playhead, [chosen.id]);
   }
+  // Reproduzir/pausar a sequência; no fim do conteúdo, recomeça do início (como no Premiere).
+  function setPlayback(next) {
+    if (next && playbackRate > 0 && timelineEnd > 0 && playheadRef.current >= timelineEnd - EPSILON) {
+      playheadRef.current = 0;
+      setPlayhead(0);
+    }
+    setPlaying(next);
+  }
+  function togglePlay() {
+    setPlayback(!playing);
+  }
   function notify(text, duration = 3500) {
     setCommandNotice(text);
     window.clearTimeout(noticeTimer.current);
@@ -802,24 +929,51 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const left = lane?.getBoundingClientRect?.().left ?? 0;
     return timelineTimeFromPointer(event.clientX ?? 0, left, zoom, timelineSeconds);
   }
-  // Ímã: encaixa no indicador ou em marcadores próximos (6 px); senão, no quadro mais próximo.
-  function snapTime(time) {
+  // Pontos de encaixe do ímã: zero, indicador, marcadores e bordas dos clipes (menos os indicados).
+  function snapPoints(exclude = []) {
+    return [
+      0,
+      playhead,
+      ...markers,
+      ...clips.filter((clip) => !exclude.includes(clip.id)).flatMap((clip) => [clip.start, clipEnd(clip)]),
+    ];
+  }
+  // Ímã: encaixa no ponto mais próximo a até SNAP_PX; senão (ou sem ímã), no quadro mais próximo.
+  function snapTime(time, exclude = []) {
     if (snap) {
-      const near = [playhead, ...markers].find(
-        (point) => Math.abs(point - time) * zoom <= 6,
-      );
-      if (near !== undefined) return near;
+      let best;
+      for (const point of snapPoints(exclude)) {
+        const distance = Math.abs(point - time) * zoom;
+        if (distance <= SNAP_PX && (!best || distance < best.distance)) best = { distance, point };
+      }
+      if (best) return best.point;
     }
     return frameRound(time);
+  }
+  // Início de um clipe solto/arrastado: o ímã encaixa a entrada ou a saída do clipe; nunca antes do zero.
+  function placementStart(raw, duration, exclude = []) {
+    const start = Math.max(0, raw);
+    if (snap) {
+      let best;
+      for (const point of snapPoints(exclude)) {
+        for (const offset of [0, duration]) {
+          const distance = Math.abs(point - (start + offset)) * zoom;
+          if (distance <= SNAP_PX && (!best || distance < best.distance)) best = { distance, start: point - offset };
+        }
+      }
+      if (best) return Math.max(0, best.start);
+    }
+    return Math.max(0, frameRound(start));
   }
   function isLocked(clip) {
     return Boolean(trackState[clip.track]?.locked);
   }
   // Navalha: corta os clipes indicados (ou todos os desbloqueados) no tempo dado.
   function razorAt(time, onlyIds = null) {
+    const scope = onlyIds ? withLinked(onlyIds) : null;
     const targets = clips.filter(
       (clip) =>
-        (!onlyIds || onlyIds.includes(clip.id)) &&
+        (!scope || scope.includes(clip.id)) &&
         !isLocked(clip) &&
         time > clip.start + EPSILON &&
         time < clipEnd(clip) - EPSILON,
@@ -876,10 +1030,22 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       };
     }
     if (Math.abs(change) < EPSILON) return;
+    // O par vinculado recebe o mesmo aparo; o ripple corre também na faixa dele.
+    const partners = syncedPartners(clip);
+    const partnerIds = partners.map((item) => item.id);
+    const tracks = [clip.track, ...partners.map((item) => item.track)];
+    const { duration, sourceIn } = updated;
     commit((old) =>
       old.map((item) => {
         if (item.id === clip.id) return updated;
-        if (item.track === clip.track && item.start >= oldEnd - EPSILON)
+        if (partnerIds.includes(item.id))
+          return {
+            ...item,
+            duration,
+            sourceIn,
+            keyframes: edge === "in" ? (item.keyframes || []).map((time) => time + change).filter((time) => time >= 0 && time <= duration) : item.keyframes,
+          };
+        if (tracks.includes(item.track) && item.start >= oldEnd - EPSILON)
           return { ...item, start: Math.max(0, item.start + change) };
         return item;
       }),
@@ -907,9 +1073,10 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     if (Math.abs(duration - clip.duration) < EPSILON) return;
     const speed = Math.round(((used / duration) * 100) * 10) / 10;
     const ratio = duration / clip.duration;
+    const ids = [clip.id, ...syncedPartners(clip).map((item) => item.id)];
     commit((old) =>
       old.map((item) =>
-        item.id === clip.id
+        ids.includes(item.id)
           ? {
               ...item,
               start,
@@ -933,34 +1100,47 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       : Infinity;
     const sourceIn = Math.max(0, Math.min(maxIn, (clip.sourceIn || 0) - deltaTimeline * factor));
     if (Math.abs(sourceIn - (clip.sourceIn || 0)) < EPSILON) return;
+    const ids = [clip.id, ...syncedPartners(clip).map((item) => item.id)];
     commit((old) =>
-      old.map((item) => (item.id === clip.id ? { ...item, sourceIn } : item)),
+      old.map((item) => (ids.includes(item.id) ? { ...item, sourceIn } : item)),
     );
     setSelected(clip.id);
     notify(`Slip: ${clip.name} mostra a mídia a partir de ${seconds(sourceIn)}`);
   }
   // Slide: move o clipe entre os vizinhos, aparando-os para manter a faixa sem buracos.
+  function slideNeighbours(clip) {
+    const { previous, next } = sameTrackNeighbours(clip);
+    return {
+      previous,
+      next,
+      touchingPrevious: previous && Math.abs(clipEnd(previous) - clip.start) < 0.002 ? previous : null,
+      touchingNext: next && Math.abs(next.start - clipEnd(clip)) < 0.002 ? next : null,
+    };
+  }
   function slideBy(clip, delta) {
     if (isLocked(clip)) return;
-    const { previous, next } = sameTrackNeighbours(clip);
-    const touchingPrevious = previous && Math.abs(clipEnd(previous) - clip.start) < 0.002 ? previous : null;
-    const touchingNext = next && Math.abs(next.start - clipEnd(clip)) < 0.002 ? next : null;
+    // O par vinculado desliza junto: vale o limite mais restritivo entre as faixas.
+    const group = [clip, ...syncedPartners(clip)].map((item) => ({ item, ...slideNeighbours(item) }));
     let applied = delta;
-    if (touchingPrevious) {
-      applied = Math.max(applied, -(touchingPrevious.duration - FRAME));
-      applied = Math.min(applied, maxDurationForMedia(touchingPrevious) - touchingPrevious.duration);
-    } else applied = Math.max(applied, -(clip.start - (previous ? clipEnd(previous) : 0)));
-    if (touchingNext) {
-      applied = Math.min(applied, touchingNext.duration - FRAME);
-      applied = Math.max(applied, -(touchingNext.sourceIn || 0) / speedFactor(touchingNext));
-    } else if (next) applied = Math.min(applied, next.start - clipEnd(clip));
+    for (const { item, previous, next, touchingPrevious, touchingNext } of group) {
+      if (touchingPrevious) {
+        applied = Math.max(applied, -(touchingPrevious.duration - FRAME));
+        applied = Math.min(applied, maxDurationForMedia(touchingPrevious) - touchingPrevious.duration);
+      } else applied = Math.max(applied, -(item.start - (previous ? clipEnd(previous) : 0)));
+      if (touchingNext) {
+        applied = Math.min(applied, touchingNext.duration - FRAME);
+        applied = Math.max(applied, -(touchingNext.sourceIn || 0) / speedFactor(touchingNext));
+      } else if (next) applied = Math.min(applied, next.start - clipEnd(item));
+    }
     if (Math.abs(applied) < EPSILON) return;
+    const moved = new Set(group.map(({ item }) => item.id));
+    const previousIds = new Set(group.map(({ touchingPrevious }) => touchingPrevious?.id).filter(Boolean));
+    const nextIds = new Set(group.map(({ touchingNext }) => touchingNext?.id).filter(Boolean));
     commit((old) =>
       old.map((item) => {
-        if (item.id === clip.id) return { ...item, start: item.start + applied };
-        if (touchingPrevious && item.id === touchingPrevious.id)
-          return { ...item, duration: item.duration + applied };
-        if (touchingNext && item.id === touchingNext.id)
+        if (moved.has(item.id)) return { ...item, start: item.start + applied };
+        if (previousIds.has(item.id)) return { ...item, duration: item.duration + applied };
+        if (nextIds.has(item.id))
           return {
             ...item,
             start: item.start + applied,
@@ -1085,7 +1265,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     notify(`${items.length} legenda(s) de ${file.name} adicionada(s) em ${track}`);
   }
   function selectionForClipboard() {
-    const ids = selectedIds.length ? selectedIds : chosen ? [chosen.id] : [];
+    const ids = withLinked(selectedIds.length ? selectedIds : chosen ? [chosen.id] : []);
     return clips.filter((clip) => ids.includes(clip.id));
   }
   function copySelection() {
@@ -1110,8 +1290,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       return;
     }
     const origin = Math.min(...items.map((clip) => clip.start));
-    const pasted = items
-      .filter((clip) => !trackState[clip.track]?.locked)
+    const pasted = relinkCopies(items.filter((clip) => !trackState[clip.track]?.locked))
       .map((clip) => ({
         ...clip,
         id: crypto.randomUUID(),
@@ -1233,7 +1412,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         if (moved) rippleEdit(clip, edge, delta);
         else {
           // clique sem arrastar: apara até o ponto clicado (Q/W com o mouse)
-          const at = snapTime(time);
+          const at = snapTime(time, withLinked([clip.id]));
           if (edge === "in") rippleEdit(clip, "in", at - clip.start);
           else rippleEdit(clip, "out", at - clipEnd(clip));
         }
@@ -1253,7 +1432,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   function clickClipWithTool(event, clip) {
     const time = pointerTime(event);
     if (editTool === "Razor") {
-      const at = snapTime(time);
+      const at = snapTime(time, withLinked([clip.id]));
       const cut = event.shiftKey ? razorAt(at) : razorAt(at, [clip.id]);
       notify(cut ? `Corte em ${seconds(at)}${cut > 1 ? ` · ${cut} clipes` : ""}` : `Navalha: ${isLocked(clip) ? "faixa bloqueada" : "clique dentro do clipe"}`);
       return true;
@@ -1290,15 +1469,25 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     }
     beginMarquee(event, track);
   }
+  // Clipe escolhido e as partes do par vinculado alinhadas a ele (as edições de aparo agem nos dois).
+  function chosenGroup() {
+    return chosen ? [chosen, ...syncedPartners(chosen)] : [];
+  }
   function trim(side) {
     if (!chosen || trackState[chosen.track].locked) return;
     const end = chosen.start + chosen.duration;
     if (playhead <= chosen.start || playhead >= end) return;
+    const ids = chosenGroup().map((clip) => clip.id);
     commit((old) =>
       old.map((clip) => {
-        if (clip.id !== chosen.id) return clip;
+        if (!ids.includes(clip.id)) return clip;
         return side === "in"
-          ? { ...clip, start: playhead, duration: end - playhead }
+          ? {
+              ...clip,
+              start: playhead,
+              duration: end - playhead,
+              sourceIn: (clip.sourceIn || 0) + (playhead - clip.start) * speedFactor(clip),
+            }
           : { ...clip, duration: playhead - clip.start };
       }),
     );
@@ -1309,9 +1498,12 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const oldEnd = chosen.start + chosen.duration;
     if (playhead <= oldStart || playhead >= oldEnd) return;
     const delta = side === "in" ? playhead - oldStart : oldEnd - playhead;
+    const group = chosenGroup();
+    const ids = group.map((clip) => clip.id);
+    const tracks = group.map((clip) => clip.track);
     commit((old) =>
       old.map((clip) => {
-        if (clip.id === chosen.id)
+        if (ids.includes(clip.id))
           return side === "in"
             ? {
                 ...clip,
@@ -1320,7 +1512,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                 sourceIn: (clip.sourceIn || 0) + delta,
               }
             : { ...clip, duration: playhead - oldStart };
-        if (clip.track !== chosen.track) return clip;
+        if (!tracks.includes(clip.track)) return clip;
         if (side === "out" && clip.start >= oldEnd)
           return { ...clip, start: Math.max(playhead, clip.start - delta) };
         return clip;
@@ -1329,11 +1521,14 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   }
   function nudgeSelected(delta) {
     if (!chosen || trackState[chosen.track].locked) return;
-    patch("start", Math.max(0, chosen.start + delta));
+    const ids = chosenGroup().map((clip) => clip.id);
+    commit((old) => old.map((clip) => (ids.includes(clip.id) ? { ...clip, start: Math.max(0, clip.start + delta) } : clip)));
   }
   function slip(delta) {
-    if (!chosen) return;
-    patch("sourceIn", Math.max(0, (chosen.sourceIn || 0) + delta));
+    if (!chosen || trackState[chosen.track].locked) return;
+    const ids = chosenGroup().map((clip) => clip.id);
+    const sourceIn = Math.max(0, (chosen.sourceIn || 0) + delta);
+    commit((old) => old.map((clip) => (ids.includes(clip.id) ? { ...clip, sourceIn } : clip)));
   }
   function rateStretch(duration) {
     if (!chosen || duration < 0.5) return;
@@ -1354,18 +1549,20 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     patch("transition", name);
   }
   function removeSelected(ripple = false) {
-    const ids = selectedIds.length ? selectedIds : chosen ? [chosen.id] : [];
+    // Excluir leva junto o par vinculado (vídeo + áudio) quando a Seleção vinculada está ligada.
+    const ids = withLinked(selectedIds.length ? selectedIds : chosen ? [chosen.id] : []);
     const removable = clips.filter(
       (clip) => ids.includes(clip.id) && !trackState[clip.track].locked,
     );
     if (!removable.length) return;
+    const rippleTracks = chosenGroup().map((clip) => clip.track);
     commit((old) =>
       old
         .filter((clip) => !removable.some((item) => item.id === clip.id))
         .map((clip) =>
           ripple &&
           chosen &&
-          clip.track === chosen.track &&
+          rippleTracks.includes(clip.track) &&
           clip.start >= chosen.start + chosen.duration
             ? {
                 ...clip,
@@ -1527,15 +1724,24 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     event.preventDefault();
     if (trackState[track].locked) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const raw = Number.isFinite(event.clientX) ? Math.max(0, (event.clientX - rect.left) / zoom) : Math.max(0, playhead);
-    const start = snap ? Math.round(raw) : raw;
-    const clipId = event.dataTransfer.getData("application/x-filmcraft-clip");
+    // Tempo sob o ponteiro (sem posição no evento, usa o indicador).
+    const pointer = Number.isFinite(event.clientX) ? (event.clientX - rect.left) / zoom : Math.max(0, playhead);
+    const clipId = event.dataTransfer.getData(CLIP_DRAG_TYPE);
     if (clipId) {
       const moving = clips.find((clip) => clip.id === clipId);
-      if (!moving || !compatible(moving, kind)) return;
+      if (!moving || isLocked(moving) || !compatible(moving, kind)) return;
+      // O clipe mantém o ponto onde foi agarrado; o par vinculado acompanha o deslocamento.
+      const grab = Number(event.dataTransfer.getData(GRAB_DRAG_TYPE)) || 0;
+      const group = withLinked([clipId]);
+      const start = placementStart(pointer - grab, moving.duration, group);
+      const delta = start - moving.start;
       commit((old) =>
         old.map((clip) =>
-          clip.id === clipId ? { ...clip, track, start } : clip,
+          clip.id === clipId
+            ? { ...clip, track, start }
+            : group.includes(clip.id)
+              ? { ...clip, start: Math.max(0, clip.start + delta) }
+              : clip,
         ),
       );
       setSelected(clipId);
@@ -1557,10 +1763,13 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       } catch { return; }
     }
     if (!asset || !compatible(asset, kind)) return;
-    const item = makeClip(asset, track, start);
+    const probe = assetPlacement(asset, track, 0);
+    if (!probe.length) return;
+    const start = placementStart(pointer, probe[0].duration);
+    const items = probe.map((item) => ({ ...item, start }));
     // Modo inserção (botão ▤ ativo) empurra os clipes seguintes; desligado mantém o comportamento original.
-    commit((old) => (insertMode ? placeClip(old, item, "insert") : [...old, item]));
-    setSelected(item.id);
+    commit((old) => (insertMode ? items.reduce((list, item) => placeClip(list, item, "insert"), old) : [...old, ...items]));
+    selectPlaced(items);
   }
   function patchClip(id, values) {
     commit((old) =>
@@ -1639,11 +1848,11 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const trackArea = timelineTracks.current;
     const left =
       ruler?.getBoundingClientRect().left ??
-      (trackArea ? trackArea.getBoundingClientRect().left + 144 : undefined) ??
+      (trackArea ? trackArea.getBoundingClientRect().left + TRACK_HEADER_W : undefined) ??
       0;
     const update = (pointerEvent) =>
       setPlayhead(
-        timelineTimeFromPointer(pointerEvent.clientX, left, zoom, timelineSeconds),
+        frameRound(timelineTimeFromPointer(pointerEvent.clientX, left, zoom, timelineSeconds)),
       );
     update(event);
     const stop = () => {
@@ -1659,7 +1868,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     event.preventDefault();
     const canvas = timelineTracks.current?.getBoundingClientRect();
     if (!canvas) return;
-    const area = { left: canvas.left + 144, top: canvas.top + 74 };
+    const area = { left: canvas.left + TRACK_HEADER_W, top: canvas.top + RULER_H };
     const startTime = timelineTimeFromPointer(
       event.clientX,
       area.left,
@@ -1678,7 +1887,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         0,
         Math.min(
           TRACKS.length - 1,
-          Math.floor((pointerEvent.clientY - area.top) / 56),
+          Math.floor((pointerEvent.clientY - area.top) / TRACK_H),
         ),
       );
       const next = {
@@ -1700,7 +1909,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       window.removeEventListener("pointerup", stop);
       if (!moved) {
         setPlayhead(
-          timelineTimeFromPointer(pointerEvent.clientX, area.left, zoom, timelineSeconds),
+          frameRound(timelineTimeFromPointer(pointerEvent.clientX, area.left, zoom, timelineSeconds)),
         );
         setSelected(null);
         setSelectedIds([]);
@@ -2243,8 +2452,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                 layers={composition}
                 playing={playing}
                 playhead={playhead}
-                onPlayingChange={setPlaying}
-                onSeek={setPlayhead}
+                onPlayingChange={setPlayback}
+                onSeek={(time) => setPlayhead(Math.max(0, Math.min(timelineSeconds, time)))}
+                sequenceDuration={timelineEnd}
                 audioMuted={mixerStrip(mixer, "Mix").muted}
                 onToggleAudio={() => changeMixerStrip("Mix", { muted: !mixerStrip(mixer, "Mix").muted })}
               />
@@ -2253,25 +2463,23 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <b className="text-white">Origem</b>
               <label>
                 IN
-                <input
-                  type="number"
-                  min="0"
+                <NumericField
+                  min={0}
                   max={sourceOut - 0.5}
-                  step="0.1"
+                  step={0.1}
                   value={sourceIn}
-                  onChange={(event) => setSourceIn(+event.target.value)}
+                  onChange={setSourceIn}
                   className="ml-1 w-16 rounded border border-slate-700 bg-slate-950 px-2 py-1"
                 />
               </label>
               <label>
                 OUT
-                <input
-                  type="number"
+                <NumericField
                   min={sourceIn + 0.5}
                   max={source?.duration || 60}
-                  step="0.1"
+                  step={0.1}
                   value={sourceOut}
-                  onChange={(event) => setSourceOut(+event.target.value)}
+                  onChange={setSourceOut}
                   className="ml-1 w-16 rounded border border-slate-700 bg-slate-950 px-2 py-1"
                 />
               </label>
@@ -2333,7 +2541,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               ))}
             </aside>
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 p-2">
-              <Tool label="Reproduzir" onClick={() => setPlaying(!playing)}>
+              <Tool label="Reproduzir" onClick={togglePlay}>
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </Tool>
               <Tool label="Desfazer" disabled={!history.length} onClick={undo}>
@@ -2343,7 +2551,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                 <Redo2 size={15} />
               </Tool>
               <Tool label="Dividir" onClick={split} disabled={!chosen}>
-                <Scissors size={15} />
+                <SquareSplitHorizontal size={15} />
               </Tool>
               <Tool
                 label="Aparar entrada no cursor"
@@ -2362,16 +2570,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <Tool
                 label="Duplicar"
                 disabled={!chosen || trackState[chosen.track].locked}
-                onClick={() =>
-                  commit((old) => [
-                    ...old,
-                    {
-                      ...chosen,
-                      id: crypto.randomUUID(),
-                      start: chosen.start + chosen.duration,
-                    },
-                  ])
-                }
+                onClick={() => duplicateClip(chosen)}
               >
                 <Copy size={15} />
               </Tool>
@@ -2419,7 +2618,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                 <Magnet size={15} />
               </Tool>
               <span className="ml-auto font-mono text-xs text-cyan-300">
-                00:{clock(playhead)}:00
+                {timecode(playhead)}
               </span>
               <input
                 aria-label="Zoom da timeline"
@@ -2435,7 +2634,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <div
                 ref={timelineTracks}
                 className="relative"
-                style={{ width: Math.max(900, (timelineSeconds + 2) * zoom) }}
+                style={{ width: Math.max(900, TRACK_HEADER_W + (timelineSeconds + 5) * zoom) }}
               >
                 <div className="flex h-[74px] border-b border-black bg-[#202020]">
                   <div className="sticky left-0 z-30 w-36 shrink-0 border-r border-black px-2 py-1">
@@ -2447,7 +2646,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       <span>☰</span>
                     </div>
                     <div className="mt-1 font-mono text-lg leading-none text-[#58a6ff]">
-                      00:{clock(playhead)}:23
+                      {timecode(playhead)}
                     </div>
                     <div className="mt-2 flex items-center gap-1 text-slate-300">
                       <TrackButton
@@ -2456,13 +2655,6 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                         onClick={() => setLinkedSelection(!linkedSelection)}
                       >
                         ▣
-                      </TrackButton>
-                      <TrackButton
-                        label="Snapping"
-                        active={snap}
-                        onClick={() => setSnap(!snap)}
-                      >
-                        ∪
                       </TrackButton>
                       <TrackButton
                         label="Inserção e sobrescrita"
@@ -2481,24 +2673,30 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       >
                         ▥
                       </TrackButton>
-                      <Flag size={10} />
-                      <span className="ml-auto">⌕</span>
                     </div>
                   </div>
                   <div
                     data-timeline-ruler
+                    role="slider"
+                    tabIndex={0}
+                    aria-label="Régua da timeline"
+                    aria-valuemin={0}
+                    aria-valuemax={timelineSeconds}
+                    aria-valuenow={Math.round(playhead * 100) / 100}
+                    aria-valuetext={timecode(playhead)}
                     onPointerDown={beginPlayheadDrag}
-                    className="flex flex-1 cursor-ew-resize items-end"
+                    className="relative flex-1 cursor-ew-resize"
                   >
+                    {/* Rótulos a cada 5 s, posicionados no tempo exato (o clique vale pelo ponto da régua). */}
                     {Array.from({ length: timelineSeconds / 5 + 1 }, (_, index) => (
-                      <button
+                      <span
                         key={index}
-                        onClick={() => setPlayhead(index * 5)}
-                        style={{ width: 5 * zoom }}
-                        className="h-8 border-l border-slate-700 pl-1 text-left text-[9px] text-slate-500"
+                        aria-hidden
+                        style={{ left: index * 5 * zoom, width: 5 * zoom }}
+                        className="pointer-events-none absolute bottom-0 h-8 whitespace-nowrap border-l border-slate-700 pl-1 text-left text-[9px] text-slate-500"
                       >
                         {clock(index * 5)}
-                      </button>
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -2546,8 +2744,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                           <div className="flex h-5 items-center gap-0.5">
                             <TrackButton
                               label={`Sincronização ${id}`}
-                              active={state.sync}
-                              onClick={() => toggleTrack(id, "sync")}
+                              title={NOT_AVAILABLE}
+                              disabled
                             >
                               ⌘
                             </TrackButton>
@@ -2577,12 +2775,11 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                                 </TrackButton>
                                 <TrackButton
                                   label={`Gravar ${id}`}
-                                  active={state.armed}
-                                  onClick={() => toggleTrack(id, "armed")}
+                                  title={NOT_AVAILABLE}
+                                  disabled
                                 >
                                   <Mic size={11} />
                                 </TrackButton>
-                                <span className="text-slate-500">◆</span>
                               </>
                             )}
                           </div>
@@ -2612,23 +2809,26 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                               }}
                               onDragStart={(event) => {
                                 event.stopPropagation();
-                                event.dataTransfer.setData(
-                                  "application/x-filmcraft-clip",
-                                  clip.id,
-                                );
+                                event.dataTransfer.setData(CLIP_DRAG_TYPE, clip.id);
+                                // Distância (s) entre o ponto agarrado e o início do clipe, mantida ao soltar.
+                                const left = event.currentTarget.getBoundingClientRect().left;
+                                const grab = Number.isFinite(event.clientX) ? Math.max(0, (event.clientX - left) / zoom) : 0;
+                                event.dataTransfer.setData(GRAB_DRAG_TYPE, String(grab));
                               }}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (clickClipWithTool(event, clip)) return;
+                                // Par vinculado pelo linkId; clipes antigos sem vínculo: mesmo recurso no mesmo início.
                                 const linked = linkedSelection
                                   ? clips
-                                      .filter(
-                                        (item) =>
-                                          item.id !== clip.id &&
-                                          item.track !== clip.track &&
-                                          clip.assetId &&
-                                          item.assetId === clip.assetId &&
-                                          Math.abs(item.start - clip.start) < 0.002,
+                                      .filter((item) =>
+                                        clip.linkId
+                                          ? item.id !== clip.id && item.linkId === clip.linkId
+                                          : item.id !== clip.id &&
+                                            item.track !== clip.track &&
+                                            clip.assetId &&
+                                            item.assetId === clip.assetId &&
+                                            Math.abs(item.start - clip.start) < 0.002,
                                       )
                                       .map((item) => item.id)
                                   : [];
@@ -2678,7 +2878,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     </div>
                   );
                 })}
-                <div className="pointer-events-none absolute bottom-0 left-36 right-0 top-[74px] z-10">
+                <div className="pointer-events-none absolute bottom-0 right-0 top-[74px] z-10" style={{ left: TRACK_HEADER_W }}>
                   {markers.map((marker) => (
                     <span
                       key={marker}
@@ -2696,10 +2896,10 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     className="pointer-events-none absolute z-40 border border-blue-300 bg-blue-400/20"
                     style={{
                       left:
-                        144 +
+                        TRACK_HEADER_W +
                         Math.min(marquee.startTime, marquee.endTime) * zoom,
                       top:
-                        74 +
+                        RULER_H +
                         Math.min(
                           TRACKS.findIndex(([id]) => id === marquee.startTrack),
                           TRACKS.findIndex(([id]) => id === marquee.endTrack),
@@ -2725,7 +2925,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                   aria-label="Arrastar playhead"
                   onPointerDown={beginPlayheadDrag}
                   className="absolute bottom-0 top-[70px] z-50 w-3 -translate-x-1/2 cursor-ew-resize"
-                  style={{ left: 144 + playhead * zoom }}
+                  style={{ left: TRACK_HEADER_W + playhead * zoom }}
                 >
                   <span className="absolute bottom-0 left-1/2 top-1 w-px bg-cyan-300" />
                   <i className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 rotate-45 bg-cyan-300" />
@@ -2789,13 +2989,12 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                 </div>
                 <label className="mt-2 block text-[10px] text-slate-400">
                   Rate stretch · duração
-                  <input
-                    type="number"
-                    min="0.5"
-                    step="0.1"
+                  <NumericField
+                    min={0.5}
+                    step={0.1}
                     value={chosen?.duration ?? 0}
                     disabled={!chosen}
-                    onChange={(event) => rateStretch(+event.target.value)}
+                    onChange={rateStretch}
                     className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 disabled:opacity-30"
                   />
                 </label>
@@ -2841,6 +3040,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     {label}
                     <div className="mt-1 flex gap-2">
                       <input
+                        aria-label={`Clipe ${label} (controle deslizante)`}
                         className="min-w-0 flex-1 accent-cyan-400"
                         type="range"
                         min={min}
@@ -2850,13 +3050,15 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                         disabled={trackState[chosen.track].locked}
                         onChange={(event) => patch(key, +event.target.value)}
                       />
-                      <input
+                      <NumericField
+                        aria-label={`Clipe ${label}`}
                         className="w-16 rounded border border-slate-700 bg-slate-950 px-2"
-                        type="number"
+                        min={min}
+                        max={max}
                         step={step}
                         value={chosen[key]}
                         disabled={trackState[chosen.track].locked}
-                        onChange={(event) => patch(key, +event.target.value)}
+                        onChange={(next) => patch(key, next)}
                       />
                     </div>
                   </label>
@@ -2906,15 +3108,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               const asset = media.find((item) => item.id === clip.assetId);
               if (asset) openSource(asset);
             },
-            duplicate: (clip) =>
-              commit((items) => [
-                ...items,
-                {
-                  ...clip,
-                  id: crypto.randomUUID(),
-                  start: clip.start + clip.duration,
-                },
-              ]),
+            duplicate: (clip) => duplicateClip(clip),
             toggle: (clip) =>
               commit((items) =>
                 items.map((item) =>
@@ -3319,9 +3513,12 @@ function ColorEffectControls({ clip, patch }) {
           />
           <label className="grid grid-cols-[1fr_110px] items-center gap-2 pl-4">
             <span>Modo de mesclagem</span>
+            {/* O Programa e a exportação ainda não aplicam modos de mesclagem: controle indisponível. */}
             <select
-              disabled={!clip}
-              className="border border-[#333] bg-black px-2 py-1"
+              aria-label="Modo de mesclagem"
+              disabled
+              title={NOT_AVAILABLE}
+              className="border border-[#333] bg-black px-2 py-1 disabled:opacity-40"
             >
               <option>Normal</option>
               <option>Multiplicação</option>
@@ -3341,8 +3538,6 @@ function ColorEffectControls({ clip, patch }) {
           />
         </ControlGroup>
         <ControlGroup title="Cor Lumetri">
-          <ControlRow label="Correção básica" value="✓" />
-          <ControlRow label="LUT de entrada" value="Nenhum" />
           {colorRows.map(([label, key, value, min, max]) => (
             <EditableControlRow
               key={label}
@@ -3395,18 +3590,6 @@ function ControlGroup({ title, children }) {
   );
 }
 
-function ControlRow({ label, value, keyframe }) {
-  return (
-    <div className="grid grid-cols-[14px_1fr_auto] items-center gap-1 py-0.5">
-      <span className="text-slate-500">◉</span>
-      <span>{label}</span>
-      <span className="font-mono text-blue-400">
-        {value} {keyframe ? "◆" : ""}
-      </span>
-    </div>
-  );
-}
-
 function EditableControlRow({
   label,
   value,
@@ -3429,13 +3612,13 @@ function EditableControlRow({
         onChange={(event) => onChange(+event.target.value)}
         className="min-w-0 accent-blue-500 disabled:opacity-30"
       />
-      <input
-        type="number"
+      <NumericField
+        aria-label={`Controles de efeitos ${label}`}
         min={min}
         max={max}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(+event.target.value)}
+        onChange={onChange}
         className="w-full border-0 bg-transparent text-right font-mono text-blue-400 outline-none disabled:opacity-30"
       />
       {keyframe && (
@@ -3503,14 +3686,16 @@ function Tool({ label, children, active, onClick, disabled }) {
     </button>
   );
 }
-function TrackButton({ label, children, active, onClick }) {
+function TrackButton({ label, children, active = false, onClick, disabled = false, title }) {
   return (
     <button
       type="button"
       aria-label={label}
-      aria-pressed={active}
+      aria-pressed={disabled ? undefined : active}
+      title={title}
+      disabled={disabled}
       onClick={onClick}
-      className={`rounded p-0.5 ${active ? "bg-cyan-400 text-slate-950" : "text-slate-500 hover:text-cyan-300"}`}
+      className={`rounded p-0.5 disabled:cursor-not-allowed disabled:opacity-40 ${active ? "bg-cyan-400 text-slate-950" : "text-slate-500 hover:text-cyan-300"}`}
     >
       {children}
     </button>
@@ -3667,7 +3852,8 @@ function AudioTrackMixer({
                 <option>Estéreo</option>
                 <option>Mono</option>
               </select>
-              <select className="mt-1 w-full bg-[#111]">
+              {/* Roteamento para submix e automação ainda não existem na mixagem Web Audio. */}
+              <select aria-label={`Saída ${id}`} disabled title={NOT_AVAILABLE} className="mt-1 w-full bg-[#111] disabled:opacity-40">
                 <option>Mix</option>
                 <option>Submix 1</option>
               </select>
@@ -3682,7 +3868,7 @@ function AudioTrackMixer({
                 onChange={(event) => setPan(+event.target.value)}
                 className="my-3 w-full"
               />
-              <select className="w-full bg-[#111]">
+              <select aria-label={`Automação ${id}`} disabled title={NOT_AVAILABLE} className="w-full bg-[#111] disabled:opacity-40">
                 <option>Leitura</option>
                 <option>Touch</option>
                 <option>Latch</option>
@@ -3711,8 +3897,9 @@ function AudioTrackMixer({
                   S
                 </button>
                 <button
-                  onClick={() => id !== "Mix" && toggleTrack(id, "armed")}
-                  className={state.armed ? "bg-red-600 px-1" : "bg-[#333] px-1"}
+                  disabled
+                  title={NOT_AVAILABLE}
+                  className="bg-[#333] px-1 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   R
                 </button>
@@ -3865,7 +4052,7 @@ function fxVisualStyle(clip, frameScale = 1) {
     filter: blur > 0 ? `${lookFilter(clip)} blur(${Math.round(blur * frameScale * 100) / 100}px)` : lookFilter(clip),
   };
 }
-function Monitor({ title, asset, layers, children, playing = false, playhead = 0, onPlayingChange, onSeek, audioMuted = false, onToggleAudio }) {
+function Monitor({ title, asset, layers, children, playing = false, playhead = 0, onPlayingChange, onSeek, audioMuted = false, onToggleAudio, sequenceDuration = 0 }) {
   const videoRef = useRef(null);
   const frameRef = useRef(null);
   const [monitorPlaying, setMonitorPlaying] = useState(false);
@@ -3884,6 +4071,19 @@ function Monitor({ title, asset, layers, children, playing = false, playhead = 0
     return () => observer.disconnect();
   }, [hasLayers]);
   const visualStyle = layerVisualStyle(asset);
+  // No Programa o transporte controla a sequência (indicador da timeline), com ou sem vídeo no quadro.
+  const sequence = Boolean(onPlayingChange);
+  const showTransport = sequence || Boolean(asset?.type?.startsWith("video"));
+  const isPlaying = sequence ? playing : monitorPlaying;
+  const progressMax = sequenceDuration > 0 ? sequenceDuration : 1;
+  function stepFrame(direction) {
+    if (sequence) {
+      onSeek?.(frameRound(playhead + direction * FRAME));
+      return;
+    }
+    const video = videoRef.current;
+    if (video) video.currentTime = Math.max(0, (video.currentTime || 0) + direction * FRAME);
+  }
   const videoEvents = {
     onPlay: () => setMonitorPlaying(true),
     onPause: () => setMonitorPlaying(false),
@@ -3921,7 +4121,7 @@ function Monitor({ title, asset, layers, children, playing = false, playhead = 0
               />
             ))
           ) : (
-            <span className="text-xs text-slate-600">00:00:00:00</span>
+            <span className="text-xs text-slate-600">{timecode(playhead)}</span>
           )
         ) : asset?.type === TITLE_TYPE ? (
           <div
@@ -3963,20 +4163,27 @@ function Monitor({ title, asset, layers, children, playing = false, playhead = 0
           )
         ) : (
           <span className="text-xs text-slate-600">
-            {title === "Programa" ? "00:00:00:00" : "Nenhuma mídia"}
+            {sequence ? timecode(playhead) : "Nenhuma mídia"}
           </span>
         )}
       </div>
       <div className="mt-auto flex h-10 shrink-0 items-center gap-3 border-t border-[#303030] bg-[#1e1e1e] px-3 py-2 text-[10px] text-slate-500">
-        {asset?.type?.startsWith('video') && <>
-          <button aria-label={`${monitorPlaying ? 'Pausar' : 'Reproduzir'} ${title}`} onClick={() => { if(onPlayingChange) {onPlayingChange(!playing);return;} const video = videoRef.current; if (!video) return; if(video.paused) video.play().catch(() => {}); else video.pause(); }}>{monitorPlaying ? 'Ⅱ' : '▶'}</button>
-          <input aria-label={`Progresso ${title}`} type="range" min="0" max={monitorDuration || 1} step="0.01" value={Math.min(monitorTime,monitorDuration || 1)} onChange={event => { const next=Number(event.target.value); if(onSeek) onSeek(asset.start+Math.max(0,next-(asset.sourceIn || 0))/((asset.speed || 100)/100)); else if(videoRef.current) videoRef.current.currentTime=next; }} className="min-w-0 flex-1 accent-sky-400"/>
+        {showTransport && <>
+          <button aria-label={`${isPlaying ? 'Pausar' : 'Reproduzir'} ${title}`} onClick={() => { if(sequence) {onPlayingChange(!playing);return;} const video = videoRef.current; if (!video) return; if(video.paused) video.play().catch(() => {}); else video.pause(); }}>{isPlaying ? 'Ⅱ' : '▶'}</button>
+          {sequence ? (
+            <input aria-label={`Progresso ${title}`} type="range" min="0" max={progressMax} step={FRAME} value={Math.min(playhead, progressMax)} onChange={event => onSeek?.(Number(event.target.value))} className="min-w-0 flex-1 accent-sky-400"/>
+          ) : (
+            <input aria-label={`Progresso ${title}`} type="range" min="0" max={monitorDuration || 1} step="0.01" value={Math.min(monitorTime,monitorDuration || 1)} onChange={event => { if(videoRef.current) videoRef.current.currentTime=Number(event.target.value); }} className="min-w-0 flex-1 accent-sky-400"/>
+          )}
           <button aria-label={`Silenciar ${title}`} aria-pressed={onToggleAudio ? audioMuted : undefined} onClick={() => {if(onToggleAudio) {onToggleAudio();return;} if(videoRef.current) videoRef.current.muted=!videoRef.current.muted;}}>♪</button>
         </>}
-        <span className="font-mono text-blue-400">{clock(monitorTime)}</span>
-        <button>Fit ▾</button>
-        <button>1/2 ▾</button>
-        <span className="ml-auto">◀ │ ▶</span>
+        <span className="font-mono text-blue-400">{sequence ? timecode(playhead) : timecode(monitorTime)}</span>
+        {showTransport && (
+          <span className="ml-auto flex items-center gap-2">
+            <button aria-label={`Quadro anterior ${title}`} title="Voltar 1 quadro" onClick={() => stepFrame(-1)}>◀</button>
+            <button aria-label={`Próximo quadro ${title}`} title="Avançar 1 quadro" onClick={() => stepFrame(1)}>▶</button>
+          </span>
+        )}
       </div>
     </div>
   );
@@ -4349,12 +4556,11 @@ function ExportWorkspace({
             </select>
           </ExportField>
           <ExportField label="Taxa alvo">
-            <input
-              type="number"
+            <NumericField
               value={targetMbps}
-              min="0.1"
-              step="0.1"
-              onChange={(event) => setTargetMbps(event.target.value)}
+              min={0.1}
+              step={0.1}
+              onChange={setTargetMbps}
             />
           </ExportField>
           <ExportCheck
@@ -4507,6 +4713,8 @@ function ExportCheck({ label, checked, onChange = () => {}, value }) {
 function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLength = 0, notify = () => {}, onImportCaptions }) {
   const [infoTab, setInfoTab] = useState("Informações");
   const [openEffects, setOpenEffects] = useState({});
+  const [effectSearch, setEffectSearch] = useState("");
+  const effectQuery = effectSearch.trim().toLowerCase();
   const Icon =
     workspace === "Cor"
       ? BarChart3
@@ -4615,7 +4823,8 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
             <span className="float-right italic">fx</span>
           </div>
           <LumetriSection title="Correção básica" open>
-            <select className="mb-2 w-full border border-[#333] bg-black px-2 py-1 text-slate-300">
+            {/* LUTs ainda não são aplicadas no Programa nem na exportação. */}
+            <select aria-label="LUT de entrada" disabled title={NOT_AVAILABLE} className="mb-2 w-full border border-[#333] bg-black px-2 py-1 text-slate-300 disabled:opacity-40">
               <option>LUT de entrada · Nenhum</option>
               <option>Rec.709</option>
               <option>Log para Rec.709</option>
@@ -4662,7 +4871,10 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
             <span className="border-b border-slate-300 pb-1">Efeitos</span> ☰
           </div>
           <input
+            aria-label="Pesquisar efeitos"
             placeholder="Pesquisar efeitos"
+            value={effectSearch}
+            onChange={(event) => setEffectSearch(event.target.value)}
             className="mb-2 w-full rounded-full border border-[#444] bg-[#111] px-3 py-2 text-slate-300"
           />
           {Object.entries({
@@ -4691,7 +4903,10 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
               "Wipe",
             ],
             Legado: ["Film Dissolve", "Mosaico", "Posterizar tempo"],
-          }).map(([name, effects]) => (
+          })
+            .map(([name, effects]) => [name, effectQuery ? effects.filter((effect) => effect.toLowerCase().includes(effectQuery)) : effects])
+            .filter(([, effects]) => effects.length > 0)
+            .map(([name, effects]) => (
             <div key={name}>
               <button
                 onClick={() =>
@@ -4700,12 +4915,12 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
                 className="flex w-full items-center gap-2 py-2 text-left text-slate-300 hover:bg-[#292929]"
               >
                 <span className="text-slate-500">
-                  {openEffects[name] ? "⌄" : "›"}
+                  {effectQuery || openEffects[name] ? "⌄" : "›"}
                 </span>
                 <span className="inline-block h-2.5 w-3.5 border border-slate-400" />
                 {name}
               </button>
-              {openEffects[name] && (
+              {(effectQuery || openEffects[name]) && (
                 <div className="ml-7 border-l border-[#3b3b3b] pl-2">
                   {effects.map((effect) => (
                     <button
@@ -4762,29 +4977,6 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
       {workspace === "Legendas" && (
         <EditingWorkspacePanel clip={clip} patch={patch} initialTab="Texto" notify={notify} onImportCaptions={onImportCaptions} />
       )}
-      {workspace === "Exportar" && (
-        <div className="space-y-2 text-[10px]">
-          <PanelStack
-            rows={[
-              ["Arquivo", "Sequência 01.mp4"],
-              ["Formato", "H.264"],
-              ["Preset", "Match Source"],
-              ["Vídeo", "1920×1080 · 29,97"],
-              ["Áudio", "AAC · 48 kHz"],
-            ]}
-          />
-          <label className="flex items-center gap-2 text-slate-300">
-            <input type="checkbox" defaultChecked /> Renderizar na qualidade
-            máxima
-          </label>
-          <button className="w-full rounded border border-cyan-500 p-2 font-bold text-cyan-300">
-            Adicionar à fila
-          </button>
-          <button className="w-full rounded bg-cyan-400 p-2 font-bold text-slate-950">
-            Exportar
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -4799,23 +4991,78 @@ const GRAPHIC_TEMPLATES = [
   ["Callout – Tag", "Callouts", "● LIVE", "tag"],
   ["Ticker – Crawl", "Lower Thirds", "Breaking news · MediaMind", "ticker"],
 ];
+const TEMPLATE_CATEGORIES = [
+  ["", "Todas"],
+  ["Titles", "Títulos"],
+  ["Lower Thirds", "Lower Thirds"],
+];
+// Estilo inicial de um título sem `captionStyle`: reproduz o título simples (Inter negrito, branco, centro do quadro)
+// para que a primeira edição em Gráficos essenciais não mude o resto da aparência. Os mesmos campos são lidos pela
+// prévia (captionStyleCss) e pela exportação (drawStyledText).
+const TITLE_STYLE_BASE = {
+  font: "Inter",
+  weight: 700,
+  size: 64,
+  fill: "#FFFFFF",
+  stroke: "#000000",
+  strokeWidth: 0,
+  box: false,
+  boxColor: "#000000B3",
+  align: "center",
+  position: "center",
+  uppercase: false,
+  highlightColor: "#FFFFFF",
+  animation: "none",
+};
+const GRAPHIC_FONTS = ["Inter", "Montserrat", "Arial", "Georgia", "Courier New"];
+const GRAPHIC_ALIGNS = [
+  ["left", "Esquerda"],
+  ["center", "Centro"],
+  ["right", "Direita"],
+];
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
+// Movimento mínimo (px) para um clique virar arraste no campo de valor.
+const DRAG_THRESHOLD = 4;
+// Propriedade com arraste estilo Premiere: arrastar para os lados ajusta o valor (depois de DRAG_THRESHOLD px);
+// um clique simples foca o campo para digitar e, com o campo em edição, o ponteiro só posiciona/seleciona o texto.
 function PrecisionProperty({label,value,min,max,speed,disabled,onChange}) {
   const drag = useRef(null);
   function start(event) {
     if(disabled || event.button !== 0) return;
-    drag.current={x:event.clientX,value:Number(value)};
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    if(event.currentTarget === document.activeElement) return;
+    drag.current={x:event.clientX,value:Number(value),dragging:false};
   }
   function move(event) {
-    if(!drag.current) return;
-    const delta=event.clientX-drag.current.x;
-    if(Math.abs(delta)<3) return;
-    onChange(Math.max(min,Math.min(max,Math.round((drag.current.value+delta*speed)*100)/100)));
+    const state=drag.current;
+    if(!state) return;
+    const delta=event.clientX-state.x;
+    if(!state.dragging) {
+      if(Math.abs(delta)<DRAG_THRESHOLD) return;
+      state.dragging=true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    onChange(Math.max(min,Math.min(max,Math.round((state.value+delta*speed)*100)/100)));
+  }
+  function end(event) {
+    const state=drag.current;
+    drag.current=null;
+    if(!state) return;
+    if(state.dragging) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      return;
+    }
+    // Clique simples: entra na edição do texto.
+    event.currentTarget.focus();
+    event.currentTarget.select?.();
+  }
+  // Fora da edição o foco só chega no fim do clique (end); assim o arraste não congela o rascunho do campo.
+  function holdFocus(event) {
+    if(!disabled && event.button === 0 && event.currentTarget !== document.activeElement) event.preventDefault();
   }
   const span=(max-min)*Math.min(1,speed);
   const low=Math.max(min,Math.min(max-span,Number(value)-span/2));
-  return <label className="grid grid-cols-[90px_minmax(0,1fr)_70px] items-center gap-2 px-3 py-2 text-xs"><span>{label}</span><input aria-label={`Propriedades ${label}`} type="range" disabled={disabled} min={low} max={low+span} step={Math.max(0.01,Math.min(1,speed))} value={value} onChange={event=>onChange(Number(event.target.value))} className="min-w-0 accent-sky-400"/><input aria-label={`Valor ${label}`} title="Arraste para os lados para ajustar; clique para digitar" type="number" disabled={disabled} value={value} onPointerDown={start} onPointerMove={move} onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}} onChange={event=>{const next=Number(event.target.value);if(Number.isFinite(next))onChange(Math.max(min,Math.min(max,next)));}} className="w-full cursor-ew-resize rounded border border-slate-700 bg-slate-950 p-1"/></label>;
+  return <label className="grid grid-cols-[90px_minmax(0,1fr)_70px] items-center gap-2 px-3 py-2 text-xs"><span>{label}</span><input aria-label={`Propriedades ${label}`} type="range" disabled={disabled} min={low} max={low+span} step={Math.max(0.01,Math.min(1,speed))} value={value} onChange={event=>onChange(Number(event.target.value))} className="min-w-0 accent-sky-400"/><NumericField aria-label={`Valor ${label}`} title="Arraste para os lados para ajustar; clique para digitar" disabled={disabled} min={min} max={max} value={value} onMouseDown={holdFocus} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={()=>{drag.current=null}} onChange={onChange} className="w-full cursor-ew-resize rounded border border-slate-700 bg-slate-950 p-1 focus:cursor-text"/></label>;
 }
 
 function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notify = () => {}, onImportCaptions }) {
@@ -4824,10 +5071,21 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notif
   const [graphicsMode, setGraphicsMode] = useState("Procurar");
   const [textMode, setTextMode] = useState("Transcrição");
   const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("");
   const [captionTrack, setCaptionTrack] = useState(false);
-  const shownTemplates = GRAPHIC_TEMPLATES.filter(([name]) =>
-    name.toLowerCase().includes(templateSearch.toLowerCase()),
+  const shownTemplates = GRAPHIC_TEMPLATES.filter(
+    ([name, category]) =>
+      name.toLowerCase().includes(templateSearch.toLowerCase()) && (!templateCategory || category === templateCategory),
   );
+  // Fonte, tamanho, alinhamento e preenchimento gravam no `captionStyle` do título selecionado (mesmo patch do texto).
+  const isTitle = clip?.type === TITLE_TYPE;
+  const graphicStyle = { ...TITLE_STYLE_BASE, ...(clip?.captionStyle || {}) };
+  const patchGraphicStyle = (changes) => patch("captionStyle", { ...graphicStyle, ...changes });
+  const styleHint = isTitle ? undefined : "Selecione um título na timeline para editar o estilo";
+  const fonts = GRAPHIC_FONTS.includes(graphicStyle.font) ? GRAPHIC_FONTS : [graphicStyle.font, ...GRAPHIC_FONTS];
+  const fillColor = HEX_COLOR.test(graphicStyle.fill) ? graphicStyle.fill : "#FFFFFF";
+  const styleRow = "flex w-full items-center justify-between gap-2 rounded border border-slate-800 px-2 py-2 text-left text-slate-500";
+  const styleControl = "min-w-0 bg-transparent text-right text-slate-200 outline-none disabled:opacity-40";
 
   return (
     <div className="min-h-full text-[10px] text-slate-300">
@@ -4883,14 +5141,14 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notif
                 className="grid grid-cols-[1fr_66px_18px] items-center gap-2 px-3 py-2 text-[11px]"
               >
                 <span className="text-slate-400">{label}</span>
-                <input
+                <NumericField
+                  aria-label={`Cortar ${label}`}
                   disabled={!clip}
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
+                  min={0}
+                  max={100}
+                  step={0.1}
                   value={clip?.[key] ?? 0}
-                  onChange={(event) => patch(key, +event.target.value)}
+                  onChange={(next) => patch(key, next)}
                   className="border-0 bg-transparent text-right text-blue-400 outline-none"
                 />
                 <span className="text-slate-400">◇</span>
@@ -4929,10 +5187,17 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notif
                   placeholder="Pesquisar modelos"
                   className="rounded border border-[#3a3a3a] bg-[#111] px-2 py-1"
                 />
-                <select className="rounded border border-[#3a3a3a] bg-[#111] px-1">
-                  <option>Todas</option>
-                  <option>Títulos</option>
-                  <option>Lower Thirds</option>
+                <select
+                  aria-label="Categoria dos modelos"
+                  value={templateCategory}
+                  onChange={(event) => setTemplateCategory(event.target.value)}
+                  className="rounded border border-[#3a3a3a] bg-[#111] px-1"
+                >
+                  {TEMPLATE_CATEGORIES.map(([value, label]) => (
+                    <option key={label} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
                 <button
                   onClick={() =>
@@ -4986,14 +5251,70 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notif
                 onChange={(event) => patch("text", event.target.value)}
                 className="w-full border border-[#444] bg-[#111] p-2"
               />
-              <PanelStack
-                rows={[
-                  ["Fonte", "Inter Semibold"],
-                  ["Tamanho", "64 px"],
-                  ["Alinhamento", "Centro"],
-                  ["Preenchimento", "#FFFFFF"],
-                ]}
-              />
+              <div className="space-y-1" title={styleHint}>
+                <label className={styleRow}>
+                  <span>Fonte</span>
+                  <select
+                    aria-label="Fonte do gráfico"
+                    value={graphicStyle.font}
+                    disabled={!isTitle}
+                    onChange={(event) => patchGraphicStyle({ font: event.target.value })}
+                    className={styleControl}
+                  >
+                    {fonts.map((font) => (
+                      <option key={font} value={font} className="bg-[#111]">
+                        {font}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styleRow}>
+                  <span>Tamanho</span>
+                  <span className="flex items-center gap-1 text-slate-200">
+                    <NumericField
+                      aria-label="Tamanho do gráfico"
+                      min={8}
+                      max={400}
+                      step={1}
+                      value={graphicStyle.size}
+                      disabled={!isTitle}
+                      onChange={(size) => patchGraphicStyle({ size })}
+                      className={`w-14 ${styleControl}`}
+                    />
+                    px
+                  </span>
+                </label>
+                <label className={styleRow}>
+                  <span>Alinhamento</span>
+                  <select
+                    aria-label="Alinhamento do gráfico"
+                    value={graphicStyle.align}
+                    disabled={!isTitle}
+                    onChange={(event) => patchGraphicStyle({ align: event.target.value })}
+                    className={styleControl}
+                  >
+                    {GRAPHIC_ALIGNS.map(([value, label]) => (
+                      <option key={value} value={value} className="bg-[#111]">
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className={styleRow}>
+                  <span>Preenchimento</span>
+                  <span className="flex items-center gap-2 text-slate-200">
+                    <input
+                      aria-label="Preenchimento do gráfico"
+                      type="color"
+                      value={fillColor.toLowerCase()}
+                      disabled={!isTitle}
+                      onChange={(event) => patchGraphicStyle({ fill: event.target.value.toUpperCase() })}
+                      className="h-5 w-7 cursor-pointer border-0 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                    {fillColor.toUpperCase()}
+                  </span>
+                </label>
+              </div>
             </div>
           )}
         </div>
@@ -5100,16 +5421,6 @@ function PropertyGroup({ title, reset, children }) {
   );
 }
 
-function PropertyNumber({ label, value, diamond }) {
-  return (
-    <div className="grid grid-cols-[1fr_120px_18px] items-center gap-2 px-3 py-2 text-[11px]">
-      <span className="text-slate-400">{label}</span>
-      <span className="whitespace-pre text-blue-400">{value}</span>
-      <span className="text-slate-400">{diamond ? "◇" : ""}</span>
-    </div>
-  );
-}
-
 function LumetriSection({ title, open = false, enabled = true, children }) {
   const [expanded, setExpanded] = useState(open);
   const [active, setActive] = useState(enabled);
@@ -5185,20 +5496,19 @@ function Range({ label, value, min = 0, max = 100, onChange, disabled }) {
   );
 }
 
+// Linhas só de leitura (informações e metadados). Não são menus: nada aqui é editável.
 function PanelStack({ rows }) {
-  const [active, setActive] = useState(null);
   return (
-    <div className="space-y-1">
+    <dl className="space-y-1">
       {rows.map(([label, value]) => (
-        <button
+        <div
           key={label}
-          onClick={() => setActive(label)}
-          className={`flex w-full justify-between rounded border px-2 py-2 text-left hover:border-cyan-800 ${active === label ? "border-cyan-700 bg-cyan-500/10 text-cyan-300" : "border-slate-800 text-slate-500"}`}
+          className="flex w-full justify-between rounded border border-slate-800 px-2 py-2 text-left text-slate-500"
         >
-          <span>{label}</span>
-          <span className="text-slate-200">{value} ▾</span>
-        </button>
+          <dt>{label}</dt>
+          <dd className="text-slate-200">{value}</dd>
+        </div>
       ))}
-    </div>
+    </dl>
   );
 }

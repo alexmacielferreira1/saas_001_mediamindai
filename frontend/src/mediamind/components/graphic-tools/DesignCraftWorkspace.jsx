@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { registerMCPActions } from "../../lib/mcpActions";
 import { mmdesignCatalogue, runMMDesignTool } from "./mmdesignMcpTools";
 import {
-  AlignLeft,
+  Minus,
   Download,
   Eye,
   FileText,
@@ -12,6 +12,7 @@ import {
   Image,
   Link2,
   MousePointer2,
+  MousePointerClick,
   PenTool,
   Plus,
   Save,
@@ -23,11 +24,11 @@ import {
 
 const TOOLS = [
   ["V", "Seleção", MousePointer2],
-  ["A", "Seleção direta", MousePointer2],
+  ["A", "Seleção direta", MousePointerClick],
   ["T", "Texto", Type],
   ["F", "Quadro", Square],
   ["P", "Caneta", PenTool],
-  ["L", "Linha", AlignLeft],
+  ["L", "Linha", Minus],
   ["H", "Mão", Hand],
   ["Z", "Zoom", ZoomIn],
 ];
@@ -958,10 +959,13 @@ export default function DesignCraftWorkspace({ active = true, assets, onOpenFile
         </span>
       </div>
       <div className="grid min-h-[730px] grid-cols-[54px_235px_minmax(600px,1fr)_300px] gap-2">
-        <aside className="flex flex-col items-center gap-1 rounded border border-slate-800 bg-[#242424] p-1">
+        <aside aria-label="Ferramentas do MMDesign" className="flex flex-col items-center gap-1 rounded border border-slate-800 bg-[#242424] p-1">
           {TOOLS.map(([shortcut, name, Icon]) => (
             <button
               key={name}
+              type="button"
+              aria-label={name}
+              aria-pressed={tool === name}
               title={`${name} (${shortcut})${name === "Quadro" ? " · Alt: elipse" : ""}`}
               onClick={() => {
                 if (tool === "Caneta" && name !== "Caneta") finishPen();

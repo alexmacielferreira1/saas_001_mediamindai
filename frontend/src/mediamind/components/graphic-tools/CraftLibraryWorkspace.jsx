@@ -1,6 +1,7 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { registerMCPActions } from "../../lib/mcpActions";
+import { useTextPrompt } from "./FilmCraftTextPrompt";
 import { ALL_ASSETS, FOLDERS_SECTION, TAGS_SECTION, TRASH, mmlibsCatalogue, runMMLibsTool, tagCounts, visibleAssets } from "./mmlibsMcpTools";
 import {
   Box,
@@ -51,8 +52,10 @@ export default function CraftLibraryWorkspace({
   const [assetTags, setAssetTags] = useGraphicDraftState("CraftLibraryWorkspace.jsx:assetTags", {});
   const [trashed, setTrashed] = useGraphicDraftState("CraftLibraryWorkspace.jsx:trashed", []);
   const [openFolder, setOpenFolder] = useGraphicDraftState("CraftLibraryWorkspace.jsx:openFolder", "");
-  const createFolder = () => {
-    const name = window.prompt("Nome da nova pasta", "Nova pasta")?.trim();
+  // Diálogo próprio: window.prompt é bloqueado no painel embutido e falhava em silêncio.
+  const [askText, textPromptDialog] = useTextPrompt();
+  const createFolder = async () => {
+    const name = (await askText("Nome da nova pasta", "Nova pasta"))?.trim();
     if (name)
       setFolders((current) => [...current, { id: crypto.randomUUID(), name }]);
   };
@@ -433,6 +436,7 @@ export default function CraftLibraryWorkspace({
           </p>
         </aside>
       </div>
+      {textPromptDialog}
     </section>
   );
 }

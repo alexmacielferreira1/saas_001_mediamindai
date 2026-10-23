@@ -6,10 +6,20 @@ describe("GraphicTools", () => {
   it("preserves an edited scene when switching to another editor and back", () => {
     render(<GraphicTools />);
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar objeto" }));
     fireEvent.click(screen.getByRole("button", { name: "Adicionar esfera" }));
     fireEvent.click(screen.getByRole("tab", { name: /MMPhoto/ }));
     fireEvent.click(screen.getByRole("tab", { name: /MM3D/ }));
     expect(screen.getByRole("button", { name: "Objeto Esfera 1" })).toBeInTheDocument();
+  });
+  it("cada aba de programa tem um ícone próprio (Word não repete o do MMPDF)", () => {
+    render(<GraphicTools />);
+    const tabs = [...screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" }).querySelectorAll('[role="tab"]')];
+    const iconOf = (tab) => [...tab.querySelector("svg").classList].find((name) => name.startsWith("lucide-"));
+    const icons = tabs.map(iconOf);
+    expect(new Set(icons).size).toBe(icons.length);
+    expect(iconOf(screen.getByRole("tab", { name: /Word/ }))).toMatch(/^lucide-file-type-?2$/);
+    expect(iconOf(screen.getByRole("tab", { name: /MMPDF/ }))).toBe("lucide-file-text");
   });
   it("opens the MMFig interface design workspace", () => {
     window.history.replaceState({}, "", "/ferramentas-graficas?tool=figcraft");
@@ -223,7 +233,7 @@ describe("GraphicTools", () => {
     fireEvent.change(screen.getByLabelText("Valor Escala da camada"), { target: { value: "140" } });
     fireEvent.change(screen.getByLabelText("Agulha da timeline"), { target: { value: "4" } });
 
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(120);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("120");
     expect(screen.getByLabelText("Camada MMEffect na composição")).toHaveStyle({ transform: "translate(0%, 0%) scale(1.2) rotate(0deg)" });
   });
 
@@ -232,10 +242,10 @@ describe("GraphicTools", () => {
     render(<GraphicTools />);
     const numericX = screen.getByLabelText("Valor X da camada");
     const sliderX = screen.getByLabelText("X da camada");
-    expect(numericX).toHaveValue(960);
+    expect(numericX).toHaveValue("960");
     fireEvent.change(numericX, { target: { value: "720" } });
     expect(sliderX).toHaveValue("720");
-    expect(screen.getByLabelText("Valor de Fuzziness")).toHaveValue(0);
+    expect(screen.getByLabelText("Valor de Fuzziness")).toHaveValue("0");
     expect(screen.getByRole("button", { name: "Recolher Color Range" })).toHaveAttribute("aria-expanded", "true");
   });
 
