@@ -20,7 +20,7 @@ para o equivalente na Central (`saas_000_central/docs/HISTORICO_QUALIDADE_2026-1
 
 ## 2. O que foi entregue neste repositório
 
-Branch `qualidade/kit-revisao-2026-10-23` (publicada no GitHub, ainda **sem PR e sem merge**).
+Branch `qualidade/kit-revisao-2026-10-23` (publicada no GitHub; PR aberto em https://github.com/alexmacielferreira1/saas_001_mediamindai/pull/17, ainda **sem merge**).
 
 | Commit | O quê |
 |---|---|
