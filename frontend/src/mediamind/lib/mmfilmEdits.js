@@ -56,11 +56,16 @@ export function leftPart(clip, at) {
 }
 
 // Parte direita de um corte: começa em `at` e avança a origem pelo trecho consumido (respeitando a velocidade).
+// Vínculo vídeo+áudio (`linkId`): ao cortar, as partes direitas do par ganham um vínculo novo derivado do
+// original e do ponto de corte — iguais para os dois lados do par, sem ligar as partes esquerdas às direitas.
+export const linkRoot = (linkId) => String(linkId).split("@")[0];
+const splitLinkId = (linkId, at) => `${linkRoot(linkId)}@${Math.round(at * 1000)}`;
 export function rightPart(clip, at, id = crypto.randomUUID()) {
   const offset = at - clip.start;
   return {
     ...clip,
     id,
+    linkId: clip.linkId ? splitLinkId(clip.linkId, at) : clip.linkId,
     start: at,
     duration: clipEnd(clip) - at,
     sourceIn: (clip.sourceIn || 0) + offset * speedFactor(clip),

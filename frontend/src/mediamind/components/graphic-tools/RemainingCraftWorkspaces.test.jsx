@@ -174,6 +174,14 @@ function Pdf({ assets = [pdf] }) {
   const [selected, setSelected] = useState(assets[0] || null);
   return <PdfCraftWorkspace assets={assets} selected={selected} onSelect={setSelected} onOpenFiles={vi.fn()} />;
 }
+// O MMPDF usa diálogo próprio (window.prompt é bloqueado no painel embutido): responde e confirma.
+async function answer(label, text) {
+  const input = await screen.findByRole("textbox", { name: label });
+  fireEvent.change(input, { target: { value: text } });
+  await act(async () => {
+    fireEvent.submit(screen.getByRole("dialog", { name: label }));
+  });
+}
 const SAMPLE = `%PDF-1.4
 1 0 obj << /Type /Catalog /Pages 2 0 R /Outlines 6 0 R >> endobj
 2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >> endobj
@@ -222,11 +230,13 @@ describe("MMPDF", () => {
     expect(screen.getByTitle("Relatório.pdf").getAttribute("src")).toBe("blob:pdf#page=2");
   });
 
-  it("adds, persists in state and removes annotations", () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Revisar este trecho");
+  it("adds, persists in state and removes annotations", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
     render(<Pdf />);
     fireEvent.click(screen.getByText("Comentar"));
     fireEvent.click(screen.getByText("Nota"));
+    await answer("Texto da nota:", "Revisar este trecho");
+    expect(window.prompt).not.toHaveBeenCalled();
     const layer = screen.getByTestId("pdf-annotation-layer");
     expect(layer.style.pointerEvents).toBe("auto");
     fireEvent.pointerDown(layer, { clientX: 0, clientY: 0 });
@@ -241,22 +251,81 @@ describe("MMPDF", () => {
     expect(screen.queryByText("Revisar este trecho")).not.toBeInTheDocument();
   });
 
-  it("adds a watermark and a signature", () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Alex Ferreira");
+  it("adds a watermark and a signature", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
     render(<Pdf />);
     fireEvent.click(screen.getByText("Marca d'água"));
+    expect(await screen.findByRole("textbox", { name: "Texto da marca d'água:" })).toHaveValue("CONFIDENCIAL");
+    await answer("Texto da marca d'água:", "Alex Ferreira");
     expect(screen.getByTestId("pdf-annotation-layer").querySelector('[data-annotation="watermark"]')).toHaveTextContent("Alex Ferreira");
     fireEvent.click(screen.getByText("Preencher e assinar"));
     fireEvent.click(screen.getByText("Adicionar assinatura"));
+    await answer("Nome para a assinatura:", "Alex Ferreira");
     fireEvent.pointerDown(screen.getByTestId("pdf-annotation-layer"), { clientX: 0, clientY: 0 });
     expect(screen.getByTestId("pdf-annotation-layer").querySelector('[data-annotation="signature"]')).toHaveTextContent("Alex Ferreira");
   });
 
-  it("rejects non-http links", () => {
-    vi.spyOn(window, "prompt").mockReturnValue("javascript:alert(1)");
+  it("rejects non-http links", async () => {
     render(<Pdf />);
     fireEvent.click(screen.getByText("Criar link"));
+    await answer("Endereço do link (https://…):", "javascript:alert(1)");
     expect(screen.getByRole("status")).toHaveTextContent(/Link inválido/);
+  });
+
+  it("todas as ferramentas de texto usam o diálogo próprio (prompt nativo bloqueado)", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
+    render(<Pdf />);
+    const layer = () => screen.getByTestId("pdf-annotation-layer");
+    fireEvent.click(screen.getByText("Adicionar texto"));
+    await answer("Texto a adicionar:", "  Parágrafo novo  ");
+    fireEvent.pointerDown(layer(), { clientX: 0, clientY: 0 });
+    expect(layer().querySelector('[data-annotation="text"]')).toHaveTextContent("Parágrafo novo");
+
+    fireEvent.click(screen.getByText("Criar link"));
+    await answer("Endereço do link (https://…):", "https://mediamind.test/doc");
+    await answer("Texto do link:", "Ver documento");
+    fireEvent.pointerDown(layer(), { clientX: 0, clientY: 0 });
+    expect(screen.getByRole("link", { name: "Ver documento" })).toHaveAttribute("href", "https://mediamind.test/doc");
+
+    fireEvent.click(screen.getByText("Cabeçalho e rodapé"));
+    await answer("Texto do cabeçalho e rodapé:", "Confidencial 2026");
+    expect(layer().querySelector('[data-annotation="headerfooter"]')).toHaveTextContent("Confidencial 2026");
+
+    fireEvent.click(screen.getByText("Comentar"));
+    fireEvent.click(screen.getByText("Carimbo"));
+    await answer("Texto do carimbo:", "revisado");
+    fireEvent.pointerDown(layer(), { clientX: 0, clientY: 0 });
+    expect(layer().querySelector('[data-annotation="stamp"]')).toHaveTextContent("REVISADO");
+
+    fireEvent.click(screen.getByText("Preencher e assinar"));
+    fireEvent.click(screen.getByText("Adicionar iniciais"));
+    await answer("Suas iniciais:", "AF");
+    fireEvent.pointerDown(layer(), { clientX: 0, clientY: 0 });
+    expect(layer().querySelector('[data-annotation="signature"]')).toHaveTextContent("AF");
+    expect(window.prompt).not.toHaveBeenCalled();
+  });
+
+  it("cancelar o diálogo não arma ferramenta nem cria anotação", async () => {
+    render(<Pdf />);
+    fireEvent.click(screen.getByText("Adicionar texto"));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByTestId("pdf-annotation-layer").style.pointerEvents).toBe("none");
+  });
+
+  it("modos têm ícones distintos e aria-pressed", () => {
+    render(<Pdf />);
+    const modes = ["Editar", "Comentar", "Organizar", "Preencher e assinar", "Proteger", "Exportar"];
+    const buttons = modes.map((name) => screen.getByRole("button", { name }));
+    const icon = (el) => [...el.querySelector("svg").classList].find((c) => c.startsWith("lucide-"));
+    const icons = buttons.map(icon);
+    expect(new Set([...icons, icon(screen.getByRole("button", { name: "Salvar cópia" }))]).size).toBe(modes.length + 1);
+    expect(icons[1]).toBe("lucide-message-square");
+    expect(icons[5]).toBe("lucide-file-output");
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(buttons[5]);
+    expect(buttons[5]).toHaveAttribute("aria-pressed", "true");
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "false");
   });
 
   it("saves a real copy of the PDF bytes", async () => {

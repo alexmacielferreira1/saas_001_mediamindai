@@ -30,6 +30,7 @@ import {
   PenTool,
   Play,
   Plus,
+  Save,
   Spline,
   Square,
   Trash2,
@@ -42,6 +43,7 @@ import {
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { registerMCPActions } from "../../lib/mcpActions";
 import { mmfigCatalogue, runMMFigTool } from "./mmfigMcpTools";
+import NumericField from "./NumericField";
 
 /* ------------------------------------------------------------------ */
 /* Modelo do documento                                                 */
@@ -1225,6 +1227,23 @@ const toHex6 = (color) => {
   return "#000000";
 };
 
+// Foca um editor recém-criado no próximo quadro, depois do mousedown padrão do navegador
+// (que, no mesmo gesto, devolveria o foco ao contêiner). Devolve a limpeza do agendamento.
+function focusNextFrame(getElement, selectAll) {
+  const run = () => {
+    const el = getElement();
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    if (selectAll) el.select?.();
+  };
+  if (typeof window.requestAnimationFrame === "function") {
+    const frame = window.requestAnimationFrame(run);
+    return () => window.cancelAnimationFrame?.(frame);
+  }
+  const timer = setTimeout(run, 0);
+  return () => clearTimeout(timer);
+}
+
 function Section({ title, action, children }) {
   return (
     <section className="border-b border-[#3b3b3b] px-3 py-3">
@@ -1243,18 +1262,16 @@ function NumField({ label, short, value, onChange, disabled, step = 1, min, max,
       className={`flex min-w-0 items-center gap-1 rounded border border-transparent bg-[#383838] px-1.5 py-1 text-[10px] text-slate-400 hover:border-[#4a4a4a] focus-within:border-[#0d99ff] ${disabled ? "opacity-50" : ""}`}
     >
       <span className="shrink-0 select-none">{short}</span>
-      <input
+      {/* NumericField: apagar não grava 0, aceita "-" e decimal; Enter/blur confirmam com limite min/max. */}
+      <NumericField
         aria-label={label}
-        type="number"
         step={step}
         min={min}
         max={max}
+        precision={2}
         disabled={disabled}
-        value={Number.isFinite(value) ? round2(value) : ""}
-        onChange={(event) => {
-          const next = parseFloat(event.target.value);
-          if (Number.isFinite(next)) onChange(next);
-        }}
+        value={Number.isFinite(value) ? round2(value) : undefined}
+        onChange={onChange}
         className="w-full min-w-0 bg-transparent text-right text-[11px] text-slate-100 outline-none"
       />
     </label>
@@ -1440,6 +1457,12 @@ export default function FigCraftWorkspace({ active = true } = {}) {
   const historyRef = useRef({ past: [], future: [], key: null, at: 0 });
   const canvasRef = useRef(null);
   const rootRef = useRef(null);
+  const textEditorRef = useRef(null);
+  // O textarea de texto nasce durante o pointerdown do canvas; o mousedown padrão do navegador
+  // (que vem logo depois) devolve o foco ao editor raiz e o blur fechava a edição na hora.
+  // Por isso o foco vai no próximo quadro e o blur só conta depois que o editor teve foco ou edição.
+  const textEditorArmed = useRef(false);
+  const commentEditorRef = useRef(null);
   const menuRef = useRef(null);
   const clipRef = useRef(null);
   const dragLayerRef = useRef(null);
@@ -1947,6 +1970,21 @@ export default function FigCraftWorkspace({ active = true } = {}) {
     if (!n) return;
     setSel([id]);
     if (n.type === "text" && !n.locked) setEditingText({ id, value: n.text, fresh: false });
+  }
+  useEffect(() => {
+    if (!editingText?.id) return undefined;
+    textEditorArmed.current = false;
+    return focusNextFrame(() => textEditorRef.current, true);
+  }, [editingText?.id]);
+  // Mesmo caso do comentário: nasce no pointerdown do canvas e perderia o foco no mousedown seguinte.
+  const commentEditKey = commentEdit ? `${commentEdit.id}:${commentEdit.x}:${commentEdit.y}` : null;
+  useEffect(() => {
+    if (!commentEditKey) return undefined;
+    return focusNextFrame(() => commentEditorRef.current, false);
+  }, [commentEditKey]);
+  function onTextEditorBlur() {
+    if (!textEditorArmed.current) return;
+    finishTextEdit();
   }
   function finishTextEdit() {
     const current = editingText;
@@ -3288,7 +3326,7 @@ export default function FigCraftWorkspace({ active = true } = {}) {
             />
           </label>
           <button type="button" onClick={downloadProject} className="rounded border border-slate-700 px-3 py-2 text-xs">
-            <Download size={14} className="mr-1 inline" />
+            <Save size={14} className="mr-1 inline" />
             Baixar projeto
           </button>
           <button type="button" onClick={() => runExport()} className="rounded bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950">
@@ -3519,6 +3557,7 @@ export default function FigCraftWorkspace({ active = true } = {}) {
               >
                 <textarea
                   autoFocus
+                  ref={commentEditorRef}
                   aria-label="Texto do comentário"
                   value={commentEdit.value}
                   onChange={(event) => setCommentEdit({ ...commentEdit, value: event.target.value })}
@@ -3548,11 +3587,17 @@ export default function FigCraftWorkspace({ active = true } = {}) {
             )}
             {editingNode && editingBounds && (
               <textarea
-                autoFocus
+                ref={textEditorRef}
                 aria-label="Editar texto"
                 value={editingText.value}
-                onChange={(event) => setEditingText({ ...editingText, value: event.target.value })}
-                onBlur={finishTextEdit}
+                onFocus={() => {
+                  textEditorArmed.current = true;
+                }}
+                onChange={(event) => {
+                  textEditorArmed.current = true;
+                  setEditingText({ ...editingText, value: event.target.value });
+                }}
+                onBlur={onTextEditorBlur}
                 onKeyDown={(event) => {
                   event.stopPropagation();
                   if (event.key === "Escape") event.currentTarget.blur();

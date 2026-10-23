@@ -3,14 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Download,
+  FileOutput,
   FileSignature,
   FileText,
   FolderPlus,
   Grid3X3,
   Image,
+  MessageSquare,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Star,
   Upload,
 } from "lucide-react";
@@ -30,6 +31,7 @@ import {
   runMMLightTool,
 } from "./mmlightMcpTools";
 import { mmpdfCatalogue, runMMPdfTool } from "./mmpdfMcpTools";
+import { useTextPrompt } from "./FilmCraftTextPrompt";
 
 const LIGHT_KEY = "RemainingCraftWorkspaces.jsx:light";
 const CATALOG = [
@@ -829,6 +831,8 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
   const [tool, setTool] = useState(null);
   const [drawing, setDrawing] = useState(null);
   const [status, setStatus] = useState("");
+  // Diálogo próprio: window.prompt é bloqueado no painel embutido e falhava em silêncio.
+  const [askText, textPromptDialog] = useTextPrompt();
   const source =
     selected || assets.find((asset) => asset.type === "application/pdf");
   const docKey = source?.id || "";
@@ -865,8 +869,8 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
     setStatus("Abra um PDF primeiro.");
     return true;
   }
-  function ask(message, fallback = "") {
-    const value = window.prompt(message, fallback);
+  async function ask(message, fallback = "") {
+    const value = await askText(message, fallback);
     return value && value.trim() ? value.trim() : null;
   }
   function arm(name, payload) {
@@ -893,10 +897,10 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
     });
   }
 
-  function editTool(item) {
+  async function editTool(item) {
     if (needDoc()) return;
     if (item === "Adicionar texto") {
-      const text = ask("Texto a adicionar:");
+      const text = await ask("Texto a adicionar:");
       if (text) arm(item, { kind: "text", text });
     } else if (item === "Adicionar imagem") {
       const input = document.createElement("input");
@@ -911,44 +915,44 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
       };
       input.click();
     } else if (item === "Criar link") {
-      const url = ask("Endereço do link (https://…):", "https://");
+      const url = await ask("Endereço do link (https://…):", "https://");
       if (!url) return;
       if (!/^https?:\/\/[^\s]+$/i.test(url)) {
         setStatus("Link inválido: use um endereço http:// ou https://.");
         return;
       }
-      arm(item, { kind: "link", url, text: ask("Texto do link:", url) || url });
+      arm(item, { kind: "link", url, text: (await ask("Texto do link:", url)) || url });
     } else if (item === "Cabeçalho e rodapé") {
-      const text = ask("Texto do cabeçalho e rodapé:");
+      const text = await ask("Texto do cabeçalho e rodapé:");
       if (!text) return;
       addAnnotation({ type: "headerfooter", text, page: 0 });
       setStatus("Cabeçalho e rodapé adicionados (camada de anotação).");
     } else if (item === "Marca d'água") {
-      const text = ask("Texto da marca d'água:", "CONFIDENCIAL");
+      const text = await ask("Texto da marca d'água:", "CONFIDENCIAL");
       if (!text) return;
       addAnnotation({ type: "watermark", text, page: 0 });
       setStatus("Marca d'água adicionada (camada de anotação).");
     } else unavailable(item);
   }
 
-  function commentTool(item) {
+  async function commentTool(item) {
     if (needDoc()) return;
     if (item === "Nota") {
-      const text = ask("Texto da nota:");
+      const text = await ask("Texto da nota:");
       if (text) arm(item, { kind: "note", text });
     } else if (item === "Carimbo") {
-      const text = ask("Texto do carimbo:", "APROVADO");
+      const text = await ask("Texto do carimbo:", "APROVADO");
       if (text) arm(item, { kind: "stamp", text: text.toUpperCase() });
     } else arm(item, { kind: "drag" });
   }
 
-  function signTool(item) {
+  async function signTool(item) {
     if (needDoc()) return;
     if (item === "Solicitar assinaturas") {
       setStatus("Solicitar assinaturas requer um serviço de assinatura e envio de e-mail, não configurado no MediaMind.");
       return;
     }
-    const text = ask(item === "Adicionar iniciais" ? "Suas iniciais:" : "Nome para a assinatura:");
+    const text = await ask(item === "Adicionar iniciais" ? "Suas iniciais:" : "Nome para a assinatura:");
     if (text) arm(item, { kind: "signature", text });
   }
 
@@ -1157,14 +1161,16 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
       <div className="flex gap-1 overflow-x-auto rounded border border-slate-700 bg-[#22252a] p-1">
         {[
           ["Editar", FileText],
-          ["Comentar", SlidersHorizontal],
+          ["Comentar", MessageSquare],
           ["Organizar", Grid3X3],
           ["Preencher e assinar", FileSignature],
           ["Proteger", ShieldCheck],
-          ["Exportar", Download],
+          ["Exportar", FileOutput],
         ].map(([name, Icon]) => (
           <button
             key={name}
+            type="button"
+            aria-pressed={mode === name}
             onClick={() => {
               setMode(name);
               setTool(null);
@@ -1425,6 +1431,7 @@ export function PdfCraftWorkspace({ active = true, assets, selected, onSelect, o
           </div>
         </aside>
       </div>
+      {textPromptDialog}
     </section>
   );
 }

@@ -64,7 +64,8 @@ describe("MMFilm — exportação WebM", () => {
     fireEvent.click(exportButton());
     const options = vi.mocked(render$.renderTimelineToWebm).mock.calls[0][0];
     expect(options).toMatchObject({ width: 1080, height: 1920, videoBitsPerSecond: 4_000_000, audioBitsPerSecond: 320_000, includeAudio: true, range: { start: 0, end: 8 } });
-    expect(options.clips).toHaveLength(1);
+    // Vídeo em V1 + áudio vinculado em A1.
+    expect(options.clips.map((clip) => clip.track)).toEqual(["V1", "A1"]);
     expect(screen.getByText("Renderizando 0%")).toBeInTheDocument();
     report(0.42);
     await screen.findByText("Renderizando 42%");

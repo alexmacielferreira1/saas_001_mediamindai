@@ -426,3 +426,50 @@ describe("MMFig model", () => {
     expect(markup).toContain("matrix(1 0 0 1 100 50)");
   });
 });
+
+describe("MMFig — campos numéricos, edição de texto e barra", () => {
+  it("campos numéricos aceitam vazio e '-' sem gravar 0 e confirmam negativo/decimal", () => {
+    render(<FigCraftWorkspace />);
+    draw("Retângulo (R)", [180, 180], [230, 230]);
+    const x = screen.getByRole("spinbutton", { name: "Posição X" });
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "" } });
+    expect(x).toHaveValue("");
+    fireEvent.change(x, { target: { value: "-" } });
+    expect(x).toHaveValue("-");
+    fireEvent.change(x, { target: { value: "-12.5" } });
+    fireEvent.blur(x);
+    expect(value("Posição X")).toBe(-12.5);
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "" } });
+    fireEvent.blur(x);
+    expect(value("Posição X")).toBe(-12.5);
+    const radius = screen.getByRole("spinbutton", { name: "Raio dos cantos" });
+    fireEvent.focus(radius);
+    fireEvent.change(radius, { target: { value: "-4" } });
+    fireEvent.blur(radius);
+    expect(value("Raio dos cantos")).toBe(0);
+  });
+
+  it("criar texto deixa o editor aberto: blur imediato (foco devolvido pelo navegador) não fecha", async () => {
+    render(<FigCraftWorkspace />);
+    fireEvent.click(screen.getByRole("button", { name: "Texto (T)" }));
+    fireEvent.pointerDown(canvas(), { clientX: 400, clientY: 400, button: 0 });
+    const editor = screen.getByLabelText("Editar texto");
+    // O mousedown padrão do navegador tira o foco logo após a criação.
+    fireEvent.blur(editor);
+    expect(screen.getByLabelText("Editar texto")).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Editar texto")));
+    fireEvent.change(screen.getByLabelText("Editar texto"), { target: { value: "Título" } });
+    fireEvent.blur(screen.getByLabelText("Editar texto"));
+    expect(screen.queryByLabelText("Editar texto")).not.toBeInTheDocument();
+    expect(layerNames()).toEqual(["Título"]);
+  });
+
+  it("Baixar projeto e Exportar usam ícones distintos", () => {
+    render(<FigCraftWorkspace />);
+    const icon = (name) => [...screen.getByRole("button", { name }).querySelector("svg").classList].find((c) => c.startsWith("lucide-"));
+    expect(icon("Baixar projeto")).not.toBe(icon("Exportar"));
+    expect(icon("Exportar")).toBe("lucide-download");
+  });
+});

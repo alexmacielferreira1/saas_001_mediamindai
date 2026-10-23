@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   keyValueAt,
   leftPart,
+  linkRoot,
   mergeRanges,
   placeClip,
   removeRanges,
@@ -49,6 +50,19 @@ describe("partes de um corte", () => {
     expect(right.motion.scale).toEqual([[0, 1.5], [2, 2]]);
     expect(right.gainKeys).toEqual([[0, -6], [2, -12]]);
     expect(rightPart(clip("c", "V1", 0, 2), 1).id).toEqual(expect.any(String));
+  });
+
+  it("o corte de um par vinculado gera um novo vínculo comum às partes direitas", () => {
+    const video = clip("v", "V1", 0, 8, { linkId: "L" });
+    const audio = clip("a", "A1", 0, 8, { linkId: "L" });
+    expect(leftPart(video, 3).linkId).toBe("L");
+    const [rightVideo, rightAudio] = [rightPart(video, 3), rightPart(audio, 3)];
+    expect(rightVideo.linkId).not.toBe("L");
+    expect(rightVideo.linkId).toBe(rightAudio.linkId);
+    expect(linkRoot(rightVideo.linkId)).toBe("L");
+    expect(rightPart(rightVideo, 5).linkId).toBe(rightPart(rightAudio, 5).linkId);
+    expect(linkRoot(rightPart(rightVideo, 5).linkId)).toBe("L");
+    expect(rightPart(clip("s", "V1", 0, 2), 1).linkId).toBeUndefined();
   });
 
   it("insere empurrando e sobrescreve aparando como antes", () => {

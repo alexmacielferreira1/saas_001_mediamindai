@@ -5,6 +5,8 @@ import { applyMaskResampled, runMMPhotoTool, mmphotoCatalogue } from "./mmphotoM
 import { segmentPersonCanvas } from "../../lib/personSegmentation";
 import { segmentObjectCanvas } from "../../lib/objectSegmentation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import NumericField from "./NumericField";
+import { useTextPrompt } from "./FilmCraftTextPrompt";
 import {
   Brush,
   ChevronDown,
@@ -638,6 +640,31 @@ const TOOLS = [
   ["Z", "Zoom", ZoomIn],
 ];
 
+// Slots da barra como no Photoshop: ferramentas parecidas dividem um slot com flyout.
+// O slot mostra a ferramenta ativa do grupo (ou a última usada nele).
+const TOOL_SLOTS = [
+  { tools: ["Mover"] },
+  { label: "Ferramentas de seleção", tools: ["Letreiro", "Laço", "Seleção rápida"] },
+  { tools: ["Recorte"] },
+  { label: "Ferramentas de pintura", tools: ["Pincel", "Clone", "Borracha"] },
+  { tools: ["Caneta"] },
+  { tools: ["Texto"] },
+  { tools: ["Mão"] },
+  { tools: ["Zoom"] },
+];
+const TOOL_BY_NAME = Object.fromEntries(TOOLS.map(([shortcut, name, Icon]) => [name, { shortcut, name, Icon }]));
+
+// Foca um editor recém-criado no próximo quadro, depois do mousedown padrão do navegador
+// (que, no mesmo gesto, tiraria o foco dele). Devolve a limpeza do agendamento.
+function focusNextFrame(run) {
+  if (typeof window.requestAnimationFrame === "function") {
+    const frame = window.requestAnimationFrame(run);
+    return () => window.cancelAnimationFrame?.(frame);
+  }
+  const timer = setTimeout(run, 0);
+  return () => clearTimeout(timer);
+}
+
 const PAINT_TOOLS = ["Pincel", "Borracha", "Clone"];
 const DEFAULT_TRANSFORM = { x: 0, y: 0, scale: 100, rotation: 0 };
 export const BLEND_MODES = [
@@ -699,6 +726,12 @@ export default function PhotoCraftWorkspace({
   const [cropRect, setCropRect] = useState(null);
   const [cloneSource, setCloneSource] = useState(null);
   const [editingText, setEditingText] = useState(null);
+  // O texto nasce no pointerdown do documento; o mousedown padrão que vem em seguida tira o foco
+  // do span editável. O blur só fecha a edição depois que o span recebeu foco ou digitação.
+  const textEditArmed = useRef(false);
+  const [openSlot, setOpenSlot] = useState(null);
+  const [slotChoice, setSlotChoice] = useState({});
+  const [askText, textPromptDialog] = useTextPrompt();
   const [message, setMessage] = useState("");
   const [future, setFuture] = useState([]);
   const [leftTab, setLeftTab] = useState("Arquivos");
@@ -789,8 +822,8 @@ export default function PhotoCraftWorkspace({
   }
 
   function updateTransform(key, value) {
-    if (!selectedLayer) return;
-    updateLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, [key]: Number(value) } }, "Transformação livre");
+    if (!selectedLayer || !Number.isFinite(value)) return;
+    updateLayer(selectedLayer.id, { transform: { ...selectedLayer.transform, [key]: value } }, "Transformação livre");
   }
 
   function toggle(id) {
@@ -992,17 +1025,26 @@ export default function PhotoCraftWorkspace({
   }, [source?.id]);
 
   useEffect(() => {
-    if (!editingText) return;
-    const node = textRefs.current.get(editingText);
-    if (!node) return;
-    node.focus?.();
-    const range = document.createRange?.();
-    if (range && window.getSelection) {
-      range.selectNodeContents(node);
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(range);
-    }
+    if (!editingText) return undefined;
+    textEditArmed.current = false;
+    return focusNextFrame(() => {
+      const node = textRefs.current.get(editingText);
+      if (!node) return;
+      node.focus?.();
+      const range = document.createRange?.();
+      if (range && window.getSelection) {
+        range.selectNodeContents(node);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+      }
+    });
   }, [editingText]);
+
+  // O slot lembra a última ferramenta escolhida no grupo (inclusive por atalho).
+  useEffect(() => {
+    const index = TOOL_SLOTS.findIndex((slot) => slot.tools.includes(tool));
+    if (index >= 0) setSlotChoice((old) => (old[index] === tool ? old : { ...old, [index]: tool }));
+  }, [tool]);
 
   function sourceReady() {
     const image = sourceImgRef.current;
@@ -1244,8 +1286,8 @@ export default function PhotoCraftWorkspace({
     return transformDocument("Recortar", { w: r.w, h: r.h }, (ctx, baked) => ctx.drawImage(baked, -r.x, -r.y), (p) => ({ x: p.x - r.x, y: p.y - r.y }));
   }
 
-  function resizeImage() {
-    const answer = window.prompt?.(`Tamanho da imagem — nova largura em pixels (atual: ${docSize.w} × ${docSize.h}; altura proporcional):`, String(docSize.w));
+  async function resizeImage() {
+    const answer = await askText(`Tamanho da imagem — nova largura em pixels (atual: ${docSize.w} × ${docSize.h}; altura proporcional):`, String(docSize.w));
     if (answer == null) return;
     const width = Math.round(Number(answer));
     if (!Number.isFinite(width) || width < 1 || width > 16000) return notify("Largura inválida. Informe um número entre 1 e 16000.");
@@ -1262,8 +1304,8 @@ export default function PhotoCraftWorkspace({
     }, (p) => ({ x: p.x * k, y: p.y * k }), (layer) => ({ fontSize: (layer.fontSize || 30 / stageScale) * k }));
   }
 
-  function rotateImage() {
-    const answer = window.prompt?.("Rotação da imagem — ângulo (90, -90 ou 180):", "90");
+  async function rotateImage() {
+    const answer = await askText("Rotação da imagem — ângulo (90, -90 ou 180):", "90");
     if (answer == null) return;
     const angle = Number(answer);
     if (![90, -90, 180].includes(angle)) return notify("Ângulo inválido. Use 90, -90 ou 180.");
@@ -1383,8 +1425,8 @@ export default function PhotoCraftWorkspace({
     }
   }
 
-  function exportAs() {
-    const answer = window.prompt?.("Exportar como — formato (png ou jpg):", "png");
+  async function exportAs() {
+    const answer = await askText("Exportar como — formato (png ou jpg):", "png");
     if (answer == null) return;
     const format = answer.trim().toLowerCase().replace(".", "");
     if (format === "png") exportImage("png");
@@ -1424,7 +1466,7 @@ export default function PhotoCraftWorkspace({
     setTool("Mover");
     setRightPanel("Propriedades");
     notify("Transformação livre: arraste para mover e ajuste escala e rotação nos campos de Transformar.");
-    setTimeout(() => scaleInputRef.current?.focus(), 0);
+    setTimeout(() => scaleInputRef.current?.querySelector("input")?.focus(), 0);
   }
 
   function runMenuCommand(command) {
@@ -1773,6 +1815,7 @@ export default function PhotoCraftWorkspace({
     if (ctrl && key === "Enter") return pathToSelection(workPath.length ? closeWorkPath() : paths.at(-1));
     if (key === "Enter" && tool === "Caneta") return closeWorkPath();
     if (key === "Escape") {
+      setOpenSlot(null);
       setWorkPath([]);
       setCropRect(null);
       return;
@@ -1882,17 +1925,73 @@ export default function PhotoCraftWorkspace({
         </select>
       </div>
       <div className="grid min-h-[720px] grid-cols-[54px_230px_minmax(600px,1fr)_300px] gap-2">
-        <aside className="flex flex-col items-center gap-1 rounded border border-slate-800 bg-[#242424] p-1">
-          {TOOLS.map(([shortcut, name, Icon]) => (
-            <button
-              key={name}
-              title={`${name} (${shortcut})`}
-              onClick={() => setTool(name)}
-              className={`grid h-9 w-9 place-items-center rounded ${tool === name ? "bg-blue-500 text-white" : "text-slate-300 hover:bg-slate-700"}`}
-            >
-              <Icon size={17} />
-            </button>
-          ))}
+        <aside aria-label="Ferramentas do MMPhoto" className="flex flex-col items-center gap-1 rounded border border-slate-800 bg-[#242424] p-1">
+          {TOOL_SLOTS.map((slot, index) => {
+            const shown = TOOL_BY_NAME[slot.tools.includes(tool) ? tool : slotChoice[index] || slot.tools[0]];
+            const Icon = shown.Icon;
+            const label = `${shown.name} (${shown.shortcut})`;
+            const open = openSlot === index;
+            return (
+              <div key={shown.name + index} className="relative">
+                <button
+                  type="button"
+                  aria-label={label}
+                  aria-pressed={tool === shown.name}
+                  title={slot.label ? `${label} · clique com o botão direito para ${slot.label.toLowerCase()}` : label}
+                  onClick={() => {
+                    setTool(shown.name);
+                    setOpenSlot(null);
+                  }}
+                  onContextMenu={(event) => {
+                    if (!slot.label) return;
+                    event.preventDefault();
+                    setOpenSlot(open ? null : index);
+                  }}
+                  className={`grid h-9 w-9 place-items-center rounded ${tool === shown.name ? "bg-blue-500 text-white" : "text-slate-300 hover:bg-slate-700"}`}
+                >
+                  <Icon size={17} />
+                </button>
+                {slot.label && (
+                  <button
+                    type="button"
+                    aria-label={`Abrir grupo: ${slot.label}`}
+                    title={slot.label}
+                    aria-haspopup="true"
+                    aria-expanded={open}
+                    onClick={() => setOpenSlot(open ? null : index)}
+                    className="absolute bottom-0 right-0 h-2.5 w-2.5 text-slate-400 hover:text-white"
+                  >
+                    <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 h-0 w-0 border-l-[4px] border-t-[4px] border-l-transparent border-t-current" style={{ transform: "rotate(-90deg)" }} />
+                  </button>
+                )}
+                {open && (
+                  <div role="group" aria-label={slot.label} className="absolute left-full top-0 z-50 ml-1 min-w-44 border border-[#555] bg-[#292929] py-1 shadow-xl">
+                    {slot.tools.map((name) => {
+                      const item = TOOL_BY_NAME[name];
+                      const ItemIcon = item.Icon;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          aria-label={`${name} (${item.shortcut})`}
+                          aria-pressed={tool === name}
+                          onClick={() => {
+                            setTool(name);
+                            setOpenSlot(null);
+                          }}
+                          className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-[11px] hover:bg-blue-600 ${tool === name ? "text-white" : "text-slate-300"}`}
+                        >
+                          <ItemIcon size={14} />
+                          <span className="flex-1">{name}</span>
+                          <span className="text-slate-500">{item.shortcut}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <span className="my-1 h-px w-8 bg-slate-700" />
           <span className="relative h-9 w-9">
             <i className="absolute left-0 top-0 h-7 w-7 border-2 border-white bg-black" style={{ backgroundColor: colors.fg }}>
@@ -2087,7 +2186,13 @@ export default function PhotoCraftWorkspace({
                         contentEditable={editingText === layer.id}
                         suppressContentEditableWarning
                         aria-label={`Texto de ${layer.name}`}
-                        onBlur={(event) => editingText === layer.id && commitText(layer, event.currentTarget)}
+                        onFocus={() => {
+                          if (editingText === layer.id) textEditArmed.current = true;
+                        }}
+                        onInput={() => {
+                          if (editingText === layer.id) textEditArmed.current = true;
+                        }}
+                        onBlur={(event) => editingText === layer.id && textEditArmed.current && commitText(layer, event.currentTarget)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault();
@@ -2189,10 +2294,10 @@ export default function PhotoCraftWorkspace({
                 <section className="border-b border-slate-700 pb-3">
                   <h4 className="mb-2 text-[10px] font-bold uppercase text-slate-400">Transformar</h4>
                   <div className="grid grid-cols-2 gap-2 text-[10px]">
-                    <label>X <input aria-label="Posição X da camada" type="number" value={selectedLayer?.transform.x ?? 0} onChange={(event) => updateTransform("x", event.target.value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
-                    <label>Y <input aria-label="Posição Y da camada" type="number" value={selectedLayer?.transform.y ?? 0} onChange={(event) => updateTransform("y", event.target.value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
-                    <label>Escala <input ref={scaleInputRef} aria-label="Escala da camada" type="number" value={selectedLayer?.transform.scale ?? 100} onChange={(event) => updateTransform("scale", event.target.value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
-                    <label>Rotação <input aria-label="Rotação da camada" type="number" value={selectedLayer?.transform.rotation ?? 0} onChange={(event) => updateTransform("rotation", event.target.value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
+                    <label>X <NumericField aria-label="Posição X da camada" value={selectedLayer?.transform.x ?? 0} onChange={(value) => updateTransform("x", value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
+                    <label>Y <NumericField aria-label="Posição Y da camada" value={selectedLayer?.transform.y ?? 0} onChange={(value) => updateTransform("y", value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
+                    <label ref={scaleInputRef}>Escala <NumericField aria-label="Escala da camada" value={selectedLayer?.transform.scale ?? 100} onChange={(value) => updateTransform("scale", value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
+                    <label>Rotação <NumericField aria-label="Rotação da camada" value={selectedLayer?.transform.rotation ?? 0} onChange={(value) => updateTransform("rotation", value)} className="w-full rounded border border-slate-700 bg-[#171717] p-1" /></label>
                   </div>
                 </section>
                 <label className="block text-[10px] text-slate-400">Modo
@@ -2340,6 +2445,7 @@ export default function PhotoCraftWorkspace({
           </div>
         </aside>
       </div>
+      {textPromptDialog}
     </section>
   );
 }

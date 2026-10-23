@@ -16,7 +16,7 @@ describe("MM3D · ferramentas de um clique do MCP", () => {
 
     const preview = await act(() => provider.analyze("transform.center", {}));
     expect(preview).toEqual({ ok: true, count: 1, summary: "Prévia (nada foi alterado): Cubo centralizado no viewport" });
-    expect(screen.getByLabelText("X de Cubo")).toHaveValue(52);
+    expect(screen.getByLabelText("X de Cubo")).toHaveValue("52");
     expect(await act(() => provider.analyze("anim.clear", {}))).toEqual({ ok: false, summary: "Cubo não tem quadros-chave." });
 
     // Duas ações seguidas sem redesenhar: a segunda lê a cena deixada pela primeira.
@@ -24,7 +24,7 @@ describe("MM3D · ferramentas de um clique do MCP", () => {
     expect(centered).toEqual({ ok: true, count: 1, summary: "Cubo centralizado no viewport" });
     expect(added).toEqual({ ok: true, count: 1, summary: "1 esfera(s) adicionado(s) à cena" });
     expect(screen.getByRole("button", { name: "Objeto Cubo" })).toHaveStyle({ left: "50%" });
-    expect(screen.getByLabelText("X de Esfera 1")).toHaveValue(50);
+    expect(screen.getByLabelText("X de Esfera 1")).toHaveValue("50");
     expect(screen.getByRole("status")).toHaveTextContent("MCP · 1 esfera(s) adicionado(s) à cena");
     expect(provider.canUndo()).toBe(true);
 
@@ -32,11 +32,11 @@ describe("MM3D · ferramentas de um clique do MCP", () => {
       expect(provider.undo()).toBe(true);
     });
     expect(screen.queryByRole("button", { name: "Esfera 1" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("X de Cubo")).toHaveValue(50);
+    expect(screen.getByLabelText("X de Cubo")).toHaveValue("50");
     act(() => {
       expect(provider.undo()).toBe(true);
     });
-    expect(screen.getByLabelText("X de Cubo")).toHaveValue(52);
+    expect(screen.getByLabelText("X de Cubo")).toHaveValue("52");
     expect(screen.getByRole("status")).toHaveTextContent("MCP · Última ação desfeita.");
 
     const world = await act(() => provider.apply("world.lighting", { preset: "night", grid: true }));

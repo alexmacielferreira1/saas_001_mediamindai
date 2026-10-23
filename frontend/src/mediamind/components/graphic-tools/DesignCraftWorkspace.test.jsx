@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesignCraftWorkspace, { spreadLabels, spreadPages } from "./DesignCraftWorkspace";
 
@@ -37,6 +37,23 @@ function drawOn(key, from, to, init = {}) {
 }
 const tool = (name) => fireEvent.click(screen.getByTitle(new RegExp(`^${name} \\(`)));
 const frames = (type) => document.querySelectorAll(`[data-frame-type="${type}"]`);
+
+describe("MMDesign — barra de ferramentas", () => {
+  it("cada ferramenta tem ícone próprio, aria-label e aria-pressed", () => {
+    render(<DesignCraftWorkspace assets={[]} onOpenFiles={vi.fn()} />);
+    const names = ["Seleção", "Seleção direta", "Texto", "Quadro", "Caneta", "Linha", "Mão", "Zoom"];
+    const bar = within(screen.getByRole("complementary", { name: "Ferramentas do MMDesign" }));
+    const buttons = names.map((name) => bar.getByRole("button", { name }));
+    const icons = buttons.map((button) => [...button.querySelector("svg").classList].find((c) => c.startsWith("lucide-")));
+    expect(new Set(icons).size).toBe(names.length);
+    expect(icons[names.indexOf("Linha")]).toBe("lucide-minus");
+    expect(icons[names.indexOf("Seleção direta")]).toBe("lucide-mouse-pointer-click");
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(bar.getByRole("button", { name: "Linha" }));
+    expect(bar.getByRole("button", { name: "Linha" })).toHaveAttribute("aria-pressed", "true");
+    expect(buttons[0]).toHaveAttribute("aria-pressed", "false");
+  });
+});
 
 describe("MMDesign", () => {
   it("computes spreads like InDesign", () => {

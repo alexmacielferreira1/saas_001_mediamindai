@@ -113,6 +113,17 @@ describe("agendamento de trechos", () => {
     expect(planAudioSegments({ clips, trackState: {} }).find((item) => item.clipId === "v2").bus).toBe("V");
   });
 
+  it("vídeo vinculado (linkId) cede o som ao clipe de áudio do par, mesmo deslocado ou mudo", () => {
+    const clips = [
+      clip({ id: "v", track: "V1", type: "video/mp4", assetId: "x", linkId: "L1" }),
+      clip({ id: "a", track: "A1", type: "video/mp4", assetId: "x", linkId: "L1", start: 3, enabled: false }),
+      clip({ id: "solo", track: "V2", type: "video/mp4", assetId: "y", linkId: "L2" }),
+    ];
+    // O par L1 está deslocado e o áudio desabilitado: o vídeo continua sem som (não duplica nem “ressuscita”).
+    // L2 perdeu o clipe de áudio: o vídeo volta a tocar o som próprio.
+    expect(audioClipsForMix(clips, {}).map((item) => item.id)).toEqual(["solo"]);
+  });
+
   it("leva o início do clipe e a curva de volume (ducking) para o trecho", () => {
     const keys = [[0, -6], [1, 0]];
     const [withKeys, withoutKeys, emptyKeys] = planAudioSegments({

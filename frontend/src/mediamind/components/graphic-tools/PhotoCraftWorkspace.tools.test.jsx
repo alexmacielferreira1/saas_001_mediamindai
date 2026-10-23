@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PhotoCraftWorkspace, {
   ADJUSTMENT_PRESETS,
@@ -110,6 +110,21 @@ function menu(item, command) {
 
 const doc = () => screen.getByLabelText("Documento do MMPhoto");
 
+// Diálogo próprio que substitui window.prompt (bloqueado no painel embutido).
+async function answer(label, text) {
+  const input = await screen.findByRole("textbox", { name: label });
+  fireEvent.change(input, { target: { value: text } });
+  await act(async () => {
+    fireEvent.submit(screen.getByRole("dialog", { name: label }));
+  });
+}
+
+// Ferramentas agrupadas em slots com flyout (como no Photoshop): abre o grupo e escolhe.
+function pickTool(group, label) {
+  fireEvent.click(screen.getByRole("button", { name: `Abrir grupo: ${group}` }));
+  fireEvent.click(within(screen.getByRole("group", { name: group })).getByRole("button", { name: label }));
+}
+
 describe("MMPhoto — funções puras", () => {
   it("aplica filtros CSS em pixels conforme a especificação", () => {
     const gray = applyFilterOps(new Uint8ClampedArray([255, 0, 0, 255]), [["grayscale", 1]]);
@@ -202,12 +217,23 @@ describe("MMPhoto — controles", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Exportado mmphoto-documento.png (1200 × 800 px)");
   });
 
-  it("Exportar como permite JPG", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("jpg");
+  it("Exportar como permite JPG pelo diálogo próprio (prompt nativo bloqueado)", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
     renderPhoto();
     fireEvent.click(screen.getByRole("button", { name: "Exportar como" }));
+    expect(await screen.findByRole("textbox", { name: "Exportar como — formato (png ou jpg):" })).toHaveValue("png");
+    await answer("Exportar como — formato (png ou jpg):", "jpg");
     await waitFor(() => expect(downloads).toEqual(["mmphoto-documento.jpg"]));
     expect(createdBlobs[0].type).toBe("image/jpeg");
+    expect(window.prompt).not.toHaveBeenCalled();
+  });
+
+  it("cancelar Exportar como não exporta nada", async () => {
+    renderPhoto();
+    fireEvent.click(screen.getByRole("button", { name: "Exportar como" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(downloads).toEqual([]);
   });
 
   it("Pincel pinta traço que segue o arraste, com desfazer e refazer", () => {
@@ -229,11 +255,11 @@ describe("MMPhoto — controles", () => {
   it("Borracha apaga com destination-out e Clone exige origem com Alt+clique", () => {
     renderPhoto();
     stageRect();
-    fireEvent.click(screen.getByRole("button", { name: "Borracha (E)" }));
+    pickTool("Ferramentas de pintura", "Borracha (E)");
     fireEvent.pointerDown(doc(), { clientX: 50, clientY: 50 });
     fireEvent.pointerUp(doc(), { clientX: 50, clientY: 50 });
     expect(log.some(([method, , , state]) => method === "drawImage" && state.globalCompositeOperation === "destination-out")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Clone (S)" }));
+    pickTool("Ferramentas de pintura", "Clone (S)");
     fireEvent.pointerDown(doc(), { clientX: 10, clientY: 10 });
     expect(screen.getByRole("status")).toHaveTextContent("Alt+clique para definir a origem");
     fireEvent.pointerDown(doc(), { clientX: 10, clientY: 10, altKey: true });
@@ -253,7 +279,7 @@ describe("MMPhoto — controles", () => {
     const shape = screen.getByLabelText("Seleção Letreiro").querySelector("rect");
     expect(shape).toHaveAttribute("x", "100");
     expect(shape).toHaveAttribute("width", "200");
-    fireEvent.click(screen.getByRole("button", { name: "Laço (L)" }));
+    pickTool("Ferramentas de seleção", "Laço (L)");
     fireEvent.pointerDown(doc(), { clientX: 10, clientY: 10 });
     fireEvent.pointerMove(doc(), { clientX: 90, clientY: 10 });
     fireEvent.pointerMove(doc(), { clientX: 90, clientY: 90 });
@@ -269,18 +295,22 @@ describe("MMPhoto — controles", () => {
     expect(screen.getByText("Doc: 1200 × 800 px")).toBeInTheDocument();
   });
 
-  it("Mover desloca a camada com histórico e Texto cria camada editável", () => {
+  it("Mover desloca a camada com histórico e Texto cria camada editável", async () => {
     renderPhoto();
     stageRect();
     fireEvent.pointerDown(doc(), { clientX: 100, clientY: 100 });
     fireEvent.pointerMove(doc(), { clientX: 140, clientY: 120 });
     fireEvent.pointerUp(doc(), { clientX: 140, clientY: 120 });
-    expect(screen.getByLabelText("Posição X da camada")).not.toHaveValue(0);
+    expect(screen.getByLabelText("Posição X da camada")).not.toHaveValue("0");
     expect(screen.getByText("▸ Mover")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Texto (T)" }));
     fireEvent.pointerDown(doc(), { clientX: 600, clientY: 400 });
     const text = screen.getByLabelText("Texto de Texto 5");
     expect(text).toHaveAttribute("contenteditable", "true");
+    // O mousedown padrão do navegador tira o foco logo após criar: não pode fechar a edição.
+    fireEvent.blur(text);
+    expect(text).toHaveAttribute("contenteditable", "true");
+    await waitFor(() => expect(document.activeElement).toBe(text));
     text.textContent = "Olá MMPhoto";
     fireEvent.blur(text);
     expect(text).toHaveTextContent("Olá MMPhoto");
@@ -301,8 +331,8 @@ describe("MMPhoto — controles", () => {
     expect(screen.getByRole("status")).toHaveTextContent("não estão disponíveis");
   });
 
-  it("fx, abas e itens de menu antes mortos respondem", () => {
-    vi.spyOn(window, "prompt").mockReturnValueOnce("600").mockReturnValueOnce("90");
+  it("fx, abas e itens de menu antes mortos respondem", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
     renderPhoto();
     fireEvent.click(screen.getByRole("button", { name: "Estilo de camada (fx)" }));
     expect(screen.getByRole("button", { name: "Estilo de camada (fx)" })).toHaveAttribute("aria-pressed", "true");
@@ -312,9 +342,16 @@ describe("MMPhoto — controles", () => {
     fireEvent.click(screen.getByRole("button", { name: "◉ Vermelho" }));
     expect(screen.getByRole("button", { name: "◉ Vermelho" })).toHaveAttribute("aria-pressed", "true");
     menu("Imagem", "Tamanho da imagem");
+    await answer(/^Tamanho da imagem — nova largura/, "600");
     expect(screen.getByText("Doc: 600 × 400 px")).toBeInTheDocument();
     menu("Imagem", "Rotação da imagem");
+    expect(await screen.findByRole("textbox", { name: "Rotação da imagem — ângulo (90, -90 ou 180):" })).toHaveValue("90");
+    await answer("Rotação da imagem — ângulo (90, -90 ou 180):", "90");
     expect(screen.getByText("Doc: 400 × 600 px")).toBeInTheDocument();
+    menu("Imagem", "Tamanho da imagem");
+    await answer(/^Tamanho da imagem — nova largura/, "abc");
+    expect(screen.getByRole("status")).toHaveTextContent("Largura inválida");
+    expect(window.prompt).not.toHaveBeenCalled();
     menu("3D", "Nova camada 3D");
     expect(screen.getByRole("status")).toHaveTextContent("não estão disponíveis");
     menu("Ajuda", "Atalhos do MMPhoto");
@@ -339,6 +376,77 @@ describe("MMPhoto — controles", () => {
     expect(screen.getByText("Pincel · 25 px")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "5", code: "Digit5" });
     expect(screen.getByText("Opacidade: 50%")).toBeInTheDocument();
+  });
+});
+
+describe("MMPhoto — barra de ferramentas em slots", () => {
+  const bar = () => within(screen.getByRole("complementary", { name: "Ferramentas do MMPhoto" }));
+  const slotButtons = () => bar().getAllByRole("button").filter((b) => !b.hasAttribute("aria-haspopup") && !b.closest('[role="group"]'));
+
+  it("agrupa como o Photoshop, sem ícone repetido e com aria-label/aria-pressed", () => {
+    renderPhoto();
+    expect(slotButtons().map((b) => b.getAttribute("aria-label"))).toEqual(["Mover (V)", "Letreiro (M)", "Recorte (C)", "Pincel (B)", "Caneta (P)", "Texto (T)", "Mão (H)", "Zoom (Z)"]);
+    for (const button of bar().getAllByRole("button")) {
+      expect(button).toHaveAttribute("aria-label");
+      if (!button.hasAttribute("aria-haspopup")) expect(button).toHaveAttribute("aria-pressed");
+    }
+    const icons = slotButtons().map((b) => [...b.querySelector("svg").classList].find((c) => c.startsWith("lucide-")));
+    expect(new Set(icons).size).toBe(icons.length);
+    expect(bar().getByRole("button", { name: "Mover (V)" })).toHaveAttribute("aria-pressed", "true");
+    expect(bar().queryByRole("button", { name: "Laço (L)" })).not.toBeInTheDocument();
+  });
+
+  it("o flyout lista o grupo, escolher troca a ferramenta e o slot passa a mostrar a ativa", () => {
+    renderPhoto();
+    const opener = bar().getByRole("button", { name: "Abrir grupo: Ferramentas de seleção" });
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    const group = within(screen.getByRole("group", { name: "Ferramentas de seleção" }));
+    expect(group.getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Letreiro (M)", "Laço (L)", "Seleção rápida (W)"]);
+    fireEvent.click(group.getByRole("button", { name: "Seleção rápida (W)" }));
+    expect(screen.queryByRole("group", { name: "Ferramentas de seleção" })).not.toBeInTheDocument();
+    expect(bar().getByRole("button", { name: "Seleção rápida (W)" })).toHaveAttribute("aria-pressed", "true");
+    expect(bar().queryByRole("button", { name: "Letreiro (M)" })).not.toBeInTheDocument();
+    expect(screen.getByText("Seleção rápida", { selector: "b" })).toBeInTheDocument();
+  });
+
+  it("atalhos selecionam a ferramenta e o slot mostra a ativa", () => {
+    renderPhoto();
+    fireEvent.keyDown(window, { key: "e" });
+    expect(bar().getByRole("button", { name: "Borracha (E)" })).toHaveAttribute("aria-pressed", "true");
+    expect(bar().queryByRole("button", { name: "Pincel (B)" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "l" });
+    expect(bar().getByRole("button", { name: "Laço (L)" })).toHaveAttribute("aria-pressed", "true");
+    // O slot de pintura lembra a última escolhida mesmo com outra ferramenta ativa.
+    expect(bar().getByRole("button", { name: "Borracha (E)" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.contextMenu(bar().getByRole("button", { name: "Borracha (E)" }));
+    expect(screen.getByRole("group", { name: "Ferramentas de pintura" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+  });
+});
+
+describe("MMPhoto — campos de transformação", () => {
+  it("apagar não vira 0, aceita '-' e decimal e confirma no blur", () => {
+    renderPhoto();
+    const x = screen.getByRole("spinbutton", { name: "Posição X da camada" });
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "" } });
+    expect(x).toHaveValue("");
+    expect(screen.queryByText("▸ Transformação livre")).not.toBeInTheDocument();
+    fireEvent.change(x, { target: { value: "-" } });
+    expect(x).toHaveValue("-");
+    fireEvent.change(x, { target: { value: "-15.5" } });
+    fireEvent.blur(x);
+    expect(x).toHaveValue("-15.5");
+    expect(screen.getAllByText("▸ Transformação livre").length).toBeGreaterThan(0);
+    fireEvent.focus(x);
+    fireEvent.change(x, { target: { value: "" } });
+    fireEvent.blur(x);
+    expect(x).toHaveValue("-15.5");
+    const scale = screen.getByRole("spinbutton", { name: "Escala da camada" });
+    fireEvent.change(scale, { target: { value: "150" } });
+    expect(scale).toHaveValue("150");
   });
 });
 

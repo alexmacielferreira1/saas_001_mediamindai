@@ -20,12 +20,12 @@ describe("MMEffects · ferramentas de um clique do MCP", () => {
 
     const preview = await act(() => provider.analyze("anim.spin", { turns: 1 }));
     expect(preview).toEqual({ ok: true, count: 2, summary: 'Prévia (nada foi alterado): Girar em "Controller" (0 s → 10 s) · 2 quadro(s)-chave' });
-    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(0);
+    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue("0");
 
     const result = await act(() => provider.apply("anim.spin", { turns: 1 }));
     expect(result).toEqual({ ok: true, count: 2, summary: 'Girar em "Controller" (0 s → 10 s) · 2 quadro(s)-chave' });
     expect(result.patch).toBeUndefined();
-    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(108);
+    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue("108");
     expect(status()).toHaveTextContent("MCP · Girar");
     expect(provider.canUndo()).toBe(true);
     // Mesmo depois de outro redesenho (ex.: mover a agulha), o desfazer continua disponível.
@@ -34,7 +34,7 @@ describe("MMEffects · ferramentas de um clique do MCP", () => {
     act(() => {
       expect(provider.undo()).toBe(true);
     });
-    await waitFor(() => expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(0));
+    await waitFor(() => expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue("0"));
 
     rerender(<EffectCraftWorkspace active={false} {...props} />);
     expect(currentMCPActions()).toBeNull();

@@ -3,53 +3,100 @@ import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { registerMCPActions } from "../../lib/mcpActions";
 import { mmvectorCatalogue, runMMVectorTool } from "./mmvectorMcpTools";
+import NumericField from "./NumericField";
 import {
-  Circle,
-  Crosshair,
-  Download,
-  Eraser,
-  Eye,
-  EyeOff,
+  ALargeSmall,
+  Activity,
+  Baseline,
   Blend,
   Brush,
+  CaseSensitive,
   ChevronDown,
   ChevronRight,
-  Hexagon,
+  Circle,
+  CircleDot,
+  CircleMinus,
+  CirclePlus,
+  Combine,
+  Contrast,
+  Crop,
+  Download,
+  Eraser,
+  Expand,
+  Eye,
+  EyeOff,
+  FlipHorizontal2,
+  Flower,
+  Grid2x2,
+  Grid3x3,
   Hand,
+  Hexagon,
+  Highlighter,
+  Italic,
   Layers3,
   Lasso,
+  Link2,
   Lock,
-  MousePointer2,
-  MoveDiagonal2,
   MoreHorizontal,
+  MousePointer,
+  MousePointer2,
+  Move,
+  MoveHorizontal,
+  PaintBucket,
+  Pencil,
+  PencilOff,
   PenTool,
+  PersonStanding,
   Pipette,
   Plus,
+  Pointer,
+  Printer,
+  Radius,
+  RectangleHorizontal,
+  RotateCcw,
+  RotateCw,
+  Ruler,
   Save,
-  ScanSearch,
+  Scaling,
+  Scissors,
+  Shapes,
+  Shell,
+  Shrink,
+  Signature,
+  Slash,
+  Slice,
+  Snowflake,
+  Split,
+  Spline,
   Square,
+  SquareDashedMousePointer,
+  SquareMousePointer,
+  SquareSplitHorizontal,
+  Star,
+  Sun,
+  Target,
+  TextCursor,
+  TextCursorInput,
+  Tornado,
   Trash2,
   Type,
   Upload,
-  RotateCcw,
-  RotateCw,
-  Scissors,
-  Sparkles,
-  Spline,
-  TextCursorInput,
   WandSparkles,
+  Waves,
+  Waypoints,
   ZoomIn,
 } from "lucide-react";
 
 // VectorCraft 0.7.0: barra Basic, na mesma ordem e com os mesmos atalhos
 // de crates/ui-egui/src/toolbar.rs. Cada entrada representa o primeiro item
 // visível de um slot; as alternativas pertencem ao menu expansível do slot.
-const TOOL_GROUPS = [
+// Cada ferramenta tem um ícone próprio (VectorCraftWorkspace.fields.test.jsx garante).
+export const TOOL_GROUPS = [
   {
     label: "Seleção",
     slots: [
       [["V", "Seleção", MousePointer2]],
-      [["A", "Seleção direta", MousePointer2], [null, "Seleção de grupo", MousePointer2]],
+      [["A", "Seleção direta", MousePointer], [null, "Seleção de grupo", SquareDashedMousePointer]],
       [["Q", "Laço", Lasso], ["Y", "Varinha mágica", WandSparkles]],
     ],
   },
@@ -57,27 +104,27 @@ const TOOL_GROUPS = [
     label: "Formas",
     slots: [
       [
-        ["M", "Retângulo", Square], [null, "Retângulo arredondado", Square],
-        [null, "Estrela", Sparkles], ["\\", "Segmento de linha", Spline],
-        [null, "Arco", Spline], [null, "Espiral", RotateCw],
-        [null, "Grade retangular", Crosshair], [null, "Grade polar", Crosshair],
-        [null, "Clarão", Sparkles],
+        ["M", "Retângulo", Square], [null, "Retângulo arredondado", RectangleHorizontal],
+        [null, "Estrela", Star], ["\\", "Segmento de linha", Slash],
+        [null, "Arco", Radius], [null, "Espiral", Shell],
+        [null, "Grade retangular", Grid3x3], [null, "Grade polar", Target],
+        [null, "Clarão", Sun],
       ],
       [["L", "Elipse", Circle]],
       [[null, "Polígono", Hexagon]],
-      [["Shift+N", "Modelador", Sparkles]],
+      [["Shift+N", "Modelador", Shapes]],
     ],
   },
   {
     label: "Desenhar",
     slots: [
-      [["N", "Lápis", PenTool], [null, "Suavizar", Spline], [null, "Borracha de caminho", Eraser], [null, "Unir", Spline]],
+      [["N", "Lápis", Pencil], [null, "Suavizar", Waves], [null, "Borracha de caminho", PencilOff], [null, "Unir", Link2]],
       [
-        ["Shift+E", "Borracha", Eraser], ["C", "Tesoura", Scissors], [null, "Faca", Scissors],
-        [null, "Corte espelhado", Scissors], [null, "Corte em linha", Scissors], [null, "Corte retangular", Scissors],
+        ["Shift+E", "Borracha", Eraser], ["C", "Tesoura", Scissors], [null, "Faca", Slice],
+        [null, "Corte espelhado", SquareSplitHorizontal], [null, "Corte em linha", Split], [null, "Corte retangular", Crop],
       ],
-      [["B", "Pincel", Brush], ["Shift+B", "Pincel de manchas", Brush]],
-      [["P", "Caneta", PenTool], ["+", "Adicionar ponto de ancoragem", PenTool], ["-", "Excluir ponto de ancoragem", PenTool], ["Shift+C", "Ponto de ancoragem", PenTool]],
+      [["B", "Pincel", Brush], ["Shift+B", "Pincel de manchas", Highlighter]],
+      [["P", "Caneta", PenTool], ["+", "Adicionar ponto de ancoragem", CirclePlus], ["-", "Excluir ponto de ancoragem", CircleMinus], ["Shift+C", "Ponto de ancoragem", CircleDot]],
       [["Shift+~", "Curvatura", Spline]],
     ],
   },
@@ -85,41 +132,41 @@ const TOOL_GROUPS = [
     label: "Modificar",
     slots: [
       [
-        ["Shift+W", "Largura", MoveDiagonal2], ["Shift+R", "Deformar", Spline], [null, "Redemoinho", RotateCw],
-        [null, "Contrair", MoveDiagonal2], [null, "Inflar", MoveDiagonal2], [null, "Recortar", Spline],
-        [null, "Cristalizar", Sparkles], [null, "Enrugar", Spline],
+        ["Shift+W", "Largura", MoveHorizontal], ["Shift+R", "Deformar", Pointer], [null, "Redemoinho", Tornado],
+        [null, "Contrair", Shrink], [null, "Inflar", Expand], [null, "Recortar", Flower],
+        [null, "Cristalizar", Snowflake], [null, "Enrugar", Activity],
       ],
       [
-        ["R", "Girar", RotateCw], ["O", "Refletir", RotateCcw], ["S", "Escala", MoveDiagonal2],
-        [null, "Inclinar", MoveDiagonal2], [null, "Remodelar", Spline], ["E", "Transformação livre", MoveDiagonal2],
-        [null, "Distorção de marionete", MoveDiagonal2],
+        ["R", "Girar", RotateCw], ["O", "Refletir", FlipHorizontal2], ["S", "Escala", Scaling],
+        [null, "Inclinar", Italic], [null, "Remodelar", Waypoints], ["E", "Transformação livre", Move],
+        [null, "Distorção de marionete", PersonStanding],
       ],
       [
-        ["Shift+M", "Construtor de formas", Blend], ["K", "Balde de pintura ao vivo", Brush],
-        ["Shift+L", "Seleção de pintura ao vivo", MousePointer2], ["W", "Mesclagem", Blend],
+        ["Shift+M", "Construtor de formas", Combine], ["K", "Balde de pintura ao vivo", PaintBucket],
+        ["Shift+L", "Seleção de pintura ao vivo", SquareMousePointer], ["W", "Mesclagem", Blend],
       ],
     ],
   },
   {
     label: "Texto",
     slots: [
-      [[null, "Texto em área", TextCursorInput], [null, "Texto em um caminho", Type], [null, "Texto vertical em área", TextCursorInput], [null, "Texto vertical em um caminho", Type]],
-      [["T", "Texto", Type], [null, "Texto vertical", Type], ["Shift+T", "Texto de toque", Type]],
+      [[null, "Texto em área", TextCursorInput], [null, "Texto em um caminho", Signature], [null, "Texto vertical em área", TextCursor], [null, "Texto vertical em um caminho", ALargeSmall]],
+      [["T", "Texto", Type], [null, "Texto vertical", Baseline], ["Shift+T", "Texto de toque", CaseSensitive]],
     ],
   },
   {
     label: "Navegar",
     slots: [
       [["Z", "Zoom", ZoomIn]],
-      [["H", "Mão", Hand], [null, "Divisão de impressão", Crosshair]],
+      [["H", "Mão", Hand], [null, "Divisão de impressão", Printer]],
       [["Shift+H", "Girar visualização", RotateCcw]],
     ],
   },
   {
     label: "Cor",
     slots: [
-      [["G", "Gradiente", Crosshair], ["U", "Malha", Crosshair]],
-      [["I", "Conta-gotas", Pipette], [null, "Medida", MoveDiagonal2]],
+      [["G", "Gradiente", Contrast], ["U", "Malha", Grid2x2]],
+      [["I", "Conta-gotas", Pipette], [null, "Medida", Ruler]],
     ],
   },
 ];
@@ -165,7 +212,7 @@ export const ARTBOARD_W = 820;
 export const ARTBOARD_H = 620;
 const BRUSH_RADIUS = 40;
 const ZOOM_STEPS = [25, 33, 50, 66, 72, 100, 125, 150];
-const SELECT_TOOLS = ["Seleção", "Seleção direta", "Laço", "Seleção de grupo", "Transformação livre", "Seleção de pintura ao vivo"];
+const SELECT_TOOLS = ["Seleção", "Seleção direta", "Laço"];
 const WARP_TOOLS = ["Deformar", "Redemoinho", "Contrair", "Inflar", "Recortar", "Cristalizar", "Enrugar"];
 const PRESET_PATHS = {
   Caneta: "M4 92 L34 18 L58 72 L96 8",
@@ -181,7 +228,10 @@ const UNIT_INFO = {
   Centímetros: [2.54 / 96, "cm"],
   Polegadas: [1 / 96, "pol"],
 };
-const UNSUPPORTED_TOOLS = {
+export const UNSUPPORTED_TOOLS = {
+  "Seleção de grupo": "Seleção de grupo ainda não está disponível (o MMVector não tem grupos). Use Seleção (V) com Shift+clique.",
+  "Transformação livre": "Transformação livre ainda não está disponível. Use as alças da Seleção (V), Girar (R), Escala (S) ou Inclinar.",
+  "Seleção de pintura ao vivo": "Seleção de pintura ao vivo ainda não está disponível. Use Balde de pintura ao vivo (K) ou Seleção (V).",
   Malha: "Malha de degradê ainda não está disponível no MMVector web. Use a ferramenta Gradiente (G).",
   "Divisão de impressão": "Divisão de impressão não está disponível no navegador. Use Exportar para gerar SVG ou PNG.",
   "Girar visualização": "Girar visualização ainda não está disponível. Gire o objeto com a ferramenta Girar (R).",
@@ -193,6 +243,7 @@ const UNSUPPORTED_TOOLS = {
   "Texto vertical em um caminho": "Texto vertical em um caminho ainda não está disponível. Use Texto em um caminho.",
 };
 const TOOL_HINTS = {
+  "Seleção direta": "Arraste um ponto de ancoragem do objeto selecionado para movê-lo; fora dos pontos, arraste para mover o caminho.",
   Mão: "Arraste para mover a visualização.",
   Caneta: "Clique para pontos de canto, clique e arraste para curvas; Enter conclui; clique no primeiro ponto fecha.",
   Curvatura: "Clique para adicionar pontos suaves; Enter conclui; clique no primeiro ponto fecha.",
@@ -704,6 +755,26 @@ function parseLength(text) {
   const toPx = { px: 1, pt: 1 / 0.75, mm: 96 / 25.4, cm: 96 / 2.54, pol: 96, in: 96 }[unit];
   return value > 0 ? value * toPx : 1;
 }
+// Tipografia real dos objetos de texto (painéis Texto e Parágrafo). Sem valor definido,
+// o texto mantém a aparência original (48 px, peso 900, entrelinha = tamanho).
+const FONT_FAMILIES = ["Source Sans 3", "Inter", "Arial"];
+const FONT_WEIGHTS = { Regular: 400, Semibold: 600, Bold: 700, Black: 900 };
+const TEXT_ALIGNS = ["left", "center", "right"];
+const DEFAULT_FONT_SIZE = 48;
+function fontStack(family) {
+  return family ? `"${family}", Arial, sans-serif` : undefined;
+}
+function textStyle(object) {
+  const style = {};
+  if (object.vertical) style.writingMode = "vertical-rl";
+  if (object.fontFamily) style.fontFamily = fontStack(object.fontFamily);
+  if (object.fontSize) style.fontSize = `${object.fontSize}px`;
+  if (object.fontWeight) style.fontWeight = object.fontWeight;
+  if (object.lineHeight) style.lineHeight = `${object.lineHeight}px`;
+  if (object.tracking) style.letterSpacing = `${object.tracking / 1000}em`;
+  if (object.textAlign) style.textAlign = object.textAlign;
+  return Object.keys(style).length ? style : undefined;
+}
 function cssTransform(object) {
   let transform = `rotate(${object.rotation ?? 0}deg)`;
   if (object.flipX || object.flipY) transform += ` scale(${object.flipX ? -1 : 1}, ${object.flipY ? -1 : 1})`;
@@ -866,7 +937,19 @@ function objectExportNode(object) {
     children.push(node("path", { d: presetPath(object.drawingTool), transform: `scale(${round2(w / 100)} ${round2(h / 100)})`, fill: "none", stroke: object.stroke || object.color, strokeWidth: object.drawingTool === "Pincel" ? 12 : strokeWidth || 6, strokeLinecap: object.drawingTool === "Pincel" ? "round" : "butt", strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" }));
   } else if (object.kind === "Texto") {
     const lines = String(object.text || object.name).split("\n");
-    children.push(node("text", { fill: object.color, fontFamily: "Inter, Arial, sans-serif", fontSize: 48, fontWeight: 900, writingMode: object.vertical ? "vertical-rl" : undefined }, lines.map((line, index) => node("tspan", { x: 0, y: 40 + index * 48 }, [line]))));
+    const size = object.fontSize || DEFAULT_FONT_SIZE;
+    const leading = object.lineHeight || size;
+    const align = object.textAlign || "left";
+    const anchorX = { left: 0, center: round2(w / 2), right: w }[align];
+    children.push(node("text", {
+      fill: object.color,
+      fontFamily: fontStack(object.fontFamily) || "Inter, Arial, sans-serif",
+      fontSize: size,
+      fontWeight: object.fontWeight || 900,
+      letterSpacing: object.tracking ? `${object.tracking / 1000}em` : undefined,
+      textAnchor: align === "left" ? undefined : align === "center" ? "middle" : "end",
+      writingMode: object.vertical ? "vertical-rl" : undefined,
+    }, lines.map((line, index) => node("tspan", { x: anchorX, y: round2((size * 40) / 48 + index * leading) }, [line]))));
   } else {
     if (object.gradient) defs.push(gradientNode(object, idp));
     const paint = paintFor(object, idp);
@@ -952,6 +1035,12 @@ function sanitizeObject(raw) {
     fillRule: raw.fillRule === "evenodd" ? "evenodd" : undefined,
     linecap: ["round", "butt", "square"].includes(raw.linecap) ? raw.linecap : undefined,
     op: ["unite", "minusFront", "minusBack", "intersect", "exclude", "crop", "trim", "outline"].includes(raw.op) ? raw.op : undefined,
+    fontFamily: FONT_FAMILIES.includes(raw.fontFamily) ? raw.fontFamily : undefined,
+    fontWeight: Object.values(FONT_WEIGHTS).includes(raw.fontWeight) ? raw.fontWeight : undefined,
+    fontSize: raw.fontSize === undefined ? undefined : number(raw.fontSize, 1, 1000, DEFAULT_FONT_SIZE),
+    lineHeight: raw.lineHeight === undefined ? undefined : number(raw.lineHeight, 1, 2000, DEFAULT_FONT_SIZE),
+    tracking: raw.tracking === undefined ? undefined : number(raw.tracking, -1000, 1000, 0),
+    textAlign: TEXT_ALIGNS.includes(raw.textAlign) ? raw.textAlign : undefined,
   };
   for (const key of ["visible", "locked", "panelOnly", "filled", "smooth", "flipX", "flipY", "vertical", "noFill", "onPath", "shadow"]) object[key] = key === "visible" ? raw[key] !== false : raw[key] === true;
   if (raw.gradient && color(raw.gradient.from) && color(raw.gradient.to)) object.gradient = { from: raw.gradient.from, to: raw.gradient.to, angle: number(raw.gradient.angle, -360, 360, 90) };
@@ -1111,6 +1200,8 @@ export default function VectorCraftWorkspace({
   const [notice, setNotice] = useState("");
   const [guide, setGuide] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
+  const [toolLabelsHidden, setToolLabelsHidden] = useGraphicDraftState("VectorCraftWorkspace.jsx:toolLabelsHidden", false);
+  const [moreToolsOpen, setMoreToolsOpen] = useState(null);
   const draftScope = useWorkScope();
   const transformRef = useRef(null);
   const drawingRef = useRef(null);
@@ -1343,6 +1434,9 @@ export default function VectorCraftWorkspace({
     );
   }
   function patchObject(key, value) {
+    // Defesa: um campo numérico nunca pode gravar NaN/Infinity (a forma sumiria da prancheta).
+    if (typeof value === "number" && !Number.isFinite(value)) return;
+    if (!selectedObject) return;
     setObjects((old) =>
       old.map((object) =>
         object.id === selectedObject ? { ...object, [key]: value } : object,
@@ -2197,12 +2291,53 @@ export default function VectorCraftWorkspace({
     return undefined;
   }
 
+  // Seleção direta: pontos de ancoragem do objeto em coordenadas de prancheta. Caminhos
+  // só com retas usam os pontos reais; curvas são amostradas (como as demais ferramentas
+  // de ponto de ancoragem). Texto e formas compostas não têm pontos editáveis.
+  function directSubpaths(object) {
+    if (!object || object.locked || object.panelOnly || object.kind === "Texto" || object.parts) return null;
+    const curved = !isPathObject(object) || /[CcSsQqTtAa]/.test(object.d || "");
+    return canvasSubpaths(object, curved ? 8 : 1);
+  }
+  function startDirectSelect(event, object) {
+    const subpaths = directSubpaths(object);
+    if (!subpaths) return false;
+    const start = canvasPoint(event);
+    let found = null;
+    subpaths.forEach((subpath, subIndex) => subpath.points.forEach((point, index) => {
+      const gap = distance(point, start);
+      if (gap <= 14 && (!found || gap < found.gap)) found = { subIndex, index, gap, origin: point };
+    }));
+    if (!found) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    beginGesture();
+    suppressClickRef.current = true;
+    setSelectedObject(object.id);
+    const style = { ...pathStyle(object), smooth: object.smooth };
+    let moved = false;
+    trackDrag((moveEvent) => {
+      const point = canvasPoint(moveEvent);
+      const target = [snapValue(found.origin[0] + point[0] - start[0]), snapValue(found.origin[1] + point[1] - start[1])];
+      if (!moved && distance(target, found.origin) < 1) return;
+      moved = true;
+      const next = subpaths.map((subpath, subIndex) => (subIndex === found.subIndex
+        ? { ...subpath, points: subpath.points.map((item, index) => (index === found.index ? target : item)) }
+        : subpath));
+      patchObjectValues(object.id, { ...style, ...pathPatchFromCanvas(next) });
+    }, () => {
+      if (moved) setNotice("Ponto de ancoragem movido.");
+    });
+    return true;
+  }
+
   function handleObjectPointerDown(event, object) {
     if (event.button) return;
     if (tool === "Borracha") {
       if (!object.locked) startEraser(event, object);
       return;
     }
+    if (tool === "Seleção direta" && !event.shiftKey && startDirectSelect(event, object)) return;
     if (SELECT_TOOLS.includes(tool)) {
       if (event.shiftKey) {
         event.preventDefault();
@@ -2456,6 +2591,7 @@ export default function VectorCraftWorkspace({
     if (key === "Escape") {
       finishPen();
       setOpenMenu(null);
+      setMoreToolsOpen(null);
       setGuide(null);
       return;
     }
@@ -2514,6 +2650,14 @@ export default function VectorCraftWorkspace({
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [openMenu]);
+  useEffect(() => {
+    if (!moreToolsOpen) return undefined;
+    const close = (event) => {
+      if (!event.target.closest?.("[data-vector-tools]")) setMoreToolsOpen(null);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [moreToolsOpen]);
 
   function applyToolbarFill(value) {
     setFill(value);
@@ -2528,6 +2672,15 @@ export default function VectorCraftWorkspace({
   }
   const [unitFactor, unitSuffix] = UNIT_INFO[units] || UNIT_INFO.Pixels;
   const showLength = (value) => `${String(round2((value || 0) * unitFactor)).replace(".", ",")} ${unitSuffix}`;
+  const directAnchors = tool === "Seleção direta" ? directSubpaths(active) : null;
+  const unitProps = { unitFactor, unitSuffix, showLength };
+  const allTools = TOOL_GROUPS.flatMap((group) => group.slots.flat().map(([shortcut, name]) => ({ group: group.label, shortcut, name })));
+  function pickTool(name) {
+    setSlotTools((current) => ({ ...current, [TOOL_SLOTS[name]]: name }));
+    chooseTool(name);
+    setOpenToolGroup(null);
+    setMoreToolsOpen(null);
+  }
 
   return (
     <section ref={sectionRef} className="space-y-2 bg-[#151515] text-slate-200">
@@ -2614,28 +2767,40 @@ export default function VectorCraftWorkspace({
       </div>
       <div className="grid min-h-[720px] grid-cols-[56px_minmax(600px,1fr)_44px_330px] gap-px bg-[#111]">
         <aside className="flex max-h-[720px] flex-col items-center overflow-x-hidden overflow-y-auto rounded border border-slate-800 bg-[#303030] px-1 py-1">
-          <button className="mb-1 w-full text-left text-lg text-slate-400" title="Recolher ferramentas">«</button>
+          <button
+            aria-label="Recolher rótulos das ferramentas"
+            aria-pressed={Boolean(toolLabelsHidden)}
+            title={toolLabelsHidden ? "Mostrar rótulos das ferramentas" : "Recolher rótulos das ferramentas"}
+            onClick={() => setToolLabelsHidden((value) => !value)}
+            className="mb-1 w-full text-left text-lg text-slate-400"
+          >
+            {toolLabelsHidden ? "»" : "«"}
+          </button>
           {TOOL_GROUPS.map((group) => (
             <div key={group.label} className="mb-2 w-full">
-              <p className="mb-1 w-full truncate text-center text-[9px] text-slate-300">{group.label}</p>
+              {!toolLabelsHidden && <p className="mb-1 w-full truncate text-center text-[9px] text-slate-300">{group.label}</p>}
               <div className="grid grid-cols-1 gap-1">
                 {group.slots.map((slot, slotIndex) => {
                   const slotKey = `${group.label}-${slotIndex}`;
                   const shown = slot.find(([, name]) => name === slotTools[slotKey]) ?? slot[0];
                   const [shortcut, name, Icon] = shown;
+                  const unsupported = Boolean(UNSUPPORTED_TOOLS[name]);
                   return (
                     <div key={slotKey} className="relative">
                       <button
                         aria-label={toolTitle(shortcut, name)}
-                        title={toolTitle(shortcut, name)}
+                        aria-pressed={tool === name}
+                        aria-disabled={unsupported || undefined}
+                        title={unsupported ? `${toolTitle(shortcut, name)} — Ainda não disponível` : toolTitle(shortcut, name)}
                         onClick={() => { chooseTool(name); setOpenToolGroup(null); }}
-                        className={`grid h-8 w-full place-items-center rounded ${tool === name ? "bg-[#202020] text-white" : "text-slate-300 hover:bg-[#414141]"}`}
+                        className={`grid h-8 w-full place-items-center rounded ${unsupported ? "opacity-40" : ""} ${tool === name ? "bg-[#202020] text-white" : "text-slate-300 hover:bg-[#414141]"}`}
                       >
                         <Icon size={18} strokeWidth={1.7} />
                       </button>
                       {slot.length > 1 && (
                         <button
                           aria-label={`Abrir grupo de ${name}`}
+                          aria-expanded={openToolGroup === slotKey}
                           title={`Outras ferramentas de ${name}`}
                           onClick={() => setOpenToolGroup((current) => current === slotKey ? null : slotKey)}
                           className="absolute bottom-0 right-0 z-10 h-3 w-3 border-b-[6px] border-l-[6px] border-b-slate-300 border-l-transparent"
@@ -2643,21 +2808,22 @@ export default function VectorCraftWorkspace({
                       )}
                       {openToolGroup === slotKey && (
                         <div className="mt-1 grid gap-1 border-y border-[#555] bg-[#242424] py-1" role="menu" aria-label={`Grupo de ${name}`}>
-                          {slot.map(([optionShortcut, optionName, OptionIcon]) => (
-                            <button
-                              key={optionName}
-                              aria-label={toolTitle(optionShortcut, optionName)}
-                              title={toolTitle(optionShortcut, optionName)}
-                              onClick={() => {
-                                setSlotTools((current) => ({ ...current, [slotKey]: optionName }));
-                                chooseTool(optionName);
-                                setOpenToolGroup(null);
-                              }}
-                              className={`grid h-8 place-items-center rounded ${tool === optionName ? "bg-[#202020] text-white" : "text-slate-300 hover:bg-[#414141]"}`}
-                            >
-                              <OptionIcon size={17} strokeWidth={1.7} />
-                            </button>
-                          ))}
+                          {slot.map(([optionShortcut, optionName, OptionIcon]) => {
+                            const optionUnsupported = Boolean(UNSUPPORTED_TOOLS[optionName]);
+                            return (
+                              <button
+                                key={optionName}
+                                aria-label={toolTitle(optionShortcut, optionName)}
+                                aria-pressed={tool === optionName}
+                                aria-disabled={optionUnsupported || undefined}
+                                title={optionUnsupported ? `${toolTitle(optionShortcut, optionName)} — Ainda não disponível` : toolTitle(optionShortcut, optionName)}
+                                onClick={() => pickTool(optionName)}
+                                className={`grid h-8 place-items-center rounded ${optionUnsupported ? "opacity-40" : ""} ${tool === optionName ? "bg-[#202020] text-white" : "text-slate-300 hover:bg-[#414141]"}`}
+                              >
+                                <OptionIcon size={17} strokeWidth={1.7} />
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -2679,16 +2845,49 @@ export default function VectorCraftWorkspace({
             />
           </label>
           <div className="mb-2 flex gap-1">
-            <button title="Cor sólida" onClick={() => applyFillMode("solid")} className="h-4 w-4 bg-white" />
-            <button title="Gradiente" onClick={() => applyFillMode("gradient")} className="h-4 w-4 bg-gradient-to-r from-white to-black" />
-            <button title="Sem cor" onClick={() => applyFillMode("none")} className="relative h-4 w-4 border border-white after:absolute after:left-1/2 after:top-[-2px] after:h-5 after:w-px after:-rotate-45 after:bg-red-500" />
+            <button aria-label="Preenchimento sólido" title="Cor sólida no preenchimento da seleção" onClick={() => applyFillMode("solid")} className="h-4 w-4 bg-white" />
+            <button aria-label="Preenchimento em gradiente" title="Gradiente linear no preenchimento da seleção" onClick={() => applyFillMode("gradient")} className="h-4 w-4 bg-gradient-to-r from-white to-black" />
+            <button aria-label="Sem preenchimento" title="Sem cor no preenchimento da seleção" onClick={() => applyFillMode("none")} className="relative h-4 w-4 border border-white after:absolute after:left-1/2 after:top-[-2px] after:h-5 after:w-px after:-rotate-45 after:bg-red-500" />
           </div>
-          <button title="Modos de desenho" className="mb-1 grid h-8 w-9 place-items-center rounded hover:bg-[#414141]">
-            <ScanSearch size={18} />
-          </button>
-          <button title="Mais ferramentas" className="grid h-8 w-9 place-items-center rounded hover:bg-[#414141]">
+          <button
+            data-vector-tools
+            aria-label="Mais ferramentas"
+            aria-haspopup="menu"
+            aria-expanded={Boolean(moreToolsOpen)}
+            title="Mais ferramentas (lista completa)"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setMoreToolsOpen((current) => (current ? null : { left: rect.right + 4, top: Math.max(8, rect.top - 360) }));
+            }}
+            className="grid h-8 w-9 place-items-center rounded hover:bg-[#414141]"
+          >
             <MoreHorizontal size={20} />
           </button>
+          {moreToolsOpen && typeof document !== "undefined" && createPortal(
+            <div data-vector-tools role="menu" aria-label="Todas as ferramentas" className="fixed z-50 max-h-[420px] w-60 overflow-y-auto border border-[#555] bg-[#292929] py-1 shadow-xl" style={{ left: moreToolsOpen.left, top: moreToolsOpen.top }}>
+              {allTools.map(({ group, shortcut, name }, index) => {
+                const unsupported = Boolean(UNSUPPORTED_TOOLS[name]);
+                return (
+                  <div key={name}>
+                    {(index === 0 || allTools[index - 1].group !== group) && <p className="px-3 pb-1 pt-2 text-[9px] uppercase text-slate-500">{group}</p>}
+                    <button
+                      role="menuitem"
+                      aria-label={name}
+                      aria-current={tool === name || undefined}
+                      aria-disabled={unsupported || undefined}
+                      title={unsupported ? "Ainda não disponível" : undefined}
+                      onClick={() => pickTool(name)}
+                      className={`flex w-full items-center gap-2 whitespace-nowrap px-4 py-1 text-left text-[11px] hover:bg-[#2675df] hover:text-white ${unsupported ? "opacity-40" : ""} ${tool === name ? "text-white" : "text-slate-200"}`}
+                    >
+                      <span className="flex-1">{name}</span>
+                      {shortcut && <span className="text-slate-500">{shortcut}</span>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>,
+            document.body,
+          )}
         </aside>
         <main className="flex min-w-0 flex-col rounded border border-slate-800 bg-[#2a2a2a]">
           <div className="flex items-center gap-3 border-b border-slate-700 px-3 py-2 text-[10px]">
@@ -2768,7 +2967,7 @@ export default function VectorCraftWorkspace({
                       }}
                     >
                       {object.kind === "Texto" && (
-                        <span className="block whitespace-pre-line text-left text-5xl font-black leading-none" style={object.vertical ? { writingMode: "vertical-rl" } : undefined}>
+                        <span className="block whitespace-pre-line text-left text-5xl font-black leading-none" style={textStyle(object)}>
                           {object.text || object.name}
                         </span>
                       )}
@@ -2831,6 +3030,13 @@ export default function VectorCraftWorkspace({
                   {guide.kind === "line" && <line x1={guide.a[0]} y1={guide.a[1]} x2={guide.b[0]} y2={guide.b[1]} stroke="#fb923c" strokeDasharray="4 3" />}
                 </svg>
               )}
+              {tool === "Seleção direta" && active?.visible && directAnchors && (
+                <svg role="img" aria-label="Pontos de ancoragem" className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 31 }} viewBox={`0 0 ${ARTBOARD_W} ${ARTBOARD_H}`}>
+                  {directAnchors.flatMap((subpath, subIndex) => subpath.points.map(([x, y], index) => (
+                    <rect key={`${subIndex}-${index}`} x={round2(x - 3)} y={round2(y - 3)} width="6" height="6" fill="white" stroke="#2675df" strokeWidth="1" />
+                  )))}
+                </svg>
+              )}
             </div>
             {appearanceOpen && active && (
               <section
@@ -2840,6 +3046,7 @@ export default function VectorCraftWorkspace({
                 <header className="flex items-center border-b border-[#4b4b4b] px-3 py-2 text-xs font-bold">
                   <span>Aparência</span>
                   <button
+                    aria-label="Fechar aparência flutuante"
                     onClick={() => setAppearanceOpen(false)}
                     className="ml-auto text-slate-400"
                   >
@@ -2875,25 +3082,29 @@ export default function VectorCraftWorkspace({
                   </div>
                   <label className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
                     Desfoque{" "}
-                    <input
-                      type="number"
-                      defaultValue="22"
+                    <NumericField
+                      aria-label="Desfoque"
+                      min={0}
+                      max={50}
+                      value={active.blur ?? 0}
+                      onChange={(value) => patchObject("blur", value)}
                       className="bg-[#252525] p-1 text-right"
                     />
                   </label>
                   <label className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
                     Modo{" "}
-                    <select className="bg-[#252525] p-1">
-                      <option>Tela</option>
+                    <select aria-label="Modo de mesclagem" disabled title="Ainda não disponível" className="bg-[#252525] p-1 disabled:opacity-40">
                       <option>Normal</option>
-                      <option>Multiplicação</option>
                     </select>
                   </label>
                   <label className="mt-2 grid grid-cols-[1fr_90px] items-center gap-2">
                     Opacidade{" "}
-                    <input
-                      type="number"
-                      defaultValue="95"
+                    <NumericField
+                      aria-label="Opacidade da aparência"
+                      min={0}
+                      max={100}
+                      value={active.opacity ?? 100}
+                      onChange={(value) => patchObject("opacity", value)}
                       className="bg-[#252525] p-1 text-right"
                     />
                   </label>
@@ -2972,7 +3183,7 @@ export default function VectorCraftWorkspace({
           ) : rightPanel === "Traçado" ? (
             <StrokePanel active={active} patchObject={patchObject} />
           ) : !["Propriedades", "Camadas", "Bibliotecas"].includes(rightPanel) ? (
-            <AuxiliaryPanel name={rightPanel} onCommand={runCommand} />
+            <AuxiliaryPanel name={rightPanel} onCommand={runCommand} active={active} patchObject={patchObject} stroke={stroke} {...unitProps} />
           ) : active ? (
             <ObjectProperties
               active={active}
@@ -2983,6 +3194,8 @@ export default function VectorCraftWorkspace({
               patchObject={patchObject}
               addObject={addObject}
               onCommand={runCommand}
+              unitFactor={unitFactor}
+              unitSuffix={unitSuffix}
             />
           ) : (
             <DocumentProperties
@@ -3011,7 +3224,7 @@ function StrokePanel({ active, patchObject }) {
       </div>
       <label className="mb-3 flex items-center gap-3">
         <span className="w-20 text-right">Peso:</span>
-        <input type="number" min="0" step="0.25" value={active?.strokeWidth ?? 1} onChange={(event) => patchObject("strokeWidth", Number(event.target.value))} className="w-28 rounded border border-[#555] bg-[#383838] px-3 py-2" />
+        <NumericField aria-label="Peso do traçado" min={0} max={500} step={0.25} disabled={!active} value={active?.strokeWidth ?? 1} onChange={(value) => patchObject("strokeWidth", value)} className="w-28 rounded border border-[#555] bg-[#383838] px-3 py-2" />
         <span>pt</span><ChevronDown size={14} />
       </label>
       <ControlChoices label="Extremidade:" value={cap} setValue={setCap} items={[["butt","dc-cap-butt","Extremidade reta"],["round","dc-cap-round","Extremidade redonda"],["square","dc-cap-square","Extremidade projetada"]]} />
@@ -3045,31 +3258,77 @@ function ControlChoices({ label, value, setValue, items }) {
   return <div className="mb-3 flex items-center gap-2"><span className="w-20 shrink-0 text-right">{label}</span>{items.map(([key, icon, title]) => <button key={key} onClick={() => setValue(key)} className={`grid h-8 w-8 place-items-center rounded ${value === key ? "bg-[#222] text-white" : "text-slate-400 hover:bg-[#444]"}`} title={title}><ReferenceIcon name={icon} size={20} /></button>)}</div>;
 }
 
-function AuxiliaryPanel({ name, onCommand = () => {} }) {
+// Controle sem efeito real ainda: fica visível, mas desabilitado e com aviso honesto.
+const NOT_AVAILABLE = { disabled: true, title: "Ainda não disponível" };
+const PARAGRAPH_ALIGNS = [
+  ["left", "≡", "Alinhar texto à esquerda"], ["center", "≣", "Centralizar"], ["right", "≡", "Alinhar texto à direita"],
+  [null, "☷", "Justificar com última linha à esquerda"], [null, "☰", "Justificar com última linha centralizada"], [null, "☷", "Justificar tudo"],
+];
+
+function HexField({ value, onChange, disabled, className }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      aria-label="Cor hexadecimal"
+      disabled={disabled}
+      value={draft}
+      onChange={(event) => {
+        const text = event.target.value.replace(/^#/, "").slice(0, 6);
+        if (!/^[0-9a-f]*$/i.test(text)) return;
+        setDraft(text.toUpperCase());
+        if (text.length === 6) onChange(`#${text.toLowerCase()}`);
+      }}
+      onBlur={() => setDraft(value)}
+      className={className}
+    />
+  );
+}
+
+function AuxiliaryPanel({ name, onCommand = () => {}, active = null, patchObject = () => {}, stroke = "#000000", unitFactor = 1, unitSuffix = "px", showLength = (value) => `${value} px` }) {
   const [alignTarget, setAlignTarget] = useState("Alinhar à seleção");
-  const [mode, setMode] = useState("Normal");
-  const [opacity, setOpacity] = useState(100);
   const [historyStep, setHistoryStep] = useState(3);
+  const editable = Boolean(active && !active.locked);
+  const isText = editable && active.kind === "Texto";
+  const gradient = active?.gradient;
+  const canGradient = editable && active.kind !== "Texto";
+  const rgb = hexToRgb(active?.color) || [0, 0, 0];
+  const hex = rgbToHex(rgb).slice(1).toUpperCase();
+  const patchGradient = (values) => patchObject("gradient", { ...gradient, ...values });
   const shell = (content) => <div className="p-3 text-[11px] text-[#d6d6d6]"><div className="mb-3 flex items-center border-b border-[#555] pb-3"><h3 className="text-sm font-semibold">{name}</h3><button className="ml-auto">☰</button><button className="ml-3">»</button></div>{content}</div>;
   const field = "rounded border border-[#555] bg-[#383838] px-2 py-2 outline-none";
 
-  if (name === "Cor") return shell(<><div className="mb-3 h-28 rounded border border-[#555] bg-[linear-gradient(90deg,#fff0,#fff),linear-gradient(#f00,#000)]" /><div className="grid grid-cols-[1fr_70px] gap-2"><div className="space-y-2">{[["R",15],["G",47],["B",73]].map(([label, value]) => <label key={label} className="grid grid-cols-[18px_1fr_42px] items-center gap-2"><span>{label}</span><input type="range" defaultValue={value} className="accent-white"/><input defaultValue={value} className={field}/></label>)}</div><div className="rounded border border-[#666] bg-[#0f2f49]" /></div><label className="mt-3 flex items-center gap-2"><span className="w-8">#</span><input defaultValue="0F2F49" className={`${field} flex-1`} /></label></>);
+  if (name === "Cor") {
+    const setChannel = (index, value) => patchObject("color", rgbToHex(rgb.map((channel, position) => (position === index ? value : channel))));
+    return shell(<><div className="mb-3 h-28 rounded border border-[#555] bg-[linear-gradient(90deg,#fff0,#fff),linear-gradient(#f00,#000)]" /><div className="grid grid-cols-[1fr_70px] gap-2"><div className="space-y-2">{["R", "G", "B"].map((label, index) => <label key={label} className="grid grid-cols-[18px_1fr_42px] items-center gap-2"><span>{label}</span><input type="range" aria-label={`Canal ${label}`} min="0" max="255" disabled={!editable} value={rgb[index]} onChange={(event) => setChannel(index, Number(event.target.value))} className="accent-white"/><NumericField aria-label={`Valor ${label}`} min={0} max={255} precision={0} disabled={!editable} value={rgb[index]} onChange={(value) => setChannel(index, value)} className={field}/></label>)}</div><div className="rounded border border-[#666]" style={{ background: active?.color || "#0f2f49" }} /></div><label className="mt-3 flex items-center gap-2"><span className="w-8">#</span><HexField value={hex} disabled={!editable} onChange={(value) => patchObject("color", value)} className={`${field} flex-1`} /></label></>);
+  }
   if (name === "Guia de cores") return shell(<><select className={`${field} mb-3 w-full`}><option>Regras de harmonia</option><option>Complementar</option><option>Análoga</option><option>Tríade</option></select><div className="grid grid-cols-5 gap-1">{["#082f49","#0e7490","#22d3ee","#f59e0b","#f97316"].map(color => <button key={color} title={color} className="h-12 border border-[#777]" style={{background:color}} />)}</div><button className="mt-3 w-full rounded border border-[#666] p-2">Salvar cores como amostras</button></>);
   if (name === "Amostras") return shell(<><input placeholder="Localizar" className={`${field} mb-3 w-full italic`} /><div className="grid grid-cols-7 gap-1">{["#000000","#ffffff","#ef4444","#f59e0b","#facc15","#22c55e","#06b6d4","#3b82f6","#6366f1","#a855f7","#ec4899","#78716c","#94a3b8","transparent"].map((color,index) => <button key={`${color}-${index}`} className="aspect-square border border-[#777]" style={{background:color === 'transparent' ? 'linear-gradient(135deg,#fff 45%,#e11d48 46%,#e11d48 54%,#fff 55%)' : color}} />)}</div><PanelFooter labels={["Bibliotecas","Grupo","Nova amostra","Excluir"]}/></>);
   if (name === "Pincéis" || name === "Símbolos" || name === "Estilos gráficos") return shell(<><div className="grid grid-cols-4 gap-2">{Array.from({length:12},(_,index)=><button key={index} className="grid aspect-square place-items-center rounded border border-[#5a5a5a] bg-[#414141] text-xl">{name === 'Pincéis' ? ['╱','〰','≈','⌁'][index%4] : name === 'Símbolos' ? ['◆','✦','●','✿'][index%4] : ['A','B','C','D'][index%4]}</button>)}</div><PanelFooter labels={["Biblioteca","Novo","Opções","Excluir"]}/></>);
-  if (name === "Opções de padrão") return shell(<><label className="mb-3 grid gap-1">Nome<input defaultValue="Novo padrão" className={field}/></label><label className="mb-3 grid gap-1">Tipo de bloco<select className={field}><option>Grade</option><option>Tijolo por linha</option><option>Hexagonal</option></select></label><div className="grid grid-cols-2 gap-2"><label>Largura<input defaultValue="100 px" className={`${field} mt-1 w-full`}/></label><label>Altura<input defaultValue="100 px" className={`${field} mt-1 w-full`}/></label></div><label className="mt-3 flex gap-2"><input type="checkbox"/> Dimensionar bloco à arte</label><label className="mt-2 flex gap-2"><input type="checkbox" defaultChecked/> Mover bloco com arte</label></>);
-  if (name === "Gradiente") return shell(<><div className="mb-3 flex gap-2"><button className="rounded bg-[#222] px-3 py-2">Linear</button><button className="rounded px-3 py-2 hover:bg-[#444]">Radial</button><button className="rounded px-3 py-2 hover:bg-[#444]">Forma livre</button></div><div className="h-9 rounded border border-[#666] bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500"/><div className="mt-1 flex justify-between"><button>▼</button><button>▼</button><button>▼</button></div><div className="mt-4 grid grid-cols-2 gap-2"><label>Ângulo<input defaultValue="0°" className={`${field} mt-1 w-full`}/></label><label>Proporção<input defaultValue="100%" className={`${field} mt-1 w-full`}/></label><label>Opacidade<input defaultValue="100%" className={`${field} mt-1 w-full`}/></label><label>Local<input defaultValue="0%" className={`${field} mt-1 w-full`}/></label></div></>);
-  if (name === "Transparência") return shell(<><div className="grid grid-cols-[1fr_90px] gap-2"><select value={mode} onChange={event=>setMode(event.target.value)} className={field}>{["Normal","Multiplicação","Tela","Sobrepor","Luz suave","Diferença"].map(item=><option key={item}>{item}</option>)}</select><label className={`${field} flex items-center gap-1`}><input value={opacity} onChange={event=>setOpacity(event.target.value)} className="min-w-0 flex-1 bg-transparent"/>%</label></div><div className="my-4 grid grid-cols-2 gap-2"><div className="grid h-20 place-items-center border border-[#555]">Miniatura</div><div className="grid h-20 place-items-center border border-[#555]">Máscara</div></div><div className="grid grid-cols-2 gap-2"><button className="rounded border border-[#666] p-2">Criar máscara</button><button className="rounded border border-[#666] p-2">Liberar</button></div><label className="mt-3 flex gap-2"><input type="checkbox"/> Recortar</label><label className="mt-2 flex gap-2"><input type="checkbox"/> Inverter máscara</label></>);
+  if (name === "Opções de padrão") return shell(<><label className="mb-3 grid gap-1">Nome<input aria-label="Nome do padrão" {...NOT_AVAILABLE} defaultValue="Novo padrão" className={`${field} disabled:opacity-40`}/></label><label className="mb-3 grid gap-1">Tipo de bloco<select aria-label="Tipo de bloco" {...NOT_AVAILABLE} className={`${field} disabled:opacity-40`}><option>Grade</option><option>Tijolo por linha</option><option>Hexagonal</option></select></label><div className="grid grid-cols-2 gap-2"><label>Largura<input aria-label="Largura do bloco" {...NOT_AVAILABLE} defaultValue="100 px" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Altura<input aria-label="Altura do bloco" {...NOT_AVAILABLE} defaultValue="100 px" className={`${field} mt-1 w-full disabled:opacity-40`}/></label></div><label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Dimensionar bloco à arte</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Mover bloco com arte</label><p className="mt-3 text-[#aaa]">Padrões ainda não estão disponíveis no MMVector web.</p></>);
+  if (name === "Gradiente") return shell(<><div className="mb-3 flex gap-2"><button aria-pressed={Boolean(gradient)} disabled={!canGradient} title={canGradient ? "Aplicar gradiente linear ao preenchimento" : "Selecione uma forma desbloqueada"} onClick={() => { patchObject("gradient", gradient || { from: active.color, to: stroke === active.color ? "#000000" : stroke, angle: 90 }); if (active.noFill) patchObject("noFill", false); }} className="rounded bg-[#222] px-3 py-2 disabled:opacity-40">Linear</button><button {...NOT_AVAILABLE} className="rounded px-3 py-2 hover:bg-[#444] disabled:opacity-40">Radial</button><button {...NOT_AVAILABLE} className="rounded px-3 py-2 hover:bg-[#444] disabled:opacity-40">Forma livre</button></div><div className={`h-9 rounded border border-[#666] ${gradient ? "" : "bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500"}`} style={gradient ? { background: `linear-gradient(90deg, ${gradient.from}, ${gradient.to})` } : undefined}/><div className="mt-1 flex justify-between"><input type="color" aria-label="Cor inicial do gradiente" disabled={!gradient || !canGradient} value={gradient?.from || "#000000"} onChange={(event) => patchGradient({ from: event.target.value })} className="h-6 w-7 disabled:opacity-40"/><input type="color" aria-label="Cor final do gradiente" disabled={!gradient || !canGradient} value={gradient?.to || "#000000"} onChange={(event) => patchGradient({ to: event.target.value })} className="h-6 w-7 disabled:opacity-40"/></div><div className="mt-4 grid grid-cols-2 gap-2"><label>Ângulo<NumericField aria-label="Ângulo do gradiente" disabled={!gradient || !canGradient} min={-360} max={360} value={gradient?.angle ?? 90} onChange={(value) => patchGradient({ angle: value })} className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Proporção<input aria-label="Proporção do gradiente" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Opacidade<input aria-label="Opacidade do gradiente" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Local<input aria-label="Local da parada" {...NOT_AVAILABLE} defaultValue="0%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label></div></>);
+  if (name === "Transparência") return shell(<><div className="grid grid-cols-[1fr_90px] gap-2"><select aria-label="Modo de mesclagem" {...NOT_AVAILABLE} className={`${field} disabled:opacity-40`}><option>Normal</option></select><label className={`${field} flex items-center gap-1`}><NumericField aria-label="Opacidade da transparência" disabled={!editable} min={0} max={100} value={active?.opacity ?? 100} onChange={(value) => patchObject("opacity", value)} className="min-w-0 flex-1 bg-transparent"/>%</label></div><div className="my-4 grid grid-cols-2 gap-2"><div className="grid h-20 place-items-center border border-[#555]">Miniatura</div><div className="grid h-20 place-items-center border border-[#555]">Máscara</div></div><div className="grid grid-cols-2 gap-2"><button {...NOT_AVAILABLE} className="rounded border border-[#666] p-2 disabled:opacity-40">Criar máscara</button><button {...NOT_AVAILABLE} className="rounded border border-[#666] p-2 disabled:opacity-40">Liberar</button></div><label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Recortar</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Inverter máscara</label></>);
   if (name === "Aparência") return shell(<><p className="mb-3 font-semibold">{`Texto`}</p>{[["Preenchimento","#082f49"],["Traçado","#0f172a"],["Opacidade","100%"]].map(([label,value])=><button key={label} className="flex w-full items-center gap-3 border-b border-[#555] py-3 text-left"><Eye size={14}/><span className="h-6 w-6 border border-[#777]" style={{background:value.startsWith('#')?value:'transparent'}}/><span>{label}</span><span className="ml-auto text-[#aaa]">{value}</span></button>)}<PanelFooter labels={["Novo preenchimento","Novo traçado","fx","Limpar"]}/></>);
   if (name === "Pranchetas") return shell(<><div className="space-y-1">{["Prancheta 1","Prancheta 2"].map((item,index)=><button key={item} className={`flex w-full items-center gap-2 border px-3 py-2 text-left ${index===0?'border-[#58a6ff] bg-[#43566b]':'border-[#555]'}`}><span>{index+1}</span><span>{item}</span><span className="ml-auto">☐</span></button>)}</div><PanelFooter labels={["Reorganizar","Nova","Excluir"]}/></>);
-  if (name === "Transformar") return shell(<><div className="grid grid-cols-2 gap-2">{[["X","112 pt"],["Y","150 pt"],["L","390 pt"],["A","120 pt"],["Rotação","0°"],["Inclinação","0°"]].map(([label,value])=><label key={label} className="grid grid-cols-[auto_1fr] items-center gap-2"><span>{label}:</span><input defaultValue={value} className={field}/></label>)}</div><label className="mt-4 flex gap-2"><input type="checkbox" defaultChecked/> Transformar objetos</label><label className="mt-2 flex gap-2"><input type="checkbox" defaultChecked/> Transformar padrões</label><button className="mt-4 w-full rounded border border-[#666] p-2">Transformar cada...</button></>);
+  if (name === "Transformar") {
+    if (!active) return shell(<p className="text-[#aaa]">Selecione um objeto para transformar.</p>);
+    return shell(<><div className="grid grid-cols-2 gap-2">{[["X", "x"], ["Y", "y"], ["L", "w"], ["A", "h"]].map(([label, key]) => <label key={label} className="grid grid-cols-[auto_1fr] items-center gap-2" title={unitSuffix}><span>{label}:</span><LengthField label={label} field={key} active={active} patchObject={patchObject} unitFactor={unitFactor} disabled={!editable} className={field}/></label>)}<label className="grid grid-cols-[auto_1fr] items-center gap-2" title="graus"><span>Rotação:</span><NumericField aria-label="Rotação" disabled={!editable} min={-36000} max={36000} value={active.rotation ?? 0} onChange={(value) => patchObject("rotation", value)} className={field}/></label><label className="grid grid-cols-[auto_1fr] items-center gap-2" title="graus"><span>Inclinação:</span><NumericField aria-label="Inclinação" disabled={!editable} min={-75} max={75} value={active.skewX ?? 0} onChange={(value) => patchObject("skewX", value)} className={field}/></label></div><label className="mt-4 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE} defaultChecked/> Transformar objetos</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Transformar padrões</label><button {...NOT_AVAILABLE} className="mt-4 w-full rounded border border-[#666] p-2 disabled:opacity-40">Transformar cada...</button></>);
+  }
   if (name === "Alinhar") return shell(<><PanelIconGrid names={["dc-al-left","dc-al-hcenter","dc-al-right","dc-al-top","dc-al-vcenter","dc-al-bottom"]} onPick={(icon) => onCommand(`align:${icon.replace("dc-al-", "")}`, { target: alignTarget })}/><h4 className="mb-2 mt-5 font-semibold">Distribuir objetos</h4><PanelIconGrid names={["dc-dist-left","dc-dist-hcenter","dc-dist-right","dc-dist-top","dc-dist-vcenter","dc-dist-bottom"]} onPick={(icon) => onCommand(`align:${icon.replace("dc-", "")}`)}/><label className="mt-5 grid gap-1">Alinhar a:<select aria-label="Alinhar a" value={alignTarget} onChange={(event) => setAlignTarget(event.target.value)} className={field}><option>Alinhar à seleção</option><option>Alinhar à prancheta</option><option>Alinhar ao objeto-chave</option></select></label></>);
   if (name === "Pathfinder") return shell(<><h4 className="mb-2 font-semibold">Modos de forma</h4><PanelIconGrid names={["dc-pf-unite","dc-pf-minus-front","dc-pf-intersect","dc-pf-exclude"]} onPick={(icon) => onCommand(PATHFINDER_COMMANDS[icon])}/><button onClick={() => onCommand("pf:expand")} className="mt-3 rounded border border-[#666] px-3 py-2">Expandir</button><h4 className="mb-2 mt-5 font-semibold">Pathfinders</h4><PanelIconGrid names={["dc-pf-divide","dc-pf-trim","dc-pf-merge","dc-pf-crop","dc-pf-outline","dc-pf-minus-back"]} onPick={(icon) => onCommand(PATHFINDER_COMMANDS[icon])}/></>);
-  if (name === "Texto") return shell(<><label className="grid gap-1">Família da fonte<select className={field}><option>Source Sans 3</option><option>Inter</option><option>Arial</option></select></label><label className="mt-2 grid gap-1">Estilo<select className={field}><option>Regular</option><option>Semibold</option><option>Bold</option></select></label><div className="mt-3 grid grid-cols-2 gap-2">{[["Tamanho","132 pt"],["Entrelinha","158,4 pt"],["Kerning","Automático"],["Tracking","60"],["Escala H","100%"],["Escala V","100%"]].map(([label,value])=><label key={label}>{label}<input defaultValue={value} className={`${field} mt-1 w-full`}/></label>)}</div></>);
-  if (name === "Parágrafo") return shell(<><div className="mb-4 flex justify-between">{["≡","≣","≡","☷","☰","☷"].map((icon,index)=><button key={index} className="grid h-8 w-8 place-items-center rounded hover:bg-[#444]">{icon}</button>)}</div>{["Recuo esquerdo","Recuo direito","Primeira linha","Espaço antes","Espaço depois"].map(label=><label key={label} className="mb-2 grid grid-cols-[1fr_90px] items-center gap-2"><span>{label}</span><input defaultValue="0 pt" className={field}/></label>)}<label className="mt-3 flex gap-2"><input type="checkbox" defaultChecked/> Hifenizar</label></>);
+  if (name === "Texto") {
+    const size = active?.fontSize || DEFAULT_FONT_SIZE;
+    const weightName = Object.keys(FONT_WEIGHTS).find((key) => FONT_WEIGHTS[key] === (active?.fontWeight || 900));
+    const disabledClass = "disabled:opacity-40";
+    return shell(<>{!isText && <p className="mb-3 text-[#aaa]">Selecione um objeto de texto para editar a fonte.</p>}<label className="grid gap-1">Família da fonte<select aria-label="Família da fonte" disabled={!isText} value={active?.fontFamily || "Inter"} onChange={(event) => patchObject("fontFamily", event.target.value)} className={`${field} ${disabledClass}`}>{FONT_FAMILIES.map((family) => <option key={family}>{family}</option>)}</select></label><label className="mt-2 grid gap-1">Estilo<select aria-label="Estilo da fonte" disabled={!isText} value={weightName} onChange={(event) => patchObject("fontWeight", FONT_WEIGHTS[event.target.value])} className={`${field} ${disabledClass}`}>{Object.keys(FONT_WEIGHTS).map((weight) => <option key={weight}>{weight}</option>)}</select></label><div className="mt-3 grid grid-cols-2 gap-2"><label>Tamanho<NumericField aria-label="Tamanho da fonte" disabled={!isText} min={1} max={1000} value={size} onChange={(value) => patchObject("fontSize", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Entrelinha<NumericField aria-label="Entrelinha" disabled={!isText} min={1} max={2000} value={active?.lineHeight || size} onChange={(value) => patchObject("lineHeight", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Kerning<input aria-label="Kerning" {...NOT_AVAILABLE} defaultValue="Automático" className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Tracking<NumericField aria-label="Tracking" disabled={!isText} min={-1000} max={1000} value={active?.tracking ?? 0} onChange={(value) => patchObject("tracking", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Escala H<input aria-label="Escala H" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Escala V<input aria-label="Escala V" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full ${disabledClass}`}/></label></div></>);
+  }
+  if (name === "Parágrafo") return shell(<>{!isText && <p className="mb-3 text-[#aaa]">Selecione um objeto de texto para alinhar o parágrafo.</p>}<div className="mb-4 flex justify-between">{PARAGRAPH_ALIGNS.map(([align, icon, label]) => align ? <button key={label} aria-label={label} title={label} aria-pressed={isText && (active.textAlign || "left") === align} disabled={!isText} onClick={() => patchObject("textAlign", align)} className={`grid h-8 w-8 place-items-center rounded hover:bg-[#444] disabled:opacity-40 ${isText && (active.textAlign || "left") === align ? "bg-[#222] text-white" : ""}`}>{icon}</button> : <button key={label} aria-label={label} {...NOT_AVAILABLE} className="grid h-8 w-8 place-items-center rounded disabled:opacity-40">{icon}</button>)}</div>{["Recuo esquerdo","Recuo direito","Primeira linha","Espaço antes","Espaço depois"].map(label=><label key={label} className="mb-2 grid grid-cols-[1fr_90px] items-center gap-2"><span>{label}</span><input aria-label={label} {...NOT_AVAILABLE} defaultValue="0 pt" className={`${field} disabled:opacity-40`}/></label>)}<label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Hifenizar</label></>);
   if (name === "Histórico") return shell(<><div className="space-y-1">{["Abrir documento","Selecionar objeto","Mover","Alterar preenchimento","Aplicar traçado","Editar gradiente"].map((item,index)=><button key={item} onClick={()=>setHistoryStep(index)} className={`flex w-full items-center gap-2 px-2 py-2 text-left ${index===historyStep?'bg-[#43566b]':''}`}><ReferenceIcon name="history" size={14}/>{item}</button>)}</div><PanelFooter labels={["Novo instantâneo","Excluir histórico"]}/></>);
   if (name === "Ações") return shell(<><div className="space-y-1">{["Ações padrão","Salvar para Web","Redimensionar","Converter em CMYK"].map((item,index)=><button key={item} className="flex w-full items-center gap-2 border-b border-[#555] px-2 py-2 text-left"><span>{index===0?'⌄':'▷'}</span>{item}</button>)}</div><PanelFooter labels={["Parar","Gravar","Executar","Nova ação","Excluir"]}/></>);
-  if (name === "Informações") return shell(<div className="grid grid-cols-2 gap-x-5 gap-y-3">{[["X","112 pt"],["Y","150 pt"],["L","390 pt"],["A","120 pt"],["R","8"],["G","47"],["B","73"],["Opacidade","100%"]].map(([label,value])=><div key={label} className="flex justify-between border-b border-[#555] pb-1"><span className="text-[#aaa]">{label}</span><strong>{value}</strong></div>)}</div>);
+  if (name === "Informações") return shell(<div aria-label="Informações do objeto" className="grid grid-cols-2 gap-x-5 gap-y-3">{(active
+    ? [["X", showLength(active.x)], ["Y", showLength(active.y)], ["L", showLength(active.w)], ["A", showLength(active.h)], ["R", String(rgb[0])], ["G", String(rgb[1])], ["B", String(rgb[2])], ["Opacidade", `${active.opacity ?? 100}%`]]
+    : [["X", "—"], ["Y", "—"], ["L", showLength(ARTBOARD_W)], ["A", showLength(ARTBOARD_H)], ["R", "—"], ["G", "—"], ["B", "—"], ["Opacidade", "—"]]
+  ).map(([label,value])=><div key={label} className="flex justify-between border-b border-[#555] pb-1"><span className="text-[#aaa]">{label}</span><strong>{value}</strong></div>)}</div>);
   if (name === "Navegador") return shell(<><div className="relative aspect-[4/3] overflow-hidden border border-[#666] bg-white"><div className="absolute inset-[18%] bg-gradient-to-br from-cyan-400 to-violet-600"/><div className="absolute inset-[12%] border-2 border-red-500"/></div><div className="mt-3 flex items-center gap-2"><button>−</button><input type="range" defaultValue="72" className="flex-1"/><button>+</button><input defaultValue="72%" className={`${field} w-16`}/></div></>);
   return shell(<p className="text-[#aaa]">Painel disponível na área de trabalho.</p>);
 }
@@ -3095,11 +3354,23 @@ function PanelIconGrid({ names, onPick }) {
   return <div className="grid grid-cols-6 gap-2">{names.map(name=><button key={name} title={name} aria-label={ICON_LABELS[name] || name} onClick={onPick ? () => onPick(name) : undefined} className="grid h-9 place-items-center rounded border border-transparent text-[#bbb] hover:border-[#666] hover:bg-[#444] hover:text-white"><ReferenceIcon name={name} size={22}/></button>)}</div>;
 }
 
-function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObject, addObject, onCommand = () => {} }) {
-  const fields = [
-    ["X", "x", active.x], ["L", "w", active.w],
-    ["Y", "y", active.y], ["A", "h", active.h],
-  ];
+// Campos de posição/tamanho no sistema de unidades do documento; gravam sempre em px e
+// nunca NaN (NumericField só propaga números finitos).
+const LENGTH_FIELDS = [["X", "x"], ["L", "w"], ["Y", "y"], ["A", "h"]];
+function LengthField({ label, field, active, patchObject, unitFactor = 1, className, ...rest }) {
+  return (
+    <NumericField
+      aria-label={label}
+      value={round2((active[field] ?? 0) * unitFactor)}
+      min={field === "w" || field === "h" ? 0.01 : undefined}
+      onChange={(value) => patchObject(field, round2(value / unitFactor))}
+      className={className}
+      {...rest}
+    />
+  );
+}
+
+function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObject, addObject, onCommand = () => {}, unitFactor = 1, unitSuffix = "px" }) {
 
   return (
     <div className="p-4 text-[11px]">
@@ -3111,11 +3382,11 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
       </div>
       <h3 className="mb-3 text-sm font-semibold">Transformar</h3>
       <div className="grid grid-cols-2 gap-2">
-        {fields.map(([label, key, value]) => (
+        {LENGTH_FIELDS.map(([label, key]) => (
           <label key={key} className="flex items-center rounded border border-[#555] bg-[#383838] px-2 py-2">
             <span className="text-slate-400">{label}:</span>
-            <input aria-label={label} value={value} onChange={(event) => patchObject(key, Number(event.target.value))} className="min-w-0 flex-1 bg-transparent text-right outline-none" />
-            <span className="ml-1 text-slate-400">pt</span>
+            <LengthField label={label} field={key} active={active} patchObject={patchObject} unitFactor={unitFactor} className="min-w-0 flex-1 bg-transparent text-right outline-none" />
+            <span className="ml-1 text-slate-400">{unitSuffix}</span>
           </label>
         ))}
       </div>
@@ -3134,7 +3405,7 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
       <div className="mt-2 flex items-center gap-2">
         <label className="flex flex-1 items-center rounded border border-[#555] bg-[#383838] px-2 py-2">
           <RotateCcw size={13} className="mr-2" />
-          <input aria-label="Rotação" value={active.rotation ?? 0} onChange={(event) => patchObject("rotation", Number(event.target.value))} className="w-full bg-transparent outline-none" />°
+          <NumericField aria-label="Rotação" value={active.rotation ?? 0} min={-36000} max={36000} onChange={(value) => patchObject("rotation", value)} className="w-full bg-transparent outline-none" />°
         </label>
         <button title="Inverter verticalmente" onClick={() => onCommand("flip:y")} className="rounded px-3 py-2 hover:bg-[#444]">↕</button>
         <button title="Inverter horizontalmente" onClick={() => onCommand("flip:x")} className="rounded px-3 py-2 hover:bg-[#444]">↔</button>
@@ -3142,15 +3413,14 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
       {(active.kind === "Retângulo" || active.kind === "Forma") && (
         <label className="mt-3 flex items-center gap-3">
           <span>Raio dos cantos:</span>
-          <input
+          <NumericField
             aria-label="Raio dos cantos"
-            type="number"
-            min="0"
-            value={active.cornerRadius ?? 0}
-            onChange={(event) => patchObject("cornerRadius", Number(event.target.value))}
+            min={0}
+            value={round2((active.cornerRadius ?? 0) * unitFactor)}
+            onChange={(value) => patchObject("cornerRadius", round2(value / unitFactor))}
             className="w-24 rounded border border-[#555] bg-[#383838] px-3 py-2"
           />
-          <span>pt</span>
+          <span>{unitSuffix}</span>
         </label>
       )}
 
@@ -3163,14 +3433,14 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
         <label className="mb-2 flex items-center gap-3">
           <input type="color" value={active.stroke || stroke} onChange={(event) => { setStroke(event.target.value); patchObject("stroke", event.target.value); }} />
           <span className="underline">Traçado</span>
-          <span className="ml-auto flex flex-col border border-[#555] text-[8px]"><button className="px-1">▲</button><button className="border-t border-[#555] px-1">▼</button></span>
-          <input aria-label="Espessura do traçado" type="number" min="0" value={active.strokeWidth ?? 0} onChange={(event) => patchObject("strokeWidth", Number(event.target.value))} className="w-14 rounded border border-[#555] bg-[#383838] px-2 py-1" />
-          <span>pt</span>
+          <span className="ml-auto flex flex-col border border-[#555] text-[8px]"><button type="button" aria-label="Aumentar espessura do traçado" onClick={() => patchObject("strokeWidth", Math.min(500, (active.strokeWidth ?? 0) + 1))} className="px-1">▲</button><button type="button" aria-label="Diminuir espessura do traçado" onClick={() => patchObject("strokeWidth", Math.max(0, (active.strokeWidth ?? 0) - 1))} className="border-t border-[#555] px-1">▼</button></span>
+          <NumericField aria-label="Espessura do traçado" min={0} max={500} value={active.strokeWidth ?? 0} onChange={(value) => patchObject("strokeWidth", value)} className="w-14 rounded border border-[#555] bg-[#383838] px-2 py-1" />
+          <span>px</span>
           <ChevronDown size={14} />
         </label>
         <label className="flex items-center gap-3">
           <span>Opacidade</span>
-          <input aria-label="Opacidade" type="number" min="0" max="100" value={active.opacity ?? 100} onChange={(event) => patchObject("opacity", Number(event.target.value))} className="ml-auto w-20 rounded border border-[#555] bg-[#383838] px-2 py-1" />%
+          <NumericField aria-label="Opacidade" min={0} max={100} value={active.opacity ?? 100} onChange={(value) => patchObject("opacity", value)} className="ml-auto w-20 rounded border border-[#555] bg-[#383838] px-2 py-1" />%
           <button title="Mais opções">•••</button>
         </label>
         <button className="mt-3 rounded border border-[#666] px-4 py-2 text-base">fx</button>
