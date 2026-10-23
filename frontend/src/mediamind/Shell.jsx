@@ -26,7 +26,6 @@ import {
   PanelsTopLeft,
   Palette,
   Activity,
-  Network,
 } from "lucide-react";
 import { useAuth } from "./auth";
 import { canAccessModule } from "./lib/moduleAccess";
@@ -159,7 +158,6 @@ export const NAV_GROUPS = [
     items: [
       { to: "/estudio-de-arte", label: "Estúdio de Arte", icon: Palette },
         { to: "/canais-dark", label: "Canais Dark", icon: Clapperboard },
-      { to: "/canais-dark-2", label: "Canais Dark 2", icon: Network },
       { to: "/agencia-video", label: "Agência de Vídeo", icon: Layers3 },
       { to: "/geracao-de-video", label: "Geração de vídeo", icon: Clapperboard },
       {

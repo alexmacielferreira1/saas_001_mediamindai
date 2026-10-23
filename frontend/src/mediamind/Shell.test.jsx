@@ -44,8 +44,10 @@ describe("production navigation", () => {
     expect(labels).not.toContain("Criar Thumbs");
     expect(labels).toContain("Estúdio de Arte");
     expect(labels).toContain("Canais Dark");
-    expect(labels).toContain("Canais Dark 2");
-    expect(labels.indexOf("Canais Dark 2")).toBe(labels.indexOf("Canais Dark") + 1);
+    expect(labels).not.toContain("Canais Dark 2");
+    const destinations = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.to));
+    expect(destinations).toContain("/canais-dark");
+    expect(destinations).not.toContain("/canais-dark-2");
     expect(labels).toContain("Geração de vídeo");
     expect(labels).not.toContain("VIDEO_ESTUDIO");
     expect(labels).not.toContain("Ferramentas IA");

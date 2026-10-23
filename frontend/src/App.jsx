@@ -34,7 +34,6 @@ const ThumbnailStudio = lazy(() => import("./mediamind/pages/ThumbnailStudio"));
 const AITools = lazy(() => import("./mediamind/pages/AITools"));
 const VideoGeneration = lazy(() => import("./mediamind/pages/VideoGeneration"));
 const DarkChannels = lazy(() => import("./mediamind/pages/DarkChannels"));
-const DarkChannels2 = lazy(() => import("./mediamind/pages/DarkChannels2"));
 const AgenciaVideo = lazy(() => import("./mediamind/pages/AgenciaVideo"));
 const GraphicTools = lazy(() => import("./mediamind/pages/GraphicTools"));
 const SoundCraft = lazy(() => import("./mediamind/pages/SoundCraft"));
@@ -127,7 +126,7 @@ function AuthenticatedApp() {
       <Route path="/ferramentas-ia" element={protectedPage(AITools, "ai_tools")} />
       <Route path="/geracao-de-video" element={protectedPage(VideoGeneration, "ai_tools")} />
         <Route path="/canais-dark" element={protectedPage(DarkChannels, "ai_tools")} />
-        <Route path="/canais-dark-2" element={protectedPage(DarkChannels2, "ai_tools")} />
+        <Route path="/canais-dark-2" element={<Navigate to="/canais-dark" replace />} />
         <Route path="/video-estudio" element={<Navigate to="/canais-dark" replace />} />
       <Route path="/agencia-video" element={protectedPage(AgenciaVideo, "ai_tools")} />
       <Route path="/ferramentas-graficas" element={protectedPage(GraphicTools, "ai_tools")} />
