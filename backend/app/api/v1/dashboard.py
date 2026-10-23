@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
@@ -46,29 +46,73 @@ ROLE_LABELS = {
 }
 
 
-@router.get("/me")
-def dashboard_me(current: Authenticated, session: DbSession):
-    membership = require_membership(current)
-    rows = list(
-        session.scalars(
-            select(TenantRecord).where(
-                TenantRecord.tenant_id == membership.tenant_id,
+# Linhas de trilha/medição: nunca entram nas contagens do painel (podem ser milhares).
+NON_PROJECT_ENTITIES = ("LogAuditoria", "AIUsageEvent")
+COUNTED_ENTITIES = (
+    "ProducaoProjeto",
+    "AprovacaoItem",
+    "AprovacaoVersao",
+    "ProcessamentoJob",
+    "Publicacao",
+    "PendenciaCorp",
+)
+
+
+def entity_counts(session: Session, tenant_id) -> dict[str, int]:
+    rows = session.execute(
+        select(TenantRecord.entity_type, func.count())
+        .where(
+            TenantRecord.tenant_id == tenant_id,
+            TenantRecord.entity_type.in_(COUNTED_ENTITIES),
+        )
+        .group_by(TenantRecord.entity_type)
+    )
+    return {entity_type: count for entity_type, count in rows}
+
+
+def production_stage_counts(session: Session, tenant_id) -> dict[str | None, int]:
+    stage = TenantRecord.data["etapa"].as_string()
+    rows = session.execute(
+        select(stage, func.count())
+        .where(
+            TenantRecord.tenant_id == tenant_id,
+            TenantRecord.entity_type == "ProducaoProjeto",
+        )
+        .group_by(stage)
+    )
+    return {value: count for value, count in rows}
+
+
+def distinct_project_count(session: Session, tenant_id) -> int:
+    project_id = TenantRecord.data["project_id"].as_string()
+    return (
+        session.scalar(
+            select(func.count(distinct(project_id))).where(
+                TenantRecord.tenant_id == tenant_id,
+                TenantRecord.entity_type.not_in(NON_PROJECT_ENTITIES),
+                project_id.is_not(None),
+                project_id != "",
             )
         )
+        or 0
     )
-    by_type = {}
-    for item in rows:
-        by_type.setdefault(item.entity_type, []).append(item)
-    productions = by_type.get("ProducaoProjeto", [])
+
+
+@router.get("/me")
+def dashboard_me(current: Authenticated, session: DbSession):
+    """KPIs do painel com contagens no SQL (auditoria 2026-10-23, #8)."""
+    membership = require_membership(current)
+    counts = entity_counts(session, membership.tenant_id)
+    stages = production_stage_counts(session, membership.tenant_id)
     values = [
-        len(productions),
-        sum(item.data.get("etapa") == "finalizado" for item in productions),
-        sum(item.data.get("etapa") == "em_edicao" for item in productions),
-        len(by_type.get("AprovacaoItem", [])) + len(by_type.get("AprovacaoVersao", [])),
-        len(by_type.get("ProcessamentoJob", [])),
-        len(by_type.get("Publicacao", [])),
-        len(by_type.get("PendenciaCorp", [])),
-        len({item.data.get("project_id") for item in rows if item.data.get("project_id")}),
+        counts.get("ProducaoProjeto", 0),
+        stages.get("finalizado", 0),
+        stages.get("em_edicao", 0),
+        counts.get("AprovacaoItem", 0) + counts.get("AprovacaoVersao", 0),
+        counts.get("ProcessamentoJob", 0),
+        counts.get("Publicacao", 0),
+        counts.get("PendenciaCorp", 0),
+        distinct_project_count(session, membership.tenant_id),
     ]
     ids = [
         "productions",
@@ -81,8 +125,14 @@ def dashboard_me(current: Authenticated, session: DbSession):
         "projects",
     ]
     labels = ROLE_LABELS.get(membership.role, ROLE_LABELS["default"])
+    agenda = session.scalars(
+        select(TenantRecord).where(
+            TenantRecord.tenant_id == membership.tenant_id,
+            TenantRecord.entity_type == "AgendaEvento",
+        )
+    )
     events = sorted(
-        by_type.get("AgendaEvento", []),
+        agenda,
         key=lambda item: (item.data.get("day", 999), item.data.get("horario", "")),
     )[:6]
     return {

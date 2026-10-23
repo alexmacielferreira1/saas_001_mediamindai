@@ -10,7 +10,7 @@ from app.api.v1.ai import ai_settings_record, generate_connection_text, resolve_
 from app.api.v1.ai_usage import guard_budget, record_usage
 from app.api.v1.records import add_audit
 from app.core.errors import PublicError
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.mcp.registry import MODULES, TOOLS, capability_result, tool_by_name
 from app.models.identity import TenantRecord
 from app.schemas.mcp import MCPQueueCreate, MCPToolCall
@@ -89,6 +89,8 @@ async def run_tool(
         guard_budget(
             session, tenant_id, connection["provider"], connection["model"], max_tokens=4000
         )
+        # Sem conexão do pool presa durante a chamada ao provedor (até 120 s).
+        release_connection(session)
         start = perf_counter()
         try:
             text, usage = await generate_connection_text(connection, prompt, return_usage=True)

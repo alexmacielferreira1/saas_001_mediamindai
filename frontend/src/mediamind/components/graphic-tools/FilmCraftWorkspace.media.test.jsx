@@ -150,10 +150,12 @@ describe("MMFilm — Programa multicamada", () => {
     const { container } = render(<FilmCraftWorkspace />);
     drop(container, { id: "cena", name: "Cena", track: "V1" });
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "00:20" }));
+      fireEvent.pointerDown(container.querySelector("[data-timeline-ruler]"), { clientX: 20 * 12, button: 0 });
+      fireEvent.pointerUp(window, { clientX: 20 * 12 });
     });
     expect(container.querySelector("video")).toBeNull();
     const program = screen.getByText("Programa ☰").closest(".flex-col");
-    expect(within(program).getByText("00:00:00:00")).toBeInTheDocument();
+    // Quadro preto com o timecode real do indicador (o rodapé do monitor mostra o mesmo).
+    expect(within(program).getAllByText("00:00:20:00").length).toBeGreaterThan(0);
   });
 });

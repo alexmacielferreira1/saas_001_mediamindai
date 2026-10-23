@@ -307,6 +307,14 @@ describe("Canais Dark · página única (planejamento + pipeline)", () => {
     await waitFor(() => expect(api.listDarkChannelScripts).toHaveBeenLastCalledWith("channel-2"));
     expect(screen.getByRole("group", { name: "Visão do canal" })).toHaveTextContent("0 pastas · 0 roteiros · 0 materiais organizados");
     expect(screen.getByRole("tab", { name: "Materiais" })).toBeDisabled();
+    const shortcuts = within(screen.getByRole("navigation", { name: "Etapas do canal" }));
+    expect(shortcuts.getAllByRole("button").map((button) => button.textContent.replace("→", ""))).toEqual([
+      "Pastas e roteiros", "Materiais", "Gerar vídeos", "Thumbs", "Cortes", "Revisão final", "Agendados e publicados", "Analytics",
+    ]);
+    expect(shortcuts.getByRole("button", { name: /Materiais/ })).toBeDisabled();
+    fireEvent.click(shortcuts.getByRole("button", { name: /Analytics/ }));
+    expect(screen.getByRole("tab", { name: "Analytics" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "Canais" }));
 
     fireEvent.click(screen.getByRole("tab", { name: "Thumbs" }));
     expect(await screen.findByTestId("thumbnail-studio")).toHaveAttribute("data-channel", "channel-2");

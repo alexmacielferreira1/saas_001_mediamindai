@@ -1,5 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
 import { BrowserRouter as Router, Route, Routes, Navigate, Outlet, useLocation } from "react-router-dom";
@@ -11,35 +11,38 @@ import { EmpresaProvider, useEmpresa } from "./mediamind/lib/empresaContext";
 import EmpresaGate from "./mediamind/components/EmpresaGate";
 import Shell from "./mediamind/Shell";
 import Login from "./mediamind/pages/Login";
-import Home from "./mediamind/pages/Home";
-import Acervo from "./mediamind/pages/Acervo";
-import Management from "./mediamind/pages/Management";
-import Administration2 from "./mediamind/pages/Administration2";
-import Roteiro2 from "./mediamind/pages/Roteiro2";
-import Corp from "./mediamind/pages/Corp";
-import ViralClips from "./mediamind/pages/ViralClips";
-import ClipsFree from "./mediamind/pages/ClipsFree";
-import ClipsFree2 from "./mediamind/pages/ClipsFree2";
-import Ingest from "./mediamind/pages/Ingest";
-import Workspace2 from "./mediamind/pages/Workspace2";
-import Timeline from "./mediamind/pages/Timeline";
-import Timeline2 from "./mediamind/pages/Timeline2";
-import SearchPage from "./mediamind/pages/Search";
-import AssistenteIA from "./mediamind/pages/AssistenteIA";
-import ThumbnailStudio from "./mediamind/pages/ThumbnailStudio";
-import AITools from "./mediamind/pages/AITools";
-import VideoGeneration from "./mediamind/pages/VideoGeneration";
-import DarkChannels from "./mediamind/pages/DarkChannels";
-import AgenciaVideo from "./mediamind/pages/AgenciaVideo";
-import GraphicTools from "./mediamind/pages/GraphicTools";
-import SoundCraft from "./mediamind/pages/SoundCraft";
-import OfficeCraft from "./mediamind/pages/OfficeCraft";
-import AISettings from "./mediamind/pages/AISettings";
-import AIUsageDashboard from "./mediamind/pages/AIUsageDashboard";
-import Telas2 from "./mediamind/pages/Telas2";
-import Gestao2 from "./mediamind/pages/Gestao2";
-import APIsIA2 from "./mediamind/pages/APIsIA2";
 import { canAccessModule } from "./mediamind/lib/moduleAccess";
+
+// Páginas carregadas sob demanda (auditoria 2026-10-23, #15): login e home não baixam os
+// editores gráficos e de vídeo no chunk inicial.
+const Home = lazy(() => import("./mediamind/pages/Home"));
+const Acervo = lazy(() => import("./mediamind/pages/Acervo"));
+const Management = lazy(() => import("./mediamind/pages/Management"));
+const Administration2 = lazy(() => import("./mediamind/pages/Administration2"));
+const Roteiro2 = lazy(() => import("./mediamind/pages/Roteiro2"));
+const Corp = lazy(() => import("./mediamind/pages/Corp"));
+const ViralClips = lazy(() => import("./mediamind/pages/ViralClips"));
+const ClipsFree = lazy(() => import("./mediamind/pages/ClipsFree"));
+const ClipsFree2 = lazy(() => import("./mediamind/pages/ClipsFree2"));
+const Ingest = lazy(() => import("./mediamind/pages/Ingest"));
+const Workspace2 = lazy(() => import("./mediamind/pages/Workspace2"));
+const Timeline = lazy(() => import("./mediamind/pages/Timeline"));
+const Timeline2 = lazy(() => import("./mediamind/pages/Timeline2"));
+const SearchPage = lazy(() => import("./mediamind/pages/Search"));
+const AssistenteIA = lazy(() => import("./mediamind/pages/AssistenteIA"));
+const ThumbnailStudio = lazy(() => import("./mediamind/pages/ThumbnailStudio"));
+const AITools = lazy(() => import("./mediamind/pages/AITools"));
+const VideoGeneration = lazy(() => import("./mediamind/pages/VideoGeneration"));
+const DarkChannels = lazy(() => import("./mediamind/pages/DarkChannels"));
+const AgenciaVideo = lazy(() => import("./mediamind/pages/AgenciaVideo"));
+const GraphicTools = lazy(() => import("./mediamind/pages/GraphicTools"));
+const SoundCraft = lazy(() => import("./mediamind/pages/SoundCraft"));
+const OfficeCraft = lazy(() => import("./mediamind/pages/OfficeCraft"));
+const AISettings = lazy(() => import("./mediamind/pages/AISettings"));
+const AIUsageDashboard = lazy(() => import("./mediamind/pages/AIUsageDashboard"));
+const Telas2 = lazy(() => import("./mediamind/pages/Telas2"));
+const Gestao2 = lazy(() => import("./mediamind/pages/Gestao2"));
+const APIsIA2 = lazy(() => import("./mediamind/pages/APIsIA2"));
 
 function ModuleRoute({ moduleId, children }) {
   const { user } = useMmAuth();
@@ -67,24 +70,35 @@ function PersistentSoundWorkspace() {
     <div hidden={visible}><Outlet /></div>
     {(visible || visited) && canAccessModule(user?.role, "ai_tools") && (
       <div hidden={!visible} key={`${user.id}:${currentEmpresa?.id || "global"}`}>
-        <Shell persistentPath="/soundcraft"><SoundCraft /></Shell>
+        <Shell persistentPath="/soundcraft"><Suspense fallback={null}><SoundCraft /></Suspense></Shell>
       </div>
     )}
   </>;
 }
 
+function PageLoading() {
+  return <div className="fixed inset-0 flex items-center justify-center bg-slate-950">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-sky-400" />
+  </div>;
+}
+
+function InlinePageLoading() {
+  return <div className="flex h-full min-h-[50vh] items-center justify-center" role="status" aria-label="Carregando página">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-sky-400" />
+  </div>;
+}
+
 function AuthenticatedApp() {
   const { loading: mmLoading } = useMmAuth();
   if (mmLoading) {
-    return <div className="fixed inset-0 flex items-center justify-center bg-slate-950">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-sky-400" />
-    </div>;
+    return <PageLoading />;
   }
   const protectedPage = (Component, moduleId) => {
-    const content = <Shell><Component /></Shell>;
+    // Suspense dentro do Shell: a navegação mantém menu e cabeçalho enquanto a página carrega.
+    const content = <Shell><Suspense fallback={<InlinePageLoading />}><Component /></Suspense></Shell>;
     return moduleId ? <ModuleRoute moduleId={moduleId}>{content}</ModuleRoute> : content;
   };
-  return <Routes>
+  return <Suspense fallback={<PageLoading />}><Routes>
     <Route path="/login" element={<Login />} />
     <Route element={<MmProtectedRoute />}>
       <Route path="/" element={protectedPage(Home)} />
@@ -125,7 +139,7 @@ function AuthenticatedApp() {
       <Route path="/configuracoes/ia" element={protectedPage(AISettings, "ai_tools")} />
     </Route>
     <Route path="*" element={<PageNotFound />} />
-  </Routes>;
+  </Routes></Suspense>;
 }
 
 export default function App() {

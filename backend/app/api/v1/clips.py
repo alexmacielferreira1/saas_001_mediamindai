@@ -17,7 +17,7 @@ from app.clips.transcription import (
 )
 from app.core.config import get_settings
 from app.core.errors import PublicError
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.media.storage import LocalMediaStorage
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -99,9 +99,14 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         from app.api.v1.media import find_asset
 
         asset = find_asset(session, membership.tenant_id, body.asset_id)
-        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data.get("storage_key"))
+        source = LocalMediaStorage(get_settings().media_root).resolve(
+            asset.data.get("storage_key"), tenant_id=asset.tenant_id
+        )
+        api_key = decrypt_ai_key(connection) if connection else None
+        # Grava a análise como "queued" e devolve a conexão ao pool durante a transcrição
+        # e a análise (minutos); o resultado é gravado numa nova transação.
+        release_connection(session)
         if connection:
-            api_key = decrypt_ai_key(connection)
             segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
             candidates = RemoteAnalysisAdapter(connection, api_key).suggest(
                 segments,
@@ -133,6 +138,20 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
             "A transcrição ainda não está configurada para esta empresa. "
             "Configure um provedor para analisar esta mídia.",
         )
+    except Exception:
+        # A análise já foi gravada antes do trabalho longo: não deixá-la presa em "queued".
+        session.rollback()
+        try:
+            service.set_state(
+                record.id,
+                membership.tenant_id,
+                "failed",
+                "A análise falhou. Tente novamente.",
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+        raise
     session.commit()
     result = service.get_analysis(record.id, membership.tenant_id)
     assert result is not None

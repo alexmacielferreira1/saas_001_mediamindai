@@ -127,7 +127,9 @@ describe("MMFilm · ferramentas de um clique do MCP", () => {
     Object.defineProperty(audio, "duration", { value: 734.5 });
     act(() => audio.onloadedmetadata());
     expect(screen.getByText("Duração: 734.5 s")).toBeInTheDocument();
-    expect(container.querySelector('input[type="number"][max="734.5"]')).toHaveValue(734.5);
+    const out = screen.getByRole("spinbutton", { name: "OUT" });
+    expect(out).toHaveAttribute("aria-valuemax", "734.5");
+    expect(out).toHaveValue("734.5");
   });
 
   it("estende a timeline além de 60 s conforme o conteúdo", async () => {
@@ -151,7 +153,7 @@ describe("MMFilm · ferramentas de um clique do MCP", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inserir" }));
     await waitFor(() => expect(clipsOn(container)).toHaveLength(1));
     expect(ruler()).toHaveLength(18);
-    expect(screen.getByRole("button", { name: "01:25" })).toBeInTheDocument();
+    expect(screen.getByText("01:25")).toBeInTheDocument();
   });
   it("explica quando o navegador não tem Web Audio para analisar", async () => {
     vi.stubGlobal("AudioContext", undefined);

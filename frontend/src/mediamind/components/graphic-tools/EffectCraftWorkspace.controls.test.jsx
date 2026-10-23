@@ -33,15 +33,15 @@ describe("MMEffect — histórico e projeto", () => {
   it("desfaz e refaz edições de propriedade pelo menu e pelo teclado", () => {
     renderWorkspace();
     fireEvent.change(screen.getByLabelText("Valor Escala da camada"), { target: { value: "150" } });
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(150);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("150");
     runMenu("Editar", "Desfazer");
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(100);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("100");
     runMenu("Editar", "Refazer");
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(150);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("150");
     fireEvent.keyDown(window, { key: "z", ctrlKey: true });
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(100);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("100");
     fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(150);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("150");
   });
 
   it("desfaz a exclusão de uma camada e de um quadro-chave", () => {
@@ -66,10 +66,12 @@ describe("MMEffect — histórico e projeto", () => {
     expect(screen.getAllByRole("button", { name: /Marcador da composição/ })).toHaveLength(markersBefore);
   });
 
-  it("cria uma composição vazia e preserva as camadas ao alternar", () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Abertura");
+  it("cria uma composição vazia e preserva as camadas ao alternar", async () => {
     renderWorkspace();
     runMenu("Composição", "Nova composição");
+    const dialog = screen.getByRole("dialog", { name: /Nome da nova composição/ });
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Abertura" } });
+    await act(async () => fireEvent.click(within(dialog).getByRole("button", { name: "OK" })));
     expect(screen.getByText("Composição: Abertura")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "MMEffect" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Texto (T)" }));
@@ -155,10 +157,10 @@ describe("MMEffect — ferramentas do visualizador", () => {
     fireEvent.pointerDown(viewer, { clientX: 100, clientY: 0 });
     fireEvent.pointerMove(viewer, { clientX: 0, clientY: 100 });
     fireEvent.pointerUp(viewer);
-    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(90);
+    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue("90");
     expect(layerElement().style.transform).toContain("rotate(90deg)");
     runMenu("Editar", "Desfazer");
-    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue(0);
+    expect(screen.getByLabelText("Valor Rotação da camada")).toHaveValue("0");
   });
 
   it("Âncora (Y) move o ponto de ancoragem da camada", () => {
@@ -236,7 +238,7 @@ describe("MMEffect — prévia, transformação, efeitos e texto", () => {
     fireEvent.click(screen.getByRole("button", { name: /Criar keyframe de scale/ }));
     fireEvent.change(screen.getByLabelText("Valor Escala da camada"), { target: { value: "150" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Redefinir" }).find((button) => button.closest("h4")));
-    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue(100);
+    expect(screen.getByLabelText("Valor Escala da camada")).toHaveValue("100");
     expect(screen.queryByRole("button", { name: /Keyframe scale/ })).not.toBeInTheDocument();
   });
 
@@ -251,7 +253,7 @@ describe("MMEffect — prévia, transformação, efeitos e texto", () => {
     expect(layerElement().style.filter).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Efeitos de MMEffect" }));
     fireEvent.click(screen.getByRole("button", { name: "Redefinir Desfoque gaussiano" }));
-    expect(screen.getByLabelText("Valor de Desfoque")).toHaveValue(0);
+    expect(screen.getByLabelText("Valor de Desfoque")).toHaveValue("0");
     expect(layerElement().style.filter).toBe("");
   });
 

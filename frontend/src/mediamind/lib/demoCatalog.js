@@ -24,6 +24,12 @@ export function getDemoPermissionGroups() {
   return groups.map((group) => ({ ...group, permission_codes: [...group.permission_codes] }));
 }
 
+// Exemplos exibidos quando a empresa ainda não tem registros. Ficam só na tela:
+// nunca são gravados no banco da empresa.
+export function markDemoRecords(rows) {
+  return (rows || []).map((row) => ({ ...row, ...marker }));
+}
+
 export function isDemoRecord(record) {
   return record?.is_demo === true && record?.demo_dataset === DEMO_DATASET;
 }

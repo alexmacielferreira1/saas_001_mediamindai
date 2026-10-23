@@ -4,6 +4,7 @@ import {
   Camera,
   Clapperboard,
   FileText,
+  FileType2,
   Frame,
   Image,
   Layers3,
@@ -167,7 +168,7 @@ const tools = [
     accept: "audio/*",
     panels: ["Edição multipista", "Mesa de mixagem", "Limpeza de voz", "Masterização"],
   },
-  { id: "word", label: "Word", icon: FileText, subtitle: "Documentos e textos", accept: ".doc,.docx,.txt", panels: ["Documento", "Revisão", "Estrutura", "Exportação"] },
+  { id: "word", label: "Word", icon: FileType2, subtitle: "Documentos e textos", accept: ".doc,.docx,.txt", panels: ["Documento", "Revisão", "Estrutura", "Exportação"] },
   { id: "excel", label: "Excel", icon: FileSpreadsheet, subtitle: "Planilhas e dados", accept: ".xls,.xlsx,.csv", panels: ["Planilha", "Fórmulas", "Dados", "Exportação"] },
   { id: "powerpoint", label: "PowerPoint", icon: Presentation, subtitle: "Apresentações e slides", accept: ".ppt,.pptx", panels: ["Slides", "Layout", "Apresentação", "Exportação"] },
 ];

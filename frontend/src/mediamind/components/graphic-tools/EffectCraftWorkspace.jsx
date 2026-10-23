@@ -1,9 +1,12 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { registerMCPActions } from "../../lib/mcpActions";
 import { mmeffectsCatalogue, runMMEffectsTool } from "./mmeffectsMcpTools";
+import NumericField from "./NumericField";
+import { useTextPrompt } from "./FilmCraftTextPrompt";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Anchor,
   Box,
   Camera,
   Circle,
@@ -16,21 +19,34 @@ import {
   PenTool,
   Play,
   RotateCcw,
+  RotateCw,
   Search,
   Square,
   Type,
   Upload,
+  ZoomIn,
 } from "lucide-react";
 
+// Ordem da barra como no After Effects. Câmera e Luz dividem um slot com menu suspenso.
 const TOOLS = [
   ["V", "Seleção", MousePointer2],
   ["H", "Mão", Hand],
+  ["Z", "Zoom", ZoomIn],
+  ["W", "Rotação", RotateCw],
+  ["C", "Câmera", Camera],
+  ["L", "Luz", Lightbulb],
+  ["Y", "Âncora", Anchor],
   ["Q", "Forma", Square],
   ["G", "Caneta", PenTool],
   ["T", "Texto", Type],
-  ["C", "Câmera", Camera],
-  ["L", "Luz", Lightbulb],
 ];
+const CAMERA_LIGHT_TOOLS = ["Câmera", "Luz"];
+const TAGLINE_TEXT = "MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST";
+
+// Texto padrão de camadas antigas que ainda não têm `text` gravado.
+function defaultLayerText(layer) {
+  return layer?.id === "tagline" ? TAGLINE_TEXT : "MMEffect";
+}
 
 const EFFECT_GROUPS = {
   "Animação predefinida": ["Texto · Entrada suave", "Transição · Dissolver", "Formas · Bounce"],
@@ -45,13 +61,6 @@ const EFFECT_GROUPS = {
   "Tempo": ["Eco", "Posterizar tempo", "Timewarp"],
   "Transição": ["Wipe linear", "Iris Wipe", "Block Dissolve"],
 };
-
-// Ferramentas sem botão próprio na barra (mesmos atalhos do After Effects).
-const SHORTCUT_TOOLS = [
-  ["W", "Rotação"],
-  ["Y", "Âncora"],
-  ["Z", "Zoom"],
-];
 
 const COMP_DURATION = 10;
 const FPS = 30;
@@ -211,7 +220,7 @@ function formatTimecode(time) {
  * (máquina de escrever por letra ou por palavra). Sem animação, devolve o texto inteiro.
  */
 export function textAt(layer, time) {
-  const text = layer?.text ?? "MMEffect";
+  const text = layer?.text ?? defaultLayerText(layer);
   const animation = layer?.textAnimation;
   if (!animation || !["letters", "words"].includes(animation.mode)) return text;
   const progress = Math.max(0, Math.min(1, (time - animation.start) / Math.max(0.01, animation.duration)));
@@ -380,12 +389,12 @@ function drawCompositionFrame(ctx, scene, time, width, height) {
     if ("letterSpacing" in ctx) ctx.letterSpacing = `${(size * 0.04).toFixed(2)}px`;
     const lineHeight = numeric(layer.lineHeight, NaN) > 0 ? numeric(layer.lineHeight) * w / 1920 : size * 1.5;
     ctx.fillText(textAt(layer, time), textX, 16 + (lineHeight - size) / 2);
-    if (scene.composition === "EffectCraft Intro") {
+    if (scene.composition === "EffectCraft Intro" && scene.tagline) {
       ctx.shadowBlur = 0;
       ctx.fillStyle = "#67e8f9";
       ctx.font = "14px Inter, sans-serif";
       if ("letterSpacing" in ctx) ctx.letterSpacing = "5.6px";
-      ctx.fillText("MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST", textX, 16 + lineHeight);
+      ctx.fillText(textAt(scene.tagline, time), textX, 16 + lineHeight);
     }
     ctx.restore();
   }
@@ -449,6 +458,15 @@ export default function EffectCraftWorkspace({
   const [appliedEffects, setAppliedEffects] = useGraphicDraftState("EffectCraftWorkspace.jsx:appliedEffects", ["Color Range", "Transformar"]);
   const [selectedLayer, setSelectedLayer] = useGraphicDraftState("EffectCraftWorkspace.jsx:selectedLayer", "shape");
   const [editingLayer, setEditingLayer] = useState(null);
+  // Edição do texto direto no canvas: { layerId, draft, original }.
+  const [textEditing, setTextEditing] = useState(null);
+  const [layerSearch, setLayerSearch] = useState("");
+  const [loopPlayback, setLoopPlayback] = useState(true);
+  const loopRef = useRef(loopPlayback);
+  loopRef.current = loopPlayback;
+  const [cameraLightTool, setCameraLightTool] = useState("Câmera");
+  const [toolFlyout, setToolFlyout] = useState(null);
+  const [askText, textPromptDialog] = useTextPrompt();
   const [layerNameDraft, setLayerNameDraft] = useGraphicDraftState("EffectCraftWorkspace.jsx:layerNameDraft", "");
   const [parentDrag, setParentDrag] = useState(null);
   const [layers, setLayers] = useGraphicDraftState("EffectCraftWorkspace.jsx:layers", [
@@ -639,12 +657,26 @@ export default function EffectCraftWorkspace({
 
   useEffect(() => {
     if (!playing || !active) return;
+    // "Repetir" desligado: a reprodução para no último quadro em vez de voltar ao início.
     const timer = setInterval(
-      () => setPlayhead((old) => (old >= 10 ? 0 : old + 0.1)),
+      () => setPlayhead((old) => (old >= COMP_DURATION ? (loopRef.current ? 0 : COMP_DURATION) : Math.min(COMP_DURATION, old + 0.1))),
       100,
     );
     return () => clearInterval(timer);
   }, [playing, active]);
+
+  useEffect(() => {
+    if (playing && !loopPlayback && playhead >= COMP_DURATION) setPlaying(false);
+  }, [playing, loopPlayback, playhead]);
+
+  useEffect(() => {
+    if (!toolFlyout) return undefined;
+    const close = (event) => {
+      if (!event.target.closest?.("[data-effect-flyout]")) setToolFlyout(null);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [toolFlyout]);
 
   useEffect(() => {
     const layouts = {
@@ -671,7 +703,13 @@ export default function EffectCraftWorkspace({
       evaluateKeyframes(animated[property], playhead, fallback),
     ]));
   }, [playhead, propertyKeyframes, selectedLayer, transform]);
-  const showLayerBox = composition === "EffectCraft Intro" || (!PRESET_COMPOSITIONS.includes(composition) && Boolean(activeLayer));
+  const editingText = textEditing && activeLayer?.id === textEditing.layerId ? textEditing : null;
+  // Nas composições de exemplo sem caixa de camada, a caixa aparece enquanto o texto é editado.
+  const showLayerBox = composition === "EffectCraft Intro" || (!PRESET_COMPOSITIONS.includes(composition) && Boolean(activeLayer)) || Boolean(editingText);
+  const taglineLayer = composition === "EffectCraft Intro" ? layers.find((layer) => layer.id === "tagline" && layer.kind === "T") : null;
+  const timelineLayers = layerSearch.trim()
+    ? layers.filter((layer) => layer.name.toLowerCase().includes(layerSearch.trim().toLowerCase()))
+    : layers;
   const layerFilter = useMemo(() => {
     const filters = [];
     if (activeLayer && activeLayer.effectsEnabled !== false) filters.push(buildEffectFilter(appliedEffects, effectParams));
@@ -725,21 +763,48 @@ export default function EffectCraftWorkspace({
   }
 
   function addLayer(kind) {
+    commitTextEdit();
     const id = crypto.randomUUID();
+    const isText = kind === "Texto";
     setLayers((old) => [
       {
         id,
         name: `${kind} ${old.length + 1}`,
-        kind: kind === "Texto" ? "T" : "▣",
+        kind: isText ? "T" : "▣",
         color: "bg-fuchsia-500",
         visible: true,
         locked: false,
         start: playhead,
         duration: 4,
+        ...(isText ? { text: "" } : {}),
       },
       ...old,
     ]);
     setSelectedLayer(id);
+    // Camada de texto nova já entra em edição com o foco no editor (letras não viram atalhos).
+    if (isText) setTextEditing({ layerId: id, draft: "", original: "" });
+  }
+
+  function beginTextEdit(layer) {
+    if (!layer || layer.kind !== "T" || layer.locked) return false;
+    if (textEditing?.layerId === layer.id) return true;
+    commitTextEdit();
+    const current = layer.text ?? defaultLayerText(layer);
+    setSelectedLayer(layer.id);
+    setTextEditing({ layerId: layer.id, draft: current, original: current });
+    return true;
+  }
+
+  function commitTextEdit() {
+    if (!textEditing) return;
+    const { layerId, draft, original } = textEditing;
+    setTextEditing(null);
+    // Cada confirmação é um passo próprio no histórico.
+    if (draft !== original) setLayerValue(layerId, "text", draft);
+  }
+
+  function cancelTextEdit() {
+    setTextEditing(null);
   }
 
   function projectSnapshot() {
@@ -825,11 +890,12 @@ export default function EffectCraftWorkspace({
     return { layers, propertyKeyframes, markers, appliedEffects, selectedLayer };
   }
 
-  function newComposition() {
+  // window.prompt é bloqueado em painéis embutidos: a caixa de texto do app substitui.
+  async function newComposition() {
     const existing = new Set([...PRESET_COMPOSITIONS, ...Object.keys(compStore), composition]);
     let index = 1;
     while (existing.has(`Composição ${index}`)) index += 1;
-    const answer = window.prompt("Nome da nova composição (1920×1080, 10 s):", `Composição ${index}`);
+    const answer = await askText("Nome da nova composição (1920×1080, 10 s):", `Composição ${index}`);
     if (answer === null) return;
     const name = answer.trim();
     if (!name) return;
@@ -853,12 +919,12 @@ export default function EffectCraftWorkspace({
     setStatusMessage(`Composição ${name} criada.`);
   }
 
-  function renameComposition() {
+  async function renameComposition() {
     if (PRESET_COMPOSITIONS.includes(composition)) {
       setStatusMessage("Composições de exemplo não podem ser renomeadas. Use Nova composição.");
       return;
     }
-    const answer = window.prompt("Nome da composição:", composition);
+    const answer = await askText("Nome da composição:", composition);
     const name = answer?.trim();
     if (!name || name === composition) return;
     if (PRESET_COMPOSITIONS.includes(name) || compStore[name]) {
@@ -918,6 +984,7 @@ export default function EffectCraftWorkspace({
     return {
       composition,
       layer: activeLayer || null,
+      tagline: taglineLayer && taglineLayer.id !== activeLayer?.id ? taglineLayer : null,
       showBox: showLayerBox,
       canvasBox,
       transform,
@@ -1168,8 +1235,8 @@ export default function EffectCraftWorkspace({
         setLayerValue(activeLayer.id, "maskPath", { ...activeLayer.maskPath, closed: true });
         return;
       }
-      const shortcut = [...TOOLS, ...SHORTCUT_TOOLS].find(([shortcutKey]) => shortcutKey.toLowerCase() === key);
-      if (shortcut) { event.preventDefault(); setTool(shortcut[1]); }
+      const shortcut = TOOLS.find(([shortcutKey]) => shortcutKey.toLowerCase() === key);
+      if (shortcut) { event.preventDefault(); selectTool(shortcut[1]); }
       if (event.key === "Escape") setSelectedLayer(null);
     }
   }
@@ -1193,8 +1260,20 @@ export default function EffectCraftWorkspace({
     };
   }
 
+  function selectTool(name) {
+    setTool(name);
+    if (CAMERA_LIGHT_TOOLS.includes(name)) setCameraLightTool(name);
+  }
+
   function useActiveTool(event) {
+    // Cliques dentro do editor de texto não criam camadas nem mexem em ferramentas.
+    if (event.target?.closest?.("[data-effect-text-editor]")) return;
     if (tool === "Seleção") return;
+    // Texto sobre uma camada de texto existente: edita em vez de criar outra.
+    if (tool === "Texto" && event.target?.closest?.("[data-effect-layer]") && beginTextEdit(activeLayer)) {
+      event.preventDefault();
+      return;
+    }
     if (tool === "Mão") {
       beginCanvasGesture(event, "pan");
       return;
@@ -1245,7 +1324,11 @@ export default function EffectCraftWorkspace({
       return;
     }
     const layerKind = tool === "Caneta" ? "Forma" : tool;
-    if (["Texto", "Forma", "Câmera", "Luz"].includes(layerKind)) addLayer(layerKind);
+    if (["Texto", "Forma", "Câmera", "Luz"].includes(layerKind)) {
+      // Evita que o mousedown seguinte tire o foco do editor de texto recém-aberto.
+      if (layerKind === "Texto") event.preventDefault();
+      addLayer(layerKind);
+    }
   }
 
   function placeAsset(event) {
@@ -1390,18 +1473,60 @@ export default function EffectCraftWorkspace({
         ))}
       </div>
 
-      <div className="flex h-9 items-center gap-0.5 overflow-x-auto border-b border-[#080808] bg-[#202020] px-1">
+      <div role="toolbar" aria-label="Ferramentas do MMEffect" className="flex h-9 items-center gap-0.5 overflow-x-auto border-b border-[#080808] bg-[#202020] px-1">
         <span className="mr-1 grid h-6 w-6 place-items-center rounded bg-gradient-to-br from-blue-400 to-violet-600 text-[10px] font-black">M</span>
-        {TOOLS.map(([shortcut, name, Icon]) => (
-          <button
-            key={name}
-            title={`${name} (${shortcut})`}
-            onClick={() => setTool(name)}
-            className={`grid h-7 w-7 shrink-0 place-items-center rounded-sm ${tool === name ? "bg-[#2675df] text-white" : "text-[#bdbdbd] hover:bg-[#353535]"}`}
-          >
-            <Icon size={15} />
-          </button>
-        ))}
+        {TOOLS.filter(([, name]) => !CAMERA_LIGHT_TOOLS.includes(name) || name === "Câmera").map(([toolShortcut, toolName, ToolIcon]) => {
+          const grouped = CAMERA_LIGHT_TOOLS.includes(toolName);
+          const [shortcut, name, Icon] = grouped ? TOOLS.find(([, item]) => item === cameraLightTool) : [toolShortcut, toolName, ToolIcon];
+          const button = (
+            <button
+              key={name}
+              title={`${name} (${shortcut})`}
+              aria-label={`${name} (${shortcut})`}
+              aria-pressed={tool === name}
+              onClick={() => selectTool(name)}
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-sm ${tool === name ? "bg-[#2675df] text-white" : "text-[#bdbdbd] hover:bg-[#353535]"}`}
+            >
+              <Icon size={15} />
+            </button>
+          );
+          if (!grouped) return button;
+          return (
+            <span key="camera-light" data-effect-flyout className="flex shrink-0 items-center">
+              {button}
+              <button
+                aria-label="Mais ferramentas de câmera e luz"
+                title="Câmera (C) / Luz (L)"
+                aria-haspopup="menu"
+                aria-expanded={Boolean(toolFlyout)}
+                onClick={(event) => {
+                  const rect = event.currentTarget.parentElement.getBoundingClientRect();
+                  setToolFlyout(toolFlyout ? null : { left: rect.left, top: rect.bottom });
+                }}
+                className="grid h-7 w-3 shrink-0 place-items-center rounded-sm text-[9px] text-[#bdbdbd] hover:bg-[#353535]"
+              >
+                ▾
+              </button>
+              {toolFlyout && typeof document !== "undefined" && createPortal(
+                <div data-effect-flyout role="menu" aria-label="Câmera e luz" className="fixed z-50 min-w-36 border border-[#555] bg-[#292929] py-1 text-[11px] text-slate-200 shadow-xl" style={{ left: toolFlyout.left, top: toolFlyout.top }}>
+                  {TOOLS.filter(([, item]) => CAMERA_LIGHT_TOOLS.includes(item)).map(([itemShortcut, item, ItemIcon]) => (
+                    <button
+                      key={item}
+                      role="menuitemradio"
+                      aria-checked={cameraLightTool === item}
+                      aria-label={`${item} (${itemShortcut})`}
+                      onClick={() => { selectTool(item); setToolFlyout(null); }}
+                      className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left hover:bg-[#2675df] hover:text-white"
+                    >
+                      <ItemIcon size={13} />{item}<span className="ml-auto text-[#999]">{itemShortcut}</span>
+                    </button>
+                  ))}
+                </div>,
+                document.body,
+              )}
+            </span>
+          );
+        })}
         <span className="mx-1 h-5 w-px bg-[#555]" />
         <label className="flex items-center gap-2 px-2 text-[10px] text-slate-400"><input type="checkbox" aria-label="Ajustar (encaixe)" checked={Boolean(snapping)} onChange={(event)=>setSnapping(event.target.checked)} className="accent-blue-500"/> Ajustar</label>
         <span className="ml-auto flex h-full items-center text-[10px]">{["Padrão","Animação","Standard","Tela pequena"].map(item=><button key={item} onClick={()=>setWorkspace(item)} className={`h-full px-3 ${workspace===item?'border-b-2 border-blue-400 text-blue-300':'text-[#aaa] hover:text-white'}`}>{item}</button>)}</span>
@@ -1460,7 +1585,7 @@ export default function EffectCraftWorkspace({
           <div className="flex h-full min-h-0 flex-col bg-black">
             <div className="flex items-center border-b border-slate-800 bg-[#151920] px-3 py-2 text-[10px]">
               <b>Composição: {composition}</b>
-              {activeLayer && <label className="ml-3 flex items-center gap-2">Texto da camada<input aria-label="Texto da camada selecionada" disabled={activeLayer.locked} value={activeLayer.text ?? "MMEffect"} onChange={event => setLayers(old => old.map(layer => layer.id === activeLayer.id ? { ...layer, text: event.target.value } : layer))} className="w-40 bg-[#252525] px-2 py-1"/></label>}
+              {activeLayer && <label className="ml-3 flex items-center gap-2">Texto da camada<input aria-label="Texto da camada selecionada" disabled={activeLayer.locked} value={activeLayer.text ?? defaultLayerText(activeLayer)} onChange={event => setLayers(old => old.map(layer => layer.id === activeLayer.id ? { ...layer, text: event.target.value } : layer))} className="w-40 bg-[#252525] px-2 py-1"/></label>}
               {statusMessage && <span role="status" aria-label="Status do MMEffect" title={statusMessage} className="ml-3 min-w-0 truncate text-amber-300">{statusMessage}</span>}
               <span className="ml-auto shrink-0 text-slate-500">
                 Visualização: Ativa · Resolução: Completa · {zoom}%
@@ -1492,11 +1617,27 @@ export default function EffectCraftWorkspace({
                   data-three-d={activeLayer?.threeD ? "on" : undefined}
                 >
                   <div style={{clipPath: maskClipPath(activeLayer), ...layerAlignStyle(activeLayer)}}>
-                  <span aria-label="Texto renderizado da camada" className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]" style={layerTextStyle(activeLayer)}>
+                  {editingText ? <textarea
+                    autoFocus
+                    data-effect-text-editor
+                    aria-label="Editar texto da camada"
+                    placeholder="Digite o texto"
+                    rows={1}
+                    value={editingText.draft}
+                    onChange={(event) => setTextEditing((current) => current && { ...current, draft: event.target.value })}
+                    onBlur={commitTextEdit}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") { event.preventDefault(); cancelTextEdit(); }
+                      else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); commitTextEdit(); }
+                    }}
+                    className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-center text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white caret-white outline-none ring-1 ring-[#55a4ff]/60 drop-shadow-[0_0_8px_rgba(255,255,255,.7)] placeholder:text-white/40"
+                    style={{ ...layerTextStyle(activeLayer), ...layerAlignStyle(activeLayer) }}
+                  /> : <span aria-label="Texto renderizado da camada" onDoubleClick={() => beginTextEdit(activeLayer)} className="block text-[clamp(24px,4vw,62px)] font-black tracking-[0.04em] text-white drop-shadow-[0_0_8px_rgba(255,255,255,.7)]" style={layerTextStyle(activeLayer)}>
                     {textAt(activeLayer, playhead)}
-                  </span>
-                  {composition === "EffectCraft Intro" && <span className="text-sm tracking-[0.4em] text-cyan-300">
-                    MOTION GRAPHICS · VISUAL EFFECTS · PURE RUST
+                  </span>}
+                  {taglineLayer && taglineLayer.id !== activeLayer?.id && <span aria-label={`Texto da camada ${taglineLayer.name}`} className="text-sm tracking-[0.4em] text-cyan-300">
+                    {textAt(taglineLayer, playhead)}
                   </span>}
                   </div>
                   {activeLayer?.maskPath?.points?.length > 0 && <svg aria-label="Traçado da caneta" data-closed={activeLayer.maskPath.closed ? "true" : "false"} className="pointer-events-none absolute inset-0 z-20 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -1568,7 +1709,7 @@ export default function EffectCraftWorkspace({
             <div className="flex items-center gap-3 border-b border-slate-800 p-2 text-[10px]">
               <b className="text-white">{composition}</b>
               <span className="font-mono text-xl text-[#33a3ff]">{formatTimecode(playhead)}</span>
-              <label className="ml-2 flex items-center gap-2 rounded-full bg-[#171b22] px-3 py-1"><Search size={12}/><input placeholder="Pesquisar" className="w-24 bg-transparent outline-none"/></label>
+              <label className="ml-2 flex items-center gap-2 rounded-full bg-[#171b22] px-3 py-1"><Search size={12}/><input aria-label="Pesquisar camadas" placeholder="Pesquisar" value={layerSearch} onChange={(event)=>setLayerSearch(event.target.value)} className="w-24 bg-transparent outline-none"/></label>
               <button onClick={()=>setShowSwitches(value=>!value)} aria-pressed={showSwitches} className={`ml-auto rounded px-2 py-1 ${showSwitches?'bg-[#2675df]':'bg-[#30343b]'}`}>Switches</button>
               <button onClick={()=>setShowModes(value=>!value)} aria-pressed={showModes} className={`rounded px-2 py-1 ${showModes?'bg-[#2675df]':'bg-[#30343b]'}`}>Modos</button>
               <button onClick={()=>setGraphEditor(value=>!value)} aria-pressed={graphEditor} className={`rounded border px-2 py-1 ${graphEditor?'border-blue-400 bg-blue-500/20 text-blue-200':'border-slate-700'}`}>Editor de gráficos</button>
@@ -1596,7 +1737,7 @@ export default function EffectCraftWorkspace({
                 </div>
                 <div className="flex-1 bg-[linear-gradient(90deg,transparent_98%,#334155_98%)] bg-[size:10%_100%]"/>
               </div>
-              {layers.map((layer, index) => (
+              {timelineLayers.map((layer) => (
                 <div
                   key={layer.id}
                   className={`flex min-h-7 flex-wrap border-t border-[#333] ${selectedLayer === layer.id ? "bg-[#454545]" : ""}`}
@@ -1616,7 +1757,7 @@ export default function EffectCraftWorkspace({
                     </button>
                     <button aria-label={`${(layer.markers||[]).includes(Math.round(playhead*100)/100)?"Remover":"Adicionar"} marcador de ${layer.name}`} aria-pressed={(layer.markers||[]).includes(Math.round(playhead*100)/100)} onClick={() => toggleLayerMarker(layer.id)} className={`grid h-5 place-items-center border border-[#111] bg-[#151515] ${(layer.markers||[]).length?"text-[#bcbcbc]":"text-[#555]"}`}><EffectIcon name="keyframe"/></button>
                     <span className={`mx-auto h-4 w-4 rounded-[3px] ${layer.color}`}/>
-                    <span className="text-center text-[#aaa]">{index + 1}</span>
+                    <span className="text-center text-[#aaa]">{layers.indexOf(layer) + 1}</span>
                     <button aria-label={`${expandedLayers.includes(layer.id)?"Recolher":"Expandir"} propriedades de ${layer.name}`} onClick={()=>toggleLayerExpanded(layer.id)} className="grid place-items-center text-[#999]"><EffectIcon name={expandedLayers.includes(layer.id)?"chevronDown":"chevronRight"}/></button>
                     <span className="grid place-items-center text-[#858585]"><EffectIcon name="footage"/></span>
                     {editingLayer === layer.id ? <input
@@ -1708,7 +1849,7 @@ export default function EffectCraftWorkspace({
 
         <aside className={`col-start-3 row-span-2 row-start-1 min-h-0 overflow-auto bg-[#202020] ${compactWorkspace ? "invisible" : ""}`}>
           <PanelTabs labels={["Pré-visualização", "Informações", "Áudio"]} active={rightTopPanel} onChange={setRightTopPanel} />
-          {rightTopPanel === "Pré-visualização" ? <PreviewPanel playing={playing} setPlaying={setPlaying} onJump={(time)=>{setPlaying(false);setPlayhead(time)}} onStep={stepPlayhead} /> : rightTopPanel === "Informações" ? <InfoPanel transform={displayTransform} /> : <AudioPanel />}
+          {rightTopPanel === "Pré-visualização" ? <PreviewPanel playing={playing} setPlaying={setPlaying} loop={loopPlayback} setLoop={setLoopPlayback} onJump={(time)=>{setPlaying(false);setPlayhead(time)}} onStep={stepPlayhead} /> : rightTopPanel === "Informações" ? <InfoPanel transform={displayTransform} /> : <AudioPanel />}
           <PanelTabs labels={["Propriedades", "Efeitos e predefinições"]} active={rightBottomPanel} onChange={setRightBottomPanel} />
           {rightBottomPanel === "Efeitos e predefinições" ? <EffectsBrowser search={search} setSearch={setSearch} visibleEffectGroups={visibleEffectGroups} openEffectGroups={openEffectGroups} setOpenEffectGroups={setOpenEffectGroups} setAppliedEffects={setAppliedEffects} setLeftPanel={setLeftPanel} /> : <>
           <div className="border-t border-slate-800 p-3">
@@ -1745,7 +1886,7 @@ export default function EffectCraftWorkspace({
           <PropertiesExtras activeLayer={activeLayer} onChange={(key,value)=>{if(!activeLayer||activeLayer.locked)return;mergeHistoryAs(`layer:${activeLayer.id}:${key}`);setLayerValue(activeLayer.id,key,value)}} />
           <div className="border-t border-[#383838] p-3 text-[10px]">
             <div className="mb-3 flex items-center border-b border-[#383838] pb-2"><b>Alinhar</b><span className="ml-auto text-[#999]">☰</span></div>
-            <label className="mb-2 flex items-center gap-2 text-[#aaa]">Alinhar camadas a:<select className="ml-auto rounded border border-[#444] bg-[#191919] px-2 py-1 text-white"><option>Composição</option><option>Seleção</option></select></label>
+            <label className="mb-2 flex items-center gap-2 text-[#aaa]">Alinhar camadas a:<select aria-label="Alinhar camadas a" disabled defaultValue="Composição" title="Ainda não disponível: o MMEffect seleciona uma camada por vez, então os botões alinham sempre à composição." className="ml-auto rounded border border-[#444] bg-[#191919] px-2 py-1 text-white disabled:opacity-60"><option>Composição</option><option>Seleção</option></select></label>
             <div className="grid grid-cols-6 gap-1">
               <button aria-label="Alinhar à esquerda" onClick={()=>changeTransform("x",0)} className="rounded bg-[#292929] py-2">▏←</button>
               <button aria-label="Centralizar horizontalmente" onClick={()=>changeTransform("x",960)} className="rounded bg-[#292929] py-2">↔</button>
@@ -1762,6 +1903,7 @@ export default function EffectCraftWorkspace({
           </>}
         </aside>
       </div>
+      {textPromptDialog}
     </section>
   );
 }
@@ -1788,7 +1930,7 @@ function AePropertyRow({ propertyKey, value, playhead, keyed, onToggleKeyframe, 
   return <div className="group grid h-7 grid-cols-[18px_minmax(58px,1fr)_64px] items-center gap-1 px-1 text-[10px] hover:bg-[#2a2a2a]">
     <button type="button" aria-label={`Criar keyframe de ${propertyKey} em ${playhead.toFixed(2)}s`} aria-pressed={keyed} onClick={onToggleKeyframe} className={`grid place-items-center ${keyed?"text-blue-400":"text-[#888] hover:text-blue-300"}`}><EffectIcon name="stopwatch"/></button>
     <span className="capitalize text-[#c5c5c5]">{label}</span>
-    <input aria-label={`Valor ${label} da camada`} type="number" value={value} onChange={(event)=>onChange(Number(event.target.value))} className="h-5 w-full border-0 border-b border-transparent bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:border-[#666] focus:border-[#3ea6ff]"/>
+    <NumericField aria-label={`Valor ${label} da camada`} value={value} onChange={onChange} className="h-5 w-full border-0 border-b border-transparent bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:border-[#666] focus:border-[#3ea6ff]"/>
     <input aria-label={`${label} da camada`} type="range" min={min} max={max} value={value} onChange={(event)=>onChange(Number(event.target.value))} className="col-span-3 -mt-1 h-1 w-full accent-[#3b8edb]"/>
   </div>;
 }
@@ -1846,7 +1988,7 @@ function EffectControl({ effect, transform, onTransformChange, values = {}, onVa
     <div className="flex h-7 items-center gap-1 bg-[#34476c] px-1">
       <button aria-label={`${open?"Recolher":"Expandir"} ${effect}`} aria-expanded={open} onClick={()=>setOpen(value=>!value)} className="grid w-4 place-items-center text-[#ddd]"><EffectIcon name={open?"chevronDown":"chevronRight"}/></button><EffectIcon name="fx"/><b className="truncate">{effect}</b><button aria-label={`Redefinir ${effect}`} onClick={onReset} className="ml-auto text-[#bbb]">Redefinir</button><button aria-label={`Remover ${effect}`} onClick={onRemove} className="relative h-4 w-4 before:absolute before:left-1/2 before:top-0 before:h-4 before:w-px before:rotate-45 before:bg-current after:absolute after:left-1/2 after:top-0 after:h-4 after:w-px after:-rotate-45 after:bg-current"/>
     </div>
-    {open && (fields ? <div className="py-1">{fields.map(([label,initial,range])=>{const value=values[label]??initial;const isChoice=label.includes("Space")||label==="Animation";const [min,max]=range||rangeFor(label);return <div key={label} className="group grid min-h-7 grid-cols-[18px_minmax(82px,1fr)_58px_64px] items-center gap-1 px-1 text-[10px] hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span className="truncate text-[#c6c6c6]">{label}</span>{isChoice?<select aria-label={`Valor de ${label}`} value={value} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="col-span-2 h-5 border border-[#444] bg-[#191919] px-1"><option>{value}</option></select>:<><input aria-label={`Valor de ${label}`} type="number" value={String(value).replace("°","")} step="any" onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:bg-[#171717]"/><input aria-label={`${label} deslizante`} type="range" min={min} max={max} step="any" value={String(value).replace("°","")} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-1 w-full accent-[#3b8edb]"/></>}</div>})}</div> : Object.entries(transform).map(([key,value])=>{const [min,max]=rangeFor(key);return <label key={key} className="grid h-7 grid-cols-[18px_1fr_58px_64px] items-center gap-1 px-1 capitalize hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span>{key}</span><input aria-label={`Valor de ${key} no efeito`} type="number" value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none"/><input aria-label={`${key} do efeito deslizante`} type="range" min={min} max={max} value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-1 w-full accent-[#3b8edb]"/></label>}))}
+    {open && (fields ? <div className="py-1">{fields.map(([label,initial,range])=>{const value=values[label]??initial;const isChoice=label.includes("Space")||label==="Animation";const [min,max]=range||rangeFor(label);return <div key={label} className="group grid min-h-7 grid-cols-[18px_minmax(82px,1fr)_58px_64px] items-center gap-1 px-1 text-[10px] hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span className="truncate text-[#c6c6c6]">{label}</span>{isChoice?<select aria-label={`Valor de ${label}`} value={value} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="col-span-2 h-5 border border-[#444] bg-[#191919] px-1"><option>{value}</option></select>:<><NumericField aria-label={`Valor de ${label}`} value={numeric(value)} onChange={next=>setValues(old=>({...old,[label]:next}))} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none hover:bg-[#171717]"/><input aria-label={`${label} deslizante`} type="range" min={min} max={max} step="any" value={String(value).replace("°","")} onChange={event=>setValues(old=>({...old,[label]:event.target.value}))} className="h-1 w-full accent-[#3b8edb]"/></>}</div>})}</div> : Object.entries(transform).map(([key,value])=>{const [min,max]=rangeFor(key);return <label key={key} className="grid h-7 grid-cols-[18px_1fr_58px_64px] items-center gap-1 px-1 capitalize hover:bg-[#292929]"><span className="text-[#888]"><EffectIcon name="stopwatch"/></span><span>{key}</span><NumericField aria-label={`Valor de ${key} no efeito`} value={value} onChange={next=>onTransformChange(key,next)} className="h-5 border-0 bg-transparent px-1 text-right text-[#3ea6ff] outline-none"/><input aria-label={`${key} do efeito deslizante`} type="range" min={min} max={max} value={value} onChange={event=>onTransformChange(key,event.target.value)} className="h-1 w-full accent-[#3b8edb]"/></label>}))}
   </section>;
 }
 
@@ -1854,8 +1996,8 @@ function EffectsBrowser({ search, setSearch, visibleEffectGroups, openEffectGrou
   return <div className="p-3"><label className="flex items-center gap-2 rounded border border-slate-700 bg-slate-950 px-2 py-1.5"><Search size={13}/><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Pesquisar efeitos e predefinições" className="min-w-0 flex-1 bg-transparent text-xs outline-none"/></label><div className="mt-2 space-y-1">{visibleEffectGroups.map(([group,effects])=>{const open=openEffectGroups.includes(group)||search;return <section key={group}><button onClick={()=>setOpenEffectGroups(old=>old.includes(group)?old.filter(item=>item!==group):[...old,group])} className="flex w-full items-center gap-2 px-1 py-1.5 text-left text-[10px] font-semibold hover:bg-slate-800"><span>{open?'⌄':'›'}</span><span className="text-amber-300">▱</span>{group}<span className="ml-auto text-slate-600">{effects.length}</span></button>{open&&<div className="ml-4 border-l border-slate-700 pl-2">{effects.map(effect=><button key={effect} onDoubleClick={()=>{setAppliedEffects(old=>old.includes(effect)?old:[...old,effect]);setLeftPanel('Controles de efeitos')}} className="block w-full rounded px-2 py-1.5 text-left text-[10px] hover:bg-indigo-500/20">fx&nbsp; {effect}</button>)}</div>}</section>})}</div><p className="mt-3 text-[9px] text-slate-500">Clique duas vezes para aplicar à camada selecionada.</p></div>;
 }
 
-function PreviewPanel({ playing, setPlaying, onJump, onStep }) {
-  return <div className="p-3 text-[10px]"><div className="mb-4 flex items-center justify-center gap-5"><button aria-label="Ir para o primeiro quadro" title="Ir para o primeiro quadro" onClick={()=>onJump?.(0)}>◀◀</button><button aria-label="Quadro anterior" title="Quadro anterior" onClick={()=>onStep?.(-1/FPS)}>◀</button><button onClick={()=>setPlaying(!playing)} className="grid h-8 w-8 place-items-center rounded hover:bg-slate-800">{playing?<Pause size={15}/>:<Play size={15}/>}</button><button aria-label="Próximo quadro" title="Próximo quadro" onClick={()=>onStep?.(1/FPS)}>▶</button><button aria-label="Ir para o último quadro" title="Ir para o último quadro" onClick={()=>onJump?.(COMP_DURATION)}>▶▶</button></div><dl className="grid grid-cols-[110px_1fr] gap-y-2 text-slate-400"><dt>Atalho</dt><dd className="text-slate-200">Barra de espaço</dd><dt>Repetir</dt><dd><input type="checkbox" defaultChecked/></dd><dt>Intervalo</dt><dd className="text-slate-200">Área de trabalho</dd><dt>Reproduzir de</dt><dd className="text-slate-200">Tempo atual</dd><dt>Taxa de quadros</dt><dd className="text-slate-200">29,97</dd><dt>Resolução</dt><dd className="text-slate-200">Automática</dd></dl><div className="mt-4 h-1.5 overflow-hidden rounded bg-slate-900"><div className="h-full w-1/3 bg-emerald-500"/></div><p className="mt-2 text-slate-500">36 / 300 quadros em cache</p></div>;
+function PreviewPanel({ playing, setPlaying, loop, setLoop, onJump, onStep }) {
+  return <div className="p-3 text-[10px]"><div className="mb-4 flex items-center justify-center gap-5"><button aria-label="Ir para o primeiro quadro" title="Ir para o primeiro quadro" onClick={()=>onJump?.(0)}>◀◀</button><button aria-label="Quadro anterior" title="Quadro anterior" onClick={()=>onStep?.(-1/FPS)}>◀</button><button aria-label={playing?"Pausar prévia":"Reproduzir prévia"} title={playing?"Pausar prévia":"Reproduzir prévia"} onClick={()=>setPlaying(!playing)} className="grid h-8 w-8 place-items-center rounded hover:bg-slate-800">{playing?<Pause size={15}/>:<Play size={15}/>}</button><button aria-label="Próximo quadro" title="Próximo quadro" onClick={()=>onStep?.(1/FPS)}>▶</button><button aria-label="Ir para o último quadro" title="Ir para o último quadro" onClick={()=>onJump?.(COMP_DURATION)}>▶▶</button></div><dl className="grid grid-cols-[110px_1fr] gap-y-2 text-slate-400"><dt>Atalho</dt><dd className="text-slate-200">Barra de espaço</dd><dt>Repetir</dt><dd><input type="checkbox" aria-label="Repetir reprodução" title="Ao chegar ao fim, voltar ao início" checked={Boolean(loop)} onChange={(event)=>setLoop?.(event.target.checked)}/></dd><dt>Intervalo</dt><dd className="text-slate-200">Área de trabalho</dd><dt>Reproduzir de</dt><dd className="text-slate-200">Tempo atual</dd><dt>Taxa de quadros</dt><dd className="text-slate-200">29,97</dd><dt>Resolução</dt><dd className="text-slate-200">Automática</dd></dl><div className="mt-4 h-1.5 overflow-hidden rounded bg-slate-900"><div className="h-full w-1/3 bg-emerald-500"/></div><p className="mt-2 text-slate-500">36 / 300 quadros em cache</p></div>;
 }
 
 function InfoPanel({ transform }) {
@@ -1869,7 +2011,7 @@ function AudioPanel() {
 function PropertiesExtras({ activeLayer, onChange }) {
   const disabled = !activeLayer || activeLayer.locked;
   if (activeLayer?.kind !== "T") return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Opções da camada</h4><label className="flex gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(activeLayer?.motionBlur)} onChange={(event)=>onChange?.("motionBlur",event.target.checked)}/> Desfoque de movimento</label><label className="mt-2 flex gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(activeLayer?.threeD)} onChange={(event)=>onChange?.("threeD",event.target.checked)}/> Camada 3D</label></div>;
-  return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Texto</h4><select aria-label="Fonte do texto" disabled={disabled} value={activeLayer.fontFamily || "Inter"} onChange={(event)=>onChange?.("fontFamily",event.target.value)} className="mb-2 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Inter</option><option>Source Sans 3</option></select><select aria-label="Peso da fonte" disabled={disabled} value={activeLayer.fontWeight || "Bold"} onChange={(event)=>onChange?.("fontWeight",event.target.value)} className="mb-3 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Bold</option><option>Regular</option></select><div className="grid grid-cols-2 gap-2"><label>Tamanho<input aria-label="Tamanho do texto" disabled={disabled} value={activeLayer.fontSize ?? "148 px"} onChange={(event)=>onChange?.("fontSize",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label><label>Entrelinha<input aria-label="Entrelinha do texto" disabled={disabled} value={activeLayer.lineHeight ?? "Auto"} onChange={(event)=>onChange?.("lineHeight",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label></div><h4 className="mb-2 mt-4 font-semibold">Parágrafo</h4><div className="flex justify-between">{['≡','≣','≡','☷','☰'].map((item,index)=><button key={index} aria-label={PARAGRAPH_ALIGNMENTS[index][1]} aria-pressed={(activeLayer.textAlign || "center") === PARAGRAPH_ALIGNMENTS[index][0]} disabled={disabled} onClick={()=>onChange?.("textAlign",PARAGRAPH_ALIGNMENTS[index][0])} className="h-8 w-8 rounded hover:bg-slate-800">{item}</button>)}</div><button disabled title="Animadores de texto ainda não estão disponíveis no MMEffect" className="mt-4 rounded border border-slate-700 px-3 py-2">+ Adicionar animador</button></div>;
+  return <div className="border-t border-slate-800 p-3 text-[10px]"><h4 className="mb-2 font-semibold">Texto</h4><label className="mb-2 block">Texto de origem<textarea aria-label="Texto de origem" disabled={disabled} rows={2} placeholder="Digite o texto" value={activeLayer.text ?? defaultLayerText(activeLayer)} onChange={(event)=>onChange?.("text",event.target.value)} className="mt-1 w-full resize-y rounded border border-slate-700 bg-[#0d1015] p-2"/></label><select aria-label="Fonte do texto" disabled={disabled} value={activeLayer.fontFamily || "Inter"} onChange={(event)=>onChange?.("fontFamily",event.target.value)} className="mb-2 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Inter</option><option>Source Sans 3</option></select><select aria-label="Peso da fonte" disabled={disabled} value={activeLayer.fontWeight || "Bold"} onChange={(event)=>onChange?.("fontWeight",event.target.value)} className="mb-3 w-full rounded border border-slate-700 bg-[#0d1015] p-2"><option>Bold</option><option>Regular</option></select><div className="grid grid-cols-2 gap-2"><label>Tamanho<input aria-label="Tamanho do texto" disabled={disabled} value={activeLayer.fontSize ?? "148 px"} onChange={(event)=>onChange?.("fontSize",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label><label>Entrelinha<input aria-label="Entrelinha do texto" disabled={disabled} value={activeLayer.lineHeight ?? "Auto"} onChange={(event)=>onChange?.("lineHeight",event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-[#0d1015] p-2"/></label></div><h4 className="mb-2 mt-4 font-semibold">Parágrafo</h4><div className="flex justify-between">{['≡','≣','≡','☷','☰'].map((item,index)=><button key={index} aria-label={PARAGRAPH_ALIGNMENTS[index][1]} aria-pressed={(activeLayer.textAlign || "center") === PARAGRAPH_ALIGNMENTS[index][0]} disabled={disabled} onClick={()=>onChange?.("textAlign",PARAGRAPH_ALIGNMENTS[index][0])} className="h-8 w-8 rounded hover:bg-slate-800">{item}</button>)}</div><button disabled title="Animadores de texto ainda não estão disponíveis no MMEffect" className="mt-4 rounded border border-slate-700 px-3 py-2">+ Adicionar animador</button></div>;
 }
 
 const RENDER_SIZES = [

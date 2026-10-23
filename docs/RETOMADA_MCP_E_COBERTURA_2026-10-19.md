@@ -19,6 +19,10 @@ Os dois fluxos devem usar os mesmos recursos disponíveis, mas ser **independent
 - Conferir a execução sequencial e seus resultados em caso de falha ou operação indisponível; não informar sucesso para tarefas não executadas. Validar com mídia e projetos de teste reais, seleção de IA autorizada e testes de interface, integração e regressão. O painel completo também precisa ser verificado quanto a múltiplos projetos, timelines e filas.
 - Há outras alterações locais de trabalhos paralelos. Não sobrescrevê-las nem presumir que todos os arquivos pertencem a este bloco. Comparar o estado recebido, os testes e os relatórios antes de prosseguir. O estado de M0 e a situação da bateria descritos abaixo não foram atualizados por este registro.
 
+## Atualização — 23/10/2026
+
+Dados de exemplo deixaram de ser gravados no banco das empresas (PR #13, na `main`); criados a consulta somente leitura `scripts/sql/find_demo_seed_records.sql` para localizar os fictícios gravados pela versão antiga e o script de varredura de telas `scripts/qa/route_crawl.mjs`. Linha de base, evidências e pendências: `docs/RELATORIO_2026-10-23_DADOS_DEMO.md`.
+
 ## Atualização — 20/10/2026 madrugada
 
 Relatório consolidado do bloco (Ferramentas Gráficas, MMFig, ClipsFree, Timeline 2, QA, resultados da bateria `20261020-010318-974` e pendências): `docs/RELATORIO_2026-10-20.md`.

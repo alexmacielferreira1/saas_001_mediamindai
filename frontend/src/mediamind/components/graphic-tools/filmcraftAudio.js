@@ -2,7 +2,7 @@
 // Adaptado de OpenCut (MIT) — ver THIRD_PARTY_NOTICES.md (AudioManager: âncora relógio de áudio ↔ timeline,
 // agendamento com compensação de início atrasado, decodificação com cache por fonte e picos de forma de onda).
 // Semântica de mixer (fader em dB com mínimo = silêncio, pan −100..100, solo exclusivo) segue o FilmCraft (Apache-2.0).
-import { keyValueAt } from "../../lib/mmfilmEdits";
+import { keyValueAt, linkRoot } from "../../lib/mmfilmEdits";
 
 export const AUDIO_TRACKS = ["A1", "A2", "A3"];
 export const MIXER_STRIPS = [...AUDIO_TRACKS, "Mix"];
@@ -60,16 +60,22 @@ function hasAudibleMedia(clip) {
 
 /**
  * Clipes que entram na mixagem: tudo que é áudio/vídeo habilitado em A1–A3 e o som dos clipes de vídeo
- * em faixas V visíveis — exceto quando o mesmo recurso já está vinculado (mesmo início) numa faixa A.
+ * em faixas V visíveis — exceto quando o som do vídeo já está numa faixa A: pelo vínculo (`linkId`, criado ao
+ * soltar o vídeo com o áudio) em qualquer posição/estado, ou — em clipes antigos sem vínculo — pelo mesmo
+ * recurso no mesmo início.
  */
 export function audioClipsForMix(clips = [], trackState = {}) {
   const audio = clips.filter((clip) => AUDIO_TRACKS.includes(clip.track) && hasAudibleMedia(clip));
+  const linkedAudio = new Set(
+    clips.filter((clip) => AUDIO_TRACKS.includes(clip.track) && clip.linkId).map((clip) => linkRoot(clip.linkId)),
+  );
   const video = clips.filter(
     (clip) =>
       clip.track?.startsWith("V") &&
       trackState?.[clip.track]?.visible !== false &&
       clip.type?.startsWith("video") &&
       hasAudibleMedia(clip) &&
+      !(clip.linkId && linkedAudio.has(linkRoot(clip.linkId))) &&
       !audio.some(
         (item) => item.assetId && item.assetId === clip.assetId && Math.abs(item.start - clip.start) < 0.002,
       ),
