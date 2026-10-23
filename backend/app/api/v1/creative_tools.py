@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.records import add_audit
 from app.core.config import ROOT
 from app.core.errors import PublicError
 from app.creative.storage import store_creative_export
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.models.identity import TenantRecord
 from app.schemas.creative_tools import (
     CreativeDocumentCreate,
@@ -193,13 +194,18 @@ async def create_creative_export(
         )
     if (file.content_type or "").lower() not in {"application/zip", "application/x-zip-compressed"}:
         raise PublicError(422, "INVALID_FILE_TYPE", "A exportação deve ser um arquivo ZIP.")
+    # Recebimento e gravação do ZIP sem conexão do pool presa.
+    release_connection(session)
     content = await file.read(MAX_CREATIVE_EXPORT_BYTES + 1)
     await file.close()
     if len(content) > MAX_CREATIVE_EXPORT_BYTES:
         raise PublicError(413, "FILE_TOO_LARGE", "Exportação excede o limite permitido.")
     if not content.startswith(b"PK"):
         raise PublicError(422, "INVALID_ZIP", "Arquivo ZIP inválido.")
-    stored = store_creative_export(CREATIVE_EXPORT_ROOT, membership.tenant_id, content)
+    # Escrita de até 200 MB fora do event loop.
+    stored = await run_in_threadpool(
+        store_creative_export, CREATIVE_EXPORT_ROOT, membership.tenant_id, content
+    )
     record = TenantRecord(
         tenant_id=membership.tenant_id,
         entity_type="CreativeExport",

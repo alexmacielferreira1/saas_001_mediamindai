@@ -13,7 +13,7 @@ from app.api.v1.ai_usage import guard_budget, record_usage
 from app.api.v1.records import add_audit
 from app.core.config import get_settings
 from app.core.errors import PublicError
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.models.identity import Tenant, TenantRecord
 from app.repositories.identity import get_active_membership, list_active_memberships
 from app.security.outbound import OutboundUrlRejected, validate_outbound_url
@@ -531,6 +531,8 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
     guard_budget(
         session, membership.tenant_id, data["provider"], data["model"], image_count=body.count
     )
+    # Sem conexão do pool presa durante a chamada ao provedor (até 120 s).
+    release_connection(session)
     ai_start = perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
@@ -686,6 +688,7 @@ async def generate_video_studio_stage(
     guard_budget(
         session, membership.tenant_id, data["provider"], data["model"], max_tokens=body.max_tokens
     )
+    release_connection(session)
     ai_start = perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
@@ -847,6 +850,7 @@ async def copilot_chat(body: CopilotChatBody, current: Authenticated, session: D
     guard_budget(
         session, membership.tenant_id, connection["provider"], connection["model"], max_tokens=1200
     )
+    release_connection(session)
     started = perf_counter()
     # Nunca passar dados sensíveis do usuário ou do sistema implicitamente ao provedor.
     prompt = (

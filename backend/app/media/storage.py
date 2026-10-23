@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import PublicError
 from app.media.storage_backend import StoredMedia
@@ -40,7 +41,8 @@ class LocalMediaStorage:
                             "Arquivo excede o limite permitido.",
                         )
                     digest.update(chunk)
-                    output.write(chunk)
+                    # Escrita em disco de arquivos grandes fora do event loop.
+                    await run_in_threadpool(output.write, chunk)
             temporary.replace(destination)
         except Exception:
             temporary.unlink(missing_ok=True)
