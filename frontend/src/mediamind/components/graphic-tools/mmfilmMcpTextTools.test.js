@@ -71,7 +71,7 @@ describe("catálogo de texto", () => {
     expect(create.params.find((param) => param.key === "template").options[0][0]).toBe(CAPTION_TEMPLATES[0].id);
     const titles = tools.find((tool) => tool.id === "titles.create");
     expect(titles.params.find((param) => param.key === "animation").options[0]).toEqual(["nenhuma", "Sem animação"]);
-    expect(tools.find((tool) => tool.id === "transcribe.run").status).toBe("soon");
+    expect(tools.find((tool) => tool.id === "transcribe.run").status).toBeUndefined();
   });
 
   it("captionCuesFrom lê só legendas, em ordem, e trata texto ausente", () => {
@@ -241,8 +241,8 @@ describe("captions.exportsrt e transcrição", () => {
     expect(await runMMFilmTool("captions.exportsrt", state([]), {}, noEnv)).toEqual({ ok: false, summary: "Não há legendas na timeline para exportar." });
   });
 
-  it("transcrever ainda está em breve e importar SRT abre o seletor de arquivo", async () => {
-    expect(await runMMFilmTool("transcribe.run", state([]), {}, noEnv)).toEqual({ ok: false, summary: "Em breve." });
+  it("transcrever sem mídias do Acervo orienta a importar SRT e importar SRT abre o seletor de arquivo", async () => {
+    expect((await runMMFilmTool("transcribe.run", state([]), {}, noEnv)).summary).toMatch(/só funciona com mídias vindas do Acervo/);
     expect(await runMMFilmTool("transcribe.importsrt", state([]), {}, noEnv)).toEqual({
       ok: true,
       count: 0,

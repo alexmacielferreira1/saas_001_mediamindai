@@ -130,7 +130,7 @@ const chunk = (text, size) => text.match(new RegExp(`[\\s\\S]{1,${size}}`, "gu")
  */
 export function reflowCaptions(
   words,
-  { mode = "linhas", maxChars = 32, maxLines = 2, maxDuration = 3, pauseSplit = 0.5, uppercase = false, stripPunctuation = false } = {},
+  { mode = "linhas", maxChars = 32, maxLines = 2, maxDuration = 3, pauseSplit = 0.5, uppercase = false, stripPunctuation = false, minDuration = 0.6 } = {},
 ) {
   const list = prepareWords(words, { uppercase, stripPunctuation });
   const lineLimit = Math.max(1, Math.min(6, Math.round(Number(maxLines) || 1)));
@@ -190,7 +190,35 @@ export function reflowCaptions(
     current.words.push(wordOut(item));
   });
   flush();
-  return cues;
+  return mergeShortCues(cues, { minDuration, pauseSplit, charLimit, lineLimit });
+}
+
+// Legenda curta demais para ler (ex.: "É…" sozinho por 0,1 s) se junta à seguinte quando estão coladas e cabem.
+function mergeShortCues(cues, { minDuration, pauseSplit, charLimit, lineLimit }) {
+  const result = [];
+  for (let index = 0; index < cues.length; index += 1) {
+    const cue = cues[index];
+    const next = cues[index + 1];
+    if (next && cue.end - cue.start < minDuration && next.start - cue.end < pauseSplit) {
+      const lines = wrapWords(`${cue.text.replace(/\n/g, " ")} ${next.text.replace(/\n/g, " ")}`.split(/\s+/), charLimit);
+      if (lines.length <= lineLimit) {
+        cues[index + 1] = { start: cue.start, end: next.end, text: lines.join("\n"), words: [...cue.words, ...next.words] };
+        continue;
+      }
+    }
+    result.push(cue);
+  }
+  return result;
+}
+
+function wrapWords(words, charLimit) {
+  const lines = [];
+  words.filter(Boolean).forEach((word) => {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && `${last} ${word}`.length <= charLimit) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(word);
+  });
+  return lines;
 }
 
 // ---------------------------------------------------------------- Vícios de linguagem

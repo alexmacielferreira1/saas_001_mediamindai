@@ -1,6 +1,7 @@
 import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
 import { registerMCPActions } from "../../lib/mcpActions";
+import { ensureTranscription } from "../../lib/clipEngineService";
 import { leftPart, placeClip, rightPart } from "../../lib/mmfilmEdits";
 import { animatedClip } from "../../lib/mmfilmMotion";
 import { captionStyleCss } from "../../lib/mmfilmCaptions";
@@ -301,12 +302,22 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     backups: toolBackups,
     targets: toolTargets,
     primaryId: selected,
+    playhead,
   };
   const toolActions = useRef(null);
   toolActions.current = { commit, undo, setMarkers, notify, setPlayhead, setToolBackups, setToolTargets, canUndo: history.length > 0, sequenceName };
   useEffect(() => {
     if (!active) return undefined;
-    const envFor = (onProgress) => ({ loadBuffers: (list) => loadToolBuffers(list, onProgress), sceneChanges: (list, options) => detectSceneChanges(list, options, onProgress) });
+    const envFor = (onProgress) => ({
+      loadBuffers: (list) => loadToolBuffers(list, onProgress),
+      sceneChanges: (list, options) => detectSceneChanges(list, options, onProgress),
+      // Mesmo serviço de transcrição do ClipsFree: reaproveita a transcrição salva no Acervo ou pede ao servidor.
+      transcribe: (asset) => {
+        onProgress?.(0.3, `Transcrevendo ${asset.title || "mídia"}…`);
+        return ensureTranscription(asset, { durationSeconds: Number(asset.duration) || 0 });
+      },
+    });
+    let previewAudio = null;
     const strip = ({ clips: _clips, markers: _markers, download: _download, createBackup: _backup, openCaptionFile: _open, ...result }) => result;
     const saveBackup = (label) => {
       const now = new Date();
@@ -352,6 +363,14 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       },
       canUndo: () => toolActions.current.canUndo,
       seek: (time) => toolActions.current.setPlayhead(Math.max(0, time)),
+      // Prévia de um som da biblioteca (item.id = id da mídia do projeto); um som por vez.
+      preview: (item) => {
+        const sound = toolState.current.media.find((asset) => asset.id === item.id);
+        if (!sound?.url || typeof Audio !== "function") return;
+        previewAudio?.pause?.();
+        previewAudio = new Audio(sound.url);
+        previewAudio.play?.()?.catch?.(() => {});
+      },
       footer: () => {
         const { clips: current, targets } = toolState.current;
         const end = current.reduce((value, clip) => Math.max(value, clip.start + clip.duration), 0);
