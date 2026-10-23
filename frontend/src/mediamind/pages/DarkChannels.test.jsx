@@ -307,6 +307,14 @@ describe("Canais Dark · página única (planejamento + pipeline)", () => {
     await waitFor(() => expect(api.listDarkChannelScripts).toHaveBeenLastCalledWith("channel-2"));
     expect(screen.getByRole("group", { name: "Visão do canal" })).toHaveTextContent("0 pastas · 0 roteiros · 0 materiais organizados");
     expect(screen.getByRole("tab", { name: "Materiais" })).toBeDisabled();
+    const shortcuts = within(screen.getByRole("navigation", { name: "Etapas do canal" }));
+    expect(shortcuts.getAllByRole("button").map((button) => button.textContent.replace("→", ""))).toEqual([
+      "Pastas e roteiros", "Materiais", "Gerar vídeos", "Thumbs", "Cortes", "Revisão final", "Agendados e publicados", "Analytics",
+    ]);
+    expect(shortcuts.getByRole("button", { name: /Materiais/ })).toBeDisabled();
+    fireEvent.click(shortcuts.getByRole("button", { name: /Analytics/ }));
+    expect(screen.getByRole("tab", { name: "Analytics" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("tab", { name: "Canais" }));
 
     fireEvent.click(screen.getByRole("tab", { name: "Thumbs" }));
     expect(await screen.findByTestId("thumbnail-studio")).toHaveAttribute("data-channel", "channel-2");
@@ -360,11 +368,10 @@ describe("Canais Dark · página única (planejamento + pipeline)", () => {
     confirm.mockRestore();
   });
 
-  it("redirects the old Canais Dark 2 route to the single page and no longer ships the separate page", () => {
+  it("keeps Canais Dark 2 available alongside the unified page until it is retired", () => {
     const app = readFileSync(resolve(process.cwd(), "src/App.jsx"), "utf8");
-    expect(app).toContain('<Route path="/canais-dark-2" element={<Navigate to="/canais-dark" replace />} />');
     expect(app).toContain('<Route path="/canais-dark" element={protectedPage(DarkChannels, "ai_tools")} />');
-    expect(app).not.toContain("DarkChannels2");
-    expect(existsSync(resolve(process.cwd(), "src/mediamind/pages/DarkChannels2.jsx"))).toBe(false);
+    expect(app).toContain('<Route path="/canais-dark-2" element={protectedPage(DarkChannels2, "ai_tools")} />');
+    expect(existsSync(resolve(process.cwd(), "src/mediamind/pages/DarkChannels2.jsx"))).toBe(true);
   });
 });
