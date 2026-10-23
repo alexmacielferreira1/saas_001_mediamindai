@@ -16,6 +16,7 @@ from app.core.errors import PublicError
 from app.db.session import get_session
 from app.models.identity import Tenant, TenantRecord
 from app.repositories.identity import get_active_membership, list_active_memberships
+from app.security.outbound import OutboundUrlRejected, validate_outbound_url
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import effective_permissions, require_permission
 
@@ -81,6 +82,22 @@ class AIConnectionsPatch(BaseModel):
     connections: list[AIConnection] = Field(max_length=30)
     default_connection_id: str | None = None
     tool_connections: dict[str, str | None] = Field(default_factory=dict)
+
+
+def require_safe_ai_destination(base_url: str) -> str:
+    """Guard de SSRF para o destino de IA configurado pela empresa (auditoria #3).
+
+    Usado ao salvar a conexão e logo antes de cada chamada ao provedor.
+    """
+    try:
+        validate_outbound_url(base_url)
+    except OutboundUrlRejected as error:
+        raise PublicError(
+            422,
+            "AI_DESTINATION_BLOCKED",
+            "O endereço da IA não é permitido. Use um provedor público em http(s).",
+        ) from error
+    return base_url
 
 
 def connection_configuration(data):
@@ -202,6 +219,7 @@ def write_ai_connections(
         )
         if not data["name"] or not data["model"]:
             raise PublicError(422, "AI_INVALID_CONNECTION", "Informe nome e modelo da conexão.")
+        require_safe_ai_destination(data["base_url"])
         encrypted = old.get(connection_id, {}).get("encrypted_key")
         prior = old.get(connection_id, {})
         if prior and (
@@ -332,8 +350,8 @@ def decrypt_ai_key(data: dict[str, Any]) -> str:
 async def generate_connection_text(
     data: dict[str, Any], prompt: str, *, max_tokens: int = 4000, return_usage: bool = False
 ) -> str | tuple[str, dict]:
+    base_url = require_safe_ai_destination(data["base_url"].rstrip("/"))
     key = decrypt_ai_key(data)
-    base_url = data["base_url"].rstrip("/")
     if data["provider"] == "anthropic":
         url = f"{base_url}/messages"
         headers = {
@@ -355,7 +373,7 @@ async def generate_connection_text(
             "messages": [{"role": "user", "content": prompt}],
         }
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
         result = response.json()
@@ -426,6 +444,7 @@ def read_ai_settings(current: Authenticated, session: DbSession):
 def write_ai_settings(body: AISettingsPatch, current: Authenticated, session: DbSession):
     require_permission(session, current, "permissions.manage")
     membership = require_membership(current)
+    require_safe_ai_destination(str(body.base_url).rstrip("/"))
     session.scalar(select(Tenant).where(Tenant.id == membership.tenant_id).with_for_update())
     record = ai_settings_record(session, membership.tenant_id, lock=True)
     if record and "connections" in record.data:
@@ -502,6 +521,7 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
     record = ai_settings_record(session, membership.tenant_id)
     data = resolve_connection(record.data if record else {}, "image-generator")
     key = decrypt_ai_key(data)
+    require_safe_ai_destination(data["base_url"].rstrip("/"))
     if not image_connection_supported(data):
         raise PublicError(
             422,
@@ -513,7 +533,7 @@ async def generate_image(body: ImageGenerationRequest, current: Authenticated, s
     )
     ai_start = perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
             response = await client.post(
                 f"{data['base_url'].rstrip('/')}/images/generations",
                 headers={"Authorization": f"Bearer {key}"},
@@ -641,8 +661,8 @@ async def generate_video_studio_stage(
             "AI_PROVIDER_NOT_CONFIGURED",
             "Cadastre ou selecione uma conexão de IA ativa para o Video Studio.",
         )
+    base_url = require_safe_ai_destination(data["base_url"].rstrip("/"))
     key = decrypt_ai_key(data)
-    base_url = data["base_url"].rstrip("/")
     if data["provider"] == "anthropic":
         url = f"{base_url}/messages"
         headers = {
@@ -668,7 +688,7 @@ async def generate_video_studio_stage(
     )
     ai_start = perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
         result = response.json()
