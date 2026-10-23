@@ -46,3 +46,15 @@ CONTENT_WRITE_PERMISSIONS = (
     "publishing.write",
     "review.write",
 )
+
+# Campos que só o servidor grava (caminhos de arquivo, integridade e tamanho reais).
+# A API genérica ``/records`` recusa criá-los ou alterá-los: as rotas especializadas
+# (upload de mídia, exportação criativa) confiam nesses valores para abrir arquivos.
+# Auditoria 2026-10-23, achados #1/#2 e refatoração A.
+SERVER_OWNED_FIELDS: dict[str, frozenset[str]] = {
+    "CreativeExport": frozenset({"relative_path", "sha256", "size"}),
+}
+
+
+def server_owned_fields(entity_type: str) -> frozenset[str]:
+    return SERVER_OWNED_FIELDS.get(entity_type, frozenset())

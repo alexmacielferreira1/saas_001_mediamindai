@@ -249,3 +249,98 @@ def test_creative_export_reports_missing_stored_file(permission_client, monkeypa
         (tmp_path / record.data["relative_path"]).unlink()
     missing = client.get(f"/api/v1/creative-exports/{exported.json()['id']}/download")
     assert missing.status_code == 404
+
+
+def export_carousel(client, document_id):
+    exported = client.post(
+        f"/api/v1/creative-documents/{document_id}/exports",
+        data={"revision": "1", "preset": "4:5"},
+        files={"file": ("carrossel.zip", b"PK\x03\x04conteudo", "application/zip")},
+    )
+    assert exported.status_code == 201
+    return exported.json()
+
+
+def test_generic_records_api_cannot_set_creative_export_path(
+    permission_client, monkeypatch, tmp_path
+):
+    """Auditoria #1: relative_path é do servidor; /records não pode criá-lo nem trocá-lo."""
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path / "exports")
+    secret = tmp_path / "segredo.txt"
+    secret.write_text("conteudo sigiloso")
+
+    forged = client.post(
+        "/api/v1/records/CreativeExport", json={"data": {"relative_path": str(secret)}}
+    )
+    assert forged.status_code == 422
+    assert forged.json()["error_code"] == "SERVER_OWNED_FIELD"
+    bulk = client.post(
+        "/api/v1/records/CreativeExport/bulk", json={"items": [{"relative_path": str(secret)}]}
+    )
+    assert bulk.status_code == 422
+
+    created = create_document(client)
+    exported = export_carousel(client, created["id"])
+    patched = client.patch(
+        f"/api/v1/records/CreativeExport/{exported['id']}",
+        json={"data": {"relative_path": str(secret)}},
+    )
+    assert patched.status_code == 422
+    bulk_patched = client.patch(
+        "/api/v1/records/CreativeExport/bulk",
+        json={"filters": {}, "data": {"relative_path": "../segredo.txt"}},
+    )
+    assert bulk_patched.status_code == 422
+    # Reenviar o mesmo valor (tela que devolve o registro inteiro) continua aceito.
+    stored = client.get(f"/api/v1/records/CreativeExport/{exported['id']}").json()
+    same_value = client.patch(
+        f"/api/v1/records/CreativeExport/{exported['id']}",
+        json={"data": {"relative_path": stored["relative_path"], "preset": "1:1"}},
+    )
+    assert same_value.status_code == 200
+    downloaded = client.get(f"/api/v1/creative-exports/{exported['id']}/download")
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"PK\x03\x04conteudo"
+    with ids["session_factory"]() as session:
+        exports = session.query(TenantRecord).filter_by(entity_type="CreativeExport").all()
+    assert len(exports) == 1
+
+
+def test_creative_export_download_is_confined_to_tenant_directory(
+    permission_client, monkeypatch, tmp_path
+):
+    """Defesa em profundidade: mesmo um caminho adulterado no banco não sai da pasta da empresa."""
+    client, ids = permission_client
+    login(client)
+    root = tmp_path / "exports"
+    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", root)
+    secret = tmp_path / "segredo.txt"
+    secret.write_text("conteudo sigiloso")
+    other_tenant_file = root / str(ids["other"]) / "outra.zip"
+    other_tenant_file.parent.mkdir(parents=True)
+    other_tenant_file.write_bytes(b"PK outra empresa")
+
+    tampered = [
+        str(secret),
+        "../segredo.txt",
+        f"{ids['other']}/outra.zip",
+        f"{ids['tenant']}/../{ids['other']}/outra.zip",
+    ]
+    record_ids = []
+    with ids["session_factory"]() as session:
+        for path in tampered:
+            record = TenantRecord(
+                tenant_id=ids["tenant"],
+                entity_type="CreativeExport",
+                data={"status": "ready", "relative_path": path},
+            )
+            session.add(record)
+            session.flush()
+            record_ids.append(record.id)
+        session.commit()
+
+    for record_id in record_ids:
+        response = client.get(f"/api/v1/creative-exports/{record_id}/download")
+        assert response.status_code == 404, response.content

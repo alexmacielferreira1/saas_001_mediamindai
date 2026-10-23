@@ -22,7 +22,7 @@ from app.services.production_workflow import check_creation_stage, check_stage_t
 from app.tenancy.access_policy import require_entity_read, require_entity_screens
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
-from app.tenancy.record_policies import RECORD_WRITE_PERMISSIONS
+from app.tenancy.record_policies import RECORD_WRITE_PERMISSIONS, server_owned_fields
 
 router = APIRouter(prefix="/records", tags=["records"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -88,6 +88,28 @@ def require_write(session: Session, current: CurrentSession, entity_type: str) -
         raise PublicError(403, "AUDIT_APPEND_ONLY", "A auditoria é gravada somente pelo servidor.")
     require_entity_screens(current, entity_type)
     require_permission(session, current, RECORD_WRITE_PERMISSIONS[entity_type])
+
+
+def reject_server_owned(
+    entity_type: str, data: dict[str, Any], current: dict[str, Any] | None = None
+) -> None:
+    """Recusa campos que só o servidor grava (``SERVER_OWNED_FIELDS``).
+
+    Num PATCH unitário, reenviar o mesmo valor já gravado é aceito (sem efeito), para não
+    quebrar telas que devolvem o registro inteiro; qualquer valor diferente é recusado.
+    """
+    current = current or {}
+    blocked = sorted(
+        key
+        for key in server_owned_fields(entity_type) & data.keys()
+        if key not in current or current[key] != data[key]
+    )
+    if blocked:
+        raise PublicError(
+            422,
+            "SERVER_OWNED_FIELD",
+            f"Campo controlado pelo servidor não pode ser alterado: {', '.join(blocked)}.",
+        )
 
 
 def add_audit(
@@ -276,6 +298,7 @@ def bulk_create(
     )
     # Valida todos os itens antes de gravar (sem inserção parcial).
     for item in body.items:
+        reject_server_owned(entity_type, item)
         creation_stage(entity_type, item, imported=seeding)
     rows = [
         TenantRecord(tenant_id=membership.tenant_id, entity_type=entity_type, data=item)
@@ -295,6 +318,7 @@ def bulk_update(
     validate_type(entity_type)
     require_write(session, current, entity_type)
     membership = require_membership(current)
+    reject_server_owned(entity_type, body.data)
     rows = [
         item
         for item in load_records(session, membership.tenant_id, entity_type)
@@ -316,6 +340,7 @@ def create_record(entity_type: str, body: RecordCreate, current: Authenticated, 
     validate_type(entity_type)
     require_write(session, current, entity_type)
     membership = require_membership(current)
+    reject_server_owned(entity_type, body.data)
     creation_stage(entity_type, body.data)
     record = TenantRecord(tenant_id=membership.tenant_id, entity_type=entity_type, data=body.data)
     session.add(record)
@@ -341,6 +366,7 @@ def update_record(
     require_write(session, current, entity_type)
     membership = require_membership(current)
     record = find_record(session, membership.tenant_id, entity_type, record_id)
+    reject_server_owned(entity_type, body.data, record.data)
     transition = stage_transition(entity_type, record, body.data)
     record.data = {**record.data, **body.data}
     add_audit(session, current, "record.updated", entity_type, str(record.id))

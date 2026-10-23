@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -231,10 +232,26 @@ async def create_creative_export(
     }
 
 
+def resolve_export_path(tenant_id: UUID, data: dict) -> Path | None:
+    """Resolve o ZIP só dentro da pasta da empresa da sessão (defesa em profundidade).
+
+    ``relative_path`` é gravado pelo servidor, mas um valor absoluto, com ``..`` ou de outra
+    empresa nunca pode sair de ``CREATIVE_EXPORT_ROOT/<tenant_id>``.
+    """
+    relative_path = data.get("relative_path")
+    if not relative_path or not isinstance(relative_path, str):
+        return None
+    tenant_root = (CREATIVE_EXPORT_ROOT / str(tenant_id)).resolve()
+    candidate = (CREATIVE_EXPORT_ROOT / relative_path).resolve()
+    if candidate == tenant_root or not candidate.is_relative_to(tenant_root):
+        return None
+    return candidate
+
+
 @router.get("/creative-exports/{export_id}/download")
 def download_creative_export(export_id: UUID, current: Authenticated, session: DbSession):
     record = find_export(session, current, export_id)
-    source = CREATIVE_EXPORT_ROOT / record.data["relative_path"]
-    if not source.is_file():
+    source = resolve_export_path(require_membership(current).tenant_id, record.data)
+    if source is None or not source.is_file():
         raise PublicError(404, "CREATIVE_EXPORT_FILE_NOT_FOUND", "Arquivo não encontrado.")
     return FileResponse(source, media_type="application/zip", filename="carrossel.zip")
