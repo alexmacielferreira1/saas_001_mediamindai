@@ -301,7 +301,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     selectedIds: selectedIds.length ? selectedIds : selected ? [selected] : [],
     backups: toolBackups,
     targets: toolTargets,
-    primaryId: selected,
+    // Referência do "Clonar estilo": o primeiro clipe da seleção (Shift+clique acrescenta os outros depois).
+    primaryId: selectedIds[0] ?? selected,
     playhead,
   };
   const toolActions = useRef(null);

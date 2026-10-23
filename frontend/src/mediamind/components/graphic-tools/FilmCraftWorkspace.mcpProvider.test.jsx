@@ -138,6 +138,19 @@ describe("MMFilm · provedor do MCP", () => {
     await expect(provider.analyze("cuts.pauses", { mode: "cena" })).rejects.toThrow(/Não foi possível ler os quadros do vídeo/);
   });
 
+  it("clonar estilo usa o primeiro clipe da seleção, mesmo com Shift+clique no último", async () => {
+    const { container, provider } = await setup();
+    drop(container, { id: "22222222-3333-4444-8555-666666666666", name: "Plano B", track: "V2" });
+    await waitFor(() => expect(clipsOn(container, "V2")).toHaveLength(1));
+    fireEvent.click(clipsOn(container)[0]);
+    await act(() => provider.apply("motion.punch", {}));
+    fireEvent.click(clipsOn(container)[0]);
+    fireEvent.click(clipsOn(container, "V2")[0], { shiftKey: true });
+    const result = await act(() => provider.apply("motion.clonestyle", {}));
+    expect(result.summary).toBe("Estilo de “Entrevista” clonado em 1 clipe(s)");
+    await waitFor(() => [...container.querySelectorAll("video")].forEach((video) => expect(video.style.transform).toContain("scale(1.15)")));
+  });
+
   it("sem Audio no ambiente, a prévia de som não faz nada", async () => {
     const { provider } = await setup();
     vi.stubGlobal("Audio", undefined);
