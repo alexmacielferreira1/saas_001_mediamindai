@@ -60,7 +60,9 @@ def create_session(body: CreateSessionBody, current: Authenticated, session: DbS
         ),
     }
     try:
-        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data.get("storage_key"))
+        source = LocalMediaStorage(get_settings().media_root).resolve(
+            asset.data.get("storage_key"), tenant_id=asset.tenant_id
+        )
         segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
         candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         result = {

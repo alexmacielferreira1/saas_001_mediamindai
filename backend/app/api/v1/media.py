@@ -416,7 +416,7 @@ async def upload_local_asset(
         "stream_url": f"/api/v1/media/local/assets/{asset_id}/stream",
         "created_date": now,
         "updated_date": now,
-        **probe_media(storage.resolve(stored.relative_key)),
+        **probe_media(storage.resolve(stored.relative_key, tenant_id=LOCAL_DEMO_TENANT)),
     }
     catalog = load_local_catalog()
     save_local_catalog([asset, *[item for item in catalog if item.get("id") != str(asset_id)]])
@@ -445,7 +445,9 @@ def find_local_asset(asset_id: UUID) -> dict:
 @router.get("/local/assets/{asset_id}/stream")
 def stream_local_asset(asset_id: UUID, request: Request):
     asset = find_local_asset(asset_id)
-    source = LocalMediaStorage(get_settings().media_root).resolve(asset["storage_key"])
+    source = LocalMediaStorage(get_settings().media_root).resolve(
+        asset["storage_key"], tenant_id=LOCAL_DEMO_TENANT
+    )
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     size = source.stat().st_size
@@ -479,7 +481,7 @@ def export_local_clip(payload: ClipExportRequest):
         get_settings().media_root / str(LOCAL_DEMO_TENANT) / "exports" / str(uuid4()) / "clip.mp4"
     )
     render_media_clip(
-        storage.resolve(asset["storage_key"]),
+        storage.resolve(asset["storage_key"], tenant_id=LOCAL_DEMO_TENANT),
         destination,
         source_in=payload.source_in,
         duration=payload.duration,
@@ -511,7 +513,7 @@ def export_local_timeline(payload: TimelineExportRequest):
             continue
         segments.append(
             {
-                "source": storage.resolve(asset["storage_key"]),
+                "source": storage.resolve(asset["storage_key"], tenant_id=LOCAL_DEMO_TENANT),
                 **trimmed,
             }
         )
@@ -551,7 +553,9 @@ async def upload_asset(
         file,
         get_settings().media_max_upload_bytes,
     )
-    media_metadata = probe_media(storage.resolve(stored.relative_key))
+    media_metadata = probe_media(
+        storage.resolve(stored.relative_key, tenant_id=membership.tenant_id)
+    )
     record = TenantRecord(
         id=asset_id,
         tenant_id=membership.tenant_id,
@@ -660,7 +664,7 @@ def stream_asset(asset_id: UUID, request: Request, current: Authenticated, sessi
     membership = require_membership(current)
     record = find_asset(session, membership.tenant_id, asset_id)
     storage = LocalMediaStorage(get_settings().media_root)
-    source = storage.resolve(record.data.get("storage_key"))
+    source = storage.resolve(record.data.get("storage_key"), tenant_id=membership.tenant_id)
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     size = source.stat().st_size
@@ -697,7 +701,7 @@ def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbS
     if record.data.get("asset_type") != "video":
         raise PublicError(422, "VIDEO_REQUIRED", "Selecione um clipe de vídeo para exportar.")
     storage = LocalMediaStorage(get_settings().media_root)
-    source = storage.resolve(record.data.get("storage_key"))
+    source = storage.resolve(record.data.get("storage_key"), tenant_id=membership.tenant_id)
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     export_id = uuid4()
@@ -746,7 +750,9 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
         record = find_asset(session, membership.tenant_id, asset_id)
         segments.append(
             {
-                "source": storage.resolve(record.data.get("storage_key")),
+                "source": storage.resolve(
+                    record.data.get("storage_key"), tenant_id=membership.tenant_id
+                ),
                 **trimmed,
             }
         )

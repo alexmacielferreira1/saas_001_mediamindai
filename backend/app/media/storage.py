@@ -90,17 +90,23 @@ class LocalMediaStorage:
             mime_type=mime_type,
         )
 
-    def resolve_local(self, relative_key: str | None) -> Path:
+    def resolve_local(self, relative_key: str | None, *, tenant_id: UUID | None = None) -> Path:
+        """Resolve uma chave de mídia dentro da raiz.
+
+        Com ``tenant_id`` (todas as rotas de empresa), exige a pasta daquela empresa: uma
+        chave adulterada não alcança mídia de outra empresa (auditoria 2026-10-23, #2).
+        """
         # Registros de mídia sem arquivo (ex.: criados só como metadados) não têm chave.
         if not relative_key or not isinstance(relative_key, str):
             raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
+        boundary = self.root / str(tenant_id) if tenant_id is not None else self.root
         candidate = (self.root / relative_key).resolve()
-        if self.root not in candidate.parents:
+        if boundary not in candidate.parents:
             raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
         return candidate
 
-    def resolve(self, relative_key: str | None) -> Path:
-        return self.resolve_local(relative_key)
+    def resolve(self, relative_key: str | None, *, tenant_id: UUID | None = None) -> Path:
+        return self.resolve_local(relative_key, tenant_id=tenant_id)
 
     def delete_asset(self, tenant_id: UUID, asset_id: UUID) -> None:
         root = self.asset_root(tenant_id, asset_id)

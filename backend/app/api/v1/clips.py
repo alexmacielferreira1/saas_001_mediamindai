@@ -99,7 +99,9 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         from app.api.v1.media import find_asset
 
         asset = find_asset(session, membership.tenant_id, body.asset_id)
-        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data.get("storage_key"))
+        source = LocalMediaStorage(get_settings().media_root).resolve(
+            asset.data.get("storage_key"), tenant_id=asset.tenant_id
+        )
         if connection:
             api_key = decrypt_ai_key(connection)
             segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
