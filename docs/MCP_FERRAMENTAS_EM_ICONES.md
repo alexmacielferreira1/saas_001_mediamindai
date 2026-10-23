@@ -2,6 +2,8 @@
 
 Primeiro uso: MMFilm (2026-10-20). Ideia inspirada no fluxo de painéis de plugins do Premiere (ex.: FX Master); nenhum código ou conteúdo licenciado (packs de SFX/presets) de terceiros foi copiado — os algoritmos foram escritos do zero.
 
+Histórico completo (linha do tempo, decisões, verificação, pendências): [HISTORICO_MCP_ICONES_2026-10-20_a_23.md](HISTORICO_MCP_ICONES_2026-10-20_a_23.md).
+
 ## Como aparece
 Coluna do Copiloto → seção **MCP**. Quando a ferramenta aberta registra um catálogo, o MCP abre sozinho com:
 busca · guias (Todos, ★ Favoritos e as guias do app) · grade de ícones · ao clicar, o **detalhamento abre embaixo**
