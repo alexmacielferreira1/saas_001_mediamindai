@@ -59,6 +59,7 @@ ALLOWED_TYPES = {
 # Entities whose older results are archived (``superseded``) instead of deleted. The generic
 # API returns only the current version unless the caller filters on ``superseded``.
 VERSIONED_TYPES = {"ClipCandidate"}
+SQL_DATE_SORTS = {"created_date": "created_at", "updated_date": "updated_at"}
 
 
 def current_versions(
@@ -262,6 +263,23 @@ def list_records(
     require_read(session, current, entity_type)
     membership = require_membership(current)
     safe_limit = max(1, min(limit, 500))
+    date_column = SQL_DATE_SORTS.get(sort.removeprefix("-"))
+    if date_column is not None and entity_type not in VERSIONED_TYPES:
+        # Ordenação por data e LIMIT no SQL (índice tenant/entidade/created_at, auditoria #8):
+        # não carrega a entidade inteira para devolver poucas linhas.
+        column = getattr(TenantRecord, date_column)
+        rows = list(
+            session.scalars(
+                select(TenantRecord)
+                .where(
+                    TenantRecord.tenant_id == membership.tenant_id,
+                    TenantRecord.entity_type == entity_type,
+                )
+                .order_by(column.desc() if sort.startswith("-") else column.asc())
+                .limit(safe_limit)
+            )
+        )
+        return RecordList(records=[serialize(item) for item in rows])
     rows = ordered(
         current_versions(entity_type, load_records(session, membership.tenant_id, entity_type)),
         sort,
