@@ -50,7 +50,7 @@ Créditos de licença: `THIRD_PARTY_NOTICES.md`. Referências em `D:\_referencia
 - A API em 8000 é de outro chat e roda código antigo: MCP e Administração novos só aparecem após reiniciá-la.
 
 ## Pendente — decisões de Alex
-1. **Dados fictícios sem rótulo** em Analytics, Para publicação/Publicado, Em revisão, Home, Aprovação/Publicação do ClipsFree: selo "Demonstração" ou estado vazio.
+1. **Dados fictícios sem rótulo** em Analytics, Para publicação/Publicado, Em revisão, Home, Aprovação/Publicação do ClipsFree: selo "Demonstração" ou estado vazio. **Atualização 23/10/2026:** os exemplos deixaram de ser gravados no banco das empresas (PR #13); a exibição sem rótulo continua pendente. Ver `docs/RELATORIO_2026-10-23_DADOS_DEMO.md`.
 2. **MCP**: reexibir Express e painel completo ou manter só o Copiloto (escondidos desde 16/10).
 3. Telas duplicadas (/ingest, /search, /workspace, /social × abas do /corp): escolher a canônica; Acervo e Gestão no menu lateral.
 4. Copiloto aberto por padrão ocupa ~40% da largura.
