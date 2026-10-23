@@ -2,28 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { MOCK_CORP_APPROVAL_QUEUE } from '../data';
 import { setEtapa } from './producaoStore';
+import { markDemoRecords } from './demoCatalog';
 
 // Carrega a fila central de aprovações persistente. Se ainda não existirem
-// registros na entidade AprovacaoItem, semeia a partir do fallback (mock) e
-// retorna os registros criados (todos com status "pendente"). Centraliza a
-// carga entre a fila do CoordenadorComunicacaoPage e o Início de
+// registros na entidade AprovacaoItem, devolve o fallback (mock) marcado como
+// demonstração, sem gravá-lo no banco da empresa. Centraliza a carga entre a
+// fila do CoordenadorComunicacaoPage e o Início de
 // coordenador_comunicacao/qualidade (via roleInicioData).
 // Lança em caso de falha irrecuperável — o hook chamador trata o erro.
 export async function loadOrSeedAprovacoes(fallback = MOCK_CORP_APPROVAL_QUEUE) {
   const existing = await base44.entities.AprovacaoItem.list('ordem', 200);
   if (existing.length > 0) return existing;
-  if (!fallback || fallback.length === 0) return [];
-  return await base44.entities.AprovacaoItem.bulkCreate(
-    fallback.map((a, i) => ({
-      titulo: a.titulo || '',
-      segmento: a.segmento || '',
-      tipo: a.tipo || '',
-      solicitante: a.solicitante || '',
-      prioridade: a.prioridade || 'media',
-      status: 'pendente',
-      ordem: i,
-    }))
-  );
+  return markDemoRecords((fallback || []).map((a) => ({ ...a, prioridade: a.prioridade || 'media', status: 'pendente' })));
 }
 
 // Hook reativo: renderiza o mock no primeiro frame (sem flash de layout) e

@@ -26,6 +26,9 @@ TestClient.__init__ = _init_with_browser_origin
 # Public address used for reserved test domains (RFC 2606 ``.test``) so the SSRF guard
 # can be exercised offline and deterministically. Tests never perform real DNS lookups.
 FAKE_PUBLIC_ADDRESS = "93.184.216.34"
+# Provedores reais usados nos testes de IA; resolvidos para o endereço público fictício,
+# sem DNS real, para que o guard de SSRF (aplicado também às conexões de IA) os aceite.
+KNOWN_PUBLIC_PROVIDER_HOSTS = frozenset({"api.openai.com", "api.anthropic.com"})
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +36,7 @@ def offline_dns(monkeypatch):
     import app.security.outbound as outbound
 
     def fake_resolve(host, port):
-        if host.endswith(".test"):
+        if host.endswith(".test") or host in KNOWN_PUBLIC_PROVIDER_HOSTS:
             return [FAKE_PUBLIC_ADDRESS]
         raise OSError("DNS desativado nos testes")
 

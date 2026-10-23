@@ -671,3 +671,91 @@ def test_stream_of_metadata_only_asset_returns_404_instead_of_500(
     assert response.status_code == 404
     assert response.json()["error_code"] == "MEDIA_NOT_FOUND"
     get_settings.cache_clear()
+
+
+def test_generic_records_api_cannot_set_asset_storage_key(permission_client, monkeypatch, tmp_path):
+    """Auditoria #2: storage_key é do servidor; /records não pode criá-lo nem trocá-lo."""
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    monkeypatch.setattr("app.api.v1.media.probe_media", lambda _path: {})
+    foreign_key = f"{ids['other']}/{uuid4()}/original/source.mp4"
+
+    forged = client.post(
+        "/api/v1/records/Asset",
+        json={"data": {"filename": "x.mp4", "asset_type": "video", "storage_key": foreign_key}},
+    )
+    assert forged.status_code == 422
+    assert forged.json()["error_code"] == "SERVER_OWNED_FIELD"
+    # Metadados legados (IngestNewPackage) continuam aceitos.
+    legacy = client.post(
+        "/api/v1/records/Asset",
+        json={"data": {"title": "Pacote", "file_size": 10, "file_sha256": "abc"}},
+    )
+    assert legacy.status_code == 201
+
+    uploaded = client.post(
+        "/api/v1/media/assets",
+        files={"file": ("reportagem.mp4", b"real-video-bytes", "video/mp4")},
+    ).json()
+    patched = client.patch(
+        f"/api/v1/records/Asset/{uploaded['id']}", json={"data": {"storage_key": foreign_key}}
+    )
+    assert patched.status_code == 422
+    mime = client.patch(
+        f"/api/v1/records/Asset/{uploaded['id']}", json={"data": {"mime_type": "text/html"}}
+    )
+    assert mime.status_code == 422
+    renamed = client.patch(
+        f"/api/v1/records/Asset/{uploaded['id']}", json={"data": {"title": "Novo título"}}
+    )
+    assert renamed.status_code == 200
+    streamed = client.get(f"/api/v1/media/assets/{uploaded['id']}/stream")
+    assert streamed.status_code == 200
+    assert streamed.content == b"real-video-bytes"
+    get_settings.cache_clear()
+
+
+def test_asset_media_is_confined_to_the_session_tenant_directory(
+    permission_client, monkeypatch, tmp_path
+):
+    """Defesa em profundidade: storage_key adulterado não lê mídia de outra empresa."""
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    foreign_file = tmp_path / str(ids["other"]) / str(uuid4()) / "original" / "source.mp4"
+    foreign_file.parent.mkdir(parents=True)
+    foreign_file.write_bytes(b"video da outra empresa")
+    tampered = TenantRecord(
+        id=uuid4(),
+        tenant_id=ids["tenant"],
+        entity_type="Asset",
+        data={
+            "filename": "tampered.mp4",
+            "asset_type": "video",
+            "storage_key": foreign_file.relative_to(tmp_path).as_posix(),
+        },
+    )
+    with ids["session_factory"]() as session:
+        session.add(tampered)
+        session.commit()
+
+    stream = client.get(f"/api/v1/media/assets/{tampered.id}/stream")
+    export = client.post(
+        "/api/v1/media/exports/clip", json={"asset_id": str(tampered.id), "duration": 1}
+    )
+    timeline = client.post(
+        "/api/v1/media/exports/timeline",
+        json={
+            "tracks": [
+                {"id": "v1", "clips": [{"assetId": str(tampered.id), "start": 0, "duration": 1}]}
+            ]
+        },
+    )
+
+    assert stream.status_code == 404
+    assert export.status_code == 404
+    assert timeline.status_code == 404
+    get_settings.cache_clear()

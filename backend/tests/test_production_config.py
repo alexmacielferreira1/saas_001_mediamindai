@@ -115,3 +115,41 @@ def test_defined_optional_variables_are_still_parsed(clean_optional_env, tmp_pat
     assert settings.hub_admin_token_expires_at.year == 2027
     assert settings.outbound_allow_private_networks is True
     assert settings.hub_admin_scope_set == frozenset({"hub:observe"})
+
+
+def test_missing_environment_fails_closed(monkeypatch):
+    """Auditoria #5: sem ENVIRONMENT a API não pode subir como ``local`` (falha aberta)."""
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+    with pytest.raises(ValidationError, match="ENVIRONMENT"):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("environment", ["", "   "])
+def test_blank_environment_fails_closed(monkeypatch, environment):
+    monkeypatch.setenv("ENVIRONMENT", environment)
+
+    with pytest.raises(ValidationError, match="ENVIRONMENT"):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("environment", ["local", "test"])
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql+psycopg://u:p@ep-cool-1234.sa-east-1.aws.neon.tech/mediamind",
+        "postgresql+psycopg://u:p@dpg-abc123.oregon-postgres.render.com/mediamind",
+    ],
+)
+def test_local_environment_refuses_managed_remote_database(environment, database_url):
+    with pytest.raises(ValidationError, match="ENVIRONMENT"):
+        Settings(_env_file=None, environment=environment, database_url=database_url)
+
+
+def test_local_environment_keeps_local_database():
+    settings = Settings(
+        _env_file=None,
+        environment="local",
+        database_url="postgresql+psycopg://mediamind:x@127.0.0.1:5433/mediamind",
+    )
+    assert settings.environment == "local"

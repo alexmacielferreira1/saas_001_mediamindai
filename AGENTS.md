@@ -21,3 +21,9 @@ Aplicam-se também as instruções de AGENTS.md da raiz do HUB e seus documentos
 - Preservar relatórios históricos, alterações de outros chats e credenciais. Os relatórios são locais e ignorados pelo Git.
 - A nova configuração de IA e os endpoints associados permanecem com o outro chat enquanto ele estiver trabalhando nesse escopo. Registrar falhas ali sem editar esses arquivos concorrentes.
 - Esta rotina não autoriza commit, push ou deploy automáticos. A publicação será feita pelo chat responsável após consolidar o trabalho.
+
+## Revisão de qualidade e segurança
+
+- Roteiro padrão do HUB: `docs/REVISAO_QUALIDADE.md`. Rodar antes de publicar, ao fechar marco e após blocos que mexam em auth, permissões, dados de empresas, uploads, integrações, IA ou cobrança.
+- Skills do projeto em `.claude/skills/`; plugins de segurança (Trail of Bits) declarados em `.claude/settings.json`. Outros agentes seguem o mesmo roteiro pelo documento.
+- Relatórios de auditoria ficam em `docs/AUDITORIA_QUALIDADE_<data>.md`. Correções seguem a rotina de testes deste arquivo: teste que falha, correção, teste que passa, um item por vez.

@@ -13,7 +13,8 @@ def test_clipsfree2_creates_an_isolated_manual_review_session(permission_client)
         asset = TenantRecord(
             tenant_id=ids["tenant"],
             entity_type="Asset",
-            data={"filename": "entrevista.mp4", "storage_key": "source.mp4"},
+            # Chaves reais ficam sempre na pasta da empresa (<tenant>/<asset>/original/...).
+            data={"filename": "entrevista.mp4", "storage_key": f"{ids['tenant']}/source.mp4"},
         )
         session.add(asset)
         session.commit()

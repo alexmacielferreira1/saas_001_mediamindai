@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -5,12 +6,13 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.records import add_audit
 from app.core.config import ROOT
 from app.core.errors import PublicError
 from app.creative.storage import store_creative_export
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.models.identity import TenantRecord
 from app.schemas.creative_tools import (
     CreativeDocumentCreate,
@@ -192,13 +194,18 @@ async def create_creative_export(
         )
     if (file.content_type or "").lower() not in {"application/zip", "application/x-zip-compressed"}:
         raise PublicError(422, "INVALID_FILE_TYPE", "A exportação deve ser um arquivo ZIP.")
+    # Recebimento e gravação do ZIP sem conexão do pool presa.
+    release_connection(session)
     content = await file.read(MAX_CREATIVE_EXPORT_BYTES + 1)
     await file.close()
     if len(content) > MAX_CREATIVE_EXPORT_BYTES:
         raise PublicError(413, "FILE_TOO_LARGE", "Exportação excede o limite permitido.")
     if not content.startswith(b"PK"):
         raise PublicError(422, "INVALID_ZIP", "Arquivo ZIP inválido.")
-    stored = store_creative_export(CREATIVE_EXPORT_ROOT, membership.tenant_id, content)
+    # Escrita de até 200 MB fora do event loop.
+    stored = await run_in_threadpool(
+        store_creative_export, CREATIVE_EXPORT_ROOT, membership.tenant_id, content
+    )
     record = TenantRecord(
         tenant_id=membership.tenant_id,
         entity_type="CreativeExport",
@@ -231,10 +238,26 @@ async def create_creative_export(
     }
 
 
+def resolve_export_path(tenant_id: UUID, data: dict) -> Path | None:
+    """Resolve o ZIP só dentro da pasta da empresa da sessão (defesa em profundidade).
+
+    ``relative_path`` é gravado pelo servidor, mas um valor absoluto, com ``..`` ou de outra
+    empresa nunca pode sair de ``CREATIVE_EXPORT_ROOT/<tenant_id>``.
+    """
+    relative_path = data.get("relative_path")
+    if not relative_path or not isinstance(relative_path, str):
+        return None
+    tenant_root = (CREATIVE_EXPORT_ROOT / str(tenant_id)).resolve()
+    candidate = (CREATIVE_EXPORT_ROOT / relative_path).resolve()
+    if candidate == tenant_root or not candidate.is_relative_to(tenant_root):
+        return None
+    return candidate
+
+
 @router.get("/creative-exports/{export_id}/download")
 def download_creative_export(export_id: UUID, current: Authenticated, session: DbSession):
     record = find_export(session, current, export_id)
-    source = CREATIVE_EXPORT_ROOT / record.data["relative_path"]
-    if not source.is_file():
+    source = resolve_export_path(require_membership(current).tenant_id, record.data)
+    if source is None or not source.is_file():
         raise PublicError(404, "CREATIVE_EXPORT_FILE_NOT_FOUND", "Arquivo não encontrado.")
     return FileResponse(source, media_type="application/zip", filename="carrossel.zip")

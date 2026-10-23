@@ -46,3 +46,18 @@ CONTENT_WRITE_PERMISSIONS = (
     "publishing.write",
     "review.write",
 )
+
+# Campos que só o servidor grava (caminhos de arquivo, integridade e tamanho reais).
+# A API genérica ``/records`` recusa criá-los ou alterá-los: as rotas especializadas
+# (upload de mídia, exportação criativa) confiam nesses valores para abrir arquivos.
+# Auditoria 2026-10-23, achados #1/#2 e refatoração A.
+# ``Asset.file_size`` fica de fora: o cadastro legado de pacotes (IngestNewPackage) o envia
+# só como metadado de exibição. ``mime_type`` vira o Content-Type do stream.
+SERVER_OWNED_FIELDS: dict[str, frozenset[str]] = {
+    "Asset": frozenset({"storage_key", "sha256", "mime_type"}),
+    "CreativeExport": frozenset({"relative_path", "sha256", "size"}),
+}
+
+
+def server_owned_fields(entity_type: str) -> frozenset[str]:
+    return SERVER_OWNED_FIELDS.get(entity_type, frozenset())

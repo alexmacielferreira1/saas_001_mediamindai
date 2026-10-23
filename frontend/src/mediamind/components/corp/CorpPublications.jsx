@@ -3,6 +3,7 @@ import { Plus, Youtube, Instagram, Linkedin, Search, LayoutGrid, List, Play, Ext
 import ProjectThumbnails from '../thumbnails/ProjectThumbnails';
 import { resolveMediaUrl } from '@/api/media';
 import { usePublicacoes } from '../../lib/corpPublicacoes';
+import { isDemoRecord } from '../../lib/demoCatalog';
 import { base44 } from '@/api/base44Client';
 import { MOCK_CORP_PUBLICATIONS } from '../../data';
 import { StatusBadge, ListSkeleton, ErrorState } from '../shared';
@@ -48,7 +49,7 @@ export default function CorpPublications({ incomingMedia = null, mode = 'all' })
   function deleteBlockReason(pub) {
     if (!pub) return 'Nenhuma publicação selecionada';
     if (incomingPublication && String(pub.id) === String(incomingPublication.id)) return 'Mídia recebida ainda não foi salva como publicação';
-    if (persistedPubs === MOCK_CORP_PUBLICATIONS && MOCK_CORP_PUBLICATIONS.some((m) => String(m.id) === String(pub.id))) return 'Exemplo sem registro salvo; não há o que excluir';
+    if (isDemoRecord(pub) || (persistedPubs === MOCK_CORP_PUBLICATIONS && MOCK_CORP_PUBLICATIONS.some((m) => String(m.id) === String(pub.id)))) return 'Exemplo sem registro salvo; não há o que excluir';
     return '';
   }
   async function removeSelected() {
