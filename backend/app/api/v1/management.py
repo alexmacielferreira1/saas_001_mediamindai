@@ -2,7 +2,7 @@ from time import perf_counter
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.tenancy.context import CurrentSession, get_current_session, require_mem
 router = APIRouter(prefix="/management", tags=["management"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
+OVERVIEW_ENTITIES = ("Publicacao", "Asset", "ProcessamentoJob")
 
 
 def _status(data: dict[str, Any]) -> str:
@@ -65,16 +66,28 @@ def management_overview(current: Authenticated, session: DbSession):
     # Tela "gestao" retirada explicitamente do membro também bloqueia a rota (MM-003).
     require_screen(current, SCREEN_ROUTES["management.overview"])
 
+    # Só as entidades exibidas em detalhe são carregadas; a trilha de auditoria (uma linha
+    # por mutação) é apenas contada no SQL (auditoria 2026-10-23, #8).
     rows = list(
         session.scalars(
             select(TenantRecord).where(
                 TenantRecord.tenant_id == membership.tenant_id,
+                TenantRecord.entity_type.in_(OVERVIEW_ENTITIES),
             )
         )
     )
     publications = [row for row in rows if row.entity_type == "Publicacao"]
     assets = [row for row in rows if row.entity_type == "Asset"]
     jobs = [row for row in rows if row.entity_type == "ProcessamentoJob"]
+    audit_events = (
+        session.scalar(
+            select(func.count()).where(
+                TenantRecord.tenant_id == membership.tenant_id,
+                TenantRecord.entity_type == "LogAuditoria",
+            )
+        )
+        or 0
+    )
     published = sum(_status(row.data) in {"publicado", "published"} for row in publications)
     scheduled = sum(_status(row.data) in {"agendado", "scheduled"} for row in publications)
     pending = len(publications) - published - scheduled
@@ -128,7 +141,7 @@ def management_overview(current: Authenticated, session: DbSession):
                 _status(row.data) in {"falha", "failed", "erro", "error"} for row in jobs
             ),
         },
-        "audit_events": sum(row.entity_type == "LogAuditoria" for row in rows),
+        "audit_events": audit_events,
         "services": [
             # The API state is this very response: if it is being served, the API answered.
             {"key": "api", "label": "API", "status": "ok", "detail": "Respondendo"},

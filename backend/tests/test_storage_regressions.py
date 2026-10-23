@@ -64,3 +64,21 @@ def test_creative_export_failure_cleans_temporary_file(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="simulated disk failure"):
         store_creative_export(tmp_path, tenant, b"archive")
     assert list((tmp_path / str(tenant)).iterdir()) == []
+
+
+def test_media_resolution_with_tenant_rejects_other_tenant_keys(tmp_path):
+    storage = LocalMediaStorage(tmp_path / "media")
+    tenant, other = uuid4(), uuid4()
+    own = storage.root / str(tenant) / "a" / "original" / "source.mp4"
+    foreign = storage.root / str(other) / "b" / "original" / "source.mp4"
+    for path in (own, foreign):
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"x")
+    assert storage.resolve(f"{tenant}/a/original/source.mp4", tenant_id=tenant) == own
+    for key in (
+        f"{other}/b/original/source.mp4",
+        f"{tenant}/../{other}/b/original/source.mp4",
+        str(tenant),
+    ):
+        with pytest.raises(PublicError):
+            storage.resolve(key, tenant_id=tenant)

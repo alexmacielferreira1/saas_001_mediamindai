@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Table,
@@ -124,6 +125,10 @@ class Membership(Base):
 
 class TenantRecord(Base):
     __tablename__ = "tenant_records"
+    # Listagens por empresa + entidade ordenadas por data (migração 0009).
+    __table_args__ = (
+        Index("ix_tenant_records_tenant_entity_created", "tenant_id", "entity_type", "created_at"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(

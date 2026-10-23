@@ -11,7 +11,7 @@ from app.clips.captions import captions_for_candidate
 from app.clips.transcription import CommandTranscriptionAdapter, TranscriptionUnavailable
 from app.core.config import get_settings
 from app.core.errors import PublicError
-from app.db.session import get_session
+from app.db.session import get_session, release_connection
 from app.media.storage import LocalMediaStorage
 from app.models.identity import TenantRecord
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
@@ -60,7 +60,11 @@ def create_session(body: CreateSessionBody, current: Authenticated, session: DbS
         ),
     }
     try:
-        source = LocalMediaStorage(get_settings().media_root).resolve(asset.data.get("storage_key"))
+        source = LocalMediaStorage(get_settings().media_root).resolve(
+            asset.data.get("storage_key"), tenant_id=asset.tenant_id
+        )
+        # Sem conexão do pool presa durante transcrição e análise (minutos).
+        release_connection(session)
         segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
         candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         result = {

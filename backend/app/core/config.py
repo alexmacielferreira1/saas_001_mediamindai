@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,13 +11,18 @@ ROOT = Path(__file__).resolve().parents[3]
 PRODUCT = "mediamind"
 DEFAULT_DB_PORT = 5434 if PRODUCT == "central" else 5433
 HUB_ADMIN_KNOWN_SCOPES = frozenset({"hub:observe", "hub:command"})
+# Bancos gerenciados (produção/homologação). Com ENVIRONMENT local/test a API recusa subir
+# apontando para eles: login demo, mídia sem autenticação e cookie sem Secure ficariam ativos.
+MANAGED_DATABASE_HOST_SUFFIXES = (".neon.tech", ".render.com")
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
     app_name: str = PRODUCT
-    environment: Literal["local", "test", "staging", "production"] = "local"
+    # Sem padrão (auditoria 2026-10-23, #5): um deploy sem ENVIRONMENT não pode subir como
+    # ``local``. Desenvolvimento local define ENVIRONMENT=local no .env (copiado do exemplo).
+    environment: Literal["local", "test", "staging", "production"] | None = None
     database_url: SecretStr = SecretStr(
         f"postgresql+psycopg://{PRODUCT}:local_dev_only@127.0.0.1:{DEFAULT_DB_PORT}/{PRODUCT}"
     )
@@ -63,6 +69,28 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return cls.model_fields[info.field_name].default
         return value
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def blank_environment_is_missing(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def require_explicit_environment(self) -> "Settings":
+        if self.environment is None:
+            raise ValueError(
+                "ENVIRONMENT deve ser definido explicitamente (local, test, staging ou production)"
+            )
+        if self.environment in {"local", "test"}:
+            host = (urlsplit(self.database_url.get_secret_value()).hostname or "").lower()
+            if host.endswith(MANAGED_DATABASE_HOST_SUFFIXES):
+                raise ValueError(
+                    "ENVIRONMENT local/test não pode usar banco gerenciado remoto; "
+                    "defina ENVIRONMENT=production ou staging"
+                )
+        return self
 
     @field_validator("hub_admin_scopes")
     @classmethod
