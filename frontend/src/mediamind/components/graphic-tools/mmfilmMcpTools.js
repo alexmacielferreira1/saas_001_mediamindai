@@ -38,6 +38,7 @@ const CAPTION_TEMPLATE_OPTIONS = CAPTION_TEMPLATES.map((item) => [item.id, `${it
 import { mmfilmTextTools } from "./mmfilmMcpTextTools";
 import { mmfilmCameraTools } from "./mmfilmMcpCameraTools";
 import { TEXT_ANIMATION_OPTIONS, mmfilmMotionTools } from "./mmfilmMcpMotionTools";
+import { mmfilmExtraTools } from "./mmfilmMcpExtraTools";
 
 const TITLE_TYPE = "text/title";
 const ALL_TRACKS = [
@@ -877,6 +878,7 @@ export function mmfilmCatalogue(input = {}) {
     ...mmfilmTextTools(kit),
     ...mmfilmCameraTools(kit, state),
     ...mmfilmMotionTools(kit),
+    ...mmfilmExtraTools(kit, state),
   ];
   return { tabs: MMFILM_TABS, tools };
 }

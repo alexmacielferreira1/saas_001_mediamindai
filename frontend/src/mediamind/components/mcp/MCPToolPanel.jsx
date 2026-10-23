@@ -287,6 +287,7 @@ export default function MCPToolPanel({ provider, onEnqueue, onExecuted }) {
                   onToggle={(id) => setSelection((old) => (old.includes(id) ? old.filter((item) => item !== id) : [...old, id]))}
                   onToggleAll={(all) => setSelection(all ? result.items.map((item) => item.id) : [])}
                   onSeek={provider.seek}
+                  onPreview={provider.preview}
                 />
               )}
               {result.details?.length > 0 && (

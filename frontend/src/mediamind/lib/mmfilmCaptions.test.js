@@ -125,6 +125,13 @@ describe("reflowCaptions", () => {
     cues.forEach((cue) => cue.text.split("\n").forEach((line) => expect(line.length).toBeLessThanOrEqual(12)));
   });
 
+  it("legenda curta demais junta com a seguinte quando cabe; se não cabe, fica", () => {
+    const words = [w("É…", 0, 0.1), w("hoje", 0.15, 0.5), w("vamos", 0.55, 0.9)];
+    expect(reflowCaptions(words, { maxChars: 20, maxLines: 1 }).map((cue) => [cue.text, cue.start, cue.end, cue.words.length])).toEqual([["É… hoje vamos", 0, 0.9, 3]]);
+    expect(reflowCaptions(words, { maxChars: 10, maxLines: 1 }).map((cue) => cue.text)).toEqual(["É…", "hoje vamos"]);
+    expect(reflowCaptions(words, { maxChars: 20, maxLines: 1, minDuration: 0 }).map((cue) => cue.text)).toEqual(["É…", "hoje vamos"]);
+  });
+
   it("usa várias linhas, divide pela duração máxima e pela pausa", () => {
     const words = [w("um", 0, 0.5), w("dois", 0.5, 1), w("três", 1, 1.5), w("quatro", 1.5, 4), w("cinco", 5, 5.2)];
     const cues = reflowCaptions(words, { maxChars: 9, maxLines: 6, maxDuration: 3 });

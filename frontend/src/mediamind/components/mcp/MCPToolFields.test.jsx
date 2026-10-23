@@ -229,6 +229,17 @@ describe("ResultList", () => {
     expect(onToggleAll).toHaveBeenLastCalledWith(false);
     expect(screen.getByRole("button", { name: "00:01" })).toBeDisabled();
   });
+
+  it("mostra o botão de ouvir só nos itens com prévia quando há onPreview", () => {
+    const onPreview = vi.fn();
+    const sounds = [{ id: "w", label: "Whoosh", timecode: "Whoosh", preview: true }, { id: "x", label: "Sem prévia", timecode: "Outros" }];
+    const { rerender } = render(<ResultList items={sounds} selected={[]} onToggle={vi.fn()} onToggleAll={vi.fn()} onPreview={onPreview} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ouvir Whoosh" }));
+    expect(onPreview).toHaveBeenCalledWith(sounds[0]);
+    expect(screen.queryByRole("button", { name: "Ouvir Sem prévia" })).toBeNull();
+    rerender(<ResultList items={sounds} selected={[]} onToggle={vi.fn()} onToggleAll={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Ouvir Whoosh" })).toBeNull();
+  });
 });
 
 describe("LastActionBar, ProgressBar e PanelFooter", () => {

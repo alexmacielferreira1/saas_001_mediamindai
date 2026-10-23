@@ -1,5 +1,5 @@
 import React from "react";
-import { CircleHelp, Minus, Plus, RotateCcw } from "lucide-react";
+import { CircleHelp, Minus, Play, Plus, RotateCcw } from "lucide-react";
 
 // Peças compartilhadas da grade de ferramentas do MCP: campos de parâmetro, seção, forma de onda,
 // lista de resultados com checkbox, barra de última ação, progresso e rodapé.
@@ -144,8 +144,9 @@ export function ParamField({ param, value, onChange, disabled }) {
             step={param.step ?? 1}
             disabled={disabled}
             onChange={(event) => {
+              // Campo apagado (no meio da digitação) não vira 0: espera um número.
               const next = Number(event.target.value);
-              if (Number.isFinite(next)) onChange(clamp(next, param));
+              if (event.target.value !== "" && Number.isFinite(next)) onChange(clamp(next, param));
             }}
             className="w-14 bg-transparent text-center text-[11px] font-semibold text-slate-100 outline-none"
           />
@@ -253,7 +254,7 @@ export function Waveform({ data }) {
 }
 
 /** Lista de resultados com checkbox (aplicar só o que estiver marcado). */
-export function ResultList({ items, selected, onToggle, onToggleAll, onSeek }) {
+export function ResultList({ items, selected, onToggle, onToggleAll, onSeek, onPreview }) {
   const all = items.every((item) => selected.includes(item.id));
   return (
     <div className="rounded border border-slate-700">
@@ -272,6 +273,11 @@ export function ResultList({ items, selected, onToggle, onToggleAll, onSeek }) {
               {item.label}
             </span>
             {item.badge && <span className="rounded bg-slate-800 px-1 text-[9px] text-slate-400">{item.badge}</span>}
+            {onPreview && item.preview && (
+              <button type="button" aria-label={`Ouvir ${item.label}`} title="Ouvir" onClick={() => onPreview(item)} className="text-amber-300">
+                <Play size={10} />
+              </button>
+            )}
           </li>
         ))}
       </ul>

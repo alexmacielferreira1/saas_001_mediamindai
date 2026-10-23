@@ -1,7 +1,7 @@
 // Ferramentas de texto do MMFilm para o MCP: legendas com templates próprios, vícios de linguagem, títulos de
 // impacto e SRT. A fonte das palavras são as legendas da timeline (SRT importado ou transcrição); os tempos de
 // palavra vindos de SRT são estimados pelo tamanho de cada palavra.
-import { Captions, Download, FileUp, Heading, MessageSquareX, Mic, Palette, Repeat2 } from "lucide-react";
+import { Captions, Download, FileUp, Heading, MessageSquareX, Palette, Repeat2 } from "lucide-react";
 import {
   CAPTION_TEMPLATES,
   captionClips,
@@ -263,17 +263,6 @@ export function mmfilmTextTools(kit) {
       analyze: false,
       applyLabel: "Baixar SRT",
       run: (state, params) => exportSrt(state, params, kit),
-    },
-    {
-      id: "transcribe.run",
-      tab: "transcricao",
-      label: "Transcrever",
-      icon: Mic,
-      status: "soon",
-      soonReason: "a transcrição com tempo por palavra vai usar o serviço que o ClipsFree já tem. Enquanto isso, use “Importar SRT” (pode ser o SRT exportado da transcrição de outro programa).",
-      description: "Transcreve a fala da timeline com o tempo de cada palavra.",
-      params: [],
-      run: () => ({ ok: false, summary: "Em breve." }),
     },
     {
       id: "transcribe.importsrt",
