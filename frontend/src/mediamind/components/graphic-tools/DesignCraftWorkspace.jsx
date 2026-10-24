@@ -226,7 +226,6 @@ export default function DesignCraftWorkspace({ active = true, assets, onOpenFile
       },
       canUndo: () => toolActions.current.canUndo,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   function toggleLayer(name) {

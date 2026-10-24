@@ -31,6 +31,16 @@ describe('paleta temática', () => {
     expect(dark['--mm-bar']).toBe(channels('#081421'));
   });
 
+  it('mantém os cinzas dos diálogos dos editores no escuro e clareia no claro', () => {
+    expect(dark['--mm-dialog']).toBe(channels('#202020'));
+    expect(dark['--mm-dialog-edge']).toBe(channels('#555555'));
+    expect(dark['--mm-dialog-line']).toBe(channels('#444444'));
+    expect(dark['--mm-dialog-hover']).toBe(channels('#333333'));
+    expect(dark['--mm-dialog-ink']).toBe(channels('#ffffff'));
+    expect(light['--mm-dialog']).toBe(channels('#ffffff'));
+    expect(light['--mm-dialog-ink']).toBe(channels(defaultColors.slate[900]));
+  });
+
   it('inverte a escala neutra no tema claro', () => {
     expect(light['--mm-slate-950']).toBe(channels(defaultColors.slate[50]));
     expect(light['--mm-slate-800']).toBe(channels(defaultColors.slate[200]));

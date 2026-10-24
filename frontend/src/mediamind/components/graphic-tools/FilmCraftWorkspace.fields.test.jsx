@@ -301,8 +301,9 @@ describe("MMFilm — controles sem efeito real ficam indisponíveis", () => {
   it("Montagem: informações e metadados são só leitura (não parecem menus)", () => {
     render(<FilmCraftWorkspace />);
     fireEvent.click(screen.getByRole("button", { name: "⌂" }));
-    expect(screen.getByText("Área de trabalho")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Área de trabalho/ })).toBeNull();
+    const label = screen.getByText("Sequência", { selector: "dt" });
+    expect(label.closest("button")).toBeNull();
+    expect(label.parentElement.tagName).toBe("DIV");
   });
 });
 

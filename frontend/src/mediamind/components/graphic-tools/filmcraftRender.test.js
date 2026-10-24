@@ -13,6 +13,8 @@ import {
   renderTimelineToWebm,
   timelineEnd,
 } from "./filmcraftRender";
+import { clearAudioBufferCache } from "./filmcraftAudio";
+import { FakeAudioContext, fakeMediaFetch } from "./filmcraftTestAudio";
 
 const clip = (values) => ({
   id: values.id,
@@ -35,6 +37,7 @@ function fakeContext() {
 }
 
 afterEach(() => {
+  clearAudioBufferCache();
   delete HTMLCanvasElement.prototype.captureStream;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -215,6 +218,34 @@ describe("renderização WebM", () => {
       renderTimelineToWebm({ clips: [clip({ id: "o", offline: true, url: undefined, name: "Cena" })], trackState: {}, range: { start: 0, end: 5 } }),
     ).rejects.toThrow(/offline “Cena”/);
     expect(Recorder.last).toBeNull();
+  });
+
+  it("nunca exporta mudo em silêncio: sem Web Audio avisa que saiu sem áudio", async () => {
+    installRecorder();
+    const onWarning = vi.fn();
+    await renderTimelineToWebm({
+      clips: [clip({ id: "som", track: "A1", type: "audio/mpeg", duration: 0.1 })],
+      trackState: {},
+      range: { start: 0, end: 0.1 },
+      onWarning,
+    });
+    expect(onWarning).toHaveBeenCalledWith(expect.stringMatching(/sem áudio/));
+  });
+
+  it("som que não tocou nem pelo plano B vira aviso da exportação", async () => {
+    installRecorder();
+    vi.stubGlobal("AudioContext", FakeAudioContext);
+    vi.stubGlobal("fetch", fakeMediaFetch({ fail: ["blob:som"] }));
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("bloqueado"));
+    const onWarning = vi.fn();
+    await renderTimelineToWebm({
+      clips: [clip({ id: "som", track: "A1", type: "audio/mpeg", duration: 0.1 })],
+      trackState: {},
+      range: { start: 0, end: 0.1 },
+      onWarning,
+    });
+    expect(onWarning).toHaveBeenCalledWith(expect.stringMatching(/sem o som/));
+    expect(FakeAudioContext.instances.at(-1).elementSources).toHaveLength(1);
   });
 
   it("sem MediaRecorder informa o motivo", async () => {

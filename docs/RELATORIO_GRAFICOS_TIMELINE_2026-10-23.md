@@ -95,6 +95,80 @@ Testes novos: `FilmCraftWorkspace.timeline/fields`, `EffectCraftWorkspace.text`,
 - MMFilm: 16 arquivos, 253 testes verdes. Bateria completa do frontend: `npm run lint` ok, `npm run typecheck` ok,
   `npx vitest run` 233 arquivos / 2033 testes, todos passando.
 
+Observação: outro chat já tinha aplicado a mesma correção na `main`; no merge ficou a versão da `main` e o PR
+[#18](https://github.com/alexmacielferreira1/saas_001_mediamindai/pull/18) ficou só com esta documentação.
+
+## 9. Segunda rodada no MMFilm: áudio, sobrescrever e arraste fluido (23/10)
+
+Relato do Alex após testar em produção: o áudio do vídeo não toca (sem nenhum aviso); soltar um vídeo em cima
+de outro deixa os dois sobrepostos (no Premiere o novo corta o de baixo); arrastar na timeline é travado e impreciso.
+Branch `fix/mmfilm-timeline-fluida` (a partir da `main` `dd2a232`).
+
+**Causas**
+- Áudio: o motor esperava `await context.resume()` sem limite; no tablet/Safari o contexto criado fora do clique
+  fica suspenso e nada era agendado, sem aviso. O som também dependia 100% de baixar e decodificar o arquivo
+  inteiro (`loadAudioBuffer`), e falhas ficavam em cache para sempre. O `<video>` do Programa é sempre mudo.
+- Sobrescrever: soltar mídia fazia `[...old, ...items]` e mover só trocava `start`/`track`; `placeClip(..., "overwrite")`
+  já existia em `mmfilmEdits.js` mas não era usado nesses caminhos. `compatible()` deixava o A1 subir para V2.
+- Arraste: drag HTML5 nativo (sem prévia, ímã só no drop, ruim no toque); trim/ripple/rate só no `pointerup`;
+  playhead com `setPlayhead` a cada movimento re-renderizando ~5 mil linhas; reprodução a 10 fps (`setInterval` 100 ms).
+
+**Correções**
+- `filmcraftAudio.js`: `unlock()` no próprio clique do Play; `play()` espera o resume no máximo 300 ms; plano B por
+  elemento de mídia (`scheduleElement`, ligado ao barramento da faixa via `createMediaElementSource`) quando o buffer
+  não fica pronto em 400 ms, falha ou o arquivo passa de 150 MB; som direto por `<audio>` se o contexto continuar
+  suspenso; falhas saem do cache (nova tentativa após 30 s); erro visível se nada tocar em 8 s.
+- `FilmCraftWorkspace.jsx`: URLs passam por `resolveMediaUrl`; ícone persistente de problema de áudio no clipe
+  (`data-audio-issue`) no lugar do toast de 5 s; exportação avisa quando sai sem áudio (`onWarning`).
+- `mmfilmEdits.js`: `overwriteItems`, `moveClips` (Ctrl = inserir, Alt = duplicar) e `trackOverlaps` (invariante).
+  Sobrescrever vale para soltar mídia, mover, duplicar, nudge, rate stretch e criar título, em V e no A vinculado.
+  V só vai para V e A só para A.
+- `filmcraftTimelineDrag.js` (novo): arraste por pointer events com captura, limiar de 3 px, prévia por rAF,
+  fantasma com `transform`, troca de faixa, linha do ímã ao vivo, Esc/pointercancel cancelam, grava no soltar.
+  Alças de aparo de 7 px na Seleção; Ripple/Rate/Slip/Slide com prévia; mídia do Projeto com fantasma no dragOver;
+  scrub e reprodução por rAF; faixas em `TimelineLaneClips` com `memo`.
+
+**Verificação**
+- MMFilm + lib: 19 arquivos, 304 testes verdes; 39 testes novos (a maioria vista falhando antes; 3 de áudio e 1 de
+  exportação foram escritos junto com o código). Bateria completa: ver PR desta branch.
+- Harness local no Chrome com vídeos de tom 440/660 Hz: sobrescrever no meio (A[0-2], B[2-5], A[5-6] em V1 e A1),
+  agendamento correto, plano B com decodificação desligada e com resume pendurado, arraste com fantasma.
+- Não validado: ouvir o som de fato, fluidez visual (painel oculto), Safari/iPad real, arquivo > 150 MB vindo da API,
+  CORS com credenciais em produção.
+
+**Riscos/pendências desta rodada**
+- Safari pode barrar o `play()` do elemento de plano B por autoplay; nesse caso aparece erro no clipe (testar no iPad).
+- Aba oculta: a reprodução não para sozinha no fim (rAF parado); o som para.
+- Som direto (contexto suspenso) sem pan nem curva de volume. → volume resolvido na seção 10; pan continua sem suporte.
+
+## 10. Terceira rodada: ajustes gerais das pendências (24/10)
+
+Pedido do Alex: fazer todas as pendências das seções 6 e 9. Mesma branch `fix/mmfilm-timeline-fluida`.
+
+**MMFilm**
+- Aba oculta: timer de 250 ms assume o avanço quando o rAF para; a reprodução para no fim.
+- Som direto: volume segue curva do clipe, mudo/solo/fader/master ao vivo; pan não é possível sem AudioContext (aviso diz isso).
+- Plano B: `src` só 3 s antes do trecho, elemento solto no fim (`releaseElement`); `AbortError` e trechos já parados não geram aviso falso; erro antigo some quando o som toca.
+- Gráficos essenciais: 8 modelos aplicam `captionStyle` real no título selecionado (substituem o estilo inteiro).
+- Lumetri: Correção básica e Criativo ligam/desligam na prévia e exportação; Curvas/Rodas/HSL/Vinheta desabilitados.
+- Som essencial: abas Editar/Procurar funcionam. Exportar: Ordem dos campos/Aspecto/Perfil desabilitados mostrando o que sai de fato.
+- Patch V, Direcionar e "Faixa de destino" agora são um estado só (um V com patch, como no Premiere).
+- Informações com dados reais (clipe → mídia da Origem → sequência).
+- Título sem faixa livre sobrescreve e avisa (Ctrl+Z desfaz).
+- `FilmCraftTextPrompt.jsx` com tokens `mm-dialog*` (`theme/palette.cjs`), idêntico no escuro e legível no claro.
+
+**MMVector**: Traçado real (extremidade, canto, limite, tracejado em posições fixas com caixa `dashed`), sufixo px, Amostras, Guia de cores, Estilos gráficos, Histórico, Ações, Navegador, Aparência, Réguas/Grade/Limites/Guias. Desabilitados com motivo: menu ☰, pontas de seta/perfil, Pincéis/Símbolos, pranchetas múltiplas, gravação de ações, encaixe nas guias.
+
+**MMEffect**: botões de alinhar levam as bordas reais da camada às bordas/centro da composição. Alinhar camadas entre si continua desabilitado (só há uma transformação por composição).
+
+**`ToolRail.jsx`** (novo, 100% de cobertura no arquivo) com slots/flyout, Esc e clique fora; usado no MMPhoto. Os demais apps seguem com barra própria (migrar muda visual — decisão do Alex).
+
+**Lint**: removidos os `eslint-disable` sem uso em Effect, Vector, Design, Photo e Film.
+
+**Revisão de código**: aprovada com ressalvas; corrigidos Patch V × Direcionar, aviso falso do plano B, download antecipado, aviso do título e tracejado compactando campos.
+
+**Verificação**: MMFilm + lib 82 arquivos / 676 testes; Vector 77; Effect/Design/Photo 237; ToolRail 8; lint e typecheck ok. Bateria completa: ver PR. Navegador e iPad/Safari: não conferidos nesta rodada (E2E com login em preparo na branch `test/e2e-fluxo-completo`).
+
 ## 8. Ambiente e armadilhas aprendidas
 
 - **Worktrees deste trabalho:** `../saas_001_mediamindai-timeline` (branches `fix/timeline-premiere-toolbars` — mergeada — e `fix/ci-mmfilm-rodape`).

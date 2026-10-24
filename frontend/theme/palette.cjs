@@ -38,6 +38,12 @@ const SURFACES = {
   'mm-drawer': ['#041326', '#ffffff'],
   'mm-studio': ['#07111f', defaultColors.slate[100]],
   'mm-bar': ['#081421', '#ffffff'],
+  // Diálogos dos editores (ex.: FilmCraftTextPrompt): cinzas estilo NLE no escuro.
+  'mm-dialog': ['#202020', '#ffffff'],
+  'mm-dialog-edge': ['#555555', defaultColors.slate[300]],
+  'mm-dialog-line': ['#444444', defaultColors.slate[200]],
+  'mm-dialog-hover': ['#333333', defaultColors.slate[100]],
+  'mm-dialog-ink': ['#ffffff', defaultColors.slate[900]],
 };
 
 function hexToRgbChannels(hex) {

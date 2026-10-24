@@ -128,8 +128,18 @@ export function applyLook(clip, lookOrId, intensity = 100) {
  * Filtro CSS/canvas do clipe. Começa exatamente como o layerFilter atual
  * (brightness(100+exposure)% contrast saturate) e só acrescenta termos quando os campos extras não são neutros.
  */
+// Interruptores do painel Cor Lumetri: `colorBypass.basic` desliga a Correção básica (exposição, contraste,
+// saturação, realces, sombras, brancos, pretos, temperatura e matiz) e `colorBypass.creative` desliga o look
+// (filtros e cor do look). Os valores continuam gravados no clipe; só deixam de ser aplicados.
+const basicOff = (clip) => Boolean(clip?.colorBypass?.basic);
+const creativeOff = (clip) => Boolean(clip?.colorBypass?.creative);
+/** Valor efetivo de um campo de cor (neutro quando a Correção básica está desligada). */
+export function colorValue(clip, field) {
+  return basicOff(clip) ? COLOR_FIELDS[field].neutral : (clip?.[field] ?? COLOR_FIELDS[field].neutral);
+}
+
 export function lookFilter(clip) {
-  const value = (field) => clip?.[field] ?? COLOR_FIELDS[field].neutral;
+  const value = (field) => colorValue(clip, field);
   const parts = [
     `brightness(${100 + value("exposure")}%) contrast(${value("contrast")}%) saturate(${value("saturation")}%)`,
   ];
@@ -137,7 +147,7 @@ export function lookFilter(clip) {
   if (lift) parts.push(`brightness(${round(100 + lift, 2)}%)`);
   const flatten = value("shadows") * 0.15 + value("blacks") * 0.1;
   if (flatten) parts.push(`contrast(${round(100 - flatten, 2)}%)`);
-  const filters = clip?.look?.filters || {};
+  const filters = (!creativeOff(clip) && clip?.look?.filters) || {};
   if (filters.grayscale) parts.push(`grayscale(${filters.grayscale}%)`);
   if (filters.sepia) parts.push(`sepia(${filters.sepia}%)`);
   if (filters.hueRotate) parts.push(`hue-rotate(${filters.hueRotate}deg)`);
@@ -150,13 +160,13 @@ export function lookFilter(clip) {
  */
 export function lookOverlays(clip) {
   const overlays = [];
-  const temperature = clip?.temperature ?? 0;
+  const temperature = colorValue(clip, "temperature");
   if (temperature) {
     overlays.push({ color: temperature > 0 ? "#ff8a00" : "#0066ff", alpha: round((Math.abs(temperature) / 100) * 0.15), blend: "soft-light" });
   }
-  const tint = clip?.tint ?? 0;
+  const tint = colorValue(clip, "tint");
   if (tint) overlays.push({ color: tint > 0 ? "#ff00ff" : "#00ff66", alpha: round((Math.abs(tint) / 100) * 0.12), blend: "soft-light" });
-  const overlay = clip?.look?.tint;
+  const overlay = creativeOff(clip) ? null : clip?.look?.tint;
   if (overlay && overlay.alpha > 0) overlays.push({ ...overlay });
   return overlays;
 }

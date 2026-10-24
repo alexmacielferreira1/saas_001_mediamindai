@@ -812,6 +812,38 @@ function paintFor(object, idp) {
   if (object.gradient) return `url(#${idp}-grad)`;
   return object.color;
 }
+// Tracejado: `dash` guarda os 6 campos (Traço/Lacuna) por posição, com null nos vazios, para
+// que um valor nunca mude de campo; `dashed` é a caixa "Linha tracejada". Como no Illustrator,
+// o padrão efetivo vai até o primeiro campo vazio. Padrão só com zeros = linha contínua (o SVG
+// não aceita dasharray todo zero).
+const DASH_SLOTS = 6;
+function isDashed(object) {
+  if (typeof object?.dashed === "boolean") return object.dashed;
+  return Array.isArray(object?.dash) && object.dash.some((value) => Number.isFinite(value) && value > 0);
+}
+function dashPattern(object) {
+  if (!isDashed(object) || !Array.isArray(object.dash)) return [];
+  const pattern = [];
+  for (const value of object.dash.slice(0, DASH_SLOTS)) {
+    if (!Number.isFinite(value) || value < 0) break;
+    pattern.push(value);
+  }
+  return pattern.some((value) => value > 0) ? pattern : [];
+}
+/** Opções do painel Traçado (extremidade, canto, limite, tracejado) como atributos SVG. */
+function strokeStyleAttrs(object, fallbackCap = "round") {
+  const join = object.linejoin || "round";
+  const dash = dashPattern(object);
+  return {
+    strokeLinecap: object.linecap || fallbackCap,
+    strokeLinejoin: join,
+    strokeMiterlimit: join === "miter" && Number.isFinite(object.miterLimit) ? object.miterLimit : undefined,
+    strokeDasharray: dash.length ? dash.join(" ") : undefined,
+  };
+}
+function presetCap(object) {
+  return object.drawingTool === "Pincel" ? "round" : "butt";
+}
 /** Nós do conteúdo de objetos de caminho, no espaço do viewBox (vbW × vbH). */
 function pathGraphicNodes(object, idp) {
   const nodes = [];
@@ -821,8 +853,7 @@ function pathGraphicNodes(object, idp) {
   const strokeAttrs = {
     stroke: strokeWidth ? object.stroke || object.color : "none",
     strokeWidth: strokeWidth || undefined,
-    strokeLinecap: object.linecap || "round",
-    strokeLinejoin: "round",
+    ...strokeStyleAttrs(object),
     vectorEffect: "non-scaling-stroke",
   };
   const paint = paintFor(object, idp);
@@ -934,7 +965,7 @@ function objectExportNode(object) {
   if (isPathObject(object)) {
     children.push(node("g", { transform: `scale(${round2(w / (object.vbW || 100))} ${round2(h / (object.vbH || 100))})` }, pathGraphicNodes(object, idp)));
   } else if (object.kind === "Traçado") {
-    children.push(node("path", { d: presetPath(object.drawingTool), transform: `scale(${round2(w / 100)} ${round2(h / 100)})`, fill: "none", stroke: object.stroke || object.color, strokeWidth: object.drawingTool === "Pincel" ? 12 : strokeWidth || 6, strokeLinecap: object.drawingTool === "Pincel" ? "round" : "butt", strokeLinejoin: "round", vectorEffect: "non-scaling-stroke" }));
+    children.push(node("path", { d: presetPath(object.drawingTool), transform: `scale(${round2(w / 100)} ${round2(h / 100)})`, fill: "none", stroke: object.stroke || object.color, strokeWidth: object.drawingTool === "Pincel" ? 12 : strokeWidth || 6, ...strokeStyleAttrs(object, presetCap(object)), vectorEffect: "non-scaling-stroke" }));
   } else if (object.kind === "Texto") {
     const lines = String(object.text || object.name).split("\n");
     const size = object.fontSize || DEFAULT_FONT_SIZE;
@@ -964,10 +995,13 @@ function objectExportNode(object) {
     ...children,
   ]);
 }
-function buildSvgDocument(objects) {
+export function buildSvgDocument(objects) {
   const visible = [...objects].reverse().filter((object) => object.visible && !object.panelOnly);
   const ordered = [...visible.filter((object) => object.id === "background"), ...visible.filter((object) => object.id !== "background")];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${ARTBOARD_W}" height="${ARTBOARD_H}" viewBox="0 0 ${ARTBOARD_W} ${ARTBOARD_H}">${ordered.map((object) => nodeToMarkup(objectExportNode(object))).join("")}</svg>`;
+}
+function svgDataUrl(objects) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(buildSvgDocument(objects))}`;
 }
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -1005,7 +1039,7 @@ function svgToPngBlob(svg) {
 }
 const COLOR_RE = /^#[0-9a-f]{3,8}$/i;
 const PATH_RE = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]*$/;
-function sanitizeObject(raw) {
+export function sanitizeObject(raw) {
   if (!raw || typeof raw !== "object" || typeof raw.id !== "string" || typeof raw.kind !== "string") return null;
   const number = (value, min, max, fallback) => (Number.isFinite(Number(value)) ? clampValue(Number(value), min, max) : fallback);
   const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : undefined);
@@ -1034,6 +1068,10 @@ function sanitizeObject(raw) {
     vbH: raw.vbH === undefined ? undefined : number(raw.vbH, 0.01, 100000, 100),
     fillRule: raw.fillRule === "evenodd" ? "evenodd" : undefined,
     linecap: ["round", "butt", "square"].includes(raw.linecap) ? raw.linecap : undefined,
+    linejoin: ["round", "miter", "bevel"].includes(raw.linejoin) ? raw.linejoin : undefined,
+    miterLimit: raw.miterLimit === undefined ? undefined : number(raw.miterLimit, 1, 500, 10),
+    dash: Array.isArray(raw.dash) ? raw.dash.slice(0, DASH_SLOTS).map((value) => (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : clampValue(Number(value), 0, 10000))) : undefined,
+    dashed: typeof raw.dashed === "boolean" ? raw.dashed : undefined,
     op: ["unite", "minusFront", "minusBack", "intersect", "exclude", "crop", "trim", "outline"].includes(raw.op) ? raw.op : undefined,
     fontFamily: FONT_FAMILIES.includes(raw.fontFamily) ? raw.fontFamily : undefined,
     fontWeight: Object.values(FONT_WEIGHTS).includes(raw.fontWeight) ? raw.fontWeight : undefined,
@@ -1196,6 +1234,13 @@ export default function VectorCraftWorkspace({
   const [snapGrid, setSnapGrid] = useGraphicDraftState("VectorCraftWorkspace.jsx:snapGrid", false);
   const [scaleEffects, setScaleEffects] = useGraphicDraftState("VectorCraftWorkspace.jsx:scaleEffects", true);
   const [keyIncrement, setKeyIncrement] = useGraphicDraftState("VectorCraftWorkspace.jsx:keyIncrement", "1 px");
+  const [customSwatches, setCustomSwatches] = useGraphicDraftState("VectorCraftWorkspace.jsx:customSwatches", []);
+  const [showRulers, setShowRulers] = useGraphicDraftState("VectorCraftWorkspace.jsx:showRulers", false);
+  const [showGrid, setShowGrid] = useGraphicDraftState("VectorCraftWorkspace.jsx:showGrid", false);
+  const [showBounds, setShowBounds] = useGraphicDraftState("VectorCraftWorkspace.jsx:showBounds", true);
+  const [guides, setGuides] = useGraphicDraftState("VectorCraftWorkspace.jsx:guides", []);
+  const [guidesVisible, setGuidesVisible] = useGraphicDraftState("VectorCraftWorkspace.jsx:guidesVisible", true);
+  const [, setHistoryTick] = useState(0);
   const [extraIds, setExtraIds] = useState([]);
   const [notice, setNotice] = useState("");
   const [guide, setGuide] = useState(null);
@@ -1265,6 +1310,25 @@ export default function VectorCraftWorkspace({
     setObjectsRaw(next);
     restoreSelection(next);
     setNotice("Refeito.");
+  }
+  // Painel Histórico: linha do tempo = passos de desfazer + estado atual + passos de refazer.
+  function goToHistory(index) {
+    const history = historyRef.current;
+    const timeline = [...history.undo, objectsRef.current, ...[...history.redo].reverse()];
+    if (index < 0 || index >= timeline.length || index === history.undo.length) return;
+    penRef.current = null;
+    history.undo = timeline.slice(0, index);
+    history.redo = timeline.slice(index + 1).reverse();
+    const target = timeline[index];
+    objectsRef.current = target;
+    setObjectsRaw(target);
+    restoreSelection(target);
+    setNotice(index === 0 ? "Histórico: estado inicial." : `Histórico: alteração ${index}.`);
+  }
+  function clearHistory() {
+    historyRef.current = { undo: [], redo: [] };
+    setHistoryTick((tick) => tick + 1);
+    setNotice("Histórico excluído; o documento atual foi mantido.");
   }
   function setSelectedObject(id) {
     setSelectedRaw(id);
@@ -1905,6 +1969,7 @@ export default function VectorCraftWorkspace({
 
   function handleArtboardPointerDown(event) {
     if (event.button) return;
+    if (event.target.closest?.("[data-vector-ruler]")) return;
     const targetId = event.target.closest?.("[data-object-id]")?.getAttribute("data-object-id");
     const target = objectsRef.current.find((object) => object.id === targetId);
     if (UNSUPPORTED_TOOLS[tool]) {
@@ -2269,7 +2334,6 @@ export default function VectorCraftWorkspace({
       },
       canUndo: () => toolActions.current.canUndo,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appActive]);
 
   function runCommand(command, options = {}) {
@@ -2670,11 +2734,58 @@ export default function VectorCraftWorkspace({
     patchMany(new Map(targets.map((object) => [object.id, mode === "solid" ? { gradient: undefined, noFill: false } : mode === "gradient" ? { gradient: { from: object.color, to: stroke === object.color ? "#000000" : stroke, angle: 90 }, noFill: false } : { noFill: true, gradient: undefined }])));
     setNotice(mode === "solid" ? "Preenchimento sólido." : mode === "gradient" ? "Gradiente linear aplicado." : "Sem preenchimento.");
   }
+  // Amostras / Guia de cores: aplica a cor ao preenchimento ou ao traçado da seleção.
+  function applySwatch(color, target = "fill") {
+    const targets = editableSelection();
+    const none = color === "none";
+    if (target === "stroke") {
+      if (!none) setStroke(color);
+      if (!targets.length) return setNotice(none ? "Selecione um objeto para remover o traçado." : `Amostra ${color} definida como traçado atual.`);
+      patchMany(new Map(targets.map((object) => [object.id, none ? { strokeWidth: 0 } : { stroke: color, strokeWidth: Math.max(1, object.strokeWidth ?? 0) }])));
+      return setNotice(none ? "Traçado removido da seleção." : `Traçado ${color} aplicado.`);
+    }
+    if (!none) setFill(color);
+    if (!targets.length) return setNotice(none ? "Selecione um objeto para remover o preenchimento." : `Amostra ${color} definida como preenchimento atual.`);
+    patchMany(new Map(targets.map((object) => [object.id, none ? { noFill: true, gradient: undefined } : { color, noFill: false, gradient: undefined }])));
+    return setNotice(none ? "Sem preenchimento." : `Preenchimento ${color} aplicado.`);
+  }
+  function addSwatches(colors) {
+    const valid = colors.map((color) => String(color).toLowerCase()).filter((color) => COLOR_RE.test(color));
+    setCustomSwatches((current) => [...current, ...valid.filter((color, index) => !current.includes(color) && valid.indexOf(color) === index)]);
+    setNotice(`${valid.length} cor(es) salva(s) em Amostras.`);
+  }
+  function removeSwatch(color) {
+    setCustomSwatches((current) => current.filter((item) => item !== color));
+    setNotice(`Amostra ${color} excluída.`);
+  }
+  function applyGraphicStyle(name, values) {
+    const targets = editableSelection();
+    if (!targets.length) return setNotice("Selecione um objeto para aplicar o estilo gráfico.");
+    patchMany(new Map(targets.map((object) => {
+      const patch = { ...values };
+      if (object.kind === "Texto") delete patch.gradient;
+      return [object.id, patch];
+    })));
+    return setNotice(`Estilo gráfico "${name}" aplicado.`);
+  }
+  // Réguas: clicar na régua horizontal cria uma guia vertical (e vice-versa).
+  function addGuide(axis, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const point = canvasPoint(event);
+    const value = round2(clampValue(axis === "x" ? point[0] : point[1], 0, axis === "x" ? ARTBOARD_W : ARTBOARD_H));
+    setGuides((current) => [...current, { axis, value }]);
+    setGuidesVisible(true);
+    setNotice(`Guia ${axis === "x" ? "vertical" : "horizontal"} em ${showLength(value)}.`);
+  }
   const [unitFactor, unitSuffix] = UNIT_INFO[units] || UNIT_INFO.Pixels;
   const showLength = (value) => `${String(round2((value || 0) * unitFactor)).replace(".", ",")} ${unitSuffix}`;
   const directAnchors = tool === "Seleção direta" ? directSubpaths(active) : null;
   const unitProps = { unitFactor, unitSuffix, showLength };
   const allTools = TOOL_GROUPS.flatMap((group) => group.slots.flat().map(([shortcut, name]) => ({ group: group.label, shortcut, name })));
+  function closePanel() {
+    setRightPanel("Propriedades");
+  }
   function pickTool(name) {
     setSlotTools((current) => ({ ...current, [TOOL_SLOTS[name]]: name }));
     chooseTool(name);
@@ -2983,13 +3094,12 @@ export default function VectorCraftWorkspace({
                             fill="none"
                             stroke={object.stroke || object.color}
                             strokeWidth={object.drawingTool === "Pincel" ? Math.max(12, object.strokeWidth || 0) : object.strokeWidth || 6}
-                            strokeLinecap={object.drawingTool === "Pincel" ? "round" : "butt"}
-                            strokeLinejoin="round"
+                            {...strokeStyleAttrs(object, presetCap(object))}
                             vectorEffect="non-scaling-stroke"
                           />
                         </svg>
                       )}
-                      {selectedObject === object.id && (
+                      {selectedObject === object.id && showBounds && (
                         <>
                           {[
                             ["nw", "-left-2 -top-2 cursor-nwse-resize"],
@@ -3036,6 +3146,34 @@ export default function VectorCraftWorkspace({
                     <rect key={`${subIndex}-${index}`} x={round2(x - 3)} y={round2(y - 3)} width="6" height="6" fill="white" stroke="#2675df" strokeWidth="1" />
                   )))}
                 </svg>
+              )}
+              {showGrid && (
+                <div
+                  aria-label="Grade da prancheta"
+                  className="pointer-events-none absolute inset-0"
+                  style={{ zIndex: 25, backgroundImage: "linear-gradient(to right, rgba(37,99,235,0.18) 1px, transparent 1px), linear-gradient(to bottom, rgba(37,99,235,0.18) 1px, transparent 1px)", backgroundSize: "10px 10px" }}
+                />
+              )}
+              {guidesVisible && guides.length > 0 && (
+                <svg aria-label="Guias" className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 32 }} viewBox={`0 0 ${ARTBOARD_W} ${ARTBOARD_H}`}>
+                  {guides.map((item, index) => (item.axis === "x"
+                    ? <line key={index} x1={item.value} y1={0} x2={item.value} y2={ARTBOARD_H} stroke="#06b6d4" strokeWidth="1" />
+                    : <line key={index} x1={0} y1={item.value} x2={ARTBOARD_W} y2={item.value} stroke="#06b6d4" strokeWidth="1" />))}
+                </svg>
+              )}
+              {showRulers && (
+                <>
+                  <div data-vector-ruler aria-label="Régua horizontal" title="Clique para criar uma guia vertical" onPointerDown={(event) => addGuide("x", event)} className="absolute left-0 top-0 h-[18px] w-full cursor-col-resize border-b border-[#555] bg-[#2b2b2b] text-[9px] text-slate-300" style={{ zIndex: 40 }}>
+                    {Array.from({ length: Math.floor(ARTBOARD_W / 50) + 1 }, (_, index) => (
+                      <span key={index} className="absolute top-0 h-full border-l border-[#888] pl-0.5" style={{ left: index * 50 }}>{round2(index * 50 * unitFactor)}</span>
+                    ))}
+                  </div>
+                  <div data-vector-ruler aria-label="Régua vertical" title="Clique para criar uma guia horizontal" onPointerDown={(event) => addGuide("y", event)} className="absolute left-0 top-0 h-full w-[18px] cursor-row-resize border-r border-[#555] bg-[#2b2b2b] text-[9px] text-slate-300" style={{ zIndex: 40 }}>
+                    {Array.from({ length: Math.floor(ARTBOARD_H / 50) + 1 }, (_, index) => (
+                      <span key={index} className="absolute left-0 w-full border-t border-[#888] [writing-mode:vertical-rl]" style={{ top: index * 50 }}>{round2(index * 50 * unitFactor)}</span>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
             {appearanceOpen && active && (
@@ -3181,9 +3319,37 @@ export default function VectorCraftWorkspace({
               onSelect={onSelect}
             />
           ) : rightPanel === "Traçado" ? (
-            <StrokePanel active={active} patchObject={patchObject} />
+            <StrokePanel active={active} patchObject={patchObject} onClose={closePanel} />
           ) : !["Propriedades", "Camadas", "Bibliotecas"].includes(rightPanel) ? (
-            <AuxiliaryPanel name={rightPanel} onCommand={runCommand} active={active} patchObject={patchObject} stroke={stroke} {...unitProps} />
+            <AuxiliaryPanel
+              name={rightPanel}
+              onCommand={runCommand}
+              active={active}
+              patchObject={patchObject}
+              stroke={stroke}
+              {...unitProps}
+              panelTools={{
+                onClose: closePanel,
+                fill,
+                hasSelection: editableSelection().length > 0,
+                applySwatch,
+                customSwatches,
+                addSwatches,
+                removeSwatch,
+                applyGraphicStyle,
+                history: { undo: historyRef.current.undo.length, redo: historyRef.current.redo.length },
+                goToHistory,
+                undo,
+                redo,
+                clearHistory,
+                runMenuCommand,
+                openAppearance: () => setAppearanceOpen(true),
+                thumbnail: rightPanel === "Navegador" ? svgDataUrl(objects) : null,
+                zoom,
+                setZoom: (value) => setZoom(clampValue(value, 25, 150)),
+                zoomStep,
+              }}
+            />
           ) : active ? (
             <ObjectProperties
               active={active}
@@ -3196,10 +3362,13 @@ export default function VectorCraftWorkspace({
               onCommand={runCommand}
               unitFactor={unitFactor}
               unitSuffix={unitSuffix}
+              onOpenPanel={setRightPanel}
+              onOpenAppearance={() => setAppearanceOpen(true)}
             />
           ) : (
             <DocumentProperties
               {...{ units, setUnits, snapPoint, setSnapPoint, snapGrid, setSnapGrid, scaleEffects, setScaleEffects, keyIncrement, setKeyIncrement }}
+              view={{ showRulers, setShowRulers, showGrid, setShowGrid, showBounds, setShowBounds, guides, setGuides, guidesVisible, setGuidesVisible, onOpenPanel: setRightPanel, setNotice }}
             />
           )}
         </aside>
@@ -3208,54 +3377,79 @@ export default function VectorCraftWorkspace({
   );
 }
 
-function StrokePanel({ active, patchObject }) {
-  const [dashed, setDashed] = useState(false);
-  const [cap, setCap] = useState("butt");
-  const [corner, setCorner] = useState("miter");
-  const [alignment, setAlignment] = useState("centro");
-  const [dashAlignment, setDashAlignment] = useState("corners");
-  const [arrowLinked, setArrowLinked] = useState(true);
-  const [arrowAlignment, setArrowAlignment] = useState("extend");
+// Cabeçalho comum dos painéis: » fecha (volta a Propriedades); o menu ☰ ainda não existe.
+function PanelHeader({ title, onClose = () => {}, className = "mb-3" }) {
+  return (
+    <div className={`${className} flex items-center border-b border-[#555] pb-3`}>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <button aria-label="Menu do painel" {...NOT_AVAILABLE} className="ml-auto disabled:opacity-40">☰</button>
+      <button aria-label="Fechar painel" title="Fechar painel" onClick={onClose} className="ml-3">»</button>
+    </div>
+  );
+}
+
+const DASH_LABELS = ["Traço 1", "Lacuna 1", "Traço 2", "Lacuna 2", "Traço 3", "Lacuna 3"];
+const ARROW_OPTIONS = ["Nenhuma", "Triângulo", "Círculo", "Losango"];
+
+// Painel Traçado: peso (px), extremidade, canto, limite e tracejado gravam no objeto e viram
+// stroke-linecap / stroke-linejoin / stroke-miterlimit / stroke-dasharray (prancheta e SVG).
+// Formas desenhadas como caixa (retângulo, elipse, texto) só aceitam o peso; para as demais
+// opções é preciso convertê-las em caminho (Expandir).
+function StrokePanel({ active, patchObject, onClose = () => {} }) {
+  const lineEditable = Boolean(active && !active.locked && (isPathObject(active) || active.kind === "Traçado"));
+  const lineTitle = lineEditable ? undefined : "Disponível para caminhos e traçados (use Expandir nas formas)";
+  const cap = active?.linecap || (active && !isPathObject(active) ? presetCap(active) : "round");
+  const corner = active?.linejoin || "round";
+  const dash = Array.isArray(active?.dash) ? active.dash : [];
+  const dashed = isDashed(active);
+  // Cada campo grava na própria posição (null = vazio); zerar não desmarca a caixa.
+  const setDash = (index, value) => {
+    patchObject("dash", DASH_LABELS.map((_, position) => (position === index ? value : Number.isFinite(dash[position]) ? dash[position] : null)));
+  };
+  const toggleDashed = (checked) => {
+    if (checked && !dash.some((value) => Number.isFinite(value) && value > 0)) patchObject("dash", [12, null, null, null, null, null]);
+    patchObject("dashed", checked);
+  };
   return (
     <div className="p-3 text-[11px] text-[#d7d7d7]">
-      <div className="mb-4 flex items-center border-b border-[#555] pb-3">
-        <h3 className="text-sm font-semibold">Traçado</h3>
-        <button className="ml-auto">☰</button><button className="ml-3">»</button>
-      </div>
+      <PanelHeader title="Traçado" onClose={onClose} className="mb-4" />
       <label className="mb-3 flex items-center gap-3">
         <span className="w-20 text-right">Peso:</span>
         <NumericField aria-label="Peso do traçado" min={0} max={500} step={0.25} disabled={!active} value={active?.strokeWidth ?? 1} onChange={(value) => patchObject("strokeWidth", value)} className="w-28 rounded border border-[#555] bg-[#383838] px-3 py-2" />
-        <span>pt</span><ChevronDown size={14} />
+        <span>px</span><ChevronDown size={14} />
       </label>
-      <ControlChoices label="Extremidade:" value={cap} setValue={setCap} items={[["butt","dc-cap-butt","Extremidade reta"],["round","dc-cap-round","Extremidade redonda"],["square","dc-cap-square","Extremidade projetada"]]} />
+      <ControlChoices label="Extremidade:" value={cap} setValue={(value) => patchObject("linecap", value)} disabled={!lineEditable} disabledTitle={lineTitle} items={[["butt","dc-cap-butt","Extremidade reta"],["round","dc-cap-round","Extremidade redonda"],["square","dc-cap-square","Extremidade projetada"]]} />
       <div className="flex items-center gap-2">
-        <ControlChoices label="Canto:" value={corner} setValue={setCorner} items={[["miter","dc-join-miter","Junção em esquadria"],["round","dc-join-round","Junção redonda"],["bevel","dc-join-bevel","Junção chanfrada"]]} />
-        <label className="mb-3 flex items-center gap-1"><span>Limite:</span><input defaultValue="10" className="w-14 rounded border border-[#555] bg-[#383838] px-2 py-2" /><span>x</span></label>
+        <ControlChoices label="Canto:" value={corner} setValue={(value) => patchObject("linejoin", value)} disabled={!lineEditable} disabledTitle={lineTitle} items={[["miter","dc-join-miter","Junção em esquadria"],["round","dc-join-round","Junção redonda"],["bevel","dc-join-bevel","Junção chanfrada"]]} />
+        <label className="mb-3 flex items-center gap-1"><span>Limite:</span><NumericField aria-label="Limite de esquadria" min={1} max={500} disabled={!lineEditable || corner !== "miter"} title={corner === "miter" ? undefined : "Use a junção em esquadria"} value={active?.miterLimit ?? 10} onChange={(value) => patchObject("miterLimit", value)} className="w-14 rounded border border-[#555] bg-[#383838] px-2 py-2 disabled:opacity-40" /><span>x</span></label>
       </div>
-      <ControlChoices label="Alinhar traçado:" value={alignment} setValue={setAlignment} items={[["centro","dc-stroke-center","Alinhar traçado ao centro"],["dentro","dc-stroke-inside","Alinhar traçado para dentro"],["fora","dc-stroke-outside","Alinhar traçado para fora"]]} />
+      <ControlChoices label="Alinhar traçado:" value="centro" setValue={() => {}} items={[["centro","dc-stroke-center","Alinhar traçado ao centro"],["dentro","dc-stroke-inside","Alinhar traçado para dentro",true],["fora","dc-stroke-outside","Alinhar traçado para fora",true]]} />
       <section className="mt-4 border-t border-[#555] pt-4">
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2"><input type="checkbox" checked={dashed} onChange={(event) => setDashed(event.target.checked)} /> Linha tracejada</label>
+          <label className="flex items-center gap-2" title={lineTitle}><input type="checkbox" aria-label="Linha tracejada" disabled={!lineEditable} checked={dashed} onChange={(event) => toggleDashed(event.target.checked)} /> Linha tracejada</label>
           <span className="ml-auto flex gap-1">
-            {[['exact','dc-dash-exact','Comprimentos exatos'],['corners','dc-dash-align','Ajustar aos cantos e extremidades']].map(([key, icon, title]) => <button key={key} disabled={!dashed} title={title} onClick={() => setDashAlignment(key)} className={`grid h-7 w-7 place-items-center rounded disabled:opacity-25 ${dashAlignment === key ? 'bg-[#222] text-white' : 'text-[#aaa]'}`}><ReferenceIcon name={icon} size={18} /></button>)}
+            {[['exact','dc-dash-exact','Comprimentos exatos'],['corners','dc-dash-align','Ajustar aos cantos e extremidades']].map(([key, icon, title]) => <button key={key} aria-label={title} {...NOT_AVAILABLE} className="grid h-7 w-7 place-items-center rounded text-[#aaa] disabled:opacity-25"><ReferenceIcon name={icon} size={18} /></button>)}
           </span>
         </div>
         <div className="mt-3 grid grid-cols-6 gap-1">
-          {["Traço", "Lacuna", "Traço", "Lacuna", "Traço", "Lacuna"].map((label, index) => <label key={index} className="text-center text-[9px] text-slate-400"><input disabled={!dashed} defaultValue={index === 0 ? 12 : ""} className="mb-1 w-full rounded border border-[#555] bg-[#383838] p-2 disabled:opacity-30" />{label}</label>)}
+          {DASH_LABELS.map((label, index) => <label key={label} className="text-center text-[9px] text-slate-400"><NumericField aria-label={label} min={0} max={10000} disabled={!lineEditable || !dashed} value={Number.isFinite(dash[index]) ? dash[index] : undefined} onChange={(value) => setDash(index, value)} className="mb-1 w-full rounded border border-[#555] bg-[#383838] p-2 disabled:opacity-30" />{index % 2 ? "Lacuna" : "Traço"}</label>)}
         </div>
       </section>
       <section className="mt-4 border-t border-[#555] pt-4">
-        <label className="mb-3 grid grid-cols-[90px_1fr_1fr_auto] items-center gap-2"><span>Pontas de seta:</span><select className="bg-[#383838] p-2"><option>Nenhuma</option><option>Triângulo</option><option>Círculo</option><option>Losango</option></select><select className="bg-[#383838] p-2"><option>Nenhuma</option><option>Triângulo</option><option>Círculo</option><option>Losango</option></select><button title="Trocar pontas"><ReferenceIcon name="arrow-left-right" size={18} /></button></label>
-        <label className="mb-3 grid grid-cols-[90px_1fr_1fr_auto] items-center gap-2"><span>Escala:</span><input defaultValue="100%" className="min-w-0 bg-[#383838] p-2" /><input defaultValue="100%" className="min-w-0 bg-[#383838] p-2" /><button title="Vincular escalas" onClick={() => setArrowLinked(!arrowLinked)} className={arrowLinked ? 'text-white' : 'text-[#777]'}>↗</button></label>
-        <ControlChoices label="Alinhar:" value={arrowAlignment} setValue={setArrowAlignment} items={[["extend","dc-arrow-extend","A ponta ultrapassa o ponto final"],["tip","dc-arrow-tip","Ponta sobre o ponto final"]]} />
-        <label className="grid grid-cols-[90px_1fr_auto_auto] items-center gap-2"><span>Perfil:</span><select className="bg-[#383838] p-2"><option>Uniforme</option><option>Largura 1</option><option>Largura 2</option><option>Largura 3</option></select><button title="Inverter ao longo"><ReferenceIcon name="flip-horizontal-2" size={17} /></button><button title="Inverter transversalmente"><ReferenceIcon name="flip-vertical-2" size={17} /></button></label>
+        <label className="mb-3 grid grid-cols-[90px_1fr_1fr_auto] items-center gap-2"><span>Pontas de seta:</span><select aria-label="Ponta de seta inicial" {...NOT_AVAILABLE} className="bg-[#383838] p-2 disabled:opacity-40">{ARROW_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select><select aria-label="Ponta de seta final" {...NOT_AVAILABLE} className="bg-[#383838] p-2 disabled:opacity-40">{ARROW_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select><button aria-label="Trocar pontas" {...NOT_AVAILABLE} className="disabled:opacity-40"><ReferenceIcon name="arrow-left-right" size={18} /></button></label>
+        <label className="mb-3 grid grid-cols-[90px_1fr_1fr_auto] items-center gap-2"><span>Escala:</span><input aria-label="Escala da ponta inicial" {...NOT_AVAILABLE} defaultValue="100%" className="min-w-0 bg-[#383838] p-2 disabled:opacity-40" /><input aria-label="Escala da ponta final" {...NOT_AVAILABLE} defaultValue="100%" className="min-w-0 bg-[#383838] p-2 disabled:opacity-40" /><button aria-label="Vincular escalas" {...NOT_AVAILABLE} className="text-[#777] disabled:opacity-40">↗</button></label>
+        <ControlChoices label="Alinhar:" value="extend" setValue={() => {}} disabled disabledTitle="Ainda não disponível" items={[["extend","dc-arrow-extend","A ponta ultrapassa o ponto final"],["tip","dc-arrow-tip","Ponta sobre o ponto final"]]} />
+        <label className="grid grid-cols-[90px_1fr_auto_auto] items-center gap-2"><span>Perfil:</span><select aria-label="Perfil de largura" {...NOT_AVAILABLE} className="bg-[#383838] p-2 disabled:opacity-40"><option>Uniforme</option><option>Largura 1</option><option>Largura 2</option><option>Largura 3</option></select><button aria-label="Inverter ao longo" {...NOT_AVAILABLE} className="disabled:opacity-40"><ReferenceIcon name="flip-horizontal-2" size={17} /></button><button aria-label="Inverter transversalmente" {...NOT_AVAILABLE} className="disabled:opacity-40"><ReferenceIcon name="flip-vertical-2" size={17} /></button></label>
       </section>
     </div>
   );
 }
 
-function ControlChoices({ label, value, setValue, items }) {
-  return <div className="mb-3 flex items-center gap-2"><span className="w-20 shrink-0 text-right">{label}</span>{items.map(([key, icon, title]) => <button key={key} onClick={() => setValue(key)} className={`grid h-8 w-8 place-items-center rounded ${value === key ? "bg-[#222] text-white" : "text-slate-400 hover:bg-[#444]"}`} title={title}><ReferenceIcon name={icon} size={20} /></button>)}</div>;
+function ControlChoices({ label, value, setValue, items, disabled = false, disabledTitle }) {
+  return <div className="mb-3 flex items-center gap-2"><span className="w-20 shrink-0 text-right">{label}</span>{items.map(([key, icon, title, unavailable]) => {
+    const off = disabled || Boolean(unavailable);
+    return <button key={key} aria-label={title} aria-pressed={value === key} disabled={off} onClick={() => setValue(key)} className={`grid h-8 w-8 place-items-center rounded disabled:opacity-40 ${value === key ? "bg-[#222] text-white" : "text-slate-400 hover:bg-[#444]"}`} title={unavailable ? "Ainda não disponível" : off && disabledTitle ? disabledTitle : title}><ReferenceIcon name={icon} size={20} /></button>;
+  })}</div>;
 }
 
 // Controle sem efeito real ainda: fica visível, mas desabilitado e com aviso honesto.
@@ -3285,9 +3479,31 @@ function HexField({ value, onChange, disabled, className }) {
   );
 }
 
-function AuxiliaryPanel({ name, onCommand = () => {}, active = null, patchObject = () => {}, stroke = "#000000", unitFactor = 1, unitSuffix = "px", showLength = (value) => `${value} px` }) {
+const BASE_SWATCHES = [
+  ["Preto", "#000000"], ["Branco", "#ffffff"], ["Vermelho", "#ef4444"], ["Laranja", "#f59e0b"], ["Amarelo", "#facc15"], ["Verde", "#22c55e"], ["Ciano", "#06b6d4"],
+  ["Azul", "#3b82f6"], ["Índigo", "#6366f1"], ["Roxo", "#a855f7"], ["Rosa", "#ec4899"], ["Pedra", "#78716c"], ["Ardósia", "#94a3b8"], ["Nenhuma", "none"],
+];
+const HARMONY_RULES = { Complementar: [0, 180], Análoga: [0, -30, 30], Tríade: [0, 120, 240], Tétrade: [0, 90, 180, 270] };
+const GRAPHIC_STYLES = [
+  ["Contorno escuro", { stroke: "#0f172a", strokeWidth: 3 }],
+  ["Sombra suave", { shadow: true }],
+  ["Ciano sólido", { color: "#22d3ee", noFill: false, gradient: undefined }],
+  ["Degradê pôr do sol", { gradient: { from: "#f59e0b", to: "#ec4899", angle: 90 }, noFill: false }],
+  ["Desfoque leve", { blur: 3 }],
+  ["Sem efeitos", { shadow: false, blur: 0 }],
+];
+// Ações padrão: atalhos para comandos reais dos menus (gravar ações ainda não existe).
+const DEFAULT_ACTIONS = ["Sombra projetada", "Desfoque gaussiano", "Limpar efeitos", "Exportar SVG", "Exportar PNG"];
+const SWATCH_NONE_BG = "linear-gradient(135deg,#fff 45%,#e11d48 46%,#e11d48 54%,#fff 55%)";
+
+function AuxiliaryPanel({ name, onCommand = () => {}, active = null, patchObject = () => {}, stroke = "#000000", unitFactor = 1, unitSuffix = "px", showLength = (value) => `${value} px`, panelTools = {} }) {
   const [alignTarget, setAlignTarget] = useState("Alinhar à seleção");
-  const [historyStep, setHistoryStep] = useState(3);
+  const [swatchTarget, setSwatchTarget] = useState("fill");
+  const [swatchQuery, setSwatchQuery] = useState("");
+  const [pickedSwatch, setPickedSwatch] = useState(null);
+  const [harmony, setHarmony] = useState("Complementar");
+  const [pickedAction, setPickedAction] = useState(null);
+  const tools = { onClose: () => {}, fill: "#000000", hasSelection: false, applySwatch: () => {}, customSwatches: [], addSwatches: () => {}, removeSwatch: () => {}, applyGraphicStyle: () => {}, history: { undo: 0, redo: 0 }, goToHistory: () => {}, undo: () => {}, redo: () => {}, clearHistory: () => {}, runMenuCommand: () => {}, openAppearance: () => {}, thumbnail: null, zoom: 100, setZoom: () => {}, zoomStep: () => {}, ...panelTools };
   const editable = Boolean(active && !active.locked);
   const isText = editable && active.kind === "Texto";
   const gradient = active?.gradient;
@@ -3295,21 +3511,37 @@ function AuxiliaryPanel({ name, onCommand = () => {}, active = null, patchObject
   const rgb = hexToRgb(active?.color) || [0, 0, 0];
   const hex = rgbToHex(rgb).slice(1).toUpperCase();
   const patchGradient = (values) => patchObject("gradient", { ...gradient, ...values });
-  const shell = (content) => <div className="p-3 text-[11px] text-[#d6d6d6]"><div className="mb-3 flex items-center border-b border-[#555] pb-3"><h3 className="text-sm font-semibold">{name}</h3><button className="ml-auto">☰</button><button className="ml-3">»</button></div>{content}</div>;
+  const shell = (content) => <div className="p-3 text-[11px] text-[#d6d6d6]"><PanelHeader title={name} onClose={tools.onClose} />{content}</div>;
   const field = "rounded border border-[#555] bg-[#383838] px-2 py-2 outline-none";
 
   if (name === "Cor") {
     const setChannel = (index, value) => patchObject("color", rgbToHex(rgb.map((channel, position) => (position === index ? value : channel))));
     return shell(<><div className="mb-3 h-28 rounded border border-[#555] bg-[linear-gradient(90deg,#fff0,#fff),linear-gradient(#f00,#000)]" /><div className="grid grid-cols-[1fr_70px] gap-2"><div className="space-y-2">{["R", "G", "B"].map((label, index) => <label key={label} className="grid grid-cols-[18px_1fr_42px] items-center gap-2"><span>{label}</span><input type="range" aria-label={`Canal ${label}`} min="0" max="255" disabled={!editable} value={rgb[index]} onChange={(event) => setChannel(index, Number(event.target.value))} className="accent-white"/><NumericField aria-label={`Valor ${label}`} min={0} max={255} precision={0} disabled={!editable} value={rgb[index]} onChange={(value) => setChannel(index, value)} className={field}/></label>)}</div><div className="rounded border border-[#666]" style={{ background: active?.color || "#0f2f49" }} /></div><label className="mt-3 flex items-center gap-2"><span className="w-8">#</span><HexField value={hex} disabled={!editable} onChange={(value) => patchObject("color", value)} className={`${field} flex-1`} /></label></>);
   }
-  if (name === "Guia de cores") return shell(<><select className={`${field} mb-3 w-full`}><option>Regras de harmonia</option><option>Complementar</option><option>Análoga</option><option>Tríade</option></select><div className="grid grid-cols-5 gap-1">{["#082f49","#0e7490","#22d3ee","#f59e0b","#f97316"].map(color => <button key={color} title={color} className="h-12 border border-[#777]" style={{background:color}} />)}</div><button className="mt-3 w-full rounded border border-[#666] p-2">Salvar cores como amostras</button></>);
-  if (name === "Amostras") return shell(<><input placeholder="Localizar" className={`${field} mb-3 w-full italic`} /><div className="grid grid-cols-7 gap-1">{["#000000","#ffffff","#ef4444","#f59e0b","#facc15","#22c55e","#06b6d4","#3b82f6","#6366f1","#a855f7","#ec4899","#78716c","#94a3b8","transparent"].map((color,index) => <button key={`${color}-${index}`} className="aspect-square border border-[#777]" style={{background:color === 'transparent' ? 'linear-gradient(135deg,#fff 45%,#e11d48 46%,#e11d48 54%,#fff 55%)' : color}} />)}</div><PanelFooter labels={["Bibliotecas","Grupo","Nova amostra","Excluir"]}/></>);
-  if (name === "Pincéis" || name === "Símbolos" || name === "Estilos gráficos") return shell(<><div className="grid grid-cols-4 gap-2">{Array.from({length:12},(_,index)=><button key={index} className="grid aspect-square place-items-center rounded border border-[#5a5a5a] bg-[#414141] text-xl">{name === 'Pincéis' ? ['╱','〰','≈','⌁'][index%4] : name === 'Símbolos' ? ['◆','✦','●','✿'][index%4] : ['A','B','C','D'][index%4]}</button>)}</div><PanelFooter labels={["Biblioteca","Novo","Opções","Excluir"]}/></>);
+  if (name === "Guia de cores") {
+    const base = String(active?.color && COLOR_RE.test(active.color) ? active.color : tools.fill).toLowerCase();
+    const colors = HARMONY_RULES[harmony].map((degrees) => (degrees ? rotateHue(base, degrees) : base));
+    return shell(<><select aria-label="Regra de harmonia" value={harmony} onChange={(event) => setHarmony(event.target.value)} className={`${field} mb-3 w-full`}>{Object.keys(HARMONY_RULES).map((rule) => <option key={rule}>{rule}</option>)}</select><div className="grid grid-cols-5 gap-1">{colors.map((color, index) => <button key={`${color}-${index}`} aria-label={`Cor da harmonia ${color}`} title={color} onClick={() => tools.applySwatch(color, "fill")} className="h-12 border border-[#777]" style={{background:color}} />)}</div><button onClick={() => tools.addSwatches(colors)} className="mt-3 w-full rounded border border-[#666] p-2">Salvar cores como amostras</button></>);
+  }
+  if (name === "Amostras") {
+    const query = swatchQuery.trim().toLowerCase();
+    const swatches = [...BASE_SWATCHES.map(([label, color]) => ({ label, color, custom: false })), ...tools.customSwatches.map((color) => ({ label: color, color, custom: true }))]
+      .filter((item) => !query || item.label.toLowerCase().includes(query) || item.color.includes(query));
+    const pick = (item) => { setPickedSwatch(item.custom ? item.color : null); tools.applySwatch(item.color, swatchTarget); };
+    return shell(<><input aria-label="Localizar amostra" placeholder="Localizar" value={swatchQuery} onChange={(event) => setSwatchQuery(event.target.value)} className={`${field} mb-2 w-full italic`} /><div className="mb-2 flex gap-1">{[["fill", "Aplicar ao preenchimento", "Preenchimento"], ["stroke", "Aplicar ao traçado", "Traçado"]].map(([key, label, text]) => <button key={key} aria-label={label} aria-pressed={swatchTarget === key} onClick={() => setSwatchTarget(key)} className={`flex-1 rounded border border-[#555] px-2 py-1 ${swatchTarget === key ? "bg-[#222] text-white" : "text-[#aaa]"}`}>{text}</button>)}</div><div className="grid grid-cols-7 gap-1">{swatches.map((item) => <button key={`${item.custom ? "c" : "b"}-${item.color}`} aria-label={`Amostra ${item.label}`} title={item.label} aria-pressed={item.custom && pickedSwatch === item.color} onClick={() => pick(item)} className={`aspect-square border ${item.custom && pickedSwatch === item.color ? "border-white" : "border-[#777]"}`} style={{background:item.color === "none" ? SWATCH_NONE_BG : item.color}} />)}</div><PanelFooter items={[{ label: "Bibliotecas de amostras" }, { label: "Grupo de cores" }, { label: "Nova amostra", onClick: () => tools.addSwatches([active?.color && COLOR_RE.test(active.color) ? active.color : tools.fill]) }, { label: "Excluir amostra", disabled: !pickedSwatch, onClick: () => { tools.removeSwatch(pickedSwatch); setPickedSwatch(null); } }]}/></>);
+  }
+  if (name === "Estilos gráficos") return shell(<><div aria-label="Biblioteca de Estilos gráficos" className="grid grid-cols-3 gap-2">{GRAPHIC_STYLES.map(([label, values]) => <button key={label} aria-label={`Estilo ${label}`} title={tools.hasSelection ? label : "Selecione um objeto"} disabled={!tools.hasSelection} onClick={() => tools.applyGraphicStyle(label, values)} className="grid aspect-square place-items-center rounded border border-[#5a5a5a] bg-[#414141] p-1 text-center text-[9px] disabled:opacity-40"><span className="mb-1 block h-5 w-5 rounded-sm" style={{ background: values.gradient ? `linear-gradient(90deg, ${values.gradient.from}, ${values.gradient.to})` : values.color || "#94a3b8", boxShadow: [values.strokeWidth ? `inset 0 0 0 ${values.strokeWidth}px ${values.stroke}` : "", values.shadow ? "3px 3px 4px rgba(0,0,0,0.6)" : ""].filter(Boolean).join(", ") || undefined, filter: values.blur ? `blur(${values.blur / 3}px)` : undefined }} />{label}</button>)}</div><PanelFooter items={[{ label: "Biblioteca" }, { label: "Novo estilo" }, { label: "Opções" }, { label: "Excluir estilo" }]}/></>);
+  if (name === "Pincéis" || name === "Símbolos") return shell(<><div aria-label={`Biblioteca de ${name}`} className="grid grid-cols-4 gap-2">{Array.from({length:12},(_,index)=><button key={index} aria-label={`${name === "Pincéis" ? "Pincel" : "Símbolo"} ${index + 1}`} {...NOT_AVAILABLE} className="grid aspect-square place-items-center rounded border border-[#5a5a5a] bg-[#414141] text-xl disabled:opacity-40">{name === 'Pincéis' ? ['╱','〰','≈','⌁'][index%4] : ['◆','✦','●','✿'][index%4]}</button>)}</div><p className="mt-3 text-[#aaa]">{name} ainda não estão disponíveis no MMVector web.</p><PanelFooter items={[{ label: "Biblioteca" }, { label: "Novo" }, { label: "Opções" }, { label: "Excluir" }]}/></>);
   if (name === "Opções de padrão") return shell(<><label className="mb-3 grid gap-1">Nome<input aria-label="Nome do padrão" {...NOT_AVAILABLE} defaultValue="Novo padrão" className={`${field} disabled:opacity-40`}/></label><label className="mb-3 grid gap-1">Tipo de bloco<select aria-label="Tipo de bloco" {...NOT_AVAILABLE} className={`${field} disabled:opacity-40`}><option>Grade</option><option>Tijolo por linha</option><option>Hexagonal</option></select></label><div className="grid grid-cols-2 gap-2"><label>Largura<input aria-label="Largura do bloco" {...NOT_AVAILABLE} defaultValue="100 px" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Altura<input aria-label="Altura do bloco" {...NOT_AVAILABLE} defaultValue="100 px" className={`${field} mt-1 w-full disabled:opacity-40`}/></label></div><label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Dimensionar bloco à arte</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Mover bloco com arte</label><p className="mt-3 text-[#aaa]">Padrões ainda não estão disponíveis no MMVector web.</p></>);
   if (name === "Gradiente") return shell(<><div className="mb-3 flex gap-2"><button aria-pressed={Boolean(gradient)} disabled={!canGradient} title={canGradient ? "Aplicar gradiente linear ao preenchimento" : "Selecione uma forma desbloqueada"} onClick={() => { patchObject("gradient", gradient || { from: active.color, to: stroke === active.color ? "#000000" : stroke, angle: 90 }); if (active.noFill) patchObject("noFill", false); }} className="rounded bg-[#222] px-3 py-2 disabled:opacity-40">Linear</button><button {...NOT_AVAILABLE} className="rounded px-3 py-2 hover:bg-[#444] disabled:opacity-40">Radial</button><button {...NOT_AVAILABLE} className="rounded px-3 py-2 hover:bg-[#444] disabled:opacity-40">Forma livre</button></div><div className={`h-9 rounded border border-[#666] ${gradient ? "" : "bg-gradient-to-r from-cyan-400 via-violet-500 to-pink-500"}`} style={gradient ? { background: `linear-gradient(90deg, ${gradient.from}, ${gradient.to})` } : undefined}/><div className="mt-1 flex justify-between"><input type="color" aria-label="Cor inicial do gradiente" disabled={!gradient || !canGradient} value={gradient?.from || "#000000"} onChange={(event) => patchGradient({ from: event.target.value })} className="h-6 w-7 disabled:opacity-40"/><input type="color" aria-label="Cor final do gradiente" disabled={!gradient || !canGradient} value={gradient?.to || "#000000"} onChange={(event) => patchGradient({ to: event.target.value })} className="h-6 w-7 disabled:opacity-40"/></div><div className="mt-4 grid grid-cols-2 gap-2"><label>Ângulo<NumericField aria-label="Ângulo do gradiente" disabled={!gradient || !canGradient} min={-360} max={360} value={gradient?.angle ?? 90} onChange={(value) => patchGradient({ angle: value })} className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Proporção<input aria-label="Proporção do gradiente" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Opacidade<input aria-label="Opacidade do gradiente" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label><label>Local<input aria-label="Local da parada" {...NOT_AVAILABLE} defaultValue="0%" className={`${field} mt-1 w-full disabled:opacity-40`}/></label></div></>);
   if (name === "Transparência") return shell(<><div className="grid grid-cols-[1fr_90px] gap-2"><select aria-label="Modo de mesclagem" {...NOT_AVAILABLE} className={`${field} disabled:opacity-40`}><option>Normal</option></select><label className={`${field} flex items-center gap-1`}><NumericField aria-label="Opacidade da transparência" disabled={!editable} min={0} max={100} value={active?.opacity ?? 100} onChange={(value) => patchObject("opacity", value)} className="min-w-0 flex-1 bg-transparent"/>%</label></div><div className="my-4 grid grid-cols-2 gap-2"><div className="grid h-20 place-items-center border border-[#555]">Miniatura</div><div className="grid h-20 place-items-center border border-[#555]">Máscara</div></div><div className="grid grid-cols-2 gap-2"><button {...NOT_AVAILABLE} className="rounded border border-[#666] p-2 disabled:opacity-40">Criar máscara</button><button {...NOT_AVAILABLE} className="rounded border border-[#666] p-2 disabled:opacity-40">Liberar</button></div><label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Recortar</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Inverter máscara</label></>);
-  if (name === "Aparência") return shell(<><p className="mb-3 font-semibold">{`Texto`}</p>{[["Preenchimento","#082f49"],["Traçado","#0f172a"],["Opacidade","100%"]].map(([label,value])=><button key={label} className="flex w-full items-center gap-3 border-b border-[#555] py-3 text-left"><Eye size={14}/><span className="h-6 w-6 border border-[#777]" style={{background:value.startsWith('#')?value:'transparent'}}/><span>{label}</span><span className="ml-auto text-[#aaa]">{value}</span></button>)}<PanelFooter labels={["Novo preenchimento","Novo traçado","fx","Limpar"]}/></>);
-  if (name === "Pranchetas") return shell(<><div className="space-y-1">{["Prancheta 1","Prancheta 2"].map((item,index)=><button key={item} className={`flex w-full items-center gap-2 border px-3 py-2 text-left ${index===0?'border-[#58a6ff] bg-[#43566b]':'border-[#555]'}`}><span>{index+1}</span><span>{item}</span><span className="ml-auto">☐</span></button>)}</div><PanelFooter labels={["Reorganizar","Nova","Excluir"]}/></>);
+  if (name === "Aparência") {
+    if (!active) return shell(<p className="text-[#aaa]">Selecione um objeto para ver a aparência.</p>);
+    const fillText = active.noFill ? "Nenhum" : active.gradient ? "Gradiente" : active.color;
+    const strokeText = active.strokeWidth ? `${active.stroke || stroke} · ${active.strokeWidth} px` : "Nenhum";
+    return shell(<><div aria-label="Atributos de aparência"><p className="mb-3 font-semibold">{active.kind}</p>{[["Preenchimento", active.noFill ? "transparent" : active.color, fillText], ["Traçado", active.strokeWidth ? active.stroke || stroke : "transparent", strokeText], ["Opacidade", null, `${active.opacity ?? 100}%`]].map(([label, swatch, value]) => <div key={label} className="flex w-full items-center gap-3 border-b border-[#555] py-3 text-left"><Eye size={14}/><span className="h-6 w-6 border border-[#777]" style={{background: swatch || "transparent"}}/><span>{label}</span><span className="ml-auto text-[#aaa]">{value}</span></div>)}<button aria-label="Sombra projetada (fx)" aria-pressed={Boolean(active.shadow)} disabled={!editable} onClick={() => patchObject("shadow", !active.shadow)} className="flex w-full items-center gap-3 border-b border-[#555] py-3 text-left disabled:opacity-40"><Eye size={14}/><span className="italic">fx</span><span>Sombra projetada</span><span className="ml-auto text-[#aaa]">{active.shadow ? "Ativa" : "Desligada"}</span></button></div><PanelFooter items={[{ label: "Novo preenchimento" }, { label: "Novo traçado" }, { label: "Abrir efeitos (fx)", text: "fx", onClick: tools.openAppearance }, { label: "Limpar aparência", disabled: !editable, onClick: () => { patchObject("shadow", false); patchObject("blur", 0); } }]}/></>);
+  }
+  if (name === "Pranchetas") return shell(<><div className="space-y-1"><div className="flex w-full items-center gap-2 border border-[#58a6ff] bg-[#43566b] px-3 py-2 text-left"><span>1</span><span>Prancheta 1</span><span className="ml-auto text-[#cbd5e1]">{`${ARTBOARD_W} × ${ARTBOARD_H} px`}</span></div></div><p className="mt-3 text-[#aaa]">O MMVector web trabalha com uma prancheta por documento.</p><PanelFooter items={[{ label: "Reorganizar pranchetas" }, { label: "Nova prancheta" }, { label: "Excluir prancheta" }]}/></>);
   if (name === "Transformar") {
     if (!active) return shell(<p className="text-[#aaa]">Selecione um objeto para transformar.</p>);
     return shell(<><div className="grid grid-cols-2 gap-2">{[["X", "x"], ["Y", "y"], ["L", "w"], ["A", "h"]].map(([label, key]) => <label key={label} className="grid grid-cols-[auto_1fr] items-center gap-2" title={unitSuffix}><span>{label}:</span><LengthField label={label} field={key} active={active} patchObject={patchObject} unitFactor={unitFactor} disabled={!editable} className={field}/></label>)}<label className="grid grid-cols-[auto_1fr] items-center gap-2" title="graus"><span>Rotação:</span><NumericField aria-label="Rotação" disabled={!editable} min={-36000} max={36000} value={active.rotation ?? 0} onChange={(value) => patchObject("rotation", value)} className={field}/></label><label className="grid grid-cols-[auto_1fr] items-center gap-2" title="graus"><span>Inclinação:</span><NumericField aria-label="Inclinação" disabled={!editable} min={-75} max={75} value={active.skewX ?? 0} onChange={(value) => patchObject("skewX", value)} className={field}/></label></div><label className="mt-4 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE} defaultChecked/> Transformar objetos</label><label className="mt-2 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Transformar padrões</label><button {...NOT_AVAILABLE} className="mt-4 w-full rounded border border-[#666] p-2 disabled:opacity-40">Transformar cada...</button></>);
@@ -3323,18 +3555,26 @@ function AuxiliaryPanel({ name, onCommand = () => {}, active = null, patchObject
     return shell(<>{!isText && <p className="mb-3 text-[#aaa]">Selecione um objeto de texto para editar a fonte.</p>}<label className="grid gap-1">Família da fonte<select aria-label="Família da fonte" disabled={!isText} value={active?.fontFamily || "Inter"} onChange={(event) => patchObject("fontFamily", event.target.value)} className={`${field} ${disabledClass}`}>{FONT_FAMILIES.map((family) => <option key={family}>{family}</option>)}</select></label><label className="mt-2 grid gap-1">Estilo<select aria-label="Estilo da fonte" disabled={!isText} value={weightName} onChange={(event) => patchObject("fontWeight", FONT_WEIGHTS[event.target.value])} className={`${field} ${disabledClass}`}>{Object.keys(FONT_WEIGHTS).map((weight) => <option key={weight}>{weight}</option>)}</select></label><div className="mt-3 grid grid-cols-2 gap-2"><label>Tamanho<NumericField aria-label="Tamanho da fonte" disabled={!isText} min={1} max={1000} value={size} onChange={(value) => patchObject("fontSize", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Entrelinha<NumericField aria-label="Entrelinha" disabled={!isText} min={1} max={2000} value={active?.lineHeight || size} onChange={(value) => patchObject("lineHeight", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Kerning<input aria-label="Kerning" {...NOT_AVAILABLE} defaultValue="Automático" className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Tracking<NumericField aria-label="Tracking" disabled={!isText} min={-1000} max={1000} value={active?.tracking ?? 0} onChange={(value) => patchObject("tracking", value)} className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Escala H<input aria-label="Escala H" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full ${disabledClass}`}/></label><label>Escala V<input aria-label="Escala V" {...NOT_AVAILABLE} defaultValue="100%" className={`${field} mt-1 w-full ${disabledClass}`}/></label></div></>);
   }
   if (name === "Parágrafo") return shell(<>{!isText && <p className="mb-3 text-[#aaa]">Selecione um objeto de texto para alinhar o parágrafo.</p>}<div className="mb-4 flex justify-between">{PARAGRAPH_ALIGNS.map(([align, icon, label]) => align ? <button key={label} aria-label={label} title={label} aria-pressed={isText && (active.textAlign || "left") === align} disabled={!isText} onClick={() => patchObject("textAlign", align)} className={`grid h-8 w-8 place-items-center rounded hover:bg-[#444] disabled:opacity-40 ${isText && (active.textAlign || "left") === align ? "bg-[#222] text-white" : ""}`}>{icon}</button> : <button key={label} aria-label={label} {...NOT_AVAILABLE} className="grid h-8 w-8 place-items-center rounded disabled:opacity-40">{icon}</button>)}</div>{["Recuo esquerdo","Recuo direito","Primeira linha","Espaço antes","Espaço depois"].map(label=><label key={label} className="mb-2 grid grid-cols-[1fr_90px] items-center gap-2"><span>{label}</span><input aria-label={label} {...NOT_AVAILABLE} defaultValue="0 pt" className={`${field} disabled:opacity-40`}/></label>)}<label className="mt-3 flex gap-2"><input type="checkbox" {...NOT_AVAILABLE}/> Hifenizar</label></>);
-  if (name === "Histórico") return shell(<><div className="space-y-1">{["Abrir documento","Selecionar objeto","Mover","Alterar preenchimento","Aplicar traçado","Editar gradiente"].map((item,index)=><button key={item} onClick={()=>setHistoryStep(index)} className={`flex w-full items-center gap-2 px-2 py-2 text-left ${index===historyStep?'bg-[#43566b]':''}`}><ReferenceIcon name="history" size={14}/>{item}</button>)}</div><PanelFooter labels={["Novo instantâneo","Excluir histórico"]}/></>);
-  if (name === "Ações") return shell(<><div className="space-y-1">{["Ações padrão","Salvar para Web","Redimensionar","Converter em CMYK"].map((item,index)=><button key={item} className="flex w-full items-center gap-2 border-b border-[#555] px-2 py-2 text-left"><span>{index===0?'⌄':'▷'}</span>{item}</button>)}</div><PanelFooter labels={["Parar","Gravar","Executar","Nova ação","Excluir"]}/></>);
+  if (name === "Histórico") {
+    const { undo: undoCount, redo: redoCount } = tools.history;
+    const steps = Array.from({ length: undoCount + 1 + redoCount }, (_, index) => (index === 0 ? "Estado inicial" : `Alteração ${index}`));
+    return shell(<><ul aria-label="Histórico de alterações" className="max-h-72 space-y-1 overflow-y-auto">{steps.map((item, index) => <li key={item}><button aria-current={index === undoCount ? "step" : undefined} onClick={() => tools.goToHistory(index)} className={`flex w-full items-center gap-2 px-2 py-2 text-left ${index === undoCount ? "bg-[#43566b]" : ""} ${index > undoCount ? "text-[#888]" : ""}`}><ReferenceIcon name="history" size={14}/>{item}</button></li>)}</ul><PanelFooter items={[{ label: "Desfazer passo", disabled: !undoCount, onClick: tools.undo }, { label: "Refazer passo", disabled: !redoCount, onClick: tools.redo }, { label: "Novo instantâneo" }, { label: "Excluir histórico", disabled: !undoCount && !redoCount, onClick: tools.clearHistory }]}/></>);
+  }
+  if (name === "Ações") return shell(<><div className="space-y-1"><p className="flex items-center gap-2 border-b border-[#555] px-2 py-2 font-semibold"><span>⌄</span>Ações padrão</p>{DEFAULT_ACTIONS.map((item) => <button key={item} aria-label={`Ação ${item}`} aria-pressed={pickedAction === item} onClick={() => setPickedAction(item)} className={`flex w-full items-center gap-2 border-b border-[#555] px-2 py-2 text-left ${pickedAction === item ? "bg-[#43566b]" : ""}`}><span>▷</span>{item}</button>)}</div><PanelFooter items={[{ label: "Parar" }, { label: "Gravar ação" }, { label: "Executar ação", disabled: !pickedAction, onClick: () => tools.runMenuCommand(pickedAction) }, { label: "Nova ação" }, { label: "Excluir ação" }]}/></>);
   if (name === "Informações") return shell(<div aria-label="Informações do objeto" className="grid grid-cols-2 gap-x-5 gap-y-3">{(active
     ? [["X", showLength(active.x)], ["Y", showLength(active.y)], ["L", showLength(active.w)], ["A", showLength(active.h)], ["R", String(rgb[0])], ["G", String(rgb[1])], ["B", String(rgb[2])], ["Opacidade", `${active.opacity ?? 100}%`]]
     : [["X", "—"], ["Y", "—"], ["L", showLength(ARTBOARD_W)], ["A", showLength(ARTBOARD_H)], ["R", "—"], ["G", "—"], ["B", "—"], ["Opacidade", "—"]]
   ).map(([label,value])=><div key={label} className="flex justify-between border-b border-[#555] pb-1"><span className="text-[#aaa]">{label}</span><strong>{value}</strong></div>)}</div>);
-  if (name === "Navegador") return shell(<><div className="relative aspect-[4/3] overflow-hidden border border-[#666] bg-white"><div className="absolute inset-[18%] bg-gradient-to-br from-cyan-400 to-violet-600"/><div className="absolute inset-[12%] border-2 border-red-500"/></div><div className="mt-3 flex items-center gap-2"><button>−</button><input type="range" defaultValue="72" className="flex-1"/><button>+</button><input defaultValue="72%" className={`${field} w-16`}/></div></>);
+  if (name === "Navegador") return shell(<><div className="relative aspect-[4/3] overflow-hidden border border-[#666] bg-[#1f1f1f]">{tools.thumbnail && <img src={tools.thumbnail} alt="Miniatura do documento" className="h-full w-full object-contain" />}</div><div className="mt-3 flex items-center gap-2"><button aria-label="Diminuir zoom" onClick={() => tools.zoomStep(-1)}>−</button><input type="range" aria-label="Zoom (controle deslizante)" min="25" max="150" value={tools.zoom} onChange={(event) => tools.setZoom(Number(event.target.value))} className="flex-1"/><button aria-label="Aumentar zoom" onClick={() => tools.zoomStep(1)}>+</button><label className={`${field} flex w-16 items-center`}><NumericField aria-label="Zoom do navegador" min={25} max={150} precision={0} value={tools.zoom} onChange={tools.setZoom} className="w-full min-w-0 bg-transparent"/>%</label></div></>);
   return shell(<p className="text-[#aaa]">Painel disponível na área de trabalho.</p>);
 }
 
-function PanelFooter({ labels }) {
-  return <div className="mt-5 flex items-center justify-end gap-1 border-t border-[#555] pt-3">{labels.map(label=><button key={label} title={label} className="grid h-8 min-w-8 place-items-center rounded border border-[#555] px-2 hover:bg-[#444]">{label.length > 2 ? label.slice(0,2) : label}</button>)}</div>;
+// Rodapé dos painéis: botão sem onClick é recurso que ainda não existe (desabilitado, com aviso).
+function PanelFooter({ items }) {
+  return <div className="mt-5 flex items-center justify-end gap-1 border-t border-[#555] pt-3">{items.map(({ label, text, onClick, disabled }) => {
+    const unavailable = !onClick;
+    return <button key={label} aria-label={label} title={unavailable ? "Ainda não disponível" : label} disabled={unavailable || Boolean(disabled)} onClick={onClick} className="grid h-8 min-w-8 place-items-center rounded border border-[#555] px-2 hover:bg-[#444] disabled:opacity-40">{text || (label.length > 2 ? label.slice(0,2) : label)}</button>;
+  })}</div>;
 }
 
 const PATHFINDER_COMMANDS = {
@@ -3370,7 +3610,7 @@ function LengthField({ label, field, active, patchObject, unitFactor = 1, classN
   );
 }
 
-function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObject, addObject, onCommand = () => {}, unitFactor = 1, unitSuffix = "px" }) {
+function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObject, addObject, onCommand = () => {}, unitFactor = 1, unitSuffix = "px", onOpenPanel = () => {}, onOpenAppearance = () => {} }) {
 
   return (
     <div className="p-4 text-[11px]">
@@ -3441,9 +3681,9 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
         <label className="flex items-center gap-3">
           <span>Opacidade</span>
           <NumericField aria-label="Opacidade" min={0} max={100} value={active.opacity ?? 100} onChange={(value) => patchObject("opacity", value)} className="ml-auto w-20 rounded border border-[#555] bg-[#383838] px-2 py-1" />%
-          <button title="Mais opções">•••</button>
+          <button type="button" aria-label="Mais opções de aparência" title="Mais opções (painel Transparência)" onClick={() => onOpenPanel("Transparência")}>•••</button>
         </label>
-        <button className="mt-3 rounded border border-[#666] px-4 py-2 text-base">fx</button>
+        <button aria-label="Efeitos (fx)" title="Efeitos: desfoque e opacidade (Aparência flutuante)" onClick={onOpenAppearance} className="mt-3 rounded border border-[#666] px-4 py-2 text-base">fx</button>
       </PropertySection>
 
       <PropertySection title="Alinhar">
@@ -3470,7 +3710,12 @@ function ObjectProperties({ active, fill, stroke, setFill, setStroke, patchObjec
 
 const ALIGN_KEYS = ["left", "hcenter", "right", "top", "vcenter", "bottom"];
 
-function DocumentProperties({ units, setUnits, snapPoint, setSnapPoint, snapGrid, setSnapGrid, scaleEffects, setScaleEffects, keyIncrement, setKeyIncrement }) {
+function DocumentProperties({ units, setUnits, snapPoint, setSnapPoint, snapGrid, setSnapGrid, scaleEffects, setScaleEffects, keyIncrement, setKeyIncrement, view = {} }) {
+  const { showRulers = false, setShowRulers = () => {}, showGrid = false, setShowGrid = () => {}, showBounds = true, setShowBounds = () => {}, guides = [], setGuides = () => {}, guidesVisible = true, setGuidesVisible = () => {}, onOpenPanel = () => {}, setNotice = () => {} } = view;
+  const incrementRef = useRef(null);
+  const toggleButton = (label, symbol, pressed, onToggle, tone = "bg-[#282828]") => (
+    <button aria-label={label} title={label} aria-pressed={pressed} onClick={onToggle} className={`rounded px-3 py-2 text-base ${pressed ? "bg-[#1b1b1b] text-white outline outline-1 outline-[#58a6ff]" : tone}`}>{symbol}</button>
+  );
 
   return (
     <div className="p-4 text-[11px]">
@@ -3487,23 +3732,24 @@ function DocumentProperties({ units, setUnits, snapPoint, setSnapPoint, snapGrid
         </select>
       </label>
       <div className="grid grid-cols-2 gap-2">
-        <button className="rounded border border-[#666] py-2">Configurar documento</button>
-        <button className="rounded border border-[#666] py-2">Editar pranchetas</button>
+        <button {...NOT_AVAILABLE} className="rounded border border-[#666] py-2 disabled:opacity-40">Configurar documento</button>
+        <button onClick={() => onOpenPanel("Pranchetas")} className="rounded border border-[#666] py-2">Editar pranchetas</button>
       </div>
 
       <PropertySection title="Réguas e grades">
         <div className="flex gap-3">
-          <button title="Réguas" className="rounded bg-[#282828] px-3 py-2 text-base">⌑</button>
-          <button title="Grade" className="rounded bg-[#282828] px-3 py-2 text-base">▦</button>
-          <button title="Limites" className="rounded bg-[#282828] px-3 py-2 text-base">▧</button>
+          {toggleButton("Réguas", "⌑", showRulers, () => setShowRulers((value) => !value))}
+          {toggleButton("Grade", "▦", showGrid, () => setShowGrid((value) => !value))}
+          {toggleButton("Limites", "▧", showBounds, () => setShowBounds((value) => !value))}
         </div>
       </PropertySection>
 
       <PropertySection title="Guias">
         <div className="flex gap-3">
-          <button className="rounded bg-[#252525] px-3 py-2 text-base">▦</button>
-          <button className="rounded bg-[#252525] px-3 py-2 text-base">✧</button>
+          {toggleButton("Mostrar guias", "▦", guidesVisible, () => setGuidesVisible((value) => !value), "bg-[#252525]")}
+          <button aria-label="Limpar guias" title="Limpar guias" disabled={!guides.length} onClick={() => { setGuides([]); setNotice("Guias removidas."); }} className="rounded bg-[#252525] px-3 py-2 text-base disabled:opacity-40">✧</button>
         </div>
+        <p className="mt-2 text-[10px] text-slate-500">{guides.length ? `${guides.length} guia(s).` : "Ative as réguas e clique nelas para criar guias."}</p>
       </PropertySection>
 
       <PropertySection title="Opções de encaixe">
@@ -3520,7 +3766,7 @@ function DocumentProperties({ units, setUnits, snapPoint, setSnapPoint, snapGrid
       <PropertySection title="Preferências">
         <label className="mb-3 flex items-center justify-between gap-3">
           Incremento do teclado
-          <input aria-label="Incremento do teclado" value={keyIncrement} onChange={(event) => setKeyIncrement(event.target.value)} className="w-24 rounded border border-[#555] bg-[#3b3b3b] px-3 py-2" />
+          <input ref={incrementRef} aria-label="Incremento do teclado" value={keyIncrement} onChange={(event) => setKeyIncrement(event.target.value)} className="w-24 rounded border border-[#555] bg-[#3b3b3b] px-3 py-2" />
         </label>
         <label className="flex cursor-pointer items-center gap-2">
           <input type="checkbox" checked={scaleEffects} onChange={(event) => setScaleEffects(event.target.checked)} />
@@ -3530,8 +3776,8 @@ function DocumentProperties({ units, setUnits, snapPoint, setSnapPoint, snapGrid
 
       <PropertySection title="Ações rápidas">
         <div className="grid grid-cols-2 gap-2">
-          <button className="rounded border border-[#666] py-2">Configurar documento</button>
-          <button className="rounded border border-[#666] py-2">Preferências</button>
+          <button {...NOT_AVAILABLE} className="rounded border border-[#666] py-2 disabled:opacity-40">Configurar documento</button>
+          <button title="Ir para as preferências" onClick={() => incrementRef.current?.focus()} className="rounded border border-[#666] py-2">Preferências</button>
         </div>
       </PropertySection>
     </div>

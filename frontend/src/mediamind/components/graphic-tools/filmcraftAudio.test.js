@@ -10,13 +10,14 @@ import {
   dbToMeterFraction,
   emptyMixer,
   gainToDb,
+  loadAudioBuffer,
   masterGain,
   planAudioSegments,
   scheduleGainCurve,
   segmentContextTimes,
   trackGain,
 } from "./filmcraftAudio";
-import { FakeAudioContext, fakeMediaFetch } from "./filmcraftTestAudio";
+import { FakeAudioContext, fakeMediaElement, fakeMediaFetch } from "./filmcraftTestAudio";
 
 const clip = (values) => ({
   id: values.id || "c1",
@@ -237,9 +238,9 @@ describe("motor Web Audio", () => {
     expect(audio.buses.A2.gain.gain.value).toBe(1);
   });
 
-  it("decodificação que falha avisa uma vez e não agenda nada", async () => {
+  it("decodificação que falha avisa uma vez e não agenda buffer (o som segue pelo elemento)", async () => {
     const onDecodeError = vi.fn();
-    const audio = engine({ fetcher: fakeMediaFetch({ fail: ["blob:bad"] }), onDecodeError });
+    const audio = engine({ fetcher: fakeMediaFetch({ fail: ["blob:bad"] }), onDecodeError, createMediaElement: () => fakeMediaElement() });
     await audio.play({ clips: [clip({ id: "bad" })], from: 0 });
     await audio.play({ clips: [clip({ id: "bad" })], from: 0 });
     expect(FakeAudioContext.instances[0].sources).toHaveLength(0);
@@ -260,5 +261,285 @@ describe("motor Web Audio", () => {
   it("sem Web Audio no navegador, play informa indisponível", async () => {
     const audio = new FilmcraftAudioEngine();
     expect(await audio.play({ clips: [clip({})], from: 0 })).toBe(false);
+  });
+});
+
+describe("motor Web Audio — plano B por elemento de mídia", () => {
+  // O nó chega ao destino seguindo as conexões (fonte → ganho → pan → barramento)?
+  function reaches(node, target, seen = new Set()) {
+    if (node === target) return true;
+    if (!node || seen.has(node)) return false;
+    seen.add(node);
+    return (node.connections || []).some((next) => reaches(next, target, seen));
+  }
+  function engine(options = {}) {
+    return new FilmcraftAudioEngine({
+      createContext: () => new FakeAudioContext(),
+      fetcher: fakeMediaFetch(),
+      createMediaElement: () => fakeMediaElement(),
+      ...options,
+    });
+  }
+  beforeEach(() => {
+    fakeMediaElement.created = [];
+  });
+
+  it("unlock cria o contexto e chama resume() na hora (dentro do gesto do Play)", () => {
+    const audio = engine({
+      createContext: () => {
+        const context = new FakeAudioContext();
+        context.state = "suspended";
+        vi.spyOn(context, "resume");
+        return context;
+      },
+    });
+    const context = audio.unlock();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(context.state).toBe("running");
+    audio.unlock();
+    expect(context.resume).toHaveBeenCalledTimes(1);
+    expect(new FilmcraftAudioEngine().unlock()).toBeNull();
+  });
+
+  it("decodificação rejeitada: toca pelo elemento ligado ao barramento A1 e avisa o plano B", async () => {
+    const onAudioIssue = vi.fn();
+    const audio = engine({ fetcher: fakeMediaFetch({ fail: ["blob:bad"] }), onAudioIssue });
+    await audio.play({ clips: [clip({ id: "bad", start: 0, duration: 4, sourceIn: 2, speed: 200 })], from: 1 });
+    const context = FakeAudioContext.instances[0];
+    expect(context.sources).toHaveLength(0);
+    const [source] = context.elementSources;
+    expect(source.mediaElement.src).toBe("blob:bad");
+    expect(reaches(source, audio.buses.A1.input)).toBe(true);
+    expect(source.mediaElement.currentTime).toBeCloseTo(4);
+    expect(source.mediaElement.playbackRate).toBe(2);
+    await Promise.resolve();
+    expect(source.mediaElement.play).toHaveBeenCalled();
+    expect(onAudioIssue).toHaveBeenCalledWith("blob:bad", expect.objectContaining({ level: "fallback" }));
+    audio.stop();
+    expect(source.mediaElement.pause).toHaveBeenCalled();
+    expect(source.mediaElement.src).toBe("");
+  });
+
+  it("buffer ainda carregando: começa pelo elemento sem esperar o arquivo inteiro", async () => {
+    const audio = engine({ fetcher: vi.fn(() => new Promise(() => {})), bufferWaitMs: 0 });
+    await audio.play({ clips: [clip({ id: "lento" })], from: 0 });
+    const context = FakeAudioContext.instances[0];
+    expect(context.sources).toHaveLength(0);
+    expect(context.elementSources).toHaveLength(1);
+    expect(context.elementSources[0].mediaElement.play).toHaveBeenCalled();
+  });
+
+  it("arquivo grande (Content-Length) vai direto pelo elemento, sem ler o corpo", async () => {
+    const fetcher = fakeMediaFetch({ sizes: { "blob:big": 400 * 1024 * 1024 } });
+    const audio = engine({ fetcher });
+    await audio.play({ clips: [clip({ id: "big" })], from: 0 });
+    const response = await fetcher.mock.results[0].value;
+    expect(response.arrayBuffer).not.toHaveBeenCalled();
+    expect(response.body.cancel).toHaveBeenCalled();
+    expect(FakeAudioContext.instances[0].elementSources).toHaveLength(1);
+    // Na próxima reprodução não baixa de novo: já sabe que é grande.
+    await audio.play({ clips: [clip({ id: "big" })], from: 0 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("falha de decodificação não fica presa no cache: nova tentativa pode dar certo", async () => {
+    const context = new FakeAudioContext();
+    let fail = true;
+    const fetcher = vi.fn(() => Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve({ fail }) }));
+    expect(await loadAudioBuffer(context, "blob:x", fetcher)).toBeNull();
+    fail = false;
+    expect(await loadAudioBuffer(context, "blob:x", fetcher)).toMatchObject({ duration: 10 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("se nem o elemento toca, o erro é informado (não fica mudo em silêncio)", async () => {
+    const onAudioIssue = vi.fn();
+    const audio = engine({
+      fetcher: fakeMediaFetch({ fail: ["blob:bad"] }),
+      createMediaElement: () => fakeMediaElement({ rejectPlay: new Error("NotAllowedError") }),
+      onAudioIssue,
+    });
+    await audio.play({ clips: [clip({ id: "bad" })], from: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAudioIssue).toHaveBeenCalledWith("blob:bad", expect.objectContaining({ level: "error" }));
+    expect(audio.issues.get("blob:bad").level).toBe("error");
+  });
+
+  describe("contexto que não sai de suspended (resume pendurado)", () => {
+    const stuck = () => {
+      const context = new FakeAudioContext();
+      context.state = "suspended";
+      context.resume = vi.fn(() => new Promise(() => {}));
+      return context;
+    };
+
+    it("mesmo assim toca: som direto pelo elemento, indicador pelo relógio da página e aviso visível", async () => {
+      const onAudioIssue = vi.fn();
+      const clock = vi.spyOn(performance, "now").mockReturnValue(10_000);
+      const audio = engine({ createContext: stuck, resumeWaitMs: 0, onAudioIssue });
+      audio.setMix({ trackState: { A1: {} }, mixer: { ...emptyMixer(), A1: { volumeDb: -6, pan: 0, channels: "Estéreo" } } });
+      expect(await audio.play({ clips: [clip({ id: "som", volume: 50, start: 0, duration: 4, sourceIn: 1 })], from: 0 })).toBe(true);
+      const context = FakeAudioContext.instances[0];
+      expect(context.resume).toHaveBeenCalled();
+      expect(context.elementSources).toHaveLength(0);
+      const [element] = fakeMediaElement.created;
+      expect(element.src).toBe("blob:som");
+      expect(element.currentTime).toBe(1);
+      expect(element.volume).toBeCloseTo(0.5 * dbToGain(-6));
+      expect(element.play).toHaveBeenCalled();
+      await Promise.resolve();
+      expect(onAudioIssue).toHaveBeenCalledWith("blob:som", expect.objectContaining({ level: "fallback", message: expect.stringMatching(/pausado/) }));
+      clock.mockReturnValue(12_500);
+      expect(audio.currentTime()).toBeCloseTo(2.5);
+      audio.stop();
+      expect(element.pause).toHaveBeenCalled();
+    });
+
+    it("som direto segue mudo/solo/fader ao vivo e a curva de volume do clipe (pan não existe sem Web Audio)", async () => {
+      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
+      const audio = engine({ createContext: stuck, resumeWaitMs: 0 });
+      audio.setMix({ trackState: { A1: {} }, mixer: emptyMixer() });
+      // Ducking: 0 dB até 1 s, −20 dB em 2 s.
+      const gainKeys = [
+        [1, 0],
+        [2, -20],
+      ];
+      await audio.play({ clips: [clip({ id: "duck", volume: 80, duration: 4, gainKeys })], from: 0 });
+      const [element] = fakeMediaElement.created;
+      expect(element.volume).toBeCloseTo(0.8);
+      audio.setMix({ trackState: { A1: { muted: true } }, mixer: emptyMixer() });
+      expect(element.volume).toBe(0);
+      audio.setMix({ trackState: { A1: {}, A2: { solo: true } }, mixer: emptyMixer() });
+      expect(element.volume).toBe(0);
+      audio.setMix({ trackState: { A1: {} }, mixer: { ...emptyMixer(), Mix: { volumeDb: -6, pan: 0, channels: "Estéreo" } } });
+      expect(element.volume).toBeCloseTo(0.8 * dbToGain(-6));
+      audio.setMix({ trackState: { A1: {} }, mixer: emptyMixer() });
+      clock.mockReturnValue(2000);
+      element.paused = false;
+      element.currentTime = 2;
+      element.emit("timeupdate");
+      expect(element.volume).toBeCloseTo(0.8 * dbToGain(-20));
+      audio.stop();
+      // Depois de parado, mudanças no mixer não mexem mais no elemento descartado.
+      element.volume = 0.33;
+      audio.setMix({ trackState: { A1: {} }, mixer: emptyMixer() });
+      expect(element.volume).toBe(0.33);
+    });
+
+    it("na exportação (sem som direto) o motivo vira erro, não silêncio", async () => {
+      const onAudioIssue = vi.fn();
+      const audio = engine({ createContext: stuck, resumeWaitMs: 0, onAudioIssue, allowDirect: false });
+      await audio.play({ clips: [clip({ id: "som" })], from: 0 });
+      expect(fakeMediaElement.created).toHaveLength(0);
+      expect(onAudioIssue).toHaveBeenCalledWith("blob:som", expect.objectContaining({ level: "error", message: expect.stringMatching(/pausado/) }));
+    });
+  });
+
+  it("elemento que nunca começa a tocar vira aviso depois de alguns segundos", async () => {
+    vi.useFakeTimers();
+    try {
+      const onAudioIssue = vi.fn();
+      const audio = engine({
+        fetcher: vi.fn(() => new Promise(() => {})),
+        bufferWaitMs: 0,
+        startTimeoutMs: 5000,
+        onAudioIssue,
+        createMediaElement: () => {
+          const element = fakeMediaElement();
+          element.play = vi.fn(() => new Promise(() => {}));
+          return element;
+        },
+      });
+      const playing = audio.play({ clips: [clip({ id: "rede" , duration: 30 })], from: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await playing;
+      expect(onAudioIssue).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(onAudioIssue).toHaveBeenCalledWith("blob:rede", expect.objectContaining({ level: "error", message: expect.stringMatching(/demorou/) }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("pausar logo após o Play não marca erro (AbortError do play pendente)", async () => {
+    const onAudioIssue = vi.fn();
+    const audio = engine({
+      fetcher: fakeMediaFetch({ fail: ["blob:bad"] }),
+      createMediaElement: () => fakeMediaElement({ deferPlay: true }),
+      onAudioIssue,
+    });
+    await audio.play({ clips: [clip({ id: "bad" })], from: 0 });
+    audio.stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(audio.issues.get("blob:bad")).toBeUndefined();
+    expect(onAudioIssue).not.toHaveBeenCalledWith("blob:bad", expect.objectContaining({ level: "error" }));
+    // pause() vindo de fora durante o play pendente (trecho ainda ativo) também não é bloqueio.
+    await audio.play({ clips: [clip({ id: "bad" })], from: 0 });
+    fakeMediaElement.created.at(-1).pause();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(audio.issues.get("blob:bad")).toBeUndefined();
+    audio.stop();
+  });
+
+  it("um erro antigo sai quando o som volta a tocar (inclusive arquivo grande)", async () => {
+    const onAudioIssue = vi.fn();
+    let attempt = 0;
+    const audio = engine({
+      fetcher: fakeMediaFetch({ sizes: { "blob:big": 400 * 1024 * 1024 } }),
+      createMediaElement: () => fakeMediaElement({ rejectPlay: attempt++ === 0 ? new Error("NotAllowedError") : null }),
+      onAudioIssue,
+    });
+    await audio.play({ clips: [clip({ id: "big" })], from: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(audio.issues.get("blob:big").level).toBe("error");
+    await audio.play({ clips: [clip({ id: "big" })], from: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAudioIssue).toHaveBeenCalledWith("blob:big", null);
+    expect(audio.issues.get("blob:big")).toMatchObject({ level: "fallback", message: expect.stringMatching(/arquivo grande/) });
+    audio.stop();
+  });
+
+  it("o arquivo só é atribuído pouco antes do trecho e o elemento é solto no fim", async () => {
+    vi.useFakeTimers();
+    try {
+      const audio = engine({ fetcher: fakeMediaFetch({ fail: ["blob:tarde"] }), bufferWaitMs: 0 });
+      const playing = audio.play({ clips: [clip({ id: "tarde", start: 10, duration: 1 })], from: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+      await playing;
+      const context = FakeAudioContext.instances[0];
+      const element = context.elementSources[0].mediaElement;
+      expect(element.src).toBe("");
+      context.currentTime = 7;
+      vi.advanceTimersByTime(7000);
+      expect(element.src).toBe("blob:tarde");
+      expect(element.play).not.toHaveBeenCalled();
+      context.currentTime = 10;
+      vi.advanceTimersByTime(3000);
+      expect(element.play).toHaveBeenCalled();
+      context.currentTime = 11;
+      vi.advanceTimersByTime(1000);
+      expect(element.src).toBe("");
+      expect(audio.nodes.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("trecho que começa depois espera a hora certa no relógio de áudio", async () => {
+    vi.useFakeTimers();
+    try {
+      const audio = engine({ fetcher: fakeMediaFetch({ fail: ["blob:later"] }), bufferWaitMs: 0 });
+      await audio.play({ clips: [clip({ id: "later", start: 2, duration: 1 })], from: 0 });
+      const element = FakeAudioContext.instances[0].elementSources[0].mediaElement;
+      expect(element.play).not.toHaveBeenCalled();
+      FakeAudioContext.instances[0].currentTime = 2;
+      vi.advanceTimersByTime(2000);
+      expect(element.play).toHaveBeenCalled();
+      FakeAudioContext.instances[0].currentTime = 3;
+      vi.advanceTimersByTime(1000);
+      expect(element.pause).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

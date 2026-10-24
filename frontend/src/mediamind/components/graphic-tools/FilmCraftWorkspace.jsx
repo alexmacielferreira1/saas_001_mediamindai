@@ -2,13 +2,16 @@ import { useGraphicDraftState } from "../../lib/graphicDrafts";
 import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/mcpTargetContext";
 import { registerMCPActions } from "../../lib/mcpActions";
 import { ensureTranscription } from "../../lib/clipEngineService";
-import { leftPart, placeClip, rightPart } from "../../lib/mmfilmEdits";
+import { leftPart, moveClips, overwriteItems, placeClip, rightPart } from "../../lib/mmfilmEdits";
+import { resolveMediaUrl } from "../../../api/media";
+import { assetDragState, trackIndexAt, useTimelineDrag } from "./filmcraftTimelineDrag";
 import { animatedClip } from "../../lib/mmfilmMotion";
 import { captionStyleCss } from "../../lib/mmfilmCaptions";
 import { lookFilter, overlayStyles, resolveTransition } from "../../lib/mmfilmLooks";
 import { animatedTextStyle, letterSpans, textAnimationState } from "../../lib/mmfilmTextAnimation";
 import { mmfilmCatalogue, runMMFilmTool } from "./mmfilmMcpTools";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useTextPrompt } from "./FilmCraftTextPrompt";
 import NumericField from "./NumericField";
 import { isEditableTarget } from "../../lib/clipEditorTools";
@@ -37,6 +40,7 @@ import {
   SlidersHorizontal,
   SquareSplitHorizontal,
   Trash2,
+  TriangleAlert,
   Type,
   Undo2,
   Unlock,
@@ -103,6 +107,8 @@ const TRACKS = [
   ["A3", "bg-amber-500/70", "audio"],
 ];
 const AUDIO_TRACK_IDS = TRACKS.filter(([, , kind]) => kind === "audio").map(([id]) => id);
+// Ordem V1, V2, V3 (a lista TRACKS vem de cima para baixo na tela).
+const VIDEO_TRACK_IDS = TRACKS.filter(([, , kind]) => kind === "video").map(([id]) => id).sort();
 const trackKind = (track) => TRACKS.find(([id]) => id === track)?.[2];
 const EDIT_TOOLS = [
   ["V", "Seleção", MousePointer2, false],
@@ -135,6 +141,9 @@ const compatible = (asset, kind) =>
   kind === "audio"
     ? asset.type.startsWith("audio") || asset.type.startsWith("video")
     : !asset.type.startsWith("audio");
+// Ordem da faixa na timeline (V3 no topo … A3 embaixo). Ao mover, um clipe só troca para faixa do mesmo tipo
+// (o A1 de um vídeo tem tipo video/*, mas continua sendo áudio): ver beginMoveClip.
+const trackIndex = (track) => TRACKS.findIndex(([id]) => id === track);
 const FRAME = 1 / 30;
 const FPS = 30;
 // Largura do cabeçalho das faixas (w-36) e altura da régua: a área de tempo começa depois deles.
@@ -144,8 +153,6 @@ const TRACK_H = 56;
 // Distância (px) em que o ímã encaixa clipes em bordas, indicador e marcadores.
 const SNAP_PX = 8;
 const NOT_AVAILABLE = "Ainda não disponível";
-const CLIP_DRAG_TYPE = "application/x-filmcraft-clip";
-const GRAB_DRAG_TYPE = "application/x-filmcraft-grab";
 // Timecode HH:MM:SS:QQ (quadros a 30 por segundo, como o restante da timeline).
 const timecode = (time) => {
   const frames = Math.max(0, Math.round((Number(time) || 0) * FPS));
@@ -217,7 +224,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const [askText, textPromptDialog] = useTextPrompt();
   useEffect(() => {
     if (!previewAsset?.stream_url) return;
-    setSource({id:String(previewAsset.id),name:previewAsset.title || previewAsset.filename,type:previewAsset.mime_type || `${previewAsset.asset_type || 'video'}/mp4`,url:previewAsset.stream_url,duration:Number(previewAsset.duration) || 8});
+    setSource({id:String(previewAsset.id),name:previewAsset.title || previewAsset.filename,type:previewAsset.mime_type || `${previewAsset.asset_type || 'video'}/mp4`,url:resolveMediaUrl(previewAsset.stream_url),duration:Number(previewAsset.duration) || 8});
   }, [previewAsset]);
   const [media, setMedia] = useGraphicDraftState("FilmCraftWorkspace.jsx:media", []);
   const [clips, setClips] = useGraphicDraftState("FilmCraftWorkspace.jsx:clips", []);
@@ -278,13 +285,56 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   const individualRelinkInput = useRef(null);
   const timelineTracks = useRef(null);
   // Motor de áudio (Web Audio) criado sob demanda; o AudioContext só nasce no primeiro "Reproduzir".
+  // Situação do som por URL ("fallback": tocando direto do arquivo; "error": sem som), mostrada no clipe.
+  const [audioIssues, setAudioIssues] = useState({});
   const audioEngine = useRef(null);
   if (!audioEngine.current)
     audioEngine.current = new FilmcraftAudioEngine({
-      onDecodeError: () => notify("Áudio: não foi possível decodificar o som de uma mídia da timeline; ela segue em silêncio", 5000),
+      onAudioIssue: (url, issue) => {
+        setAudioIssues((old) => {
+          const next = { ...old };
+          if (issue) next[url] = issue;
+          else delete next[url];
+          return next;
+        });
+        // Além do ícone persistente no clipe, avisa na hora (nunca silêncio sem explicação).
+        if (issue?.level === "error") notify(`Áudio: sem som em uma mídia da timeline — ${issue.message}`, 6000);
+        else if (issue) notify(`Áudio: ${issue.message}`, 5000);
+      },
     });
+  // O indicador ao vivo fica em ref (reprodução/scrub por rAF); a ref só segue o estado quando ele muda.
   const playheadRef = useRef(playhead);
-  playheadRef.current = playhead;
+  const committedPlayhead = useRef(playhead);
+  if (committedPlayhead.current !== playhead) {
+    committedPlayhead.current = playhead;
+    playheadRef.current = playhead;
+  }
+  const playheadNode = useRef(null);
+  const ghostLayer = useRef(null);
+  const snapLine = useRef(null);
+  const dropGhost = useRef(null);
+  const dropTarget = useRef(null);
+  const dropFrame = useRef(null);
+  const [dragView, setDragView] = useState(null);
+  const startDrag = useTimelineDrag();
+  // Ações das faixas (componente memo): objeto estável, atualizado a cada render.
+  const laneHandlers = useRef(null);
+  // Mídia arrastada saiu da timeline ou o arraste terminou: some o fantasma.
+  useEffect(() => {
+    const clear = () => {
+      dropTarget.current = null;
+      if (dropFrame.current !== null) cancelAnimationFrame(dropFrame.current);
+      dropFrame.current = null;
+      if (dropGhost.current) dropGhost.current.style.display = "none";
+      if (snapLine.current) snapLine.current.style.display = "none";
+    };
+    window.addEventListener("dragend", clear);
+    window.addEventListener("drop", clear);
+    return () => {
+      window.removeEventListener("dragend", clear);
+      window.removeEventListener("drop", clear);
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -307,7 +357,6 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     }
     engine.play({ clips, trackState, from: playheadRef.current, rate: playbackRate });
     return () => engine.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, active, playbackRate, clips, videoVisibility]);
   // Busca durante a reprodução (clique na régua, marcadores, setas): reancora o áudio no novo ponto.
   useEffect(() => {
@@ -315,7 +364,6 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const time = engine.currentTime();
     if (!playing || time === null || Math.abs(time - playhead) <= 0.3) return;
     engine.play({ clips, trackState, from: playhead, rate: playbackRate });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playhead]);
   useEffect(() => {
     if (!active) { clearMCPContext("mmfilm"); return; }
@@ -421,7 +469,6 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         };
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
   async function loadToolBuffers(list, onProgress) {
     const engine = audioEngine.current;
@@ -483,30 +530,52 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     }
     return scenes;
   }
+  // Reprodução por requestAnimationFrame: o indicador anda a cada quadro de tela (direto no DOM) e o estado
+  // do React (monitor, timecodes) é atualizado a ~20 por segundo, para não redesenhar a tela inteira a 60 fps.
   useEffect(() => {
     if (!playing || !active) return;
-    const timer = setInterval(() => {
+    let frame = null;
+    let last = null;
+    let lastCommit = -Infinity;
+    const finish = (time) => {
+      playheadRef.current = time;
+      setPlayhead(time);
+      setPlaying(false);
+    };
+    const tick = (stamp) => {
+      frame = null;
+      const now = typeof stamp === "number" ? stamp : performance.now();
+      const elapsed = last === null ? 0 : Math.max(0, (now - last) / 1000);
+      last = now;
       // Com áudio tocando, o relógio do AudioContext manda no indicador (sem deriva entre som e imagem).
       const audioTime = audioEngine.current?.currentTime();
-      const next = audioTime ?? playheadRef.current + 0.1 * playbackRate;
+      const next = audioTime ?? playheadRef.current + elapsed * playbackRate;
       // Como no Premiere, a reprodução para no fim do conteúdo (ou no início, tocando para trás).
-      if (playbackRate > 0 && next >= timelineEnd - EPSILON) {
-        playheadRef.current = timelineEnd;
-        setPlayhead(timelineEnd);
-        setPlaying(false);
-        return;
-      }
-      if (playbackRate < 0 && next <= 0) {
-        playheadRef.current = 0;
-        setPlayhead(0);
-        setPlaying(false);
-        return;
-      }
+      if (playbackRate > 0 && next >= timelineEnd - EPSILON) return finish(timelineEnd);
+      if (playbackRate < 0 && next <= 0) return finish(0);
       playheadRef.current = Math.max(0, Math.min(timelineSeconds, next));
-      setPlayhead(playheadRef.current);
-    }, 100);
-    return () => clearInterval(timer);
-  }, [playing, playbackRate, active, timelineSeconds, timelineEnd]);
+      if (playheadNode.current) playheadNode.current.style.left = `${TRACK_HEADER_W + playheadRef.current * zoom}px`;
+      if (now - lastCommit >= 50) {
+        lastCommit = now;
+        setPlayhead(playheadRef.current);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    // Aba oculta: o navegador para de entregar quadros (rAF), mas o som continua. Um timer (que o navegador
+    // só desacelera) segue avançando o indicador e para a reprodução no fim, como com a aba visível.
+    const hiddenTimer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") return;
+      if (frame !== null) cancelAnimationFrame(frame);
+      tick(performance.now());
+    }, 250);
+    return () => {
+      window.clearInterval(hiddenTimer);
+      if (frame !== null) cancelAnimationFrame(frame);
+      // Ao pausar, o estado recebe a posição exata do último quadro.
+      if (committedPlayhead.current !== playheadRef.current) setPlayhead(playheadRef.current);
+    };
+  }, [playing, playbackRate, active, timelineSeconds, timelineEnd, zoom]);
   // Rolagem da timeline: ao mudar o zoom, o indicador fica no mesmo ponto da tela.
   const lastZoom = useRef(zoom);
   useLayoutEffect(() => {
@@ -833,13 +902,39 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   function patchedAudioTrack() {
     return AUDIO_TRACK_IDS.find((id) => trackTargets[id] && !trackState[id]?.locked);
   }
+  // Faixa de vídeo que recebe a imagem ao inserir/sobrescrever pela Origem (e no duplo clique do Projeto):
+  // a marcada no Patch de origem V (uma só, como no Premiere) e desbloqueada.
+  function patchedVideoTrack() {
+    return VIDEO_TRACK_IDS.find((id) => trackTargets[id] && !trackState[id]?.locked);
+  }
+  // Patch de origem V, "Direcionar" numa faixa V e o seletor "Faixa de destino" são o mesmo estado:
+  // mudar um muda os outros (senão o patch padrão em V1 ganharia de Direcionar V2).
+  function toggleSourcePatch(id) {
+    if (trackKind(id) === "video" && !trackTargets[id]) setTargetTrack(id);
+    setTrackTargets((old) => {
+      if (trackKind(id) !== "video") return { ...old, [id]: !old[id] };
+      const next = { ...old };
+      VIDEO_TRACK_IDS.forEach((track) => {
+        next[track] = track === id ? !old[id] : false;
+      });
+      return next;
+    });
+  }
+  function directTrack(id) {
+    setTargetTrack(id);
+    if (trackKind(id) === "video") patchVideoTrack(id);
+  }
+  function patchVideoTrack(id) {
+    setTargetTrack(id);
+    setTrackTargets((old) => ({ ...old, ...Object.fromEntries(VIDEO_TRACK_IDS.map((track) => [track, track === id])) }));
+  }
   // Como no Premiere: vídeo entra com o áudio vinculado (mesmo recurso, trecho e `linkId`); áudio e imagem
-  // entram sozinhos. Vídeo solto numa faixa de áudio vai para V1 com o áudio na faixa escolhida.
+  // entram sozinhos. Vídeo solto numa faixa de áudio vai para a faixa V do Patch de origem (V1 sem patch) com o áudio na faixa escolhida.
   function assetPlacement(asset, track, start) {
     const kind = trackKind(track);
     if (!kind || !compatible(asset, kind)) return [];
     if (!asset.type?.startsWith("video")) return trackState[track]?.locked ? [] : [makeClip(asset, track, start)];
-    const videoTrack = kind === "video" ? track : "V1";
+    const videoTrack = kind === "video" ? track : patchedVideoTrack() || "V1";
     const audioTrack = kind === "audio" ? track : patchedAudioTrack();
     const items = [];
     if (!trackState[videoTrack]?.locked) items.push(makeClip(asset, videoTrack, start));
@@ -853,7 +948,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     setSelectedIds(items.map((item) => item.id));
   }
   function insert(asset, track) {
-    const target = track || (asset.type.startsWith("audio") ? patchedAudioTrack() || "A1" : "V1");
+    const target = track || (asset.type.startsWith("audio") ? patchedAudioTrack() || "A1" : patchedVideoTrack() || "V1");
     const probe = assetPlacement(asset, target, 0);
     if (!probe.length) return;
     const tracks = probe.map((item) => item.track);
@@ -866,9 +961,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     if (!source) return;
     const track = source.type.startsWith("audio")
       ? patchedAudioTrack() || "A1"
-      : compatible(source, trackKind(targetTrack))
-        ? targetTrack
-        : "V1";
+      : patchedVideoTrack() ||
+        (compatible(source, trackKind(targetTrack)) ? targetTrack : "V1");
     const items = assetPlacement(source, track, playhead);
     if (!items.length) return;
     commit((old) => items.reduce((list, item) => placeClip(list, item, mode), old));
@@ -902,7 +996,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     if (!clip || isLocked(clip)) return;
     const group = clips.filter((item) => withLinked([clip.id]).includes(item.id));
     const copies = relinkCopies(group).map((item) => ({ ...item, id: crypto.randomUUID(), start: item.start + clip.duration }));
-    commit((old) => [...old, ...copies]);
+    // Como no Premiere: a cópia sobrescreve o que estiver no lugar (vídeo e áudio vinculado).
+    commit((old) => overwriteItems(old, copies));
   }
   function patch(key, value) {
     if (!chosen || trackState[chosen.track].locked) return;
@@ -924,6 +1019,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   }
   // Reproduzir/pausar a sequência; no fim do conteúdo, recomeça do início (como no Premiere).
   function setPlayback(next) {
+    // Dentro do gesto do usuário: cria/retoma o AudioContext já (Safari e tablets exigem).
+    if (next) audioEngine.current?.unlock();
     if (next && playbackRate > 0 && timelineEnd > 0 && playheadRef.current >= timelineEnd - EPSILON) {
       playheadRef.current = 0;
       setPlayhead(0);
@@ -969,20 +1066,33 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     }
     return frameRound(time);
   }
+  // Ímã com o ponto encaixado (para desenhar a linha de encaixe na prévia); null se não encaixou.
+  function snapAt(time, exclude = []) {
+    if (!snap) return { time: frameRound(time), at: null };
+    let best;
+    for (const point of snapPoints(exclude)) {
+      const distance = Math.abs(point - time) * zoom;
+      if (distance <= SNAP_PX && (!best || distance < best.distance)) best = { distance, point };
+    }
+    return best ? { time: best.point, at: best.point } : { time: frameRound(time), at: null };
+  }
   // Início de um clipe solto/arrastado: o ímã encaixa a entrada ou a saída do clipe; nunca antes do zero.
-  function placementStart(raw, duration, exclude = []) {
+  function snapPlacement(raw, duration, exclude = []) {
     const start = Math.max(0, raw);
     if (snap) {
       let best;
       for (const point of snapPoints(exclude)) {
         for (const offset of [0, duration]) {
           const distance = Math.abs(point - (start + offset)) * zoom;
-          if (distance <= SNAP_PX && (!best || distance < best.distance)) best = { distance, start: point - offset };
+          if (distance <= SNAP_PX && (!best || distance < best.distance)) best = { distance, start: point - offset, at: point };
         }
       }
-      if (best) return Math.max(0, best.start);
+      if (best) return { start: Math.max(0, best.start), at: best.start >= 0 ? best.at : null };
     }
-    return Math.max(0, frameRound(start));
+    return { start: Math.max(0, frameRound(start)), at: null };
+  }
+  function placementStart(raw, duration, exclude = []) {
+    return snapPlacement(raw, duration, exclude).start;
   }
   function isLocked(clip) {
     return Boolean(trackState[clip.track]?.locked);
@@ -1021,8 +1131,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     return { previous, next };
   }
   // Edição ripple: move a borda e desloca os clipes seguintes da mesma faixa, sem abrir nem sobrepor espaço.
-  function rippleEdit(clip, edge, delta) {
-    if (isLocked(clip)) return;
+  // `dryRun`: só calcula o resultado (prévia durante o arraste), sem gravar.
+  function rippleEdit(clip, edge, delta, dryRun = false) {
+    if (isLocked(clip)) return null;
     const oldEnd = clipEnd(clip);
     const factor = speedFactor(clip);
     let change;
@@ -1048,7 +1159,13 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
           .filter((time) => time >= 0 && time <= clip.duration - applied),
       };
     }
-    if (Math.abs(change) < EPSILON) return;
+    if (dryRun)
+      return {
+        start: clip.start,
+        duration: updated.duration,
+        label: `Ripple ${change >= 0 ? "+" : "−"}${seconds(Math.abs(change))} · ${seconds(updated.duration)}`,
+      };
+    if (Math.abs(change) < EPSILON) return null;
     // O par vinculado recebe o mesmo aparo; o ripple corre também na faixa dele.
     const partners = syncedPartners(clip);
     const partnerIds = partners.map((item) => item.id);
@@ -1073,8 +1190,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     notify(`Edição ripple: ${change > 0 ? "+" : "−"}${seconds(Math.abs(change))} em ${clip.name}`);
   }
   // Rate stretch: muda a duração alterando a velocidade, sem mudar o trecho de mídia usado.
-  function rateStretchEdge(clip, edge, delta) {
-    if (isLocked(clip)) return;
+  function rateStretchEdge(clip, edge, delta, dryRun = false) {
+    if (isLocked(clip)) return null;
     const { previous, next } = sameTrackNeighbours(clip);
     const used = clip.duration * speedFactor(clip);
     const minDuration = Math.max(FRAME, used / 10);
@@ -1089,8 +1206,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       duration = Math.max(minDuration, Math.min(maxDuration, limit, clip.duration - delta));
       start = clipEnd(clip) - duration;
     }
-    if (Math.abs(duration - clip.duration) < EPSILON) return;
     const speed = Math.round(((used / duration) * 100) * 10) / 10;
+    if (dryRun) return { start, duration, label: `Rate stretch ${seconds(duration)} · ${String(speed).replace(".", ",")}%` };
+    if (Math.abs(duration - clip.duration) < EPSILON) return null;
     const ratio = duration / clip.duration;
     const ids = [clip.id, ...syncedPartners(clip).map((item) => item.id)];
     commit((old) =>
@@ -1110,15 +1228,16 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     notify(`Rate stretch: ${clip.name} agora com ${seconds(duration)} a ${String(speed).replace(".", ",")}%`);
   }
   // Slip: troca o trecho da mídia exibido sem mover o clipe na timeline.
-  function slipBy(clip, deltaTimeline) {
-    if (isLocked(clip)) return;
+  function slipBy(clip, deltaTimeline, dryRun = false) {
+    if (isLocked(clip)) return null;
     const factor = speedFactor(clip);
     const media = Number(clip.mediaDuration);
     const maxIn = Number.isFinite(media) && clip.type !== TITLE_TYPE && !clip.type?.startsWith("image")
       ? Math.max(0, media - clip.duration * factor)
       : Infinity;
     const sourceIn = Math.max(0, Math.min(maxIn, (clip.sourceIn || 0) - deltaTimeline * factor));
-    if (Math.abs(sourceIn - (clip.sourceIn || 0)) < EPSILON) return;
+    if (dryRun) return { start: clip.start, duration: clip.duration, label: `Slip · entrada na origem ${seconds(sourceIn)}` };
+    if (Math.abs(sourceIn - (clip.sourceIn || 0)) < EPSILON) return null;
     const ids = [clip.id, ...syncedPartners(clip).map((item) => item.id)];
     commit((old) =>
       old.map((item) => (ids.includes(item.id) ? { ...item, sourceIn } : item)),
@@ -1136,8 +1255,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       touchingNext: next && Math.abs(next.start - clipEnd(clip)) < 0.002 ? next : null,
     };
   }
-  function slideBy(clip, delta) {
-    if (isLocked(clip)) return;
+  function slideBy(clip, delta, dryRun = false) {
+    if (isLocked(clip)) return null;
     // O par vinculado desliza junto: vale o limite mais restritivo entre as faixas.
     const group = [clip, ...syncedPartners(clip)].map((item) => ({ item, ...slideNeighbours(item) }));
     let applied = delta;
@@ -1151,7 +1270,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         applied = Math.max(applied, -(touchingNext.sourceIn || 0) / speedFactor(touchingNext));
       } else if (next) applied = Math.min(applied, next.start - clipEnd(item));
     }
-    if (Math.abs(applied) < EPSILON) return;
+    if (dryRun)
+      return { start: clip.start + applied, duration: clip.duration, label: `Slide ${applied >= 0 ? "+" : "−"}${seconds(Math.abs(applied))}` };
+    if (Math.abs(applied) < EPSILON) return null;
     const moved = new Set(group.map(({ item }) => item.id));
     const previousIds = new Set(group.map(({ touchingPrevious }) => touchingPrevious?.id).filter(Boolean));
     const nextIds = new Set(group.map(({ touchingNext }) => touchingNext?.id).filter(Boolean));
@@ -1241,16 +1362,24 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   async function createTitle(start = playhead, preferred) {
     const text = (await askText("Texto do título", "Título"))?.trim();
     if (!text) return;
-    const track = freeVideoTrack(start, 5, preferred);
+    // Faixa livre se houver; senão sobrescreve na faixa de vídeo clicada (como colocar um gráfico no Premiere).
+    const fallback = [preferred, "V1", "V2", "V3"].find((id) => id && trackKind(id) === "video" && !trackState[id]?.locked);
+    const track = freeVideoTrack(start, 5, preferred) || fallback;
     if (!track) {
-      notify("Texto: nenhuma faixa de vídeo livre e desbloqueada no indicador");
+      notify("Texto: nenhuma faixa de vídeo desbloqueada");
       return;
     }
     const item = titleClip(text, track, start);
-    commit((old) => [...old, item]);
+    // Sem faixa livre, o título sobrescreve o trecho de baixo: avisa (nunca apaga mídia sem dizer).
+    const covered = clips.some(
+      (clip) => clip.track === item.track && clip.start < clipEnd(item) - EPSILON && clipEnd(clip) > item.start + EPSILON,
+    );
+    commit((old) => overwriteItems(old, [item]));
     setSelected(item.id);
     setSelectedIds([item.id]);
-    notify(`Título “${item.name}” criado em ${track} · ${clock(start)}`);
+    if (covered)
+      notify(`Título “${item.name}” criado em ${track} · ${clock(start)} — sobrescreveu um trecho do clipe dessa faixa (Ctrl+Z desfaz)`, 6000);
+    else notify(`Título “${item.name}” criado em ${track} · ${clock(start)}`);
   }
   async function updateTitleText() {
     if (!chosen || chosen.type !== TITLE_TYPE) {
@@ -1407,7 +1536,37 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
   }
-  // Ferramentas de arraste sobre um clipe: Mão, Ripple, Rate stretch, Slip/Slide.
+  // Prévia dos arrastes: fantasmas dos clipes (renderizados uma vez) movidos direto no DOM a cada quadro.
+  function openGhosts(list) {
+    flushSync(() =>
+      setDragView({
+        ghosts: list.map((clip) => ({
+          id: clip.id,
+          track: clip.track,
+          start: clip.start,
+          duration: clip.duration,
+          name: clip.name,
+          color: TRACKS.find(([id]) => id === clip.track)?.[1] || "",
+        })),
+        hidden: new Set(list.map((clip) => clip.id)),
+      }),
+    );
+  }
+  function closeGhosts() {
+    setDragView(null);
+    showSnapLine(null);
+  }
+  function paintGhost(id, { dx = 0, dy = 0, width } = {}) {
+    const node = ghostLayer.current?.querySelector(`[data-ghost-id="${id}"]`);
+    if (!node) return;
+    node.style.transform = `translate(${dx}px, ${dy}px)`;
+    if (width !== undefined) node.style.width = `${Math.max(2, width)}px`;
+  }
+  function paintLabel(text) {
+    const label = ghostLayer.current?.querySelector("[data-drag-label]");
+    if (label) label.textContent = text || "";
+  }
+  // Ferramentas de arraste sobre um clipe: Mão, Ripple, Rate stretch, Slip/Slide (prévia ao vivo, grava no soltar).
   function beginClipTool(event, clip) {
     if (event.button !== undefined && event.button !== 0) return;
     if (editTool === "Mão") {
@@ -1421,32 +1580,173 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const edge = time - clip.start < clip.duration / 2 ? "in" : "out";
     const tool = editTool;
     const slide = event.shiftKey;
-    const finish = (endEvent) => {
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", cancel);
-      const dx = (endEvent.clientX ?? startX) - startX;
-      const moved = Math.abs(dx) >= 3;
+    const run = (dx, dryRun) => {
       const delta = frameRound(dx / zoom);
-      if (tool === "Edição ripple") {
-        if (moved) rippleEdit(clip, edge, delta);
-        else {
+      if (tool === "Edição ripple") return rippleEdit(clip, edge, delta, dryRun);
+      if (tool === "Rate stretch") return rateStretchEdge(clip, edge, delta, dryRun);
+      return slide ? slideBy(clip, delta, dryRun) : slipBy(clip, delta, dryRun);
+    };
+    startDrag(event, {
+      start: () => openGhosts([clip]),
+      preview: (point) => {
+        const plan = run(point.clientX - startX, true);
+        if (!plan) return;
+        paintGhost(clip.id, { dx: (plan.start - clip.start) * zoom, width: plan.duration * zoom });
+        paintLabel(plan.label);
+      },
+      commit: (point, { moved }) => {
+        closeGhosts();
+        if (tool === "Edição ripple" && !moved) {
           // clique sem arrastar: apara até o ponto clicado (Q/W com o mouse)
           const at = snapTime(time, withLinked([clip.id]));
           if (edge === "in") rippleEdit(clip, "in", at - clip.start);
           else rippleEdit(clip, "out", at - clipEnd(clip));
-        }
-      } else if (moved && tool === "Rate stretch") rateStretchEdge(clip, edge, delta);
-      else if (moved && tool === "Slip e slide") {
-        if (slide) slideBy(clip, delta);
-        else slipBy(clip, delta);
-      }
+        } else if (moved) run(point.clientX - startX, false);
+      },
+      cancel: closeGhosts,
+    });
+  }
+  // Seleção: arrastar move o clipe (e o par vinculado / a seleção) com prévia; soltar sobrescreve,
+  // Ctrl (ou o modo inserção) insere e empurra, Alt duplica. A troca de faixa respeita o tipo (V↔V, A↔A).
+  function beginMoveClip(event, clip) {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (isLocked(clip)) return;
+    // Arrastar um clipe de uma seleção múltipla leva a seleção inteira; o par do próprio clipe só vai junto
+    // pela Seleção vinculada.
+    const sameLink = (id) => Boolean(clip.linkId) && clips.find((item) => item.id === id)?.linkId === clip.linkId;
+    const multi = selectedIds.includes(clip.id) && selectedIds.some((id) => id !== clip.id && !sameLink(id));
+    const ids = multi ? withLinked(selectedIds) : withLinked([clip.id]);
+    const members = clips.filter((item) => ids.includes(item.id) && !isLocked(item));
+    const memberIds = members.map((item) => item.id);
+    const startX = event.clientX;
+    const top = timelineTracks.current?.getBoundingClientRect?.().top ?? 0;
+    const kind = trackKind(clip.track);
+    const minStart = Math.min(...members.map((item) => item.start));
+    const shifted = (item, shift) => TRACKS[trackIndex(item.track) + shift]?.[0];
+    const validShift = (shift) =>
+      members.every((item) => {
+        if (trackKind(item.track) !== kind) return true;
+        const target = shifted(item, shift);
+        return Boolean(target) && trackKind(target) === kind && !trackState[target]?.locked;
+      });
+    let shift = 0;
+    const plan = (point) => {
+      const { start, at } = snapPlacement(clip.start + (point.clientX - startX) / zoom, clip.duration, memberIds);
+      const delta = Math.max(start - clip.start, -minStart);
+      const wanted = trackIndexAt(point.clientY, top, RULER_H, TRACK_H, TRACKS.length) - trackIndex(clip.track);
+      if (validShift(wanted)) shift = wanted;
+      const tracks = {};
+      if (shift)
+        members.forEach((item) => {
+          if (trackKind(item.track) === kind) tracks[item.id] = shifted(item, shift);
+        });
+      return { delta, tracks, at: Math.abs(delta - (start - clip.start)) < EPSILON ? at : null };
     };
-    const cancel = () => {
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", cancel);
+    startDrag(event, {
+      start: () => openGhosts(members),
+      preview: (point) => {
+        const { delta, tracks, at } = plan(point);
+        members.forEach((item) =>
+          paintGhost(item.id, {
+            dx: delta * zoom,
+            dy: tracks[item.id] ? (trackIndex(tracks[item.id]) - trackIndex(item.track)) * TRACK_H : 0,
+          }),
+        );
+        paintLabel(
+          `${delta >= 0 ? "+" : "−"}${timecode(Math.abs(delta))}${point.ctrlKey || insertMode ? " · inserir" : ""}${point.altKey ? " · duplicar" : ""}`,
+        );
+        showSnapLine(at);
+      },
+      commit: (point, { moved }) => {
+        closeGhosts();
+        if (!moved) return;
+        const { delta, tracks } = plan(point);
+        if (Math.abs(delta) < EPSILON && !Object.keys(tracks).length && !point.altKey) return;
+        const mode = insertMode || point.ctrlKey ? "insert" : "overwrite";
+        commit((old) => moveClips(old, memberIds, { delta, tracks, duplicate: point.altKey }, mode));
+        setSelected(clip.id);
+      },
+      cancel: closeGhosts,
+    });
+  }
+  // Alças de aparo (Seleção): borda de entrada/saída com prévia; respeita a mídia, os vizinhos e o par vinculado.
+  function beginTrim(event, clip, edge) {
+    if (event.button !== undefined && event.button !== 0) return;
+    if (isLocked(clip)) return;
+    const group = [clip, ...syncedPartners(clip)];
+    const ids = group.map((item) => item.id);
+    const startX = event.clientX;
+    const end = clipEnd(clip);
+    let lower;
+    let upper;
+    if (edge === "in") {
+      lower = Math.max(
+        0,
+        ...group.map((item) => item.start - (item.sourceIn || 0) / speedFactor(item)),
+        ...group.map((item) => {
+          const { previous } = sameTrackNeighbours(item);
+          return previous ? clipEnd(previous) : 0;
+        }),
+      );
+      upper = end - FRAME;
+    } else {
+      lower = clip.start + FRAME;
+      upper = Math.min(
+        ...group.map((item) => item.start + maxDurationForMedia(item)),
+        ...group.map((item) => sameTrackNeighbours(item).next?.start ?? Infinity),
+      );
+    }
+    const plan = (point) => {
+      const raw = (edge === "in" ? clip.start : end) + (point.clientX - startX) / zoom;
+      const { time, at } = snapAt(raw, ids);
+      const value = Math.max(lower, Math.min(upper, time));
+      return { value, at: Math.abs(value - time) < EPSILON ? at : null };
     };
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", cancel);
+    startDrag(event, {
+      start: () => openGhosts(group),
+      preview: (point) => {
+        const { value, at } = plan(point);
+        group.forEach((item) =>
+          paintGhost(
+            item.id,
+            edge === "in" ? { dx: (value - clip.start) * zoom, width: (end - value) * zoom } : { width: (value - clip.start) * zoom },
+          ),
+        );
+        paintLabel(`${edge === "in" ? "Entrada" : "Saída"} · ${seconds(edge === "in" ? end - value : value - clip.start)}`);
+        showSnapLine(at);
+      },
+      commit: (point, { moved }) => {
+        closeGhosts();
+        if (!moved) return;
+        const { value } = plan(point);
+        if (Math.abs(value - (edge === "in" ? clip.start : end)) < EPSILON) return;
+        commit((old) =>
+          old.map((item) => {
+            if (!ids.includes(item.id)) return item;
+            if (edge === "out") {
+              const duration = value - item.start;
+              return { ...item, duration, keyframes: (item.keyframes || []).filter((time) => time <= duration + EPSILON) };
+            }
+            const offset = value - item.start;
+            return {
+              ...item,
+              start: value,
+              duration: item.duration - offset,
+              sourceIn: Math.max(0, (item.sourceIn || 0) + offset * speedFactor(item)),
+              keyframes: (item.keyframes || [])
+                .map((time) => time - offset)
+                .filter((time) => time >= -EPSILON && time <= item.duration - offset + EPSILON),
+            };
+          }),
+        );
+        setSelected(clip.id);
+      },
+      cancel: closeGhosts,
+    });
+  }
+  function beginClipPointer(event, clip) {
+    if (editTool === "Seleção" || editTool === "Selecionar faixa") beginMoveClip(event, clip);
+    else beginClipTool(event, clip);
   }
   function clickClipWithTool(event, clip) {
     const time = pointerTime(event);
@@ -1541,7 +1841,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   function nudgeSelected(delta) {
     if (!chosen || trackState[chosen.track].locked) return;
     const ids = chosenGroup().map((clip) => clip.id);
-    commit((old) => old.map((clip) => (ids.includes(clip.id) ? { ...clip, start: Math.max(0, clip.start + delta) } : clip)));
+    // Mover por quadro sobrescreve o vizinho (nunca empilha na mesma faixa).
+    commit((old) => moveClips(old, ids, { delta }));
   }
   function slip(delta) {
     if (!chosen || trackState[chosen.track].locked) return;
@@ -1550,18 +1851,16 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     commit((old) => old.map((clip) => (ids.includes(clip.id) ? { ...clip, sourceIn } : clip)));
   }
   function rateStretch(duration) {
-    if (!chosen || duration < 0.5) return;
-    commit((old) =>
-      old.map((clip) =>
-        clip.id === chosen.id
-          ? {
-              ...clip,
-              duration,
-              speed: Math.round((clip.duration / duration) * clip.speed),
-            }
-          : clip,
-      ),
-    );
+    if (!chosen || duration < 0.5 || isLocked(chosen)) return;
+    // O par vinculado estica junto e o que estiver depois é sobrescrito nas duas faixas.
+    const group = chosenGroup();
+    const ids = group.map((clip) => clip.id);
+    const stretched = group.map((clip) => ({
+      ...clip,
+      duration,
+      speed: Math.round((clip.duration / duration) * (clip.speed || 100)),
+    }));
+    commit((old) => overwriteItems(old.filter((clip) => !ids.includes(clip.id)), stretched));
   }
   function addTransition(name) {
     if (!chosen) return;
@@ -1739,33 +2038,62 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       if (projectInput.current) projectInput.current.value = "";
     }
   }
+  // Mídia arrastada do painel Projeto/Monitor sobre uma faixa: calcula {faixa, início} com ímã e desenha o
+  // retângulo fantasma (direto no DOM, por rAF). O soltar usa esse mesmo ponto.
+  function dragOverTrack(event, track) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    if (trackState[track]?.locked) {
+      dropTarget.current = null;
+      hideDropGhost();
+      return;
+    }
+    const asset = assetDragState.current;
+    const probe = asset ? assetPlacement(asset, track, 0) : [];
+    if (asset && !probe.length) {
+      dropTarget.current = null;
+      hideDropGhost();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointer = Number.isFinite(event.clientX) ? (event.clientX - rect.left) / zoom : Math.max(0, playhead);
+    const duration = probe[0]?.duration ?? 0;
+    const { start, at } = snapPlacement(pointer, duration);
+    dropTarget.current = { track, start, at, duration };
+    if (dropFrame.current !== null) return;
+    dropFrame.current = requestAnimationFrame(() => {
+      dropFrame.current = null;
+      const target = dropTarget.current;
+      const node = dropGhost.current;
+      if (!target || !node) return;
+      node.style.display = "block";
+      node.style.left = `${TRACK_HEADER_W + target.start * zoom}px`;
+      node.style.top = `${RULER_H + trackIndex(target.track) * TRACK_H + 4}px`;
+      node.style.width = `${Math.max(2, target.duration * zoom)}px`;
+      showSnapLine(target.at);
+    });
+  }
+  function hideDropGhost() {
+    if (dropFrame.current !== null) cancelAnimationFrame(dropFrame.current);
+    dropFrame.current = null;
+    if (dropGhost.current) dropGhost.current.style.display = "none";
+    showSnapLine(null);
+  }
+  function showSnapLine(at) {
+    const line = snapLine.current;
+    if (!line) return;
+    line.style.display = at === null || at === undefined ? "none" : "block";
+    if (at !== null && at !== undefined) line.style.left = `${TRACK_HEADER_W + at * zoom}px`;
+  }
   function dropOnTrack(event, track, kind) {
     event.preventDefault();
+    const hovered = dropTarget.current;
+    dropTarget.current = null;
+    hideDropGhost();
     if (trackState[track].locked) return;
     const rect = event.currentTarget.getBoundingClientRect();
     // Tempo sob o ponteiro (sem posição no evento, usa o indicador).
     const pointer = Number.isFinite(event.clientX) ? (event.clientX - rect.left) / zoom : Math.max(0, playhead);
-    const clipId = event.dataTransfer.getData(CLIP_DRAG_TYPE);
-    if (clipId) {
-      const moving = clips.find((clip) => clip.id === clipId);
-      if (!moving || isLocked(moving) || !compatible(moving, kind)) return;
-      // O clipe mantém o ponto onde foi agarrado; o par vinculado acompanha o deslocamento.
-      const grab = Number(event.dataTransfer.getData(GRAB_DRAG_TYPE)) || 0;
-      const group = withLinked([clipId]);
-      const start = placementStart(pointer - grab, moving.duration, group);
-      const delta = start - moving.start;
-      commit((old) =>
-        old.map((clip) =>
-          clip.id === clipId
-            ? { ...clip, track, start }
-            : group.includes(clip.id)
-              ? { ...clip, start: Math.max(0, clip.start + delta) }
-              : clip,
-        ),
-      );
-      setSelected(clipId);
-      return;
-    }
     const assetId = event.dataTransfer.getData("application/x-filmcraft-asset");
     let asset = media.find((item) => String(item.id) === assetId);
     if (!asset && source && String(source.id) === assetId) asset = source;
@@ -1776,7 +2104,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       try {
         const raw = JSON.parse(event.dataTransfer.getData("application/x-timeline2-media") || "null");
         if (raw?.src && ['video','audio','image'].includes(raw.kind)) {
-          asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:raw.src,duration:Number(raw.duration) || 8};
+          asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:resolveMediaUrl(raw.src),duration:Number(raw.duration) || 8};
           if (compatible(asset, kind)) setMedia(old => old.some(item => String(item.id) === asset.id) ? old : [...old,asset]);
         }
       } catch { return; }
@@ -1784,10 +2112,13 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     if (!asset || !compatible(asset, kind)) return;
     const probe = assetPlacement(asset, track, 0);
     if (!probe.length) return;
-    const start = placementStart(pointer, probe[0].duration);
+    // O ponto mostrado pelo fantasma durante o arraste é o ponto onde a mídia entra.
+    const start = hovered?.track === track ? hovered.start : placementStart(pointer, probe[0].duration);
     const items = probe.map((item) => ({ ...item, start }));
-    // Modo inserção (botão ▤ ativo) empurra os clipes seguintes; desligado mantém o comportamento original.
-    commit((old) => (insertMode ? items.reduce((list, item) => placeClip(list, item, "insert"), old) : [...old, ...items]));
+    // Como no Premiere: soltar sobrescreve o que estiver embaixo (vídeo e áudio vinculado); Ctrl ao soltar ou o
+    // modo inserção (botão ▤) insere e empurra os clipes seguintes.
+    const mode = insertMode || event.ctrlKey || event.metaKey ? "insert" : "overwrite";
+    commit((old) => overwriteItems(old, items, mode));
     selectPlaced(items);
   }
   function patchClip(id, values) {
@@ -1869,17 +2200,46 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       ruler?.getBoundingClientRect().left ??
       (trackArea ? trackArea.getBoundingClientRect().left + TRACK_HEADER_W : undefined) ??
       0;
-    const update = (pointerEvent) =>
-      setPlayhead(
-        frameRound(timelineTimeFromPointer(pointerEvent.clientX, left, zoom, timelineSeconds)),
-      );
-    update(event);
-    const stop = () => {
-      window.removeEventListener("pointermove", update);
-      window.removeEventListener("pointerup", stop);
+    const timeAt = (x) => frameRound(timelineTimeFromPointer(x, left, zoom, timelineSeconds));
+    setPlayhead(timeAt(event.clientX));
+    // Scrub: captura o ponteiro e coalesce os movimentos em um quadro de tela (requestAnimationFrame).
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    if (pointerId !== undefined) {
+      try {
+        target?.setPointerCapture?.(pointerId);
+      } catch {
+        // ponteiro já liberado
+      }
+    }
+    let frame = null;
+    let lastX = event.clientX;
+    const move = (pointerEvent) => {
+      lastX = pointerEvent.clientX;
+      if (frame === null)
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          setPlayhead(timeAt(lastX));
+        });
     };
-    window.addEventListener("pointermove", update);
+    const stop = (endEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      if (pointerId !== undefined) {
+        try {
+          target?.releasePointerCapture?.(pointerId);
+        } catch {
+          // já liberado
+        }
+      }
+      if (endEvent?.type === "pointerup") setPlayhead(timeAt(Number.isFinite(endEvent.clientX) ? endEvent.clientX : lastX));
+    };
+    window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   }
 
   function beginMarquee(event, startTrack) {
@@ -1938,6 +2298,36 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     window.addEventListener("pointermove", update);
     window.addEventListener("pointerup", stop);
   }
+
+  function clickClip(event, clip) {
+    if (clickClipWithTool(event, clip)) return;
+    // Par vinculado pelo linkId; clipes antigos sem vínculo: mesmo recurso no mesmo início.
+    const linked = linkedSelection
+      ? clips
+          .filter((item) =>
+            clip.linkId
+              ? item.id !== clip.id && item.linkId === clip.linkId
+              : item.id !== clip.id &&
+                item.track !== clip.track &&
+                clip.assetId &&
+                item.assetId === clip.assetId &&
+                Math.abs(item.start - clip.start) < 0.002,
+          )
+          .map((item) => item.id)
+      : [];
+    setSelected(clip.id);
+    setSelectedIds(event.shiftKey ? [...new Set([...selectedIds, clip.id, ...linked])] : [clip.id, ...linked]);
+  }
+  laneHandlers.current = {
+    pointerDown: beginClipPointer,
+    trimDown: beginTrim,
+    click: clickClip,
+    contextMenu: (event, clip) => {
+      setSelected(clip.id);
+      setSelectedIds([clip.id]);
+      showContext(event, "clip", clip);
+    },
+  };
 
   return (
     <section ref={workspaceRoot} className="bg-[#191919] text-slate-200">
@@ -2309,7 +2699,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
           try {
             const raw = JSON.parse(event.dataTransfer.getData('application/x-timeline2-media') || 'null');
             if (!raw?.src || !['video','audio','image'].includes(raw.kind)) return;
-            const asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:raw.src,duration:Number(raw.duration) || 8};
+            const asset = {id:String(raw.id),name:raw.name || raw.filename,type:raw.mimeType || `${raw.kind}/${raw.kind === 'audio' ? 'mpeg' : raw.kind === 'image' ? 'png' : 'mp4'}`,url:resolveMediaUrl(raw.src),duration:Number(raw.duration) || 8};
             setMedia(old => old.some(item => String(item.id) === asset.id) ? old : [...old,asset]);
             openSource(asset);
           } catch { return; }
@@ -2506,8 +2896,9 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
               <label className="ml-auto">
                 Faixa de destino
                 <select
-                  value={targetTrack}
-                  onChange={(event) => setTargetTrack(event.target.value)}
+                  aria-label="Faixa de destino"
+                  value={patchedVideoTrack() || (trackKind(targetTrack) === "video" ? targetTrack : "V1")}
+                  onChange={(event) => patchVideoTrack(event.target.value)}
                   className="ml-2 rounded border border-slate-700 bg-slate-950 px-2 py-1"
                 >
                   {TRACKS.filter(([, , kind]) => kind === "video").map(
@@ -2704,7 +3095,7 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     aria-valuenow={Math.round(playhead * 100) / 100}
                     aria-valuetext={timecode(playhead)}
                     onPointerDown={beginPlayheadDrag}
-                    className="relative flex-1 cursor-ew-resize"
+                    className="relative flex-1 cursor-ew-resize touch-none"
                   >
                     {/* Rótulos a cada 5 s, posicionados no tempo exato (o clique vale pelo ponto da régua). */}
                     {Array.from({ length: timelineSeconds / 5 + 1 }, (_, index) => (
@@ -2729,12 +3120,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       <div className="sticky left-0 z-30 grid w-36 shrink-0 grid-cols-[28px_18px_28px_1fr] border-r border-black bg-[#202020] text-[10px]">
                         <button
                           aria-label={`Patch de origem ${id}`}
-                          onClick={() =>
-                            setTrackTargets((old) => ({
-                              ...old,
-                              [id]: !old[id],
-                            }))
-                          }
+                          aria-pressed={Boolean(trackTargets[id])}
+                          onClick={() => toggleSourcePatch(id)}
                           className={`m-0.5 grid place-items-center font-bold ${trackTargets[id] ? "bg-[#2f63c7] text-white" : "text-transparent"}`}
                         >
                           {id}
@@ -2754,7 +3141,8 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                         </span>
                         <button
                           aria-label={`Direcionar ${id}`}
-                          onClick={() => setTargetTrack(id)}
+                          aria-pressed={targetTrack === id}
+                          onClick={() => directTrack(id)}
                           className={`m-0.5 grid place-items-center font-bold ${targetTrack === id ? "bg-[#2f63c7] text-white" : "bg-[#292929] text-[#6ca8ff]"}`}
                         >
                           {id}
@@ -2809,90 +3197,27 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                       </div>
                       <div
                         data-track-id={id}
-                        className={`relative flex-1 ${state.locked ? "bg-slate-950/60" : ""}`}
+                        className={`relative flex-1 touch-none ${state.locked ? "bg-slate-950/60" : ""}`}
                         onPointerDown={(event) => beginLanePointer(event, id)}
                         onClick={(event) => clickLaneWithTool(event, id)}
-                        onDragOver={(event) => event.preventDefault()}
+                        onDragOver={(event) => dragOverTrack(event, id)}
                         onDrop={(event) => dropOnTrack(event, id, kind)}
                         onDoubleClick={() => source && insert(source, id)}
                       >
-                        {clips
-                          .filter((clip) => clip.track === id)
-                          .map((clip) => (
-                            <button
-                              key={clip.id}
-                              draggable={!state.locked && (editTool === "Seleção" || editTool === "Selecionar faixa")}
-                              onPointerDown={(event) => {
-                                event.stopPropagation();
-                                beginClipTool(event, clip);
-                              }}
-                              onDragStart={(event) => {
-                                event.stopPropagation();
-                                event.dataTransfer.setData(CLIP_DRAG_TYPE, clip.id);
-                                // Distância (s) entre o ponto agarrado e o início do clipe, mantida ao soltar.
-                                const left = event.currentTarget.getBoundingClientRect().left;
-                                const grab = Number.isFinite(event.clientX) ? Math.max(0, (event.clientX - left) / zoom) : 0;
-                                event.dataTransfer.setData(GRAB_DRAG_TYPE, String(grab));
-                              }}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (clickClipWithTool(event, clip)) return;
-                                // Par vinculado pelo linkId; clipes antigos sem vínculo: mesmo recurso no mesmo início.
-                                const linked = linkedSelection
-                                  ? clips
-                                      .filter((item) =>
-                                        clip.linkId
-                                          ? item.id !== clip.id && item.linkId === clip.linkId
-                                          : item.id !== clip.id &&
-                                            item.track !== clip.track &&
-                                            clip.assetId &&
-                                            item.assetId === clip.assetId &&
-                                            Math.abs(item.start - clip.start) < 0.002,
-                                      )
-                                      .map((item) => item.id)
-                                  : [];
-                                setSelected(clip.id);
-                                setSelectedIds(
-                                  event.shiftKey
-                                    ? [...new Set([...selectedIds, clip.id, ...linked])]
-                                    : [clip.id, ...linked],
-                                );
-                              }}
-                              onContextMenu={(event) => {
-                                setSelected(clip.id);
-                                setSelectedIds([clip.id]);
-                                showContext(event, "clip", clip);
-                              }}
-                              className={`absolute top-1 z-20 h-12 overflow-hidden rounded border border-white/10 px-2 text-left text-[10px] text-white ${color} ${state.muted || clip.enabled === false ? "opacity-40" : ""} ${selectedIds.includes(clip.id) || selected === clip.id ? "ring-2 ring-white" : ""}`}
-                              style={{
-                                left: clip.start * zoom,
-                                width: Math.max(36, clip.duration * zoom),
-                              }}
-                            >
-                              <b className="block truncate">{clip.name}</b>
-                              {showClipInfo && (
-                                <span>
-                                  {clock(clip.start)} · {clip.duration.toFixed(1)}
-                                  s
-                                </span>
-                              )}
-                              {clip.transition && (
-                                <span className="absolute right-1 top-1 rounded bg-black/50 px-1 text-[8px]">
-                                  {resolveTransition(clip.transition)?.name || String(clip.transition?.id ?? clip.transition)}
-                                </span>
-                              )}
-                              {(clip.keyframes || []).map((time) => (
-                                <i
-                                  key={time}
-                                  title={`Keyframe ${time.toFixed(1)} s`}
-                                  className="absolute bottom-1 h-2 w-2 rotate-45 bg-amber-300"
-                                  style={{
-                                    left: `${(time / clip.duration) * 100}%`,
-                                  }}
-                                />
-                              ))}
-                            </button>
-                          ))}
+                        <TimelineLaneClips
+                          track={id}
+                          clips={clips}
+                          color={color}
+                          state={state}
+                          zoom={zoom}
+                          selected={selected}
+                          selectedIds={selectedIds}
+                          editTool={editTool}
+                          showClipInfo={showClipInfo}
+                          audioIssues={audioIssues}
+                          hiddenIds={dragView?.hidden}
+                          handlers={laneHandlers}
+                        />
                       </div>
                     </div>
                   );
@@ -2940,10 +3265,45 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
                     }}
                   />
                 )}
+                {/* Prévia dos arrastes (fantasmas, rótulo, linha do ímã e mídia vinda do Projeto), movida direto no DOM. */}
+                <div ref={ghostLayer} aria-hidden className="pointer-events-none absolute inset-0 z-40">
+                  {dragView?.ghosts.map((ghost) => (
+                    <div
+                      key={ghost.id}
+                      data-ghost-id={ghost.id}
+                      className={`absolute h-12 overflow-hidden rounded border-2 border-dashed border-white/80 px-2 text-[10px] text-white shadow-lg ${ghost.color}`}
+                      style={{
+                        left: TRACK_HEADER_W + ghost.start * zoom,
+                        top: RULER_H + trackIndex(ghost.track) * TRACK_H + 4,
+                        width: Math.max(2, ghost.duration * zoom),
+                      }}
+                    >
+                      <b className="block truncate">{ghost.name}</b>
+                    </div>
+                  ))}
+                  {dragView?.ghosts.length > 0 && (
+                    <span
+                      data-drag-label
+                      className="absolute whitespace-nowrap rounded bg-black/80 px-1.5 py-0.5 text-[10px] text-white"
+                      style={{
+                        left: TRACK_HEADER_W + dragView.ghosts[0].start * zoom,
+                        top: RULER_H + trackIndex(dragView.ghosts[0].track) * TRACK_H - 14,
+                      }}
+                    />
+                  )}
+                  <span ref={snapLine} data-snap-line className="absolute bottom-0 top-[70px] w-px bg-amber-300" style={{ display: "none" }} />
+                  <span
+                    ref={dropGhost}
+                    data-drop-ghost
+                    className="absolute h-12 rounded border-2 border-dashed border-sky-300 bg-sky-400/20"
+                    style={{ display: "none" }}
+                  />
+                </div>
                 <button
+                  ref={playheadNode}
                   aria-label="Arrastar playhead"
                   onPointerDown={beginPlayheadDrag}
-                  className="absolute bottom-0 top-[70px] z-50 w-3 -translate-x-1/2 cursor-ew-resize"
+                  className="absolute bottom-0 top-[70px] z-50 w-3 -translate-x-1/2 cursor-ew-resize touch-none"
                   style={{ left: TRACK_HEADER_W + playhead * zoom }}
                 >
                   <span className="absolute bottom-0 left-1/2 top-1 w-px bg-cyan-300" />
@@ -2955,7 +3315,18 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         </main>
 
         <aside className="space-y-3 overflow-auto border border-[#303030] bg-[#1e1e1e] p-3 xl:col-start-3 xl:row-span-2 xl:row-start-1">
-          <WorkspacePanel workspace={workspace} clip={chosen} patch={patch} historyLength={history.length} futureLength={future.length} notify={notify} onImportCaptions={importCaptions} />
+          <WorkspacePanel
+            workspace={workspace}
+            clip={chosen}
+            clips={clips}
+            source={source}
+            sequence={{ name: sequenceName, duration: timelineEnd }}
+            patch={patch}
+            historyLength={history.length}
+            futureLength={future.length}
+            notify={notify}
+            onImportCaptions={importCaptions}
+          />
           {workspace === "Edição" && (
             <>
               <div className="border-b border-slate-700 pb-3">
@@ -3147,6 +3518,104 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
   );
 }
 
+// Clipes de uma faixa. Em `memo`: o indicador andando (reprodução/scrub) e a prévia dos arrastes não
+// redesenham as faixas; as ações chegam por um objeto estável (`handlers.current`).
+const TimelineLaneClips = memo(function TimelineLaneClips({
+  track,
+  clips,
+  color,
+  state,
+  zoom,
+  selected,
+  selectedIds,
+  editTool,
+  showClipInfo,
+  audioIssues,
+  hiddenIds,
+  handlers,
+}) {
+  const trimmable = editTool === "Seleção" && !state.locked;
+  return clips
+    .filter((clip) => clip.track === track)
+    .map((clip) => {
+      const hidden = Boolean(hiddenIds?.has(clip.id));
+      const sounds = AUDIO_TRACK_IDS.includes(track) || (clip.type?.startsWith("video") && !clip.linkId);
+      const issue = sounds ? audioIssues?.[clip.url] : null;
+      return (
+        <button
+          key={clip.id}
+          data-clip-id={clip.id}
+          data-start={clip.start}
+          data-duration={clip.duration}
+          data-dragging={hidden ? "true" : undefined}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            handlers.current.pointerDown(event, clip);
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            handlers.current.click(event, clip);
+          }}
+          onContextMenu={(event) => handlers.current.contextMenu(event, clip)}
+          className={`absolute top-1 z-20 h-12 touch-none overflow-hidden rounded border border-white/10 px-2 text-left text-[10px] text-white ${color} ${state.muted || clip.enabled === false || hidden ? "opacity-40" : ""} ${selectedIds.includes(clip.id) || selected === clip.id ? "ring-2 ring-white" : ""}`}
+          style={{
+            left: clip.start * zoom,
+            width: Math.max(36, clip.duration * zoom),
+          }}
+        >
+          <b className="block truncate">{clip.name}</b>
+          {showClipInfo && (
+            <span>
+              {clock(clip.start)} · {clip.duration.toFixed(1)}
+              s
+            </span>
+          )}
+          {clip.transition && (
+            <span className="absolute right-1 top-1 rounded bg-black/50 px-1 text-[8px]">
+              {resolveTransition(clip.transition)?.name || String(clip.transition?.id ?? clip.transition)}
+            </span>
+          )}
+          {issue && (
+            <span
+              data-audio-issue={issue.level}
+              role="img"
+              aria-label={issue.level === "error" ? `Sem som: ${issue.message}` : `Áudio: ${issue.message}`}
+              title={issue.level === "error" ? `Sem som: ${issue.message}` : `Áudio: ${issue.message}`}
+              className={`absolute bottom-0.5 right-1 rounded bg-black/60 p-0.5 ${issue.level === "error" ? "text-amber-300" : "text-sky-200"}`}
+            >
+              <TriangleAlert size={10} />
+            </span>
+          )}
+          {(clip.keyframes || []).map((time) => (
+            <i
+              key={time}
+              title={`Keyframe ${time.toFixed(1)} s`}
+              className="absolute bottom-1 h-2 w-2 rotate-45 bg-amber-300"
+              style={{
+                left: `${(time / clip.duration) * 100}%`,
+              }}
+            />
+          ))}
+          {/* Alças de aparo (depois do conteúdo: o primeiro <span> do clipe continua sendo a informação). */}
+          {trimmable &&
+            ["in", "out"].map((edge) => (
+              <span
+                key={edge}
+                data-trim={edge}
+                aria-hidden
+                title={edge === "in" ? "Arraste para aparar a entrada" : "Arraste para aparar a saída"}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  handlers.current.trimDown(event, clip, edge);
+                }}
+                className={`absolute inset-y-0 z-10 w-[7px] cursor-ew-resize hover:bg-white/30 ${edge === "in" ? "left-0" : "right-0"}`}
+              />
+            ))}
+        </button>
+      );
+    });
+});
+
 function PremiereProjectPanel({
   media,
   source,
@@ -3225,10 +3694,12 @@ function PremiereProjectPanel({
                 draggable
                 onPointerDown={event => event.stopPropagation()}
                 onDragStart={event => {
+                  assetDragState.current = asset;
                   event.dataTransfer.effectAllowed = 'copy';
                   event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id));
                   event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset));
                 }}
+                onDragEnd={() => { assetDragState.current = null; }}
                 onClick={() => setSource(asset)}
                 onDoubleClick={() => setSource(asset)}
                 onKeyDown={(event) => {
@@ -4110,8 +4581,9 @@ function Monitor({ title, asset, layers, children, playing = false, playhead = 0
     onLoadedMetadata: (event) => setMonitorDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0),
   };
   return (
-    <div draggable={Boolean(asset)} onDragStart={event => {
+    <div draggable={Boolean(asset)} onDragEnd={() => { assetDragState.current = null; }} onDragStart={event => {
       if (!asset) return;
+      assetDragState.current = asset;
       event.dataTransfer.effectAllowed = 'copy';
       event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id));
       event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset));
@@ -4123,7 +4595,7 @@ function Monitor({ title, asset, layers, children, playing = false, playhead = 0
         {children}
       </div>
       <div ref={frameRef} className="relative grid min-h-0 flex-1 overflow-hidden place-items-center">
-        {asset && <div draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id)); event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset)); }} className="col-start-1 row-start-1 self-start justify-self-start z-10 m-2 cursor-grab rounded border border-sky-600 bg-slate-950/90 px-2 py-1 text-xs text-sky-300" title="Arraste para uma pista da timeline">Arrastar mídia para timeline</div>}
+        {asset && <div draggable onDragEnd={() => { assetDragState.current = null; }} onDragStart={event => { event.stopPropagation(); assetDragState.current = asset; event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-filmcraft-asset', String(asset.id)); event.dataTransfer.setData('application/x-filmcraft-media', JSON.stringify(asset)); }} className="col-start-1 row-start-1 self-start justify-self-start z-10 m-2 cursor-grab rounded border border-sky-600 bg-slate-950/90 px-2 py-1 text-xs text-sky-300" title="Arraste para uma pista da timeline">Arrastar mídia para timeline</div>}
         {layers ? (
           layers.length ? (
             layers.map((layer, index) => (
@@ -4283,8 +4755,9 @@ function ExportWorkspace({
     const master = mixerStrip(mixer, "Mix");
     const controller = new AbortController();
     abortRef.current = controller;
-    setJob(job.id, { status: "Renderizando 0%" });
+    setJob(job.id, { status: "Renderizando 0%", warning: "" });
     let last = 0;
+    const warnings = [];
     try {
       const blob = await renderTimelineToWebm({
         ...settings,
@@ -4294,6 +4767,8 @@ function ExportWorkspace({
         mixer: { ...mixer, Mix: { ...master, channels: channels === "Mono" ? "Mono" : master.channels } },
         range: exportRange({ clips, trackState, interval: jobInterval, markIn, markOut }),
         signal: controller.signal,
+        // Perda de áudio nunca é silenciosa: o aviso fica na linha da fila e na notificação.
+        onWarning: (message) => warnings.push(message),
         onProgress: (value) => {
           const percent = Math.floor(value * 100);
           if (percent !== last) {
@@ -4304,8 +4779,9 @@ function ExportWorkspace({
       });
       const name = exportFileName(job.name);
       downloadBlob(blob, name);
-      setJob(job.id, { status: "Concluído" });
-      notify(
+      setJob(job.id, { status: "Concluído", warning: warnings.join(" · ") });
+      if (warnings.length) notify(`Exportação concluída com aviso: ${warnings.join(" · ")}`, 9000);
+      else notify(
         `Exportação concluída: ${name} (WebM, ${(blob.size / 1_000_000).toFixed(1).replace(".", ",")} MB) enviado para os downloads do navegador`,
         6000,
       );
@@ -4463,6 +4939,11 @@ function ExportWorkspace({
                     {item.status}
                   </span>
                 </div>
+                {item.warning && (
+                  <p role="alert" className="mt-1 text-[10px] text-amber-300">
+                    Aviso: {item.warning}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -4548,20 +5029,23 @@ function ExportWorkspace({
             }
           />
           <ExportCheck label="Taxa de quadros" checked value="29,97 fps" />
+          {/* O gravador do navegador (MediaRecorder/WebM) só gera vídeo progressivo, pixels quadrados e perfil
+              escolhido por ele: as listas mostram o valor real da saída e ficam desabilitadas. */}
           <ExportField label="Ordem dos campos">
-            <select>
+            <select aria-label="Ordem dos campos" disabled title={NOT_AVAILABLE} value="Progressivo" onChange={() => {}}>
               <option>Progressivo</option>
               <option>Superior primeiro</option>
             </select>
           </ExportField>
           <ExportField label="Aspecto">
-            <select>
+            <select aria-label="Aspecto" disabled title={NOT_AVAILABLE} value="Pixels quadrados (1,0)" onChange={() => {}}>
               <option>Pixels quadrados (1,0)</option>
               <option>Anamórfico</option>
             </select>
           </ExportField>
           <ExportField label="Perfil">
-            <select>
+            <select aria-label="Perfil" disabled title={NOT_AVAILABLE} value="Automático (navegador)" onChange={() => {}}>
+              <option>Automático (navegador)</option>
               <option>High</option>
               <option>Main</option>
               <option>Baseline</option>
@@ -4729,8 +5213,39 @@ function ExportCheck({ label, checked, onChange = () => {}, value }) {
   );
 }
 
-function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLength = 0, notify = () => {}, onImportCaptions }) {
+const infoSeconds = (value) => seconds(Number(value) || 0);
+// Linhas reais do painel Informações: clipe selecionado, senão a mídia da Origem, senão a sequência.
+function infoRows({ clip, source, sequence, clips }) {
+  if (clip)
+    return [
+      ["Clipe", clip.name],
+      ["Tipo", clip.type || "—"],
+      ["Faixa", clip.track],
+      ["Início", infoSeconds(clip.start)],
+      ["Fim", infoSeconds(clip.start + clip.duration)],
+      ["Duração", infoSeconds(clip.duration)],
+      ["Entrada na origem", infoSeconds(clip.sourceIn)],
+      ["Velocidade", `${clip.speed ?? 100}%`],
+    ];
+  if (source)
+    return [
+      ["Mídia", source.name],
+      ["Tipo", source.type || "—"],
+      ["Duração", infoSeconds(source.duration)],
+      ["Situação", source.offline ? "Offline" : "Disponível"],
+    ];
+  return [
+    ["Sequência", sequence?.name || "—"],
+    ["Clipes", String(clips.length)],
+    ["Duração", infoSeconds(sequence?.duration)],
+    ["Formato", "1920×1080 · 29,97 fps"],
+  ];
+}
+const AUDIO_TYPES = ["Diálogo", "Música", "Efeitos sonoros", "Ambiente"];
+
+function WorkspacePanel({ workspace, clip, clips = [], source = null, sequence, patch, historyLength = 0, futureLength = 0, notify = () => {}, onImportCaptions }) {
   const [infoTab, setInfoTab] = useState("Informações");
+  const [soundTab, setSoundTab] = useState("Editar");
   const [openEffects, setOpenEffects] = useState({});
   const [effectSearch, setEffectSearch] = useState("");
   const effectQuery = effectSearch.trim().toLowerCase();
@@ -4791,17 +5306,12 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
           <div className="p-3">
             {infoTab === "Informações" && (
               <>
-                <p className="mb-4 text-slate-500">
-                  Selecione uma mídia ou sequência no painel Projeto.
-                </p>
-                <PanelStack
-                  rows={[
-                    ["Área de trabalho", "Montagem"],
-                    ["Exibição", "Ícones livres"],
-                    ["Ordenação", "Nome"],
-                    ["Metadados", "Básicos"],
-                  ]}
-                />
+                {!clip && !source && (
+                  <p className="mb-4 text-slate-500">
+                    Selecione uma mídia ou sequência no painel Projeto.
+                  </p>
+                )}
+                <PanelStack rows={infoRows({ clip, source, sequence, clips })} />
               </>
             )}
             {infoTab === "Metadados" &&
@@ -4841,7 +5351,12 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
             Master · {clip?.name || "Nenhum clipe"}
             <span className="float-right italic">fx</span>
           </div>
-          <LumetriSection title="Correção básica" open>
+          <LumetriSection
+            title="Correção básica"
+            open
+            active={!clip?.colorBypass?.basic}
+            onToggle={clip ? (on) => patch("colorBypass", { ...(clip.colorBypass || {}), basic: !on }) : undefined}
+          >
             {/* LUTs ainda não são aplicadas no Programa nem na exportação. */}
             <select aria-label="LUT de entrada" disabled title={NOT_AVAILABLE} className="mb-2 w-full border border-[#333] bg-black px-2 py-1 text-slate-300 disabled:opacity-40">
               <option>LUT de entrada · Nenhum</option>
@@ -4873,14 +5388,15 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
               />
             ))}
           </LumetriSection>
-          {[
-            "Criativo",
-            "Curvas",
-            "Rodas de cor e correspondência",
-            "HSL Secundário",
-            "Vinheta",
-          ].map((title, index) => (
-            <LumetriSection key={title} title={title} enabled={index !== 3} />
+          {/* Criativo liga/desliga o look aplicado (filtros e cor do look). */}
+          <LumetriSection
+            title="Criativo"
+            active={!clip?.colorBypass?.creative}
+            onToggle={clip ? (on) => patch("colorBypass", { ...(clip.colorBypass || {}), creative: !on }) : undefined}
+          />
+          {/* Ainda sem efeito na prévia/exportação: interruptor desabilitado ("Ainda não disponível"). */}
+          {["Curvas", "Rodas de cor e correspondência", "HSL Secundário", "Vinheta"].map((title) => (
+            <LumetriSection key={title} title={title} active={title !== "HSL Secundário"} />
           ))}
         </div>
       )}
@@ -4965,23 +5481,38 @@ function WorkspacePanel({ workspace, clip, patch, historyLength = 0, futureLengt
           <div className="mb-2 border-b border-[#333] pb-2 text-xs text-slate-200">
             Som essencial ☰
           </div>
-          <PanelTabs labels={["Procurar", "Editar"]} />
-          <div className="py-3 font-bold text-slate-200">
-            {clip?.name || "Selecione um clipe de áudio"}
-          </div>
-          <p className="mb-3 text-slate-500">
-            Atribua um tipo de áudio à seleção:
-          </p>
-          {["Diálogo", "Música", "Efeitos sonoros", "Ambiente"].map((name) => (
-            <button
-              key={name}
-              disabled={!clip}
-              onClick={() => patch("audioType", name)}
-              className={`mb-2 block w-full border p-3 text-left font-semibold disabled:opacity-40 ${clip?.audioType === name ? "border-blue-500 bg-blue-500/10" : "border-[#444] bg-[#111]"}`}
-            >
-              ◯　{name}
-            </button>
-          ))}
+          <PanelTabs labels={["Procurar", "Editar"]} active={soundTab} onChange={setSoundTab} label="Som essencial" />
+          {soundTab === "Procurar" ? (
+            <>
+              {/* Procurar: os tipos já atribuídos na sequência (contagem real dos clipes). */}
+              <p className="mb-3 mt-3 text-slate-500">Tipos de áudio atribuídos nesta sequência:</p>
+              <PanelStack
+                rows={AUDIO_TYPES.map((name) => {
+                  const count = clips.filter((item) => item.audioType === name).length;
+                  return [name, `${count} ${count === 1 ? "clipe" : "clipes"}`];
+                })}
+              />
+            </>
+          ) : (
+            <>
+              <div className="py-3 font-bold text-slate-200">
+                {clip?.name || "Selecione um clipe de áudio"}
+              </div>
+              <p className="mb-3 text-slate-500">
+                Atribua um tipo de áudio à seleção:
+              </p>
+              {AUDIO_TYPES.map((name) => (
+                <button
+                  key={name}
+                  disabled={!clip}
+                  onClick={() => patch("audioType", name)}
+                  className={`mb-2 block w-full border p-3 text-left font-semibold disabled:opacity-40 ${clip?.audioType === name ? "border-blue-500 bg-blue-500/10" : "border-[#444] bg-[#111]"}`}
+                >
+                  ◯　{name}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       )}
       {workspace === "Gráficos" && (
@@ -5010,6 +5541,18 @@ const GRAPHIC_TEMPLATES = [
   ["Callout – Tag", "Callouts", "● LIVE", "tag"],
   ["Ticker – Crawl", "Lower Thirds", "Breaking news · MediaMind", "ticker"],
 ];
+// Estilo (`captionStyle`) que cada modelo aplica no título selecionado: só campos que a prévia (captionStyleCss) e a
+// exportação (drawStyledText) já desenham. Movimento (rolagem dos créditos, ticker correndo) não faz parte do modelo.
+const GRAPHIC_TEMPLATE_STYLES = {
+  "Lower Third – Slab": { position: "bottom", align: "left", size: 48, weight: 800, uppercase: true, box: true, boxColor: "#1E3A8ACC" },
+  "Lower Third – Rule": { position: "bottom", align: "left", size: 44, weight: 600, uppercase: true, strokeWidth: 2, stroke: "#000000" },
+  "Title – Centered": { position: "center", align: "center", size: 96, weight: 800, uppercase: true },
+  "Title – Boxed": { position: "center", align: "center", size: 72, weight: 700, fill: "#1E293B", box: true, boxColor: "#FEF3C7" },
+  "End Credits – Roll": { position: "center", align: "center", size: 40, weight: 500 },
+  "Callout – Pointer": { position: "top", align: "left", size: 40, weight: 700, box: true, boxColor: "#000000B3" },
+  "Callout – Tag": { position: "top", align: "left", size: 36, weight: 700, uppercase: true, box: true, boxColor: "#0F172AE6" },
+  "Ticker – Crawl": { position: "bottom", align: "left", size: 36, weight: 600, box: true, boxColor: "#B91C1CE6" },
+};
 const TEMPLATE_CATEGORIES = [
   ["", "Todas"],
   ["Titles", "Títulos"],
@@ -5234,8 +5777,12 @@ function EditingWorkspacePanel({ clip, patch, initialTab = "Propriedades", notif
                 {shownTemplates.map(([name, category, sample, kind]) => (
                   <button
                     key={name}
-                    onClick={() => clip && patch("graphicTemplate", name)}
-                    className="overflow-hidden rounded bg-[#111] text-left hover:ring-1 hover:ring-blue-500"
+                    disabled={!isTitle}
+                    title={styleHint}
+                    aria-pressed={graphicStyle.template === name}
+                    // O modelo vira o estilo do título (mesmo `captionStyle` editado na aba Editar); o texto fica.
+                    onClick={() => isTitle && patch("captionStyle", { ...TITLE_STYLE_BASE, ...GRAPHIC_TEMPLATE_STYLES[name], template: name })}
+                    className={`overflow-hidden rounded bg-[#111] text-left hover:ring-1 hover:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40 ${graphicStyle.template === name ? "ring-1 ring-blue-500" : ""}`}
                   >
                     <span className="grid h-24 place-items-center bg-[#2d3440] px-3 text-center text-[9px] font-bold text-white">
                       <span
@@ -5440,9 +5987,10 @@ function PropertyGroup({ title, reset, children }) {
   );
 }
 
-function LumetriSection({ title, open = false, enabled = true, children }) {
+// Interruptor de seção do Lumetri. Com `onToggle`, liga/desliga de verdade (grava `colorBypass` no clipe e muda a
+// prévia e a exportação); sem `onToggle`, a seção ainda não tem efeito e o interruptor fica desabilitado.
+function LumetriSection({ title, open = false, active = true, onToggle, children }) {
   const [expanded, setExpanded] = useState(open);
-  const [active, setActive] = useState(enabled);
   return (
     <section className="border-b border-[#333] py-2">
       <div className="flex items-center gap-2">
@@ -5459,8 +6007,13 @@ function LumetriSection({ title, open = false, enabled = true, children }) {
           {title}
         </button>
         <button
-          onClick={() => setActive((value) => !value)}
-          className={`ml-auto h-4 w-8 rounded-full p-0.5 ${active ? "bg-blue-600" : "bg-slate-600"}`}
+          role="switch"
+          aria-checked={active}
+          aria-label={`Ativar ${title}`}
+          disabled={!onToggle}
+          title={onToggle ? undefined : NOT_AVAILABLE}
+          onClick={() => onToggle?.(!active)}
+          className={`ml-auto h-4 w-8 rounded-full p-0.5 disabled:cursor-not-allowed disabled:opacity-40 ${active ? "bg-blue-600" : "bg-slate-600"}`}
         >
           <span
             className={`block h-3 w-3 rounded-full bg-white transition-transform ${active ? "translate-x-4" : ""}`}
@@ -5478,14 +6031,15 @@ function LumetriSection({ title, open = false, enabled = true, children }) {
   );
 }
 
-function PanelTabs({ labels }) {
-  const [active, setActive] = useState(labels[0]);
+function PanelTabs({ labels, active, onChange, label: groupLabel }) {
   return (
-    <div className="grid auto-cols-fr grid-flow-col gap-1">
+    <div role="tablist" aria-label={groupLabel} className="grid auto-cols-fr grid-flow-col gap-1">
       {labels.map((label) => (
         <button
           key={label}
-          onClick={() => setActive(label)}
+          role="tab"
+          aria-selected={active === label}
+          onClick={() => onChange(label)}
           className={`rounded border px-1 py-1.5 ${active === label ? "border-cyan-500 bg-cyan-500/10 text-cyan-300" : "border-slate-800 text-slate-500"}`}
         >
           {label}

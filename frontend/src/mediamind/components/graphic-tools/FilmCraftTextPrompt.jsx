@@ -54,9 +54,9 @@ function TextPromptDialog({ label, defaultValue, onSubmit, onCancel }) {
           event.stopPropagation();
           if (event.key === "Escape") onCancel();
         }}
-        className="w-full max-w-sm border border-[#555] bg-[#202020] shadow-2xl"
+        className="w-full max-w-sm border border-mm-dialog-edge bg-mm-dialog shadow-2xl"
       >
-        <header className="border-b border-[#444] px-4 py-3 text-sm font-bold text-slate-100">{label}</header>
+        <header className="border-b border-mm-dialog-line px-4 py-3 text-sm font-bold text-slate-100">{label}</header>
         <div className="p-4">
           <input
             autoFocus
@@ -64,11 +64,11 @@ function TextPromptDialog({ label, defaultValue, onSubmit, onCancel }) {
             value={value}
             onChange={(event) => setValue(event.target.value)}
             onFocus={(event) => event.currentTarget.select()}
-            className="w-full border border-sky-500 bg-slate-950 px-2 py-1.5 text-sm text-white outline-none"
+            className="w-full border border-sky-500 bg-slate-950 px-2 py-1.5 text-sm text-mm-dialog-ink outline-none"
           />
         </div>
-        <footer className="flex justify-end gap-2 border-t border-[#444] px-4 py-3 text-xs">
-          <button type="button" onClick={onCancel} className="border border-slate-700 px-3 py-1.5 text-slate-200 hover:bg-[#333]">
+        <footer className="flex justify-end gap-2 border-t border-mm-dialog-line px-4 py-3 text-xs">
+          <button type="button" onClick={onCancel} className="border border-slate-700 px-3 py-1.5 text-slate-200 hover:bg-mm-dialog-hover">
             Cancelar
           </button>
           <button type="submit" className="bg-blue-600 px-3 py-1.5 font-bold text-white hover:bg-blue-500">
