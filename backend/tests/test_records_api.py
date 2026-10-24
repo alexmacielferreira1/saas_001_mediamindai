@@ -200,3 +200,47 @@ def test_authenticated_upload_round_trip_and_validation(permission_client, monke
     too_large = client.post("/api/v1/uploads", files={"file": ("large.mp4", b"1234", "video/mp4")})
     assert too_large.status_code == 413
     assert list(tmp_path.rglob("*.mp4")) == []
+
+
+def test_query_sorts_by_updated_date_within_tenant(permission_client):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.identity import TenantRecord
+
+    client, ids = permission_client
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    with ids["session_factory"]() as session:
+        session.add_all(
+            [
+                TenantRecord(
+                    tenant_id=ids["tenant"],
+                    entity_type="AgendaEvento",
+                    data={"titulo": "recente"},
+                    updated_at=base + timedelta(days=2),
+                ),
+                TenantRecord(
+                    tenant_id=ids["tenant"],
+                    entity_type="AgendaEvento",
+                    data={"titulo": "antigo"},
+                    updated_at=base,
+                ),
+                TenantRecord(
+                    tenant_id=ids["other"],
+                    entity_type="AgendaEvento",
+                    data={"titulo": "alheio"},
+                    updated_at=base + timedelta(days=1),
+                ),
+            ]
+        )
+        session.commit()
+    login(client)
+
+    ascending = client.post(
+        "/api/v1/records/AgendaEvento/query", json={"filters": {}, "sort": "updated_date"}
+    )
+    descending = client.post(
+        "/api/v1/records/AgendaEvento/query", json={"filters": {}, "sort": "-updated_date"}
+    )
+
+    assert [item["titulo"] for item in ascending.json()["records"]] == ["antigo", "recente"]
+    assert [item["titulo"] for item in descending.json()["records"]] == ["recente", "antigo"]

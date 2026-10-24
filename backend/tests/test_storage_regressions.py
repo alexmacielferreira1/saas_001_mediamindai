@@ -82,3 +82,38 @@ def test_media_resolution_with_tenant_rejects_other_tenant_keys(tmp_path):
     ):
         with pytest.raises(PublicError):
             storage.resolve(key, tenant_id=tenant)
+
+
+def _directory_link(target: Path, link: Path) -> None:
+    """Symlink de diretório; no Windows sem privilégio, junção (mesmo efeito para o teste)."""
+    import os
+
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        if os.name != "nt":
+            raise
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+
+
+def test_delete_asset_removes_links_without_following_them_outside_storage(tmp_path):
+    storage = LocalMediaStorage(tmp_path / "media")
+    tenant, asset = uuid4(), uuid4()
+    asset_root = storage.asset_root(tenant, asset)
+    (asset_root / "original").mkdir(parents=True)
+    (asset_root / "original" / "video.mp4").write_bytes(b"video")
+    outside = tmp_path / "fora"
+    outside.mkdir()
+    (outside / "segredo.txt").write_text("preservar", encoding="utf-8")
+    _directory_link(outside, asset_root / "atalho")
+    gone = tmp_path / "apagado"
+    gone.mkdir()
+    _directory_link(gone, asset_root / "quebrado")
+    gone.rmdir()
+
+    storage.delete_asset(tenant, asset)
+
+    assert not asset_root.exists()
+    assert (outside / "segredo.txt").read_text(encoding="utf-8") == "preservar"

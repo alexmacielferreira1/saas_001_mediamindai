@@ -114,12 +114,18 @@ class LocalMediaStorage:
         root = self.asset_root(tenant_id, asset_id)
         if not root.exists():
             return
-        for path in sorted(root.rglob("*"), reverse=True):
-            if path.is_file():
+        self._remove_tree(root)
+
+    @classmethod
+    def _remove_tree(cls, directory: Path) -> None:
+        """Apaga a pasta sem seguir links: ``rglob`` atravessava symlinks/junções e apagava
+        arquivos fora do armazenamento; links quebrados impediam remover a pasta."""
+        for path in directory.iterdir():
+            if path.is_symlink() or path.is_junction() or not path.is_dir():
                 path.unlink(missing_ok=True)
-            elif path.is_dir():
-                path.rmdir()
-        root.rmdir()
+            else:
+                cls._remove_tree(path)
+        directory.rmdir()
 
     @staticmethod
     def _remove_empty_parents(path: Path, stop: Path) -> None:

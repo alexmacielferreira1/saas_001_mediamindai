@@ -344,3 +344,42 @@ def test_creative_export_download_is_confined_to_tenant_directory(
     for record_id in record_ids:
         response = client.get(f"/api/v1/creative-exports/{record_id}/download")
         assert response.status_code == 404, response.content
+
+
+def test_creative_document_list_without_filter_returns_only_own_tenant(permission_client):
+    client, ids = permission_client
+    login(client)
+    created = create_document(client)
+    with ids["session_factory"]() as session:
+        session.add(
+            TenantRecord(
+                tenant_id=ids["other"],
+                entity_type="CreativeDocument",
+                data={"tool_type": "carousel", "title": "Alheio"},
+            )
+        )
+        session.commit()
+
+    listed = client.get("/api/v1/creative-documents")
+
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["documents"]] == [created["id"]]
+
+
+def test_creative_export_without_stored_path_is_not_downloadable(permission_client):
+    client, ids = permission_client
+    login(client)
+    with ids["session_factory"]() as session:
+        broken = TenantRecord(
+            tenant_id=ids["tenant"],
+            entity_type="CreativeExport",
+            data={"relative_path": None, "preset": "4:5"},
+        )
+        session.add(broken)
+        session.commit()
+        broken_id = broken.id
+
+    response = client.get(f"/api/v1/creative-exports/{broken_id}/download")
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "CREATIVE_EXPORT_FILE_NOT_FOUND"

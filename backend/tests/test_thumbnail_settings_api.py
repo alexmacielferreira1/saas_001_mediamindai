@@ -246,3 +246,86 @@ def test_external_monthly_limit_and_cache(permission_client, monkeypatch, tmp_pa
     assert limited.status_code == 429
     assert client.get("/api/v1/thumbnail-settings").json()["external_attempts_this_month"] == 1
     get_settings.cache_clear()
+
+
+def test_local_provider_removes_background_of_opaque_photo_and_caches(
+    permission_client, monkeypatch, tmp_path
+):
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    calls = []
+
+    def fake_removal(content, model):
+        calls.append(model)
+        return png()
+
+    monkeypatch.setattr("app.api.v1.thumbnail_settings.remove_image_background", fake_removal)
+    for _ in range(2):
+        response = client.post(
+            "/api/v1/media/thumbnails/remove-background",
+            files={"file": ("pessoa.png", png(False), "image/png")},
+        )
+        assert response.status_code == 200
+        assert normalized_image(response.content).getchannel("A").getextrema()[0] == 0
+
+    assert len(calls) == 1
+    assert list((tmp_path / str(ids["tenant"]) / "thumbnail-cache").glob("*.png"))
+    assert not list(tmp_path.glob(f"{ids['other']}/**/*.png"))
+    get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("outcome", "status", "retryable"),
+    [("rejected", 422, False), ("network", 503, True)],
+)
+def test_external_cutout_failures_count_attempt_and_leave_no_cache(
+    permission_client, monkeypatch, tmp_path, outcome, status, retryable
+):
+    client, ids = permission_client
+    login(client)
+    monkeypatch.setenv("THUMBNAIL_SECRET_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("MEDIA_ROOT", str(tmp_path))
+    get_settings.cache_clear()
+    assert (
+        client.patch(
+            "/api/v1/thumbnail-settings",
+            json={"provider": "removebg", "api_key": "chave-secreta", "monthly_limit": 5},
+        ).status_code
+        == 200
+    )
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def post(self, *args, **kwargs):
+            if outcome == "network":
+                raise httpx.ConnectError("sem rede")
+
+            class Result:
+                status_code = 402
+                content = b"sem creditos"
+
+            return Result()
+
+    monkeypatch.setattr("app.api.v1.thumbnail_settings.httpx.AsyncClient", FakeClient)
+    response = client.post(
+        "/api/v1/media/thumbnails/remove-background",
+        files={"file": ("portrait.png", png(False), "image/png")},
+    )
+
+    assert response.status_code == status
+    assert response.json()["error_code"] == "AI_CUTOUT_FAILED"
+    assert response.json().get("retryable", False) is retryable
+    assert "chave-secreta" not in response.text
+    assert client.get("/api/v1/thumbnail-settings").json()["external_attempts_this_month"] == 1
+    assert not list(tmp_path.glob("**/thumbnail-cache/*"))
+    get_settings.cache_clear()
