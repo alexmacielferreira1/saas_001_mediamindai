@@ -91,3 +91,25 @@ def test_clipsfree2_returns_candidates_grounded_in_its_own_transcription(
     assert response.status_code == 201
     assert response.json()["status"] == "completed"
     assert response.json()["candidates"][0]["quote"] == "Ideia real"
+
+
+def test_clipsfree2_rejects_asset_from_other_tenant(permission_client):
+    client, ids = permission_client
+    login(client)
+    with ids["session_factory"]() as session:
+        foreign = TenantRecord(
+            tenant_id=ids["other"],
+            entity_type="Asset",
+            data={"filename": "alheio.mp4", "storage_key": f"{ids['other']}/source.mp4"},
+        )
+        session.add(foreign)
+        session.commit()
+        foreign_id = foreign.id
+
+    response = client.post(
+        "/api/v1/clipsfree2/sessions",
+        json={"asset_id": str(foreign_id), "format": "9:16", "caption_style": "destaque"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "CLIPSFREE2_ASSET_NOT_FOUND"

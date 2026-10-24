@@ -382,3 +382,33 @@ def test_new_user_actions_cannot_reach_other_company_users(admin_users_client):
         assert response.status_code == 404
     with ids["session_factory"]() as session:
         assert get_active_membership(session, ids["outsider"], ids["other_tenant"]) is not None
+
+
+def test_admin_users_filter_by_other_account_status_stays_in_tenant(admin_users_client):
+    client, ids = admin_users_client
+    with ids["session_factory"]() as session:
+        session.get(User, ids["target"]).account_status = "blocked"
+        session.get(User, ids["outsider"]).account_status = "blocked"
+        session.commit()
+    login(client)
+
+    response = client.get("/api/v1/admin/users?status=blocked")
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert [item["email"] for item in items] == ["editor@mediamind.ai"]
+
+
+def test_admin_settings_second_update_keeps_name_and_previous_fields(admin_users_client):
+    client, _ids = admin_users_client
+    login(client)
+
+    first = client.patch("/api/v1/admin/settings", json={"timezone": "America/Recife"})
+    second = client.patch("/api/v1/admin/settings", json={"date_format": "DD/MM/YYYY"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    payload = second.json()
+    assert payload["organization_name"] == "Empresa"
+    assert payload["timezone"] == "America/Recife"
+    assert payload["date_format"] == "DD/MM/YYYY"

@@ -48,7 +48,9 @@ def create_session(body: CreateSessionBody, current: Authenticated, session: DbS
     membership = require_membership(current)
     try:
         asset = find_asset(session, membership.tenant_id, body.asset_id)
-    except LookupError as error:
+    except PublicError as error:
+        # find_asset sinaliza ausência com PublicError (nunca LookupError): manter o código
+        # público próprio do CLIPSFREE2 que esta rota declara.
         raise PublicError(404, "CLIPSFREE2_ASSET_NOT_FOUND", "Mídia não encontrada.") from error
 
     result = {
