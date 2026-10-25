@@ -3,6 +3,7 @@ import json
 import re
 import shutil
 import subprocess
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -49,6 +50,9 @@ ALLOWED_MEDIA = {
 LOCAL_DEMO_TENANT = UUID("00000000-0000-4000-8000-000000000001")
 THUMBNAIL_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 THUMBNAIL_IMAGE_LIMIT = 20 * 1024 * 1024
+# Exportações (MP4 gerado para download) ficam em ``<empresa>/exports/<uuid>`` e não têm
+# registro: depois deste prazo são apagadas na próxima exportação da mesma empresa.
+EXPORT_RETENTION_SECONDS = 24 * 60 * 60
 
 
 def require_local_media() -> None:
@@ -155,21 +159,25 @@ def probe_media(source: Path) -> dict:
         return {}
     if not ffprobe.is_file():
         return {}
-    result = subprocess.run(
-        [
-            str(ffprobe),
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration:stream=codec_type,width,height,r_frame_rate",
-            "-of",
-            "json",
-            str(source),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    try:
+        result = subprocess.run(
+            [
+                str(ffprobe),
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration:stream=codec_type,width,height,r_frame_rate",
+                "-of",
+                "json",
+                str(source),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        # Arquivo lento/corrompido ou ffprobe indisponível: o envio continua, sem duração.
+        return {}
     if result.returncode:
         return {}
     try:
@@ -190,6 +198,24 @@ def probe_media(source: Path) -> dict:
         }
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
+
+
+def prune_old_exports(exports_root: Path, *, max_age: float = EXPORT_RETENTION_SECONDS) -> None:
+    """Apaga pastas de exportação antigas (o disco não cresce sem limite).
+
+    Só pastas diretamente em ``exports/`` e mais velhas que ``max_age``: a exportação em
+    andamento (recente) nunca é tocada. Falha ao apagar uma pasta em uso não interrompe.
+    """
+    if not exports_root.is_dir():
+        return
+    cutoff = time.time() - max_age
+    for folder in exports_root.iterdir():
+        if folder.is_symlink() or not folder.is_dir() or folder.stat().st_mtime > cutoff:
+            continue
+        try:
+            LocalMediaStorage._remove_tree(folder)
+        except OSError:
+            continue
 
 
 def render_media_clip(
@@ -558,10 +584,15 @@ async def upload_asset(
         file,
         get_settings().media_max_upload_bytes,
     )
-    # ffprobe é subprocesso bloqueante (até 30 s): fora do event loop.
-    media_metadata = await run_in_threadpool(
-        probe_media, storage.resolve(stored.relative_key, tenant_id=membership.tenant_id)
-    )
+    try:
+        # ffprobe é subprocesso bloqueante (até 30 s): fora do event loop.
+        media_metadata = await run_in_threadpool(
+            probe_media, storage.resolve(stored.relative_key, tenant_id=membership.tenant_id)
+        )
+    except Exception:
+        # Sem registro, o arquivo gravado ficaria órfão no disco.
+        storage.delete_asset(membership.tenant_id, asset_id)
+        raise
     record = TenantRecord(
         id=asset_id,
         tenant_id=membership.tenant_id,
@@ -711,13 +742,9 @@ def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbS
     if not source.is_file():
         raise PublicError(404, "MEDIA_NOT_FOUND", "Mídia não encontrada.")
     export_id = uuid4()
-    destination = (
-        get_settings().media_root
-        / str(membership.tenant_id)
-        / "exports"
-        / str(export_id)
-        / "clip.mp4"
-    )
+    exports_root = get_settings().media_root / str(membership.tenant_id) / "exports"
+    prune_old_exports(exports_root)
+    destination = exports_root / str(export_id) / "clip.mp4"
     release_connection(session)
     render_media_clip(
         source,
@@ -764,13 +791,9 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
             }
         )
     export_id = uuid4()
-    destination = (
-        get_settings().media_root
-        / str(membership.tenant_id)
-        / "exports"
-        / str(export_id)
-        / "timeline.mp4"
-    )
+    exports_root = get_settings().media_root / str(membership.tenant_id) / "exports"
+    prune_old_exports(exports_root)
+    destination = exports_root / str(export_id) / "timeline.mp4"
     release_connection(session)
     render_timeline(segments, destination)
     safe_name = re.sub(r"[^\w.-]+", "-", payload.name, flags=re.UNICODE).strip("-.")

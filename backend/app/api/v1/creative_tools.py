@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.records import add_audit
-from app.core.config import ROOT
+from app.core.config import ROOT, get_settings
 from app.core.errors import PublicError
 from app.creative.storage import store_creative_export
 from app.db.session import get_session, release_connection
 from app.models.identity import TenantRecord
 from app.schemas.creative_tools import (
+    CreativeDocumentApprove,
     CreativeDocumentCreate,
     CreativeDocumentList,
     CreativeDocumentPatch,
@@ -27,8 +28,15 @@ from app.tenancy.permissions import require_permission
 router = APIRouter(tags=["creative-tools"])
 DbSession = Annotated[Session, Depends(get_session)]
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
-CREATIVE_EXPORT_ROOT = ROOT / ".runtime" / "creative-exports"
+# Pasta fixa usada até 2026-10-24 (não seguia MEDIA_ROOT). Novos ZIPs vão para
+# ``MEDIA_ROOT/creative-exports``; o download continua achando os antigos aqui, com o mesmo
+# ``relative_path`` (``<empresa>/<arquivo>.zip``).
+LEGACY_CREATIVE_EXPORT_ROOT = ROOT / ".runtime" / "creative-exports"
 MAX_CREATIVE_EXPORT_BYTES = 200 * 1024 * 1024
+
+
+def creative_export_root() -> Path:
+    return get_settings().media_root / "creative-exports"
 
 
 def serialize_document(record: TenantRecord) -> dict:
@@ -40,15 +48,19 @@ def serialize_document(record: TenantRecord) -> dict:
     }
 
 
-def find_document(session: Session, current: CurrentSession, document_id: UUID) -> TenantRecord:
+def find_document(
+    session: Session, current: CurrentSession, document_id: UUID, *, lock: bool = False
+) -> TenantRecord:
     membership = require_membership(current)
-    record = session.scalar(
-        select(TenantRecord).where(
-            TenantRecord.id == document_id,
-            TenantRecord.tenant_id == membership.tenant_id,
-            TenantRecord.entity_type == "CreativeDocument",
-        )
+    statement = select(TenantRecord).where(
+        TenantRecord.id == document_id,
+        TenantRecord.tenant_id == membership.tenant_id,
+        TenantRecord.entity_type == "CreativeDocument",
     )
+    if lock:
+        # Edição e aprovação da mesma linha em fila (PostgreSQL): a revisão lida é a atual.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    record = session.scalar(statement)
     if record is None:
         raise PublicError(404, "CREATIVE_DOCUMENT_NOT_FOUND", "Documento não encontrado.")
     return record
@@ -116,7 +128,7 @@ def update_creative_document(
     session: DbSession,
 ):
     require_permission(session, current, "production.write")
-    record = find_document(session, current, document_id)
+    record = find_document(session, current, document_id, lock=True)
     next_revision = int(record.data.get("revision", 0)) + 1
     record.data = {
         **record.data,
@@ -138,10 +150,22 @@ def update_creative_document(
 
 
 @router.post("/creative-documents/{document_id}/approve", response_model=CreativeDocumentPublic)
-def approve_creative_document(document_id: UUID, current: Authenticated, session: DbSession):
+def approve_creative_document(
+    document_id: UUID,
+    current: Authenticated,
+    session: DbSession,
+    body: CreativeDocumentApprove | None = None,
+):
     require_permission(session, current, "review.write")
-    record = find_document(session, current, document_id)
+    record = find_document(session, current, document_id, lock=True)
     revision = int(record.data["revision"])
+    if body is not None and body.revision is not None and body.revision != revision:
+        # Outra edição chegou depois da revisão vista: aprovar agora aprovaria algo não lido.
+        raise PublicError(
+            409,
+            "CREATIVE_REVISION_CONFLICT",
+            "O documento mudou depois da sua revisão. Revise a versão atual antes de aprovar.",
+        )
     record.data = {**record.data, "status": "approved", "approved_revision": revision}
     add_audit(
         session,
@@ -203,8 +227,9 @@ async def create_creative_export(
     if not content.startswith(b"PK"):
         raise PublicError(422, "INVALID_ZIP", "Arquivo ZIP inválido.")
     # Escrita de até 200 MB fora do event loop.
+    export_root = creative_export_root()
     stored = await run_in_threadpool(
-        store_creative_export, CREATIVE_EXPORT_ROOT, membership.tenant_id, content
+        store_creative_export, export_root, membership.tenant_id, content
     )
     record = TenantRecord(
         tenant_id=membership.tenant_id,
@@ -219,17 +244,23 @@ async def create_creative_export(
             "relative_path": stored.relative_path,
         },
     )
-    session.add(record)
-    session.flush()
-    add_audit(
-        session,
-        current,
-        "creative_export.ready",
-        "CreativeExport",
-        str(record.id),
-        {"document_id": str(document.id), "revision": revision},
-    )
-    session.commit()
+    try:
+        session.add(record)
+        session.flush()
+        add_audit(
+            session,
+            current,
+            "creative_export.ready",
+            "CreativeExport",
+            str(record.id),
+            {"document_id": str(document.id), "revision": revision},
+        )
+        session.commit()
+    except Exception:
+        # Sem registro, o ZIP gravado ficaria órfão no disco.
+        session.rollback()
+        (export_root / stored.relative_path).unlink(missing_ok=True)
+        raise
     session.refresh(record)
     return {
         "id": str(record.id),
@@ -242,22 +273,26 @@ def resolve_export_path(tenant_id: UUID, data: dict) -> Path | None:
     """Resolve o ZIP só dentro da pasta da empresa da sessão (defesa em profundidade).
 
     ``relative_path`` é gravado pelo servidor, mas um valor absoluto, com ``..`` ou de outra
-    empresa nunca pode sair de ``CREATIVE_EXPORT_ROOT/<tenant_id>``.
+    empresa nunca pode sair de ``<raiz>/<tenant_id>``. Procura primeiro na raiz atual
+    (``MEDIA_ROOT``) e depois na pasta legada, onde ficaram os ZIPs anteriores.
     """
     relative_path = data.get("relative_path")
     if not relative_path or not isinstance(relative_path, str):
         return None
-    tenant_root = (CREATIVE_EXPORT_ROOT / str(tenant_id)).resolve()
-    candidate = (CREATIVE_EXPORT_ROOT / relative_path).resolve()
-    if candidate == tenant_root or not candidate.is_relative_to(tenant_root):
-        return None
-    return candidate
+    for root in (creative_export_root(), LEGACY_CREATIVE_EXPORT_ROOT):
+        tenant_root = (root / str(tenant_id)).resolve()
+        candidate = (root / relative_path).resolve()
+        if candidate == tenant_root or not candidate.is_relative_to(tenant_root):
+            return None
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 @router.get("/creative-exports/{export_id}/download")
 def download_creative_export(export_id: UUID, current: Authenticated, session: DbSession):
     record = find_export(session, current, export_id)
     source = resolve_export_path(require_membership(current).tenant_id, record.data)
-    if source is None or not source.is_file():
+    if source is None:
         raise PublicError(404, "CREATIVE_EXPORT_FILE_NOT_FOUND", "Arquivo não encontrado.")
     return FileResponse(source, media_type="application/zip", filename="carrossel.zip")

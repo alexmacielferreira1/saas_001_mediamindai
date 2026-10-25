@@ -310,7 +310,6 @@ def test_creative_export_is_stored_off_the_event_loop(tracked, monkeypatch):
     client, _ids, sessions, tmp_path = tracked
     from app.creative.storage import store_creative_export
 
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path / "exports")
     calls = []
 
     def checked_store(*args, **kwargs):

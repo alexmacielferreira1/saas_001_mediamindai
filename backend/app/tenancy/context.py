@@ -10,6 +10,7 @@ from app.db.session import get_session
 from app.models.identity import AuthSession, Membership, Tenant, User
 from app.repositories.identity import get_active_membership, get_auth_session
 from app.security.sessions import hash_session_token
+from app.services.auth import account_allows_sign_in
 
 COOKIE_NAME = "mediamind_session"
 DbSession = Annotated[Session, Depends(get_session)]
@@ -33,7 +34,7 @@ def get_current_session(
     if auth_session is None or not auth_session.is_active(now):
         raise PublicError(401, "AUTHENTICATION_REQUIRED", "Faça login para continuar.")
     user = session.get(User, auth_session.user_id)
-    if user is None or not user.is_active:
+    if user is None or not account_allows_sign_in(user):
         raise PublicError(401, "AUTHENTICATION_REQUIRED", "Faça login para continuar.")
     membership_row = (
         get_active_membership(session, user.id, auth_session.selected_tenant_id)

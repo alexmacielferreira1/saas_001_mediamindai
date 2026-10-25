@@ -9,6 +9,20 @@ from app.security.passwords import hash_password, verify_password
 from app.security.sessions import hash_session_token, new_session_token
 
 DUMMY_PASSWORD_HASH = hash_password("mediamind-dummy-password-not-used-for-login")
+# Estados de conta que impedem entrar (senha, Google e sessões já abertas). ``pending`` e
+# outros estados sem regra definida continuam como antes.
+BLOCKED_ACCOUNT_STATUSES = frozenset({"blocked", "deleted", "suspended"})
+
+
+def account_allows_sign_in(user: User) -> bool:
+    return user.is_active and user.account_status not in BLOCKED_ACCOUNT_STATUSES
+
+
+def is_locked(user: User, now: datetime) -> bool:
+    locked_until = user.locked_until
+    if locked_until is not None and locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=UTC)
+    return locked_until is not None and locked_until > now
 
 
 @dataclass
@@ -57,12 +71,9 @@ def authenticate(
     password_valid = verify_password(password, password_hash)
     if user is None:
         return None
-    locked_until = user.locked_until
-    if locked_until is not None and locked_until.tzinfo is None:
-        locked_until = locked_until.replace(tzinfo=UTC)
-    if locked_until is not None and locked_until > now:
+    if is_locked(user, now):
         return None
-    if not password_valid or not user.is_active:
+    if not password_valid or not account_allows_sign_in(user):
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= max_attempts:
             user.locked_until = now + timedelta(minutes=lockout_minutes)

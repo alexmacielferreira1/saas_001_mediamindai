@@ -82,6 +82,13 @@ class CreativeDocumentPatch(BaseModel):
     content: CarouselContent
 
 
+class CreativeDocumentApprove(BaseModel):
+    """Revisão que o revisor viu; sem ela (clientes antigos) aprova a revisão atual."""
+
+    model_config = ConfigDict(extra="forbid")
+    revision: int | None = Field(default=None, ge=1)
+
+
 class CreativeDocumentPublic(BaseModel):
     id: str
     tool_type: Literal["carousel"]

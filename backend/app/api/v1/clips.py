@@ -1,3 +1,4 @@
+from time import perf_counter
 from typing import Annotated
 from uuid import UUID
 
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
+from app.api.v1.ai_usage import guard_budget, record_usage
 from app.clips.analysis import CommandAnalysisAdapter, RemoteAnalysisAdapter
 from app.clips.captions import captions_for_candidate
 from app.clips.service import ClipAnalysisService
@@ -41,8 +43,53 @@ class StartAnalysisBody(BaseModel):
         return self
 
 
+# Estimativa conservadora de saída para a pré-checagem de limite por requisição.
+ANALYSIS_MAX_TOKENS = 4000
+
+
 def serialize_analysis(analysis: dict) -> dict:
     return analysis
+
+
+def call_provider(session, tenant_id, user_id, connection, *, step, model, work):
+    """Executa uma chamada ao provedor da empresa e registra o uso (sucesso ou erro).
+
+    ``work`` devolve ``(resultado, usage)``; ``usage`` ``None`` marca o custo como desconhecido.
+    A transcrição não devolve tokens: é registrada com zero tokens e precisa de preço
+    cadastrado para o modelo (``whisper-1``), como qualquer outro modelo da política.
+    """
+    started = perf_counter()
+    common = {
+        "provider": connection.get("provider", ""),
+        "model": model,
+        "feature": f"auto-clips.{step}",
+        "connection_id": connection.get("id"),
+    }
+    try:
+        result, reported = work()
+    except Exception as error:
+        record_usage(
+            session,
+            tenant_id,
+            user_id,
+            **common,
+            status="error",
+            latency_ms=(perf_counter() - started) * 1000,
+            error_code=getattr(error, "code", None) or type(error).__name__,
+        )
+        raise
+    usage = reported or {}
+    record_usage(
+        session,
+        tenant_id,
+        user_id,
+        **common,
+        latency_ms=(perf_counter() - started) * 1000,
+        input_tokens=usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0,
+        output_tokens=usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0,
+        usage_known=reported is not None,
+    )
+    return result
 
 
 @router.post("/analyses", status_code=status.HTTP_202_ACCEPTED)
@@ -78,6 +125,15 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
                     "CLIP_AI_CONNECTION_INVALID",
                     "Escolha uma IA ativa e com créditos configurados.",
                 )
+            # Política de IA da empresa (desativada, limites) antes de criar a análise e de
+            # qualquer chamada paga ao provedor (revisão geral 2026-10-24, achado 6).
+            guard_budget(
+                session,
+                membership.tenant_id,
+                connection.get("provider", ""),
+                connection.get("model", ""),
+                max_tokens=ANALYSIS_MAX_TOKENS,
+            )
         record = service.create(
             asset_id=body.asset_id,
             tenant_id=membership.tenant_id,
@@ -107,12 +163,35 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         # e a análise (minutos); o resultado é gravado numa nova transação.
         release_connection(session)
         if connection:
-            segments = RemoteTranscriptionAdapter(connection, api_key).transcribe(source)
-            candidates = RemoteAnalysisAdapter(connection, api_key).suggest(
-                segments,
-                minimum=body.minimum,
-                maximum=body.maximum,
-                editorial_prompt=body.editorial_prompt,
+            transcriber = RemoteTranscriptionAdapter(connection, api_key)
+            segments = call_provider(
+                session,
+                membership.tenant_id,
+                current.user.id,
+                connection,
+                step="transcription",
+                model=connection.get("transcription_model", "whisper-1"),
+                work=lambda: (transcriber.transcribe(source), {}),
+            )
+            analyzer = RemoteAnalysisAdapter(connection, api_key)
+
+            def analyze():
+                proposals = analyzer.suggest(
+                    segments,
+                    minimum=body.minimum,
+                    maximum=body.maximum,
+                    editorial_prompt=body.editorial_prompt,
+                )
+                return proposals, getattr(analyzer, "usage", None) or None
+
+            candidates = call_provider(
+                session,
+                membership.tenant_id,
+                current.user.id,
+                connection,
+                step="analysis",
+                model=connection.get("model", ""),
+                work=analyze,
             )
         else:
             segments = CommandTranscriptionAdapter.from_environment().transcribe(source)

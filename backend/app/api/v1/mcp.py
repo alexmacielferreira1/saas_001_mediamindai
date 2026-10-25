@@ -1,9 +1,10 @@
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.api.v1.ai import ai_settings_record, generate_connection_text, resolve_connection
@@ -12,9 +13,10 @@ from app.api.v1.records import add_audit
 from app.core.errors import PublicError
 from app.db.session import get_session, release_connection
 from app.mcp.registry import MODULES, TOOLS, capability_result, tool_by_name
-from app.models.identity import TenantRecord
+from app.models.identity import TenantRecord, utc_now
 from app.schemas.mcp import MCPQueueCreate, MCPToolCall
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
+from app.tenancy.permissions import require_permission
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -24,6 +26,22 @@ AI_CONNECTION_BY_TOOL = {
     "ai-tools.prompt": "assistant",
     "ai-tools.video_studio": "video-studio",
 }
+# Ferramentas que geram conteúdo (e gastam créditos de IA) exigem a permissão de produção;
+# antes bastava não ser ``viewer`` (revisão geral 2026-10-24, achado 7).
+TOOL_EFFECT_PERMISSIONS = {"generate": "production.write", "write": "production.write"}
+# Uma fila "running" sem atualização há mais que isto ficou presa (processo reiniciado).
+RUNNING_QUEUE_STALE_AFTER = timedelta(minutes=30)
+
+
+def require_tool_permission(session: Session, current: CurrentSession, tool: dict) -> None:
+    membership = require_membership(current)
+    if tool["effect"] == "read":
+        return
+    if membership.role == "viewer":
+        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
+    require_permission(
+        session, current, TOOL_EFFECT_PERMISSIONS.get(tool["effect"], "production.write")
+    )
 
 
 def inspect_assets(session: Session, tenant_id: UUID, arguments: dict, *, operation: str) -> dict:
@@ -149,7 +167,14 @@ def queue_status(results: list[dict]) -> str:
     return "failed" if failed == len(results) else "partial"
 
 
-async def execute_queue_record(record: TenantRecord, session: Session, user_id=None) -> None:
+async def execute_queue_record(
+    record: TenantRecord,
+    session: Session,
+    user_id=None,
+    previous_results: list[dict] | None = None,
+) -> None:
+    """Executa os alvos da fila; com ``previous_results`` (fila parcial), refaz só os que
+    falharam e mantém os resultados já concluídos (sem cobrança duplicada)."""
     tool_name = queue_tool(record.data)["name"]
     targets = record.data.get("targets") or [
         {"id": value, "name": value, "asset_ids": []}
@@ -157,8 +182,13 @@ async def execute_queue_record(record: TenantRecord, session: Session, user_id=N
     ]
     if not targets:
         targets = [{"id": None, "name": "Acervo da empresa", "asset_ids": []}]
+    if previous_results is None or len(previous_results) != len(targets):
+        previous_results = [None] * len(targets)
     results = []
-    for target in targets:
+    for target, previous in zip(targets, previous_results, strict=True):
+        if isinstance(previous, dict) and previous.get("status") == "completed":
+            results.append(previous)
+            continue
         base = {"target_id": target.get("id"), "target_name": target.get("name")}
         try:
             result = await run_tool(
@@ -205,8 +235,7 @@ async def call_mcp_tool(
     tool = tool_by_name(tool_name)
     if tool is None:
         raise PublicError(404, "MCP_TOOL_NOT_FOUND", "Ferramenta MCP não encontrada.")
-    if membership.role == "viewer" and tool["effect"] != "read":
-        raise PublicError(403, "PERMISSION_DENIED", "Seu perfil permite somente leitura.")
+    require_tool_permission(session, current, tool)
     result = await run_tool(
         session, membership.tenant_id, tool_name, body.arguments, current.user.id
     )
@@ -267,6 +296,7 @@ async def create_mcp_queue(body: MCPQueueCreate, current: Authenticated, session
         raise PublicError(
             422, "MCP_TOOL_MODULE_MISMATCH", "A ferramenta não pertence ao aplicativo informado."
         )
+    require_tool_permission(session, current, tool)
     record = TenantRecord(
         tenant_id=membership.tenant_id,
         entity_type=QUEUE_ENTITY,
@@ -292,6 +322,37 @@ async def create_mcp_queue(body: MCPQueueCreate, current: Authenticated, session
     return serialize_queue(record)
 
 
+def raise_queue_running() -> None:
+    raise PublicError(
+        409, "MCP_QUEUE_RUNNING", "Esta fila já está em execução. Aguarde o resultado."
+    )
+
+
+def queue_is_stale(record: TenantRecord) -> bool:
+    # O SQLite devolve a data sem fuso; o PostgreSQL, com fuso (ambas em UTC).
+    updated_at = record.updated_at.replace(tzinfo=record.updated_at.tzinfo or UTC)
+    return updated_at < datetime.now(UTC) - RUNNING_QUEUE_STALE_AFTER
+
+
+def claim_queue(session: Session, record: TenantRecord) -> bool:
+    """Marca a fila como ``running`` só se ninguém a alterou desde a leitura.
+
+    ``UPDATE ... WHERE updated_at = <lido>`` é atômico no PostgreSQL e no SQLite: entre dois
+    cliques com o mesmo estado lido, apenas um altera a linha.
+    """
+    claimed = session.execute(
+        update(TenantRecord)
+        .where(TenantRecord.id == record.id, TenantRecord.updated_at == record.updated_at)
+        .values(data={**record.data, "status": "running"}, updated_at=utc_now())
+        .execution_options(synchronize_session=False)
+    )
+    session.commit()
+    if claimed.rowcount != 1:
+        return False
+    session.refresh(record)
+    return True
+
+
 @router.post("/queues/{queue_id}/execute")
 async def execute_mcp_queue(queue_id: UUID, current: Authenticated, session: DbSession):
     membership = require_membership(current)
@@ -306,9 +367,24 @@ async def execute_mcp_queue(queue_id: UUID, current: Authenticated, session: DbS
     )
     if record is None:
         raise PublicError(404, "MCP_QUEUE_NOT_FOUND", "Fila MCP não encontrada.")
-    if record.data.get("status") == "completed":
+    require_tool_permission(session, current, queue_tool(record.data))
+    status = record.data.get("status")
+    if status == "completed":
         return serialize_queue(record)
-    await execute_queue_record(record, session, current.user.id)
+    if status == "running" and not queue_is_stale(record):
+        raise_queue_running()
+    previous_results = record.data.get("results") if status == "partial" else None
+    # Reserva atômica: dois cliques simultâneos não executam (nem cobram) a fila duas vezes.
+    if not claim_queue(session, record):
+        raise_queue_running()
+    try:
+        await execute_queue_record(record, session, current.user.id, previous_results)
+    except Exception:
+        session.rollback()
+        record.data = {**record.data, "status": "failed"}
+        session.add(record)
+        session.commit()
+        raise
     add_audit(
         session,
         current,

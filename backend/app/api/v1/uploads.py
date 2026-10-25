@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.config import ROOT
+from app.core.config import ROOT, get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
@@ -16,7 +16,10 @@ from app.tenancy.permissions import require_permission
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 DbSession = Annotated[Session, Depends(get_session)]
-UPLOAD_ROOT = ROOT / ".runtime" / "uploads"
+# Até 2026-10-24 os anexos iam para esta pasta fixa do checkout, que não segue MEDIA_ROOT
+# (no Render, só o disco de MEDIA_ROOT é persistente). Novos envios vão para
+# ``MEDIA_ROOT/uploads/<empresa>``; a leitura continua procurando aqui os arquivos antigos.
+LEGACY_UPLOAD_ROOT = ROOT / ".runtime" / "uploads"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 ALLOWED_SUFFIXES = {
     ".aac",
@@ -44,6 +47,41 @@ ALLOWED_SUFFIXES = {
 }
 
 
+def upload_root() -> Path:
+    return get_settings().media_root / "uploads"
+
+
+def upload_name_is_safe(stored_name: str) -> bool:
+    # Só o nome gerado pelo servidor; arquivos ocultos (``.<uuid>.part`` em envio) e
+    # caminhos nunca são servidos.
+    return Path(stored_name).name == stored_name and not stored_name.startswith(".")
+
+
+def find_upload(tenant_id, stored_name: str) -> Path | None:
+    if not upload_name_is_safe(stored_name):
+        return None
+    for root in (upload_root(), LEGACY_UPLOAD_ROOT):
+        candidate = root / str(tenant_id) / stored_name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def stored_name_from_url(file_url: object) -> str | None:
+    """Nome do anexo de ``/api/v1/uploads/<nome>``; outros endereços não são locais."""
+    prefix = "/api/v1/uploads/"
+    if not isinstance(file_url, str) or not file_url.startswith(prefix):
+        return None
+    stored_name = file_url.removeprefix(prefix)
+    return stored_name if upload_name_is_safe(stored_name) else None
+
+
+def delete_upload(tenant_id, stored_name: str) -> None:
+    source = find_upload(tenant_id, stored_name)
+    if source is not None:
+        source.unlink(missing_ok=True)
+
+
 @router.post("", status_code=201)
 async def upload_file(
     current: Authenticated, session: DbSession, file: Annotated[UploadFile, File()]
@@ -53,7 +91,7 @@ async def upload_file(
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
         raise PublicError(422, "INVALID_FILE_TYPE", "Tipo de arquivo não permitido.")
-    tenant_dir = UPLOAD_ROOT / str(membership.tenant_id)
+    tenant_dir = upload_root() / str(membership.tenant_id)
     tenant_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{uuid4()}{suffix}"
     destination = tenant_dir / stored_name
@@ -85,9 +123,8 @@ async def upload_file(
 @router.get("/{stored_name}")
 def download_file(stored_name: str, current: Authenticated):
     membership = require_membership(current)
-    if Path(stored_name).name != stored_name:
+    source = find_upload(membership.tenant_id, stored_name)
+    if source is None:
         raise PublicError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.")
-    source = UPLOAD_ROOT / str(membership.tenant_id) / stored_name
-    if not source.is_file():
-        raise PublicError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.")
-    return FileResponse(source)
+    # ``attachment``: o navegador baixa o arquivo em vez de interpretá-lo na origem da API.
+    return FileResponse(source, filename=stored_name, content_disposition_type="attachment")

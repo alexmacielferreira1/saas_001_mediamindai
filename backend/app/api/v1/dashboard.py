@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
+from app.api.v1.records import mixed_sort_key
 from app.db.session import get_session
 from app.models.identity import TenantRecord
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
@@ -133,7 +134,11 @@ def dashboard_me(current: Authenticated, session: DbSession):
     )
     events = sorted(
         agenda,
-        key=lambda item: (item.data.get("day", 999), item.data.get("horario", "")),
+        # Campos livres: tipos misturados não podem derrubar o painel (achado 12).
+        key=lambda item: (
+            mixed_sort_key(item.data.get("day")),
+            mixed_sort_key(item.data.get("horario")),
+        ),
     )[:6]
     return {
         "role": membership.role,

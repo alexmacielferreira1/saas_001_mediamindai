@@ -24,12 +24,22 @@ SETTINGS_DEFAULTS = {
 
 
 def _settings_record(session: Session, tenant_id: UUID) -> TenantRecord | None:
+    # Se já houver registros em dobro (criados antes da trava), vale sempre o mais antigo.
     return session.scalar(
-        select(TenantRecord).where(
+        select(TenantRecord)
+        .where(
             TenantRecord.tenant_id == tenant_id,
             TenantRecord.entity_type == SETTINGS_ENTITY,
         )
+        .order_by(TenantRecord.created_at.asc(), TenantRecord.id.asc())
+        .limit(1)
     )
+
+
+def lock_tenant(session: Session, tenant_id: UUID) -> Tenant | None:
+    """``SELECT ... FOR UPDATE`` na empresa: dois primeiros PATCHes simultâneos não criam
+    duas configurações (o segundo espera e encontra o registro do primeiro)."""
+    return session.scalar(select(Tenant).where(Tenant.id == tenant_id).with_for_update())
 
 
 def _settings_response(tenant: Tenant, record: TenantRecord | None) -> AdminSettingsResponse:
@@ -48,7 +58,7 @@ def get_admin_settings(current: Authenticated, session: DbSession):
 def update_admin_settings(body: AdminSettingsPatch, current: Authenticated, session: DbSession):
     selected = require_membership(current)
     require_permission(session, current, "permissions.manage")
-    tenant = session.get(Tenant, selected.tenant_id)
+    tenant = lock_tenant(session, selected.tenant_id)
     submitted = body.model_dump(exclude_none=True)
     changes = dict(submitted)
     record = _settings_record(session, selected.tenant_id)
