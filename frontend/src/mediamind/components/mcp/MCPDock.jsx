@@ -6,10 +6,12 @@ import {
 } from "lucide-react";
 
 import { createMCPQueue, executeMCPQueue, listMCPQueues, listMCPTools } from "../../lib/mcpApi";
+import { mcpErrorMessage } from "../../lib/mcpErrors";
 import { useMCPContext } from "../../lib/mcpTargetContext";
 import { useProducaoProjetos } from "../../lib/producaoStore";
 import { listMediaAssets, mediaStreamUrl } from "../../../api/media";
 import MCPCenter from "../ai-tools/MCPCenter";
+import { MCP_APP_COMMANDS, moduleStatusReason } from "../../lib/mcpCommands";
 
 const APPS = [
   { id: "ai", module: "ai-tools", short: "IA", label: "Ferramentas IA", title: "Ferramentas IA", icon: Sparkles, color: "sky", href: "/ferramentas-ia" },
@@ -23,6 +25,7 @@ const APPS = [
   { id: "powerpoint", module: "powerpoint", short: "P", label: "PowerPoint", title: "PowerPoint", icon: Presentation, color: "orange", href: "/ferramentas-graficas?tool=powerpoint" },
 ];
 
+const DOCK_ACTIVE_KEY = "mm_mcp_dock_active_v1";
 const QUEUE_STATUS_LABELS = { completed: "Concluída", partial: "Concluída em parte", failed: "Falhou", draft: "Rascunho", running: "Em execução" };
 const queueStatusLabel = (status) => QUEUE_STATUS_LABELS[status] || "Estado desconhecido";
 function queueOutcomeMessage(queue) {
@@ -33,17 +36,8 @@ function queueOutcomeMessage(queue) {
   if (queue.status === "failed") return `A execução falhou. ${failed[0]?.error?.message || ""}`.trim();
   return "Fila MCP criada como rascunho.";
 }
-const BASE_COMMANDS = {
-  mmfilm: ["Montar sequência", "Cortar trechos (IN / OUT)", "Criar legendas automáticas", "Ajustar áudio e normalização", "Aplicar transições e efeitos", "Preparar exportação"],
-  mmeffects: ["Criar composição", "Animar elementos", "Aplicar efeitos", "Preparar renderização"],
-  mmsom: ["Limpar voz", "Remover ruído", "Normalizar loudness", "Preparar masterização"],
-  mmphoto: ["Tratar imagem", "Remover fundo", "Criar thumbnail", "Gerar variações"],
-  mmvector: ["Criar vetor", "Ajustar logotipo", "Preparar SVG", "Gerar elementos gráficos"],
-  word: ["Criar documento", "Revisar texto", "Resumir conteúdo", "Exportar DOCX ou PDF"],
-  excel: ["Criar planilha", "Organizar dados", "Gerar gráficos", "Exportar XLSX ou CSV"],
-  powerpoint: ["Montar apresentação", "Gerar slides", "Aplicar template", "Exportar PPTX ou PDF"],
-  ai: ["Executar prompt com IA cadastrada"],
-};
+// Ações base de cada app: a mesma lista do MCP Express (lib/mcpCommands).
+const BASE_COMMANDS = MCP_APP_COMMANDS;
 
 function contextualCommands(appId, location) {
   const params = new URLSearchParams(location.search);
@@ -53,15 +47,22 @@ function contextualCommands(appId, location) {
   if (appId === "mmfilm" && sub === "workspace") commands.unshift("Importar mídias selecionadas");
   if (appId === "mmfilm" && ["em_edicao", "redes_sociais"].includes(sub)) commands.unshift("Inspecionar timeline ativa");
   if (appId === "mmsom" && sub === "workspace") commands.unshift("Analisar áudios selecionados");
-  return [...new Set(commands)].slice(0, 8);
+  return [...new Set(commands)];
 }
 
 export default function MCPDock() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [active, setActive] = useState(null);
+  // A7: o último painel aberto volta ao navegar entre as ferramentas (por sessão do navegador).
+  const [active, setActiveState] = useState(() => { try { return sessionStorage.getItem(DOCK_ACTIVE_KEY) || null; } catch { return null; } });
+  const setActive = (next) => setActiveState((current) => {
+    const value = typeof next === "function" ? next(current) : next;
+    try { if (value) sessionStorage.setItem(DOCK_ACTIVE_KEY, value); else sessionStorage.removeItem(DOCK_ACTIVE_KEY); } catch { /* sessionStorage indisponível: só em memória */ }
+    return value;
+  });
   const [width, setWidth] = useState(() => Number(localStorage.getItem("mm_mcp_dock_width_v2")) || 720);
   const [modules, setModules] = useState([]);
+  const [catalogState, setCatalogState] = useState("loading");
   const [tools, setTools] = useState([]);
   const [tab, setTab] = useState("commands");
   const [expressDraft, setExpressDraft] = useState(null);
@@ -71,7 +72,8 @@ export default function MCPDock() {
     listMCPTools().then((data) => {
       setModules(data.modules || []);
       setTools(data.tools || []);
-    }).catch(() => { setModules([]); setTools([]); });
+      setCatalogState("ok");
+    }).catch(() => { setModules([]); setTools([]); setCatalogState("error"); });
   }, []);
   useEffect(() => {
     const open = (event) => {
@@ -98,6 +100,7 @@ export default function MCPDock() {
     const destination = new URL(item.href, window.location.origin);
     return destination.pathname === location.pathname && destination.search === location.search;
   }), [location.pathname, location.search]);
+  const statusReason = (module, label) => (catalogState === "loading" ? "Consultando o catálogo MCP…" : moduleStatusReason(moduleStatus[module], label));
   const moduleStatus = useMemo(() => Object.fromEntries(modules.map((item) => [item.id, item.status])), [modules]);
   const authorizedTools = app
     ? tools.filter((tool) => tool.module === app.module && tool.available)
@@ -147,7 +150,7 @@ export default function MCPDock() {
     {app && <aside role="dialog" aria-label={`Painel MCP ${app.label}`} style={{ width }} className="pointer-events-auto relative flex h-full flex-col border-l border-sky-900/70 bg-[#03101f]/[.98] shadow-2xl shadow-black/60">
       <button aria-label="Redimensionar painel MCP" onMouseDown={startResize} className="absolute inset-y-0 left-0 w-1.5 cursor-col-resize bg-transparent hover:bg-sky-500/70" />
       <header className="border-b border-slate-800 p-4">
-        <div className="flex items-center gap-3"><AppMark app={app} large /><div className="min-w-0 flex-1"><h2 className="truncate text-base font-bold text-white">{app.title}</h2><div className={`mt-1 flex items-center gap-1.5 text-xs ${connected ? "text-emerald-400" : "text-amber-300"}`}><span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />{connected ? "Conectado" : "Planejado"}</div></div><button aria-label="Fechar painel MCP" onClick={() => setActive(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={18} /></button></div>
+        <div className="flex items-center gap-3"><AppMark app={app} large /><div className="min-w-0 flex-1"><h2 className="truncate text-base font-bold text-white">{app.title}</h2><div title={statusReason(app.module, app.label)} className={`mt-1 flex items-center gap-1.5 text-xs ${connected ? "text-emerald-400" : "text-amber-300"}`}><span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-amber-400"}`} />{connected ? "Conectado" : "Planejado"}</div><p className="mt-0.5 text-[10px] leading-snug text-slate-500">{statusReason(app.module, app.label)}</p></div><button aria-label="Fechar painel MCP" onClick={() => setActive(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={18} /></button></div>
         <button disabled={!connected} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-sky-600 px-3 py-2 text-xs font-bold text-sky-300 disabled:border-slate-700 disabled:text-slate-600"><ExternalLink size={14} />{connected ? `Abrir no ${app.label}` : "Ponte local ainda não instalada"}</button>
       </header>
       <div className="flex border-b border-slate-800 px-4"><button onClick={() => setTab("commands")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "commands" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Comandos</button><button onClick={() => setTab("history")} className={`flex-1 border-b-2 py-3 text-xs font-semibold ${tab === "history" ? "border-sky-400 text-sky-300" : "border-transparent text-slate-500"}`}>Histórico</button></div>
@@ -161,7 +164,7 @@ export default function MCPDock() {
     </aside>}
     <nav aria-label="Aplicativos MCP" className="pointer-events-auto flex h-full w-16 flex-col items-center border-l border-slate-800 bg-[#071426]/[.98] py-3 shadow-xl">
       <div className="mb-2 flex w-14 flex-col items-center rounded-lg border border-sky-900/70 bg-sky-950/30 px-1 py-2 text-sky-300"><Bot size={17}/><strong className="mt-1 text-[10px] tracking-[0.16em]">MCP</strong></div>
-      {APPS.map((item) => <button key={item.id} aria-label={`${item.label} — ${moduleStatus[item.module] === "connected" ? "conectado" : "planejado"}`} onClick={() => toggle(item.id)} className={`group mb-1 w-14 rounded-lg border py-2 transition ${active === item.id ? "border-sky-500 bg-sky-500/10" : "border-transparent hover:border-slate-700 hover:bg-slate-900"}`}><AppMark app={item}/><span className="mt-1 block truncate text-[9px] text-slate-400">{item.label}</span></button>)}
+      {APPS.map((item) => <button key={item.id} aria-label={`${item.label} — ${moduleStatus[item.module] === "connected" ? "conectado" : "planejado"}`} title={statusReason(item.module, item.label)} onClick={() => toggle(item.id)} className={`group mb-1 w-14 rounded-lg border py-2 transition ${active === item.id ? "border-sky-500 bg-sky-500/10" : "border-transparent hover:border-slate-700 hover:bg-slate-900"}`}><AppMark app={item}/><span className="mt-1 block truncate text-[9px] text-slate-400">{item.label}</span></button>)}
       <button aria-label="Configuração MCP" onClick={() => toggle("settings")} className={`mb-1 w-14 rounded-lg border py-2 transition ${active === "settings" ? "border-sky-500 bg-sky-500/10 text-sky-300" : "border-transparent text-slate-400 hover:border-slate-700"}`}><span className="mx-auto grid h-8 w-8 place-items-center rounded-lg border border-slate-600 bg-slate-900"><Settings size={17}/></span><span className="mt-1 block text-[9px]">Config.</span></button>
       <button aria-label="Adicionar aplicativos MCP" className="mt-auto w-14 rounded-lg border border-transparent py-2 text-slate-400 hover:border-slate-700"><span className="mx-auto grid h-8 w-8 place-items-center rounded-lg border border-violet-700"><Plus size={16}/></span><span className="mt-1 block text-[9px]">Apps</span></button>
     </nav>
@@ -259,7 +262,7 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
       setQueues((current) => [created, ...current]); setInstruction(""); setTargets([]);
       window.dispatchEvent(new CustomEvent("mm:mcp-result", { detail: created }));
       setMessage(queueOutcomeMessage(created));
-    } catch (error) { setMessage(error?.message || "Não foi possível salvar o pedido MCP."); }
+    } catch (error) { setMessage(mcpErrorMessage(error, "Não foi possível salvar o pedido MCP.")); }
     finally { setSaving(false); }
   }
   function addExisting() {
@@ -295,14 +298,19 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     }
     submit({ command, quick: true });
   }
+  const [executingIds, setExecutingIds] = useState([]);
   async function execute(queue) {
+    if (executingIds.includes(queue.id)) return;
     setMessage("");
+    setExecutingIds((current) => [...current, queue.id]);
     try {
       const executed = await executeMCPQueue(queue.id);
       setQueues((current) => current.map((item) => item.id === executed.id ? executed : item));
       setMessage(queueOutcomeMessage(executed));
     } catch (error) {
-      setMessage(error?.message || "A ponte local ainda não está disponível para executar esta fila.");
+      setMessage(mcpErrorMessage(error, "A ponte local ainda não está disponível para executar esta fila."));
+    } finally {
+      setExecutingIds((current) => current.filter((id) => id !== queue.id));
     }
   }
   const steps = ["Projeto e mídias", "Operações e prompt", "Pacote de tarefas", "Execução e fila"];
@@ -321,6 +329,6 @@ function MCPActionPlanner({ module, appId, label, commands = [], tools = [], con
     {targets.length > 0 && <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3"><p className="text-xs font-semibold text-white">Projetos selecionados</p>{targets.map((target) => <div key={target.id} className="mt-2 rounded-lg border border-slate-700 bg-slate-950/60 p-2"><div className="flex items-center justify-between text-xs"><strong className="text-slate-200">{target.name}</strong><button onClick={() => setTargets((current) => current.filter((item) => item.id !== target.id))} className="text-rose-300">Remover</button></div><textarea value={target.instruction} onChange={(event) => updateTarget(target.id, { instruction: event.target.value })} placeholder="O que aplicar neste projeto?" className="mt-2 h-14 w-full resize-none rounded border border-slate-700 bg-slate-900 p-2 text-xs text-white"/></div>)}</div>}
     <div className="mt-3 flex justify-between gap-2"><button disabled={page === 0} onClick={() => setPage(0)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 disabled:opacity-40">← Etapas 1 e 2</button><button disabled={page === 1} onClick={() => setPage(1)} className="rounded-lg border border-sky-700 px-3 py-2 text-xs text-sky-200 disabled:opacity-40">Etapas 3 e 4 →</button></div>
     {message && <p role="status" className="mt-2 text-xs text-sky-200">{message}</p>}
-    {queues.length > 0 && <div className="mt-4 border-t border-violet-900 pt-3"><h4 className="text-xs font-bold text-white">Filas e pedidos MCP</h4>{queues.slice(0, 5).map((queue) => <div key={queue.id} className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-xs"><strong className="text-slate-200">{queue.name}</strong><span className="ml-2 text-sky-300">{queueStatusLabel(queue.status)}</span><p className="mt-1 text-slate-500">{queue.target_projects.length + queue.create_projects.length} projeto(s) · {queue.output_mode === "internal" ? "interno" : "arquivo final"}</p>{queue.status === "draft" && <button onClick={() => execute(queue)} className="mt-2 rounded border border-sky-700 px-2 py-1 text-[11px] font-semibold text-sky-200 hover:bg-sky-950">Executar fila</button>}</div>)}</div>}
+    {queues.length > 0 && <div className="mt-4 border-t border-violet-900 pt-3"><h4 className="text-xs font-bold text-white">Filas e pedidos MCP</h4>{queues.slice(0, 5).map((queue) => <div key={queue.id} className="mt-2 rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-xs"><strong className="text-slate-200">{queue.name}</strong><span className="ml-2 text-sky-300">{queueStatusLabel(queue.status)}</span><p className="mt-1 text-slate-500">{queue.target_projects.length + queue.create_projects.length} projeto(s) · {queue.output_mode === "internal" ? "interno" : "arquivo final"}</p>{queue.status === "draft" && <button onClick={() => execute(queue)} disabled={executingIds.includes(queue.id)} className="mt-2 rounded border border-sky-700 px-2 py-1 text-[11px] font-semibold text-sky-200 hover:bg-sky-950 disabled:opacity-50">{executingIds.includes(queue.id) ? "Executando…" : "Executar fila"}</button>}</div>)}</div>}
   </section>;
 }

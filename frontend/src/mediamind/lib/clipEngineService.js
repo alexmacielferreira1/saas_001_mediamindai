@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { assetPlaybackUrl } from '../../api/media';
 
 // ============================================================================
 // clipEngineService — camada única de orquestração do MediaMind AI Clip Engine.
@@ -26,7 +27,7 @@ export async function getAsset(assetId) {
 export async function ensureTranscription(asset, { empresaId = '', durationSeconds = 0 } = {}) {
   const existing = await base44.entities.TranscricaoSegmento.filter({ asset_id: String(asset.id) }, 'start_ms', 500);
   if (existing.length > 0) return { segments: existing, reused: true };
-  const audioUrl = asset.stream_url || asset.source_url || asset.path || '';
+  const audioUrl = assetPlaybackUrl(asset) || asset.path || '';
   if (!audioUrl) {
     throw new Error('Asset sem mídia (path) para transcrever. Anexe um arquivo de áudio/vídeo ao asset no Acervo.');
   }
@@ -34,7 +35,7 @@ export async function ensureTranscription(asset, { empresaId = '', durationSecon
     asset_id: String(asset.id),
     asset_title: asset.title || asset.filename || '',
     audio_url: audioUrl,
-    duration_seconds: durationSeconds || (asset.duration ? asset.duration / 1000 : 0),
+    duration_seconds: durationSeconds || Number(asset.duration) || 0,
     empresa_id: empresaId,
   });
   const segments = await base44.entities.TranscricaoSegmento.filter({ asset_id: String(asset.id) }, 'start_ms', 500);

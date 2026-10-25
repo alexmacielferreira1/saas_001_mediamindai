@@ -51,6 +51,7 @@ export async function markProjectThumbnail(session, exports) {
     thumbnail_document_id: session.savedId, thumbnail_assets: exports,
     thumbnail_url: exports.find((e) => e.format === 'horizontal')?.url || exports[0]?.url || '',
   };
-  await base44.entities.ProducaoProjeto.update(session.draft.projectId, changes);
-  mergePersistedProject(session.draft.projectId, changes);
+  const saved = await base44.entities.ProducaoProjeto.update(session.draft.projectId, changes);
+  // Guarda a versão nova para a próxima gravação da produção não acusar conflito falso.
+  mergePersistedProject(session.draft.projectId, { ...changes, ...(saved?.updated_date ? { _updatedDate: saved.updated_date } : {}) });
 }

@@ -440,6 +440,21 @@ export function moveClip(document, clipId, { start, trackId } = {}) {
 }
 
 /**
+ * Moves a clip like `moveClip` and keeps its linked clips (video ↔ separated audio)
+ * in sync by shifting them by the same time offset on their own tracks.
+ */
+export function moveClipWithLinked(document, clipId, options = {}) {
+  const located = locateClip(document, clipId);
+  if (!located) return document;
+  const moved = moveClip(document, clipId, options);
+  const linked = expandLinkedClipIds(document, [clipId]).filter((id) => id !== clipId);
+  if (moved === document || !linked.length) return moved;
+  const after = locateClip(moved, clipId);
+  const delta = after ? after.clip.start - located.clip.start : 0;
+  return Math.abs(delta) > 1e-9 ? moveClipsBy(moved, linked, delta) : moved;
+}
+
+/**
  * Moves several clips by the same time offset on their own tracks (group drag).
  * Clips on locked tracks are not moved; the offset never moves a clip before 0.
  */

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,7 +94,8 @@ describe("MCPExpress", () => {
     await act(async () => {});
     act(() => publishMCPContext(timelineContext({ source: "mmfilm", sequenceName: "Rascunho", clips: [{ assetId: "local-1" }] })));
 
-    fireEvent.click(screen.getByRole("button", { name: /Executar 4 ações ativas/ }));
+    // Só "Ler timeline" e "Inspecionar projeto" têm ferramenta: contam 2.
+    fireEvent.click(screen.getByRole("button", { name: /Executar 2 ações ativas/ }));
 
     expect(createMCPQueue).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent(/não tem mídias do Acervo/);
@@ -131,10 +132,12 @@ describe("MCPExpress", () => {
     render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
     await act(async () => {});
 
-    fireEvent.click(screen.getByRole("button", { name: "Executar Transcrever" }));
+    const transcribe = screen.getByRole("button", { name: "Executar Transcrever" });
+    expect(transcribe).toBeDisabled();
+    expect(transcribe).toHaveAttribute("title", expect.stringMatching(/Ainda não disponível/));
+    fireEvent.click(transcribe);
 
     expect(createMCPQueue).not.toHaveBeenCalled();
-    expect(screen.getByRole("status")).toHaveTextContent(/ainda precisa da ponte MCP/i);
   });
 
   it("sends the explicit assistant prompt to the registered MCP tool", async () => {
@@ -156,10 +159,11 @@ describe("MCPExpress", () => {
     render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
     await act(async () => {});
 
-    fireEvent.click(screen.getByRole("button", { name: "Executar 4 ações ativas" }));
+    // A5: as 3 ações sem ponte não entram na contagem nem na execução.
+    fireEvent.click(screen.getByRole("button", { name: "Executar 1 ações ativas" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/1 ação\(ões\)/i));
-    expect(screen.getByRole("status")).toHaveTextContent(/3 não executadas/i);
+    expect(screen.getByRole("status")).not.toHaveTextContent(/não executadas/i);
     expect(createMCPQueue).toHaveBeenCalledTimes(1);
     expect(createMCPQueue).toHaveBeenCalledWith(expect.objectContaining({ tool_name: "ai-tools.prompt" }));
   });
@@ -169,9 +173,30 @@ describe("MCPExpress", () => {
     render(<MemoryRouter initialEntries={["/ferramentas-ia"]}><MCPExpress /></MemoryRouter>);
     await act(async () => {});
 
-    fireEvent.click(screen.getByRole("button", { name: "Executar 4 ações ativas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Executar 1 ações ativas" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/nenhuma ação foi enviada/i));
     expect(screen.getByRole("status")).toHaveTextContent(/verifique a conexão/i);
+  });
+
+  it("A5: marks actions without an MCP bridge as unavailable before the click, unchecked by default", async () => {
+    renderExpress();
+    await act(async () => {});
+    const toggle = screen.getByRole("button", { name: "Ligar Recortar" });
+    expect(toggle).toBeDisabled();
+    expect(toggle.closest("[data-unavailable]")).toHaveAttribute("title", expect.stringMatching(/Ainda não disponível: falta a ponte MCP do MMPhoto/));
+    expect(screen.getByText("0 ativas")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Executar 0 ações ativas/ })).toBeDisabled();
+  });
+
+  it("A6: Express actions come from the shared command list", async () => {
+    const { appCommands } = await import("../../lib/mcpCommands");
+    renderExpress();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar operação MCP" }));
+    const commands = appCommands("mmphoto");
+    for (const label of commands.slice(0, 4)) expect(screen.getByRole("button", { name: `Remover ${label}` })).toBeInTheDocument();
+    const offered = within(screen.getByRole("listbox", { name: "Operações disponíveis" })).getAllByRole("option");
+    expect(offered).toHaveLength(commands.length - 4);
+    commands.slice(4).forEach((label, index) => expect(offered[index]).toHaveTextContent(label));
   });
 });

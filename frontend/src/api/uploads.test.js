@@ -14,4 +14,17 @@ describe('uploads API', () => {
     expect(options.method).toBe('POST');
     expect(options.body.get('file')).toBe(file);
   });
+
+  it('uses the progress-capable sender only when a progress callback is given', async () => {
+    requestMock.mockClear();
+    const file = new File(['doc'], 'pauta.pdf', { type: 'application/pdf' });
+    const send = vi.fn().mockResolvedValue({ file_url: '/api/v1/uploads/x.pdf' });
+    vi.doMock('./uploadProgress', () => ({ sendFormWithProgress: send }));
+    vi.resetModules();
+    const { uploadFile: fresh } = await import('./uploads');
+    const onProgress = vi.fn();
+    await fresh(file, { onProgress });
+    expect(send).toHaveBeenCalledWith('/uploads', expect.any(FormData), { onProgress });
+    expect(requestMock).not.toHaveBeenCalled();
+  });
 });

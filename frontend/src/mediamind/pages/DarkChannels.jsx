@@ -208,8 +208,15 @@ export default function DarkChannels() {
           if (!next[field]?.length && !selectedScript.workflow?.[field]?.length && !selectedScript.workflow?.[field]) delete workflow[field];
         }
       }
-      const changes = { workflow };
+      // Envia só o que mudou: cada parte exige a sua permissão no servidor
+      // (conteúdo = production.write, dados de publicação = publishing.write).
+      const stored = selectedScript.workflow || {};
+      for (const field of Object.keys(workflow)) {
+        if (JSON.stringify(workflow[field] ?? null) === JSON.stringify(stored[field] ?? null)) delete workflow[field];
+      }
+      const changes = Object.keys(workflow).length ? { workflow } : {};
       if (activeStage === "review" && next.final_title && next.final_title !== selectedScript.title) changes.title = next.final_title;
+      if (!Object.keys(changes).length) { setNotice("Nada mudou nesta etapa."); return; }
       const updated = await updateDarkChannelScript(selectedChannel.id, selectedScript.id, changes);
       setScripts((items) => items.map((item) => item.id === updated.id ? updated : item));
       setWorkflowDraft({ ...emptyWorkflow(), ...(updated.workflow || next), metrics: { ...emptyWorkflow().metrics, ...(updated.workflow?.metrics || next.metrics) } });

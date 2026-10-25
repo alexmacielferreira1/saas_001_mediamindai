@@ -2,16 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { MOCK_CORP_PUBLICATIONS } from '../data';
 import { markDemoRecords } from './demoCatalog';
+import { readLocalDemoSession } from './demoAccess';
 
-// Carrega as publicações persistentes. Se ainda não existirem registros na
-// entidade Publicacao, devolve o fallback (mock) normalizado para o schema PT
-// (titulo/plataforma/status/views) e marcado como demonstração, sem gravá-lo
-// no banco da empresa. Centraliza a carga entre CorpPublications,
+// Carrega as publicações persistentes. Só na sessão de demonstração local, se
+// ainda não existirem registros, devolve o fallback (mock) normalizado para o
+// schema PT (titulo/plataforma/status/views) e marcado como demonstração, sem
+// gravá-lo no banco. Numa empresa real, lista vazia continua vazia. Centraliza a carga entre CorpPublications,
 // SocialMediaPage, TradutorPage, ProgramacaoPage e o AgendaUnificadaPanel.
 // Lança em caso de falha irrecuperável — o hook chamador trata o erro.
 export async function loadOrSeedPublicacoes(fallback = MOCK_CORP_PUBLICATIONS) {
   const existing = await base44.entities.Publicacao.list('ordem', 200);
-  if (existing.length > 0) return existing;
+  if (existing.length > 0 || !readLocalDemoSession()) return existing;
   return markDemoRecords(
     (fallback || []).map((p, i) => ({
       id: p.id,
@@ -29,11 +30,11 @@ export async function loadOrSeedPublicacoes(fallback = MOCK_CORP_PUBLICATIONS) {
   );
 }
 
-// Hook reativo: renderiza o mock no primeiro frame (sem flash de layout) e
+// Hook reativo: na sessão demo renderiza o mock no primeiro frame e
 // substitui pelos registros da entidade assim que a carga termina. Expõe
 // `error` + `reload` para tratamento de erro consistente.
 export function usePublicacoes() {
-  const [pubs, setPubs] = useState(MOCK_CORP_PUBLICATIONS);
+  const [pubs, setPubs] = useState(() => (readLocalDemoSession() ? MOCK_CORP_PUBLICATIONS : []));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -42,7 +43,7 @@ export function usePublicacoes() {
     setError(null);
     try {
       const loaded = await loadOrSeedPublicacoes();
-      setPubs(loaded.length > 0 ? loaded : MOCK_CORP_PUBLICATIONS);
+      setPubs(loaded);
     } catch (e) {
       setError(e);
     } finally {
@@ -55,7 +56,7 @@ export function usePublicacoes() {
     loadOrSeedPublicacoes()
       .then((loaded) => {
         if (!alive) return;
-        setPubs(loaded.length > 0 ? loaded : MOCK_CORP_PUBLICATIONS);
+        setPubs(loaded);
       })
       .catch((e) => { if (alive) setError(e); })
       .finally(() => { if (alive) setLoading(false); });

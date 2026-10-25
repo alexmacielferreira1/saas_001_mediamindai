@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const list = vi.fn();
 const remove = vi.fn();
+const create = vi.fn();
 
 vi.mock('@/api/base44Client', () => ({
-  base44: { entities: { Publicacao: { list: (...a) => list(...a), delete: (...a) => remove(...a), bulkCreate: vi.fn(async () => []) } } },
+  base44: { entities: { Publicacao: { list: (...a) => list(...a), delete: (...a) => remove(...a), create: (...a) => create(...a), bulkCreate: vi.fn(async () => []) } } },
 }));
 vi.mock('../thumbnails/ProjectThumbnails', () => ({ default: () => null }));
 
@@ -15,7 +16,7 @@ const REAL = { id: '11111111-1111-1111-1111-111111111111', titulo: 'Corte real',
 const NO_URL = { id: '22222222-2222-2222-2222-222222222222', titulo: 'Sem link', descricao: '', plataforma: 'youtube', status: 'erro' };
 
 describe('CorpPublications — controles honestos', () => {
-  beforeEach(() => { list.mockReset(); remove.mockReset(); });
+  beforeEach(() => { list.mockReset(); remove.mockReset(); create.mockReset(); localStorage.removeItem('mm_demo_session_v1'); });
   afterEach(() => { vi.restoreAllMocks(); });
 
   it('publicationUrl aceita só http(s)', () => {
@@ -77,10 +78,47 @@ describe('CorpPublications — controles honestos', () => {
     expect(await screen.findByText('Não foi possível excluir a publicação: Sem permissão.')).toBeInTheDocument();
   });
 
-  it('exemplos sem registro salvo não podem ser excluídos', async () => {
+  it('exemplos sem registro salvo não podem ser excluídos (sessão demo)', async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({ id: 'demo' }));
     list.mockResolvedValue([]);
     render(<CorpPublications />);
     await waitFor(() => expect(screen.getByRole('button', { name: /Excluir/ })).toBeDisabled());
     expect(screen.getByRole('button', { name: /Excluir/ })).toHaveAttribute('title', 'Exemplo sem registro salvo; não há o que excluir');
+  });
+
+  it('empresa real vazia não vê publicações de exemplo', async () => {
+    list.mockResolvedValue([]);
+    render(<CorpPublications />);
+    await waitFor(() => expect(list).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Excluir/ })).not.toBeInTheDocument());
+  });
+
+  it('"Nova publicação" registra Publicacao no servidor (B6)', async () => {
+    list.mockResolvedValue([REAL]);
+    create.mockResolvedValue({ id: '33333333-3333-3333-3333-333333333333', titulo: 'Corte real · Nova publicação', status: 'rascunho', plataforma: 'youtube' });
+    render(<CorpPublications />);
+    await screen.findByRole('heading', { name: 'Corte real' });
+    fireEvent.click(screen.getByRole('button', { name: /Nova publicação/ }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ titulo: 'Corte real · Nova publicação', status: 'rascunho', plataforma: 'youtube' })));
+    expect(create.mock.calls[0][0]).not.toHaveProperty('id');
+    expect(await screen.findByRole('heading', { name: 'Corte real · Nova publicação' })).toBeInTheDocument();
+  });
+
+  it('falha ao registrar mostra o erro e não cria item fantasma', async () => {
+    list.mockResolvedValue([REAL]);
+    create.mockRejectedValue(new Error('Sem permissão'));
+    render(<CorpPublications />);
+    await screen.findByRole('heading', { name: 'Corte real' });
+    fireEvent.click(screen.getByRole('button', { name: /Nova publicação/ }));
+    expect(await screen.findByText('Não foi possível registrar a publicação: Sem permissão.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Nova publicação/ })).not.toBeInTheDocument();
+  });
+
+  it('mídia já registrada pelo Finalizado aparece selecionada a partir do servidor', async () => {
+    const saved = { id: '44444444-4444-4444-4444-444444444444', titulo: 'Episódio final', status: 'rascunho', plataforma: 'youtube', origem: 'finalizado' };
+    list.mockResolvedValue([REAL, saved]);
+    render(<CorpPublications incomingMedia={{ id: saved.id, publicationId: saved.id, titulo: 'Episódio final', inPoint: '00:00:00', outPoint: '00:01:00' }} />);
+    expect(await screen.findByRole('heading', { name: 'Episódio final' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Excluir/ })).not.toBeDisabled();
   });
 });

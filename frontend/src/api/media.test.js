@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
+import { assetPlaybackUrl, exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
 
 describe('media API', () => {
   beforeEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
@@ -42,6 +42,14 @@ describe('media API', () => {
     expect(options.body.get('origin')).toBe('recording');
     expect(options.body.get('project_id')).toBe('project-17');
     expect(options.body.get('recording_id')).toBe('recording-4');
+  });
+
+  it('resolves the real playback URL of records-API assets', () => {
+    expect(assetPlaybackUrl({ id: 'a1', stream_url: '/api/v1/media/assets/a1/stream' })).toBe('/api/v1/media/assets/a1/stream');
+    expect(assetPlaybackUrl({ id: 'a2', sha256: 'abc', mime_type: 'video/mp4' })).toBe('/api/v1/media/assets/a2/stream');
+    expect(assetPlaybackUrl({ id: 'a3', media_asset_id: 'm3', file_url: '/old.mp4' })).toBe('/api/v1/media/assets/m3/stream');
+    expect(assetPlaybackUrl({ id: 'a4', file_url: 'https://cdn.example/a4.mp4' })).toBe('https://cdn.example/a4.mp4');
+    expect(assetPlaybackUrl(null)).toBe('');
   });
 
   it('keeps same-origin stream paths usable by authenticated players', () => {

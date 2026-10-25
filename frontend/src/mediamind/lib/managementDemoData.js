@@ -1,3 +1,4 @@
+import { readLocalDemoSession } from './demoAccess';
 import {
   MOCK_ASSETS,
   MOCK_AUDIT_LOGS,
@@ -66,11 +67,35 @@ export const DEMO_AUDIT_LOGS = MOCK_AUDIT_LOGS.map((log, index) => ({
   created_date: new Date(Date.UTC(2026, 8, 20 - index, 12, index * 7)).toISOString(),
 }));
 
-export async function withDemoFallback(request, fallback) {
+// Exemplo só na sessão de demonstração local. Numa empresa real o resultado do
+// servidor é devolvido como veio (lista vazia continua vazia) e o erro sobe
+// para a tela mostrar "Tentar de novo" — nunca vira dado de exemplo.
+export async function withDemoFallback(request, fallback, { demo = Boolean(readLocalDemoSession()) } = {}) {
+  if (!demo) return request();
   try {
     const result = await request();
     return Array.isArray(result) && result.length === 0 ? fallback : result;
   } catch {
     return fallback;
   }
+}
+
+// Resumo do acervo calculado da própria lista (quando a visão gerencial não
+// está liberada para o perfil). Processamentos/serviços ficam vazios: não há
+// dado real para eles nesse caso.
+export function overviewFromAssets(assets = []) {
+  const status = (asset) => String(asset.status || asset.ai_status || '').toLowerCase();
+  return {
+    publications: { published: 0, scheduled: 0, pending: 0, approval_rate: 0, calendar: [] },
+    social_metrics: [],
+    assets: {
+      total: assets.length,
+      indexed: assets.filter((asset) => ['indexado', 'indexed', 'concluido', 'completed'].includes(status(asset))).length,
+      failures: assets.filter((asset) => ['falha', 'failed', 'erro', 'error'].includes(status(asset))).length,
+      storage_bytes: assets.reduce((total, asset) => total + (Number(asset.file_size) || 0), 0),
+    },
+    processing: { total: 0, active: 0, completed: 0, failed: 0 },
+    audit_events: 0,
+    services: [],
+  };
 }

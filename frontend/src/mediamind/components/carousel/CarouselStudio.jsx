@@ -21,6 +21,7 @@ import {
   createCreativeDocument,
   updateCreativeDocument,
   approveCreativeDocument,
+  creativeErrorMessage,
 } from "../../lib/creativeToolsApi";
 import { buildCarouselZip } from "../../lib/carouselExport";
 import {
@@ -247,11 +248,11 @@ export default function CarouselStudio({ projectId = null, initialMode = "image"
       return;
     }
     try {
-      const result = await approveCreativeDocument(record.id);
+      const result = await approveCreativeDocument(record.id, record.revision);
       setRecord(result);
       setMessage(`Revisão ${result.revision} aprovada.`);
     } catch (e) {
-      setMessage(e.message || "Não foi possível aprovar a revisão.");
+      setMessage(creativeErrorMessage(e, "Não foi possível aprovar a revisão."));
     }
   }
   const patch = (k, v) => setDoc((d) => ({ ...d, [k]: v }));

@@ -3,6 +3,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EmpresaProvider, useEmpresa } from './empresaContext';
+import { getCurrentTenantId } from './currentTenant';
 
 const requestMock = vi.fn();
 
@@ -42,6 +43,17 @@ describe('local tenant context', () => {
     expect(result.current.currentEmpresa.nome).toBe('Empresa Principal');
     expect(result.current.isAdmin).toBe(true);
     expect(result.current.needsSelector).toBe(true);
+  });
+
+  it('publishes the session company for stores outside React (B2)', async () => {
+    requestMock.mockResolvedValueOnce(tenants).mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEmpresa(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(getCurrentTenantId()).toBe('tenant-1');
+    await act(async () => { await result.current.setCurrent('tenant-2'); });
+    expect(getCurrentTenantId()).toBe('tenant-2');
+    await act(async () => { await result.current.setCurrent('all'); });
+    expect(getCurrentTenantId()).toBe('');
   });
 
   it('persists a company switch in the server session', async () => {

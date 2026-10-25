@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard, Clock3, Download, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
 import { exportMediaClip, uploadMediaAsset } from "../../api/media";
 import { startClipAnalysis } from "../../api/clips";
+import { mcpErrorMessage } from "../lib/mcpErrors";
 import { downloadClipFcpxml } from "../lib/clipsfreeExport";
 import { getAIConnections } from "../../api/generation";
 import { useWorkDraftState } from "../lib/workProtection";
@@ -119,7 +120,6 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
     }
     if (savedSession && draftChangeHandler.current) draftChangeHandler.current(session);
     // The restored draft is the source of this snapshot; the callback is kept in a ref to avoid a render loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedSession]);
 
   useEffect(() => {
@@ -191,7 +191,8 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
         selectedSuggestionId: suggestions[0]?.id || "",
       });
     } catch (error) {
-      update({ analysisStatus: "failed", analysisMessage: error?.message || "Não foi possível analisar esta mídia.", suggestions: [] });
+      // 403 AI_DISABLED / 429 limite: mensagem da política de IA da empresa, sem simular análise.
+      update({ analysisStatus: "failed", analysisMessage: mcpErrorMessage(error, "Não foi possível analisar esta mídia."), suggestions: [] });
     } finally {
       setAnalysing(false);
     }

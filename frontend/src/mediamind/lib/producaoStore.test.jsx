@@ -24,6 +24,7 @@ describe('production project store loading', () => {
     vi.resetModules();
     listMock.mockReset().mockResolvedValue([]);
     toastMock.mockReset();
+    localStorage.removeItem('mm_demo_session_v1');
   });
 
   it('does not request protected production data merely by importing the module', async () => {
@@ -46,7 +47,7 @@ describe('production project store loading', () => {
     const {base44}=await import('@/api/base44Client');
     base44.entities.ProducaoProjeto.update.mockResolvedValue({});
     store.updateProjeto('edit-source',{edicao_obs:'Áudio corrigido'});
-    expect(base44.entities.ProducaoProjeto.update).toHaveBeenCalledWith('edit-source',expect.objectContaining({materiais:[{id:'m1',nome:'master.mp4',url:'/master.mp4'}],edicao_obs:'Áudio corrigido',edicao_status:'corte_fino',prazo_edicao:'2026-10-20'}));
+    expect(base44.entities.ProducaoProjeto.update).toHaveBeenCalledWith('edit-source',expect.objectContaining({materiais:[{id:'m1',nome:'master.mp4',url:'/master.mp4'}],edicao_obs:'Áudio corrigido',edicao_status:'corte_fino',prazo_edicao:'2026-10-20'}), { ifMatch: undefined });
   });
 
   it("marks a failed update as not saved, keeps the edit and warns instead of swallowing the error", async () => {
@@ -97,7 +98,7 @@ describe('production project store loading', () => {
 
     await expect(second).resolves.toBe(true);
     expect(base44.entities.ProducaoProjeto.create).toHaveBeenCalledTimes(1);
-    expect(base44.entities.ProducaoProjeto.update).toHaveBeenLastCalledWith("srv-1", expect.objectContaining({ titulo: "Nova editada" }));
+    expect(base44.entities.ProducaoProjeto.update).toHaveBeenLastCalledWith("srv-1", expect.objectContaining({ titulo: "Nova editada" }), { ifMatch: undefined });
     expect(store.getProjetos().find((p) => p.id === id)._entityId).toBe("srv-1");
   });
 
@@ -211,7 +212,36 @@ describe('production project store loading', () => {
     expect(base44.entities.ProducaoProjeto.update.mock.calls.map(([entityId, data]) => [entityId, data.etapa])).toEqual([["srv-9", "agendamentos"], ["srv-9", "gravacoes"]]);
   });
 
-  it("shows example projects on an empty tenant without writing them to the database", async () => {
+  it("shows no example projects to a real (non-demo) empty tenant", async () => {
+    const store = await import("./producaoStore");
+    const { result } = renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+
+  it("records the company of the session (not a stale localStorage key) and persists Finalizado tasks", async () => {
+    localStorage.setItem('mm_current_empresa_v1', 'stale-company');
+    const tenant = await import("./currentTenant");
+    tenant.setCurrentTenantId('tenant-real-1');
+    const store = await import("./producaoStore");
+    renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(listMock).toHaveBeenCalled());
+    const { base44 } = await import("@/api/base44Client");
+    base44.entities.ProducaoProjeto.create.mockReset().mockResolvedValue({ id: "srv-2", etapa: "rascunho" });
+    base44.entities.ProducaoProjeto.update.mockReset().mockResolvedValue({ id: "srv-2" });
+
+    const id = store.addProjeto({ titulo: "Com empresa" });
+    await waitFor(() => expect(store.getSaveState(id)?.status).toBe("saved"));
+    expect(base44.entities.ProducaoProjeto.create.mock.calls[0][0].empresa_id).toBe('tenant-real-1');
+
+    await store.updateProjeto(id, { tarefas: [{ id: 't1', texto: 'Conferir master', feito: false }] });
+    expect(base44.entities.ProducaoProjeto.update).toHaveBeenCalledWith('srv-2', expect.objectContaining({ tarefas: [{ id: 't1', texto: 'Conferir master', feito: false }] }), { ifMatch: undefined });
+    localStorage.removeItem('mm_current_empresa_v1');
+    tenant.setCurrentTenantId('');
+  });
+
+  it("shows example projects on an empty tenant (demo session only) without writing them to the database", async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({ id: 'demo' }));
     const { base44: mocked } = await import("@/api/base44Client");
     mocked.entities.ProducaoProjeto.bulkCreate.mockReset();
     mocked.entities.ProducaoProjeto.create.mockReset();
@@ -226,6 +256,7 @@ describe('production project store loading', () => {
   });
 
   it("refuses to save an example project, warns once and never creates it on the server", async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({ id: 'demo' }));
     const store = await import("./producaoStore");
     const { result } = renderHook(() => store.useProducaoProjetos());
     await waitFor(() => expect(listMock).toHaveBeenCalled());
@@ -256,5 +287,31 @@ describe('production project store loading', () => {
     await waitFor(() => expect(store.getSaveState(id)?.status).toBe("saved"));
     expect(base44.entities.ProducaoProjeto.create).toHaveBeenCalledTimes(1);
     expect(base44.entities.ProducaoProjeto.create.mock.calls[0][0]).not.toHaveProperty("is_demo");
+  });
+
+  it("sends If-Match with the version read and keeps the new version for the next save", async () => {
+    listMock.mockResolvedValue([{ id: "p1", titulo: "Real", updated_date: "2026-10-24T10:00:00+00:00" }]);
+    const store = await import("./producaoStore");
+    const { result } = renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(result.current[0]?.id).toBe("p1"));
+    const { base44 } = await import("@/api/base44Client");
+    base44.entities.ProducaoProjeto.update.mockReset().mockResolvedValueOnce({ id: "p1", updated_date: "2026-10-24T10:05:00+00:00" }).mockResolvedValueOnce({ id: "p1" });
+    await store.updateProjeto("p1", { titulo: "A" });
+    await store.updateProjeto("p1", { titulo: "B" });
+    expect(base44.entities.ProducaoProjeto.update.mock.calls[0][2]).toEqual({ ifMatch: "2026-10-24T10:00:00+00:00" });
+    expect(base44.entities.ProducaoProjeto.update.mock.calls[1][2]).toEqual({ ifMatch: "2026-10-24T10:05:00+00:00" });
+  });
+
+  it("on RECORD_VERSION_CONFLICT keeps the edit, marks it unsaved and says to reload", async () => {
+    listMock.mockResolvedValue([{ id: "p1", titulo: "Real", updated_date: "2026-10-24T10:00:00+00:00" }]);
+    const store = await import("./producaoStore");
+    const { result } = renderHook(() => store.useProducaoProjetos());
+    await waitFor(() => expect(result.current[0]?.id).toBe("p1"));
+    const { base44 } = await import("@/api/base44Client");
+    base44.entities.ProducaoProjeto.update.mockReset().mockRejectedValue(Object.assign(new Error("Conflito"), { status: 409, code: "RECORD_VERSION_CONFLICT" }));
+    await expect(store.updateProjeto("p1", { titulo: "Minha edição" })).resolves.toBe(false);
+    expect(store.getProjetos()[0].titulo).toBe("Minha edição");
+    expect(store.getSaveState("p1")).toEqual(expect.objectContaining({ status: "error", error: expect.stringMatching(/Recarregue a página/) }));
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Produção alterada em outro lugar" }));
   });
 });

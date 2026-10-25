@@ -2,21 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, LoaderCircle, Play, Plus, Search, Sparkles, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { createMCPQueue, listMCPTools } from "../../lib/mcpApi";
+import { mcpErrorMessage } from "../../lib/mcpErrors";
 import { useMCPContext } from "../../lib/mcpTargetContext";
+import { appCommands, EXPRESS_INITIAL_ACTIONS, unavailableActionReason } from "../../lib/mcpCommands";
 
 const EXPRESS_APPS = {
-  filmcraft: { id: "mmfilm", module: "mmfilm", label: "MMFilm", actions: ["Ler timeline", "Inspecionar projeto", "Montar sequência", "Cortar trechos (IN / OUT)", "Remover silêncios", "Selecionar melhores cenas", "Criar legendas automáticas", "Adicionar imagens de apoio", "Inserir GC e artes", "Aplicar transições", "Ajustar áudio e normalização", "Ajustar cor e exposição", "Estabilizar imagem", "Preparar exportação"] },
-  effectcraft: { id: "mmeffects", module: "mmeffects", label: "MMEffects", actions: ["Criar composição", "Animar títulos", "Criar lower third", "Aplicar transição", "Tracking e estabilização", "Chroma key", "Máscara e rotoscopia", "Aplicar efeitos", "Correção de cor", "Aplicar template", "Preparar renderização"] },
-  photocraft: { id: "mmphoto", module: "mmphoto", label: "MMPhoto", actions: ["Recortar", "Remover fundo", "Ajustar luz e cor", "Retoque automático", "Corrigir pele", "Redimensionar imagem", "Criar thumbnail", "Aplicar identidade", "Inserir textos", "Gerar variações", "Exportar e salvar"] },
-  vectorcraft: { id: "mmvector", module: "vetor", label: "MMVector", actions: ["Vetorizar", "Aplicar paleta", "Montar layout", "Criar variações", "Ajustar tipografia", "Gerar lower third", "Criar ícones", "Organizar pranchetas", "Preparar SVG", "Exportar PNG"] },
-  mmsom: { id: "mmsom", module: "mmsom", label: "MMSom", actions: ["Limpar ruído", "Remover pausas", "Normalizar loudness", "Equalizar", "Comprimir", "De-esser", "Separar voz e música", "Misturar faixas", "Trilha e SFX", "Masterizar", "Exportar áudio"] },
-  word: { id: "word", module: "word", label: "Word", actions: ["Criar documento", "Gerar roteiro", "Resumir conteúdo", "Revisar e reescrever", "Organizar seções", "Aplicar estilo", "Inserir referências", "Exportar DOCX ou PDF"] },
-  excel: { id: "excel", module: "excel", label: "Excel", actions: ["Criar planilha", "Organizar dados", "Classificar dados", "Criar fórmula", "Gerar gráficos", "Validar dados", "Criar painel", "Exportar XLSX ou CSV"] },
-  powerpoint: { id: "powerpoint", module: "powerpoint", label: "PowerPoint", actions: ["Montar apresentação", "Gerar slides", "Criar resumo visual", "Aplicar template", "Organizar slides", "Criar gráfico", "Revisar narrativa", "Exportar PPTX ou PDF"] },
-  ai: { id: "ai", module: "ai-tools", label: "Ferramentas IA", actions: ["Executar prompt com IA cadastrada", "Transcrever", "Resumir", "Gerar cortes", "Classificar mídia", "Sugerir roteiro", "Gerar imagem", "Gerar vídeo", "Automatizar fluxo", "Exportar resultados"] },
+  filmcraft: { id: "mmfilm", module: "mmfilm", label: "MMFilm", actions: appCommands("mmfilm") },
+  effectcraft: { id: "mmeffects", module: "mmeffects", label: "MMEffects", actions: appCommands("mmeffects") },
+  photocraft: { id: "mmphoto", module: "mmphoto", label: "MMPhoto", actions: appCommands("mmphoto") },
+  vectorcraft: { id: "mmvector", module: "vetor", label: "MMVector", actions: appCommands("mmvector") },
+  mmsom: { id: "mmsom", module: "mmsom", label: "MMSom", actions: appCommands("mmsom") },
+  word: { id: "word", module: "word", label: "Word", actions: appCommands("word") },
+  excel: { id: "excel", module: "excel", label: "Excel", actions: appCommands("excel") },
+  powerpoint: { id: "powerpoint", module: "powerpoint", label: "PowerPoint", actions: appCommands("powerpoint") },
+  ai: { id: "ai", module: "ai-tools", label: "Ferramentas IA", actions: appCommands("ai") },
 };
 function pageApp(location) { return location.pathname === "/ferramentas-ia" ? EXPRESS_APPS.ai : EXPRESS_APPS[new URLSearchParams(location.search).get("tool")] || EXPRESS_APPS.ai; }
-const toOperation = (label) => ({ id: label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-"), label, enabled: true });
+const toOperation = (label) => ({ id: label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-"), label, enabled: true, touched: false });
 // Alvos derivados apenas do que a ferramenta aberta publicou; nada de rótulos fixos.
 function expressTargets(app, context) {
   if (app.module === "ai-tools") return { assistant: { id: "assistant", name: "Assistente IA", kind: "virtual", asset_ids: [], ready: true } };
@@ -35,14 +37,22 @@ export default function MCPExpress() {
   const app = useMemo(() => pageApp(location), [location]);
   const context = useMCPContext(); const targets = useMemo(() => expressTargets(app, context), [app, context]);
   const [prompt, setPrompt] = useState(""); const [target, setTarget] = useState("timeline"); const [query, setQuery] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false); const [operations, setOperations] = useState(() => app.actions.slice(0, 4).map(toOperation));
-  const [tools, setTools] = useState([]); const [running, setRunning] = useState([]); const [status, setStatus] = useState("");
-  useEffect(() => { setOperations(app.actions.slice(0, 4).map(toOperation)); setQuery(""); setPickerOpen(false); setRunning([]); setStatus(""); setTarget(app.module === "ai-tools" ? "assistant" : "timeline"); }, [app.id]);
-  useEffect(() => { listMCPTools().then((data) => setTools(data.tools || [])).catch(() => setTools([])); }, []);
+  const [pickerOpen, setPickerOpen] = useState(false); const [operations, setOperations] = useState(() => app.actions.slice(0, EXPRESS_INITIAL_ACTIONS).map(toOperation));
+  const [tools, setTools] = useState([]); const [toolsLoaded, setToolsLoaded] = useState(false); const [running, setRunning] = useState([]); const [status, setStatus] = useState("");
+  useEffect(() => { setOperations(app.actions.slice(0, EXPRESS_INITIAL_ACTIONS).map(toOperation)); setQuery(""); setPickerOpen(false); setRunning([]); setStatus(""); setTarget(app.module === "ai-tools" ? "assistant" : "timeline"); }, [app.id]);
+  useEffect(() => { listMCPTools().then((data) => setTools(data.tools || [])).catch(() => setTools([])).finally(() => setToolsLoaded(true)); }, []);
   const choices = app.actions.filter((action) => action.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR")) && !operations.some((operation) => operation.label === action));
-  const enabledOperations = operations.filter((operation) => operation.enabled); const activeTarget = targets[target] || Object.values(targets)[0];
-  const addOperation = (label) => { setOperations((current) => current.some((operation) => operation.label === label) ? current : [...current, toOperation(label)]); setQuery(""); setPickerOpen(false); };
-  const toggleOperation = (id) => setOperations((current) => current.map((operation) => operation.id === id ? { ...operation, enabled: !operation.enabled } : operation));
+  // A5: só conta e executa o que tem ferramenta disponível no catálogo MCP.
+  const isAvailable = (operation) => Boolean(matchingTool(operation.label));
+  const enabledOperations = operations.filter((operation) => operation.enabled && (!toolsLoaded || isAvailable(operation))); const activeTarget = targets[target] || Object.values(targets)[0];
+  const addOperation = (label) => { setOperations((current) => current.some((operation) => operation.label === label) ? current : [...current, { ...toOperation(label), enabled: !toolsLoaded || Boolean(matchingTool(label)) }]); setQuery(""); setPickerOpen(false); };
+  const toggleOperation = (id) => setOperations((current) => current.map((operation) => operation.id === id ? { ...operation, enabled: !operation.enabled, touched: true } : operation));
+  // Depois que o catálogo chega, ações sem ponte começam desligadas (a menos que o usuário já tenha mexido).
+  useEffect(() => {
+    if (!toolsLoaded) return;
+    setOperations((current) => current.map((operation) => (operation.touched ? operation : { ...operation, enabled: isAvailable(operation) })));
+
+  }, [toolsLoaded, tools, app.id]);
   const removeOperation = (id) => setOperations((current) => current.filter((operation) => operation.id !== id));
   const openPanel = () => window.dispatchEvent(new CustomEvent("mm:mcp-open", { detail: { appId: app.id } }));
   function matchingTool(label) {
@@ -64,7 +74,7 @@ export default function MCPExpress() {
       const failure = result.results?.find((item) => item.status === "failed")?.error?.message;
       setStatus(result.status === "partial" ? `“${operation.label}” foi executada só em parte. ${failure || ""}`.trim() : `“${operation.label}” não foi executada. ${failure || ""}`.trim());
       return false;
-    } catch (error) { setStatus(error?.message || `Não foi possível executar “${operation.label}”.`); return false; }
+    } catch (error) { setStatus(mcpErrorMessage(error, `Não foi possível executar “${operation.label}”.`)); return false; }
     finally { setRunning((current) => current.filter((id) => id !== operation.id)); }
   }
   async function executeAll() {
@@ -87,7 +97,7 @@ export default function MCPExpress() {
       <span title={activeTarget.reason || undefined} className={`rounded-lg border px-2 py-2 text-[11px] ${activeTarget.ready ? "border-cyan-800/70 bg-cyan-950/30 text-cyan-200" : "border-amber-800/70 bg-amber-950/30 text-amber-200"}`}>{activeTarget.ready ? activeTarget.name : activeTarget.reason}</span>
       <label className="flex min-w-[190px] flex-1 items-center gap-2 rounded-lg border border-sky-800 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><Search size={15}/><input aria-label="Pesquisar operações MCP" value={query} onFocus={() => setPickerOpen(true)} onChange={(event) => { setQuery(event.target.value); setPickerOpen(true); }} placeholder={`Mais ações para ${app.label}…`} className="w-full bg-transparent py-2 outline-none"/></label>
       <label className="flex min-w-[190px] flex-[1.1] items-center rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-slate-400 focus-within:border-sky-400"><input aria-label="Descreva a ação MCP" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Instrução opcional para as ações…" className="w-full bg-transparent py-2 outline-none"/></label>
-      <div className="flex flex-wrap items-center gap-1">{operations.map((operation) => <div key={operation.id} className={`flex items-center rounded-lg border text-xs ${operation.enabled ? "border-sky-500/80 bg-sky-950/80 text-sky-100" : "border-slate-700 bg-slate-950 text-slate-500"}`}><button aria-label={`${operation.enabled ? "Desligar" : "Ligar"} ${operation.label}`} aria-pressed={operation.enabled} onClick={() => toggleOperation(operation.id)} className="p-2 text-sky-300 hover:text-cyan-200">{operation.enabled ? <ToggleRight size={17}/> : <ToggleLeft size={17}/>}</button><span className="max-w-32 truncate py-2 pr-1" title={operation.label}>{operation.label}</span><button aria-label={`Executar ${operation.label}`} onClick={() => executeOperation(operation)} disabled={!operation.enabled || running.includes(operation.id)} className="border-l border-sky-700/60 p-2 text-sky-200 hover:text-cyan-100 disabled:text-slate-600">{running.includes(operation.id) ? <LoaderCircle size={13} className="animate-spin"/> : <Play size={13} fill="currentColor"/>}</button><button aria-label={`Remover ${operation.label}`} onClick={() => removeOperation(operation.id)} className="p-2 text-slate-400 hover:text-rose-300"><X size={14}/></button></div>)}<button aria-label="Adicionar operação MCP" onClick={() => { setPickerOpen((current) => !current); setQuery(""); }} className="rounded-lg border border-sky-500 bg-sky-950/70 p-2 text-sky-200 hover:bg-sky-900"><Plus size={16}/></button></div>
+      <div className="flex flex-wrap items-center gap-1">{operations.map((operation) => { const unavailable = toolsLoaded && !isAvailable(operation); const reason = unavailable ? unavailableActionReason(app.label) : undefined; return <div key={operation.id} data-unavailable={unavailable || undefined} title={reason} className={`flex items-center rounded-lg border text-xs ${unavailable ? "border-dashed border-slate-700 bg-slate-950 text-slate-500 opacity-60" : operation.enabled ? "border-sky-500/80 bg-sky-950/80 text-sky-100" : "border-slate-700 bg-slate-950 text-slate-500"}`}><button aria-label={`${operation.enabled ? "Desligar" : "Ligar"} ${operation.label}`} aria-pressed={operation.enabled} onClick={() => toggleOperation(operation.id)} disabled={unavailable} title={reason} className="p-2 text-sky-300 hover:text-cyan-200 disabled:cursor-not-allowed disabled:text-slate-600">{operation.enabled ? <ToggleRight size={17}/> : <ToggleLeft size={17}/>}</button><span className="max-w-32 truncate py-2 pr-1" title={reason || operation.label}>{operation.label}{unavailable && <span className="sr-only"> (ainda não disponível)</span>}</span><button aria-label={`Executar ${operation.label}`} title={reason} onClick={() => executeOperation(operation)} disabled={unavailable || !operation.enabled || running.includes(operation.id)} className="border-l border-sky-700/60 p-2 text-sky-200 hover:text-cyan-100 disabled:text-slate-600">{running.includes(operation.id) ? <LoaderCircle size={13} className="animate-spin"/> : <Play size={13} fill="currentColor"/>}</button><button aria-label={`Remover ${operation.label}`} onClick={() => removeOperation(operation.id)} className="p-2 text-slate-400 hover:text-rose-300"><X size={14}/></button></div>; })}<button aria-label="Adicionar operação MCP" onClick={() => { setPickerOpen((current) => !current); setQuery(""); }} className="rounded-lg border border-sky-500 bg-sky-950/70 p-2 text-sky-200 hover:bg-sky-900"><Plus size={16}/></button></div>
       <span className="ml-auto text-[11px] text-sky-200">{enabledOperations.length} ativa{enabledOperations.length === 1 ? "" : "s"}</span><button onClick={executeAll} disabled={!enabledOperations.length || running.length > 0} className="flex items-center gap-2 rounded-lg bg-sky-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-300 disabled:bg-slate-700 disabled:text-slate-400"><Play size={13} fill="currentColor"/>Executar {enabledOperations.length} ações ativas</button><button onClick={openPanel} className="rounded-lg border border-violet-500 px-3 py-2 text-xs font-semibold text-violet-200 hover:bg-violet-950">Abrir painel completo</button>
     </div>
     {pickerOpen && <div role="listbox" aria-label="Operações disponíveis" className="mt-2 grid max-h-52 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-sky-800 bg-[#031426] p-2 sm:grid-cols-2 lg:grid-cols-3">{choices.length ? choices.map((action) => <button key={action} role="option" onClick={() => addOperation(action)} className="flex items-center justify-between rounded-md px-2 py-2 text-left text-xs text-slate-200 hover:bg-sky-950 hover:text-sky-100"><span>{action}</span><Plus size={14} className="text-sky-300"/></button>) : <p className="col-span-full px-2 py-2 text-xs text-slate-500">Nenhuma outra operação disponível para esta ferramenta.</p>}</div>}

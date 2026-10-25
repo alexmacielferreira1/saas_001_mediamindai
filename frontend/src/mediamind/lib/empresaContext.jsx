@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { request } from '../../api/httpClient';
+import { setCurrentTenantId } from './currentTenant';
 
 const Ctx = createContext(null);
 
@@ -22,6 +23,11 @@ export function EmpresaProvider({ user, children }) {
   const [current, setCurrentState] = useState(initialCurrent);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Publica a empresa da sessão para módulos fora do React (producaoStore etc.).
+  useEffect(() => {
+    setCurrentTenantId(current);
+  }, [current]);
 
   useEffect(() => {
     let active = true;

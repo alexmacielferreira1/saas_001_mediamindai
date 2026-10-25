@@ -38,7 +38,6 @@ export default function Workspace() {
       const found = findAssetById(MOCK_ASSETS, assetId);
       if (found) setSelectedAsset(found);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   const [items, setItems] = useWorkDraftState("pages/Workspace.jsx:items", [
     {

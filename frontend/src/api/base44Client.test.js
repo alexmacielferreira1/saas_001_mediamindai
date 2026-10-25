@@ -70,4 +70,14 @@ describe('compatibility entity client', () => {
       .rejects.toThrow('IA ainda não configurada no modo demo.');
     expect(requestMock).not.toHaveBeenCalled();
   });
+
+  it('sends If-Match only when a version is given', async () => {
+    readDemoMock.mockReturnValue(null);
+    requestMock.mockResolvedValue({ id: 'r1' });
+    const { base44 } = await import('./base44Client');
+    await base44.entities.ProducaoProjeto.update('r1', { titulo: 'A' }, { ifMatch: '2026-10-24T10:00:00+00:00' });
+    expect(requestMock).toHaveBeenLastCalledWith('/records/ProducaoProjeto/r1', { method: 'PATCH', body: { data: { titulo: 'A' } }, headers: { 'If-Match': '2026-10-24T10:00:00+00:00' } });
+    await base44.entities.ProducaoProjeto.update('r1', { titulo: 'B' });
+    expect(requestMock).toHaveBeenLastCalledWith('/records/ProducaoProjeto/r1', { method: 'PATCH', body: { data: { titulo: 'B' } } });
+  });
 });

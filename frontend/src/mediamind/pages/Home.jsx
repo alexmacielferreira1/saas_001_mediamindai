@@ -33,7 +33,7 @@ export default function Home() {
   const [dashboard, setDashboard] = useState(null);
   const [dashboardError, setDashboardError] = useState(null);
   const [localDemo] = useState(() => Boolean(readLocalDemoSession()));
-  const { projects, assets, tasks, scripts, savedSearches, recentActivity, loading } = useMamData();
+  const { projects, assets, tasks, scripts, savedSearches, recentActivity, loading, error: mamError, retry: retryMam } = useMamData();
   const today = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   }).format(new Date());
@@ -100,6 +100,7 @@ export default function Home() {
 
       {/* Top stats */}
       {dashboardState.source === DATA_SOURCE.UNAVAILABLE && <div role="alert" className="rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">Não foi possível carregar os indicadores reais. Nenhum valor demonstrativo foi usado.</div>}
+      {mamError && <div role="alert" className="flex items-center gap-3 rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300"><span className="flex-1">Não foi possível carregar parte das listas: {mamError}</span><button type="button" onClick={retryMam} className="rounded-lg border border-rose-700 px-3 py-1 text-xs font-semibold hover:bg-rose-900/40">Tentar de novo</button></div>}
       {dashboardState.source === DATA_SOURCE.EMPTY && <div role="status" className="rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-sm text-slate-400">Ainda não há indicadores registrados para esta empresa.</div>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         {kpis.map((item, index) => (
@@ -174,6 +175,7 @@ export default function Home() {
         <div className="space-y-4">
           <Panel title="Pesquisas salvas" right={<Search size={16} className="text-slate-500" />}>
             <div className="flex flex-col gap-2">
+              {!savedSearches.length && <p className="text-xs text-slate-500">Nenhuma pesquisa salva.</p>}
               {savedSearches.map((s) => (
                 <Link
                   key={s.id}
@@ -190,6 +192,7 @@ export default function Home() {
 
           <Panel title="Atividade recente" right={<Activity size={16} className="text-slate-500" />}>
             <div className="flex flex-col gap-2.5">
+              {!recentActivity.length && <p className="text-xs text-slate-500">Nenhuma atividade registrada.</p>}
               {recentActivity.map((a) => (
                 <div key={a.id} className="flex items-start gap-2.5 text-sm">
                   <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-sky-400" />

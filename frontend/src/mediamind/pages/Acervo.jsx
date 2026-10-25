@@ -19,6 +19,7 @@ import {
   DEMO_AUDIT_LOGS,
   DEMO_MANAGEMENT_OVERVIEW,
   DEMO_MEMBERSHIPS,
+  overviewFromAssets,
   withDemoFallback,
 } from '../lib/managementDemoData';
 
@@ -39,23 +40,34 @@ export default function Acervo({ embedded = false, localDemo = false }) {
   const validTab = ACERVO_TABS.some((item) => item.key === tabParam) ? tabParam : 'acervo';
   const [activeTab, setActiveTab] = useState(validTab);
   const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setData(null);
+    setLoadError('');
     if (localDemo) {
       setData({ overview: DEMO_MANAGEMENT_OVERVIEW, assets: DEMO_ASSETS, logs: DEMO_AUDIT_LOGS, memberships: DEMO_MEMBERSHIPS });
       return () => { active = false; };
     }
+    // Exemplos só na sessão demo (withDemoFallback). Fora dela: a lista de
+    // arquivos é obrigatória (falha → erro com "Tentar de novo"); visão
+    // gerencial e usuários podem não estar liberados para o perfil.
+    let overviewError = '';
     Promise.all([
-      withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
+      withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW).catch((error) => { overviewError = error?.message || 'Indicadores indisponíveis.'; return null; }),
       withDemoFallback(() => base44.entities.Asset.list('-created_date', 500), DEMO_ASSETS),
       // Auditoria: sem fallback de demonstração (403 = sem permissão, falha = erro).
       loadAuditLogs(100),
-      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
+      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS).catch(() => []),
     ])
-      .then(([overview, assets, audit, memberships]) => { if (active) setData({ overview, assets, logs: audit.logs, logsError: audit.error, memberships }); })
+      .then(([overview, assets, audit, memberships]) => {
+        if (active) setData({ overview: overview || overviewFromAssets(assets), overviewError, assets, logs: audit.logs, logsError: audit.error, memberships });
+      })
+      .catch((error) => { if (active) setLoadError(error?.message || 'Não foi possível carregar o acervo.'); });
     return () => { active = false; };
-  }, [localDemo]);
+  }, [localDemo, attempt]);
 
   function handleTabChange(key) {
     setActiveTab(key);
@@ -74,7 +86,14 @@ export default function Acervo({ embedded = false, localDemo = false }) {
 
       <Tabs tabs={ACERVO_TABS} active={activeTab} onChange={handleTabChange} />
 
-      {!data && <Loading label="Carregando acervo..." />}
+      {loadError && (
+        <div role="alert" className="flex items-center gap-3 rounded-xl border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-300">
+          <span className="flex-1">Não foi possível carregar o acervo: {loadError}</span>
+          <button type="button" onClick={() => setAttempt((value) => value + 1)} className="rounded-lg border border-rose-700 px-3 py-1 text-xs font-semibold hover:bg-rose-900/40">Tentar de novo</button>
+        </div>
+      )}
+      {data?.overviewError && <p role="status" className="text-xs text-amber-300">Indicadores gerenciais indisponíveis ({data.overviewError}); os totais abaixo vêm da lista de arquivos.</p>}
+      {!data && !loadError && <Loading label="Carregando acervo..." />}
       {data && activeTab === 'acervo' && <AcervoTab assets={data.assets} summary={data.overview.assets} />}
       {data && activeTab === 'admin' && <AdminTab logs={data.logs} logsError={data.logsError} memberships={data.memberships} localDemo={localDemo} />}
       {data && activeTab === 'monitoring' && <MonitoringTab overview={data.overview} localDemo={localDemo} />}
@@ -363,6 +382,7 @@ function MonitoringTab({ overview, localDemo = false }) {
   const [liveOverview, setLiveOverview] = useState(overview);
   const [selectedServiceKey, setSelectedServiceKey] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
   const summary = buildAcervoSystemSummary(liveOverview);
   const ICONS = [MonitorCog, CheckCircle2, AlertTriangle, CheckCircle2, MonitorCog];
   const selectedService = liveOverview.services.find((service) => service.key === selectedServiceKey) || null;
@@ -384,7 +404,10 @@ function MonitoringTab({ overview, localDemo = false }) {
 
   async function refreshSystem() {
     setRefreshing(true);
-    try { setLiveOverview(localDemo ? DEMO_MANAGEMENT_OVERVIEW : await withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)); } finally { setRefreshing(false); }
+    setRefreshError('');
+    try { setLiveOverview(localDemo ? DEMO_MANAGEMENT_OVERVIEW : await withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)); }
+    catch (error) { setRefreshError(error?.message || 'Não foi possível atualizar o status.'); }
+    finally { setRefreshing(false); }
   }
   return (
     <div className="space-y-4">
@@ -396,6 +419,7 @@ function MonitoringTab({ overview, localDemo = false }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Serviços e pipelines" right={<button type="button" onClick={refreshSystem} disabled={refreshing} className="text-xs font-semibold text-sky-400 hover:text-sky-300 disabled:opacity-50">{refreshing ? 'Atualizando...' : 'Atualizar status'}</button>}>
+          {refreshError && <p role="alert" className="mb-2 text-xs text-rose-300">{refreshError}</p>}
           <div className="overflow-hidden rounded-xl border border-slate-800">
             <div className="grid grid-cols-[1fr_auto] bg-slate-950/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <span>Serviço</span><span>Status</span>

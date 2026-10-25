@@ -14,6 +14,8 @@ import { DEFAULT_WORKSPACE_MEDIA_SEARCH, appendScriptBlock, appendTextBlock, rem
 import { workspace2ToTimeline2 } from '../lib/timeline2Model';
 import { MOCK_ASSETS } from '../data';
 import { findAssetById, workspaceAssetId } from '../lib/assetIdentity';
+import { readLocalDemoSession } from '../lib/demoAccess';
+import { ensureAssetDurations, uploadWithDuration } from '../lib/mediaDuration';
 
 export default function Workspace2() {
   const storagePrefix = useWorkStorageKey("");
@@ -39,6 +41,8 @@ export default function Workspace2() {
   const [timelinePreview, setTimelinePreview] = useState('current');
   const locked = false;
   const [uploadReceipts, setUploadReceipts] = useState([]);
+  const [loadError, setLoadError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const importRef = useRef(null);
   const projectImportRef = useRef(null);
   const selectedAssets = useMemo(
@@ -47,12 +51,23 @@ export default function Workspace2() {
   );
   const previewAsset = assets.find((asset) => asset.id === previewAssetId) || assets[0];
 
+  // Sem ffprobe no servidor a mídia chega sem duração: o navegador mede
+  // (loadedmetadata), grava no Asset e a lista é atualizada sem bloquear a tela.
+  const measureDurations = (items, isActive = () => true) => {
+    ensureAssetDurations(items).then((measured) => {
+      if (!isActive()) return;
+      const durations = new Map(measured.filter((asset, index) => asset !== items[index]).map((asset) => [asset.id, asset.duration]));
+      if (durations.size) setAssets((current) => current.map((asset) => (durations.has(asset.id) ? { ...asset, duration: durations.get(asset.id) } : asset)));
+    });
+  };
   useEffect(() => {
     let active = true;
+    setLoadError('');
     listMediaAssets().then((items) => {
       if (!active) return;
       const normalized = items.map((asset) => ({ ...asset, title: asset.title || asset.filename, stream_url: mediaStreamUrl(asset), icon: asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'image' ? '🖼️' : '🎬' }));
       setAssets(normalized);
+      measureDurations(normalized, () => active);
       const linked = linkedAssetId ? findAssetById(normalized, linkedAssetId) : null;
       if (linked) {
         setSelectedIds((current) => (current.includes(linked.id) ? current : [...current, linked.id]));
@@ -62,8 +77,16 @@ export default function Workspace2() {
         setPreviewAssetId((current) => current || normalized[0]?.id || null);
         if (linkedAssetId) setNotice('A mídia do link não foi encontrada no Acervo desta empresa.');
       }
-    }).catch(() => {
+    }).catch((error) => {
       if (!active) return;
+      // Dados de exemplo só na sessão de demonstração local. Fora dela, o erro
+      // aparece com "Tentar de novo" e a lista fica vazia (nada de mock).
+      if (!readLocalDemoSession()) {
+        setAssets([]);
+        setLoadError(error?.message || 'Não foi possível carregar o Acervo.');
+        setNotice('Não foi possível carregar o Acervo');
+        return;
+      }
       const demo = MOCK_ASSETS.slice(0, 6).map((asset) => ({ ...asset, stream_url: mediaStreamUrl(asset) }));
       const demoBlocks = [
         { id: 'demo-open', title: 'Abertura — Apresentador', text: 'Boa noite! Você confere agora as principais notícias.', type: 'text', duration: 15 },
@@ -74,7 +97,7 @@ export default function Workspace2() {
       setNotice('Acervo indisponível · exibindo dados demonstrativos para validar o roteiro');
     });
     return () => { active = false; };
-  }, [linkedAssetId]);
+  }, [linkedAssetId, loadAttempt]);
   useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_selection', JSON.stringify(selectedIds)); }, [selectedIds, storagePrefix]);
   useEffect(() => { localStorage.setItem(storagePrefix + 'mm_workspace_media_search', JSON.stringify(mediaSearch)); }, [mediaSearch, storagePrefix]);
 
@@ -110,8 +133,10 @@ export default function Workspace2() {
     if (!files.length) return;
     setNotice(`Enviando ${files.length} arquivo(s) para o Acervo…`);
     try {
-      const uploaded = await Promise.all(files.map((file) => uploadMediaAsset(file)));
+      // Mede a duração no próprio arquivo enquanto ele sobe (sem ffprobe no servidor).
+      const uploaded = await Promise.all(files.map((file) => uploadWithDuration(file, uploadMediaAsset)));
       const normalized = uploaded.map((asset) => ({ ...asset, title: asset.title || asset.filename, stream_url: mediaStreamUrl(asset), icon: asset.asset_type === 'audio' ? '🎵' : asset.asset_type === 'image' ? '🖼️' : '🎬' }));
+      measureDurations(normalized);
       setAssets((current) => [...normalized, ...current.filter((item) => !normalized.some((next) => next.id === item.id))]);
       setSelectedIds((current) => [...new Set([...current, ...normalized.map((item) => item.id)])]);
       setPreviewAssetId(normalized[0]?.id || null);
@@ -183,6 +208,7 @@ export default function Workspace2() {
         </div>
         <div className="flex-1"><Workspace2Stepper activeStep={activeStep} onStepChange={changeStep} selectedCount={selectedIds.length} onSave={saveProject} onReset={resetProject} /></div>
       </div>
+      {loadError && <div role="alert" className="mb-3 flex items-center gap-3 rounded-lg border border-rose-800 bg-rose-950/30 px-3 py-2 text-xs text-rose-300"><span className="flex-1">Não foi possível carregar o Acervo: {loadError}</span><button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="rounded border border-rose-700 px-2 py-1 font-semibold hover:bg-rose-900/40">Tentar de novo</button></div>}
       <div role="status" className="mb-3 min-h-5 text-right text-xs text-sky-300">{notice}</div>
       <UploadReceiptPanel assets={uploadReceipts} />
       {!(activeStep === 'timeline' && timelinePreview === 'mmfilm') && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 p-2">

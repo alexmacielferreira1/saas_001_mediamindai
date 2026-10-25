@@ -79,7 +79,6 @@ export default function PendenciasHub({ segment, pendencias }) {
       if (alive) { setItems(loaded); setLoading(false); }
     });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segment]);
 
   async function move(id, newStatus) {

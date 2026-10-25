@@ -17,6 +17,7 @@
 #>
 param(
     [string]$Grep = '',
+    [string]$BackendRoot = '',
     [switch]$Headed
 )
 
@@ -24,7 +25,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$PythonExe = Join-Path $ProjectRoot '.venv/Scripts/python.exe'
+$BackendBase = if ($BackendRoot) { (Resolve-Path $BackendRoot).Path } else { $ProjectRoot }
+$PythonExe = Join-Path $BackendBase '.venv/Scripts/python.exe'
 $E2EDir = Join-Path $ProjectRoot 'tests/e2e'
 $RuntimeDir = Join-Path $ProjectRoot '.runtime/e2e'
 $ApiPort = 8020
@@ -111,7 +113,8 @@ $envVars = @{
     LOGIN_MAX_ATTEMPTS              = '20'
     MEDIA_ROOT                      = (Join-Path $runDir 'media')
     MEDIAMIND_API_PROXY             = "http://127.0.0.1:$ApiPort"
-    PYTHONPATH                      = (Join-Path $ProjectRoot 'backend')
+    PYTHONPATH                      = (Join-Path $BackendBase 'backend')
+    E2E_BACKEND_ROOT                = $BackendBase
     E2E_RUN_ID                      = $runId
     E2E_PASSWORD                    = (New-RandomHex 24)
     E2E_BASE_URL                    = "http://127.0.0.1:$WebPort"

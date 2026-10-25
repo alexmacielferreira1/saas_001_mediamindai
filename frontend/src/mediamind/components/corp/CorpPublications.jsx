@@ -27,18 +27,42 @@ export default function CorpPublications({ incomingMedia = null, mode = 'all' })
   const [view, setView] = useState('cards');
   const [channels, setChannels] = useState(['Instagram Reels', 'TikTok', 'YouTube Shorts']);
   const [notice, setNotice] = useState('');
-  const incomingPublication = incomingMedia ? { id: incomingMedia.id, titulo: incomingMedia.titulo, descricao: incomingMedia.descricao, plataforma: 'youtube', status: 'rascunho', duracao: `${incomingMedia.inPoint}–${incomingMedia.outPoint}`, views: '0', likes: 0, programa: incomingMedia.programa, sourceId: incomingMedia.sourceId } : null;
+  // Mídia vinda do Finalizado já registrada no servidor (publicationId): é só
+  // selecioná-la na lista persistida. Sem registro, aparece como item recebido.
+  const incomingPublication = incomingMedia && !incomingMedia.publicationId ? { id: incomingMedia.id, titulo: incomingMedia.titulo, descricao: incomingMedia.descricao, plataforma: 'youtube', status: 'rascunho', duracao: `${incomingMedia.inPoint}–${incomingMedia.outPoint}`, views: '0', likes: 0, programa: incomingMedia.programa, sourceId: incomingMedia.sourceId } : null;
   const pubs = useMemo(() => [...(incomingPublication ? [incomingPublication] : []), ...localDrafts, ...persistedPubs].filter((item,index,all)=>all.findIndex((candidate)=>String(candidate.id)===String(item.id))===index), [incomingPublication, localDrafts, persistedPubs]);
   const modePubs = useMemo(() => pubs.filter((p) => mode === 'all' || (mode === 'published' ? p.status === 'publicado' : p.status !== 'publicado')), [pubs, mode]);
   const filtered = useMemo(() => modePubs.filter((p) => (status === 'all' || p.status === status) && `${p.titulo} ${p.descricao}`.toLowerCase().includes(query.toLowerCase())), [modePubs, status, query]);
   const selected = pubs.find((p) => String(p.id) === String(selectedId)) || filtered[0] || pubs[0];
   const count = (id) => id === 'all' ? modePubs.length : modePubs.filter((p) => p.status === id).length;
 
-  useEffect(() => { if (incomingPublication) { setSelectedId(incomingPublication.id); setNotice(`Mídia “${incomingPublication.titulo}” recebida de Finalizado com o trecho selecionado.`); } }, [incomingMedia?.id]);
+  useEffect(() => { if (incomingMedia) { setSelectedId(incomingMedia.publicationId || incomingMedia.id); setNotice(`Mídia “${incomingMedia.titulo}” recebida de Finalizado com o trecho selecionado.${incomingMedia.publicationId ? ' Publicação registrada.' : ''}`); } }, [incomingMedia?.id]);
 
-  function addDraft(suffix = 'Nova publicação') {
-    const draft = { ...(selected || incomingPublication || {}), id: `draft-${Date.now()}`, titulo: selected ? `${selected.titulo} · ${suffix}` : suffix, status: 'rascunho', views: '0', likes: 0 };
-    setLocalDrafts((current)=>[draft,...current]); setSelectedId(draft.id); setNotice(`${suffix} criada com a mesma mídia.`);
+  // Nova publicação / agendamento / cópia: registro real (Publicacao) no
+  // servidor — é ele que aparece após recarregar e entra nos relatórios.
+  const [creating, setCreating] = useState(false);
+  async function addDraft(suffix = 'Nova publicação') {
+    if (creating) return;
+    const base = selected || incomingPublication || {};
+    const data = {
+      titulo: base.titulo ? `${base.titulo} · ${suffix}` : suffix,
+      descricao: base.descricao || '',
+      plataforma: base.plataforma || 'youtube',
+      status: 'rascunho',
+      programa: base.programa || '',
+      duracao: base.duracao || '',
+      ...(base.project_id || base.sourceId ? { project_id: String(base.project_id || base.sourceId) } : {}),
+      ...(base.thumbnail_url ? { thumbnail_url: base.thumbnail_url } : {}),
+    };
+    setCreating(true);
+    try {
+      const record = await base44.entities.Publicacao.create(data);
+      if (!record?.id) throw new Error('o servidor não devolveu o registro criado');
+      setLocalDrafts((current) => [record, ...current.filter((item) => String(item.id) !== String(record.id))]);
+      setSelectedId(record.id); setNotice(`${suffix} registrada com a mesma mídia.`);
+    } catch (error) {
+      setNotice(`Não foi possível registrar a publicação: ${error?.message || 'erro desconhecido'}.`);
+    } finally { setCreating(false); }
   }
   function addChannel() {
     const next = ['Facebook', 'LinkedIn', 'Spotify'].find((channel)=>!channels.includes(channel));
@@ -81,7 +105,7 @@ export default function CorpPublications({ incomingMedia = null, mode = 'all' })
   if (error && pubs.length === 0) return <ErrorState onRetry={reload} description="Não foi possível carregar as publicações." />;
 
   return <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/35">
-    <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-sky-400">Distribuição</p><h2 className="text-base font-semibold text-slate-100">{mode === 'published' ? 'Publicado' : 'Para publicação'}</h2><p className="text-[10px] text-slate-500">Acompanhamento completo de cada postagem, canal, operação e desempenho.</p>{notice&&<p className="mt-1 text-[9px] font-semibold text-emerald-300">{notice}</p>}</div>{mode !== 'published' && <button onClick={()=>addDraft()} className="flex items-center gap-1 rounded bg-sky-500 px-3 py-2 text-[10px] font-bold text-slate-950"><Plus size={12}/>Nova publicação</button>}</header>
+    <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-sky-400">Distribuição</p><h2 className="text-base font-semibold text-slate-100">{mode === 'published' ? 'Publicado' : 'Para publicação'}</h2><p className="text-[10px] text-slate-500">Acompanhamento completo de cada postagem, canal, operação e desempenho.</p>{notice&&<p className="mt-1 text-[9px] font-semibold text-emerald-300">{notice}</p>}</div>{mode !== 'published' && <button onClick={()=>addDraft()} disabled={creating} className="flex items-center gap-1 rounded bg-sky-500 px-3 py-2 text-[10px] font-bold text-slate-950 disabled:opacity-60"><Plus size={12}/>Nova publicação</button>}</header>
     <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 px-3 py-2">{[['all','Todas'],['programado','Programadas'],['pending_review','Publicando'],['publicado','Publicadas'],['erro','Com erro']].map(([id,label])=><button key={id} onClick={()=>setStatus(id)} className={`rounded border px-2 py-1 text-[9px] font-semibold ${status===id?'border-sky-500 bg-sky-500/15 text-sky-300':'border-slate-800 text-slate-500'}`}>{label} <span className="ml-1 rounded bg-slate-800 px-1 text-slate-300">{count(id)}</span></button>)}<div className="relative ml-auto min-w-[220px] flex-1 sm:max-w-xs"><Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600"/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Buscar publicações..." className="w-full rounded border border-slate-800 bg-slate-950 py-1.5 pl-7 pr-2 text-[10px] text-slate-200"/></div>{['Canal','Programa','Período','Status'].map((label)=><button key={label} type="button" disabled title={UNAVAILABLE_TITLE} className="rounded border border-slate-800 px-2 py-1.5 text-[9px] text-slate-500 disabled:cursor-not-allowed disabled:opacity-60">{label} ▾</button>)}<div className="flex rounded border border-slate-800"><button type="button" aria-label="Ver em cartões" aria-pressed={view==='cards'} onClick={()=>setView('cards')} className={`p-1.5 ${view==='cards'?'bg-sky-500 text-slate-950':'text-slate-500'}`}><LayoutGrid size={12}/></button><button type="button" aria-label="Ver em lista" aria-pressed={view==='table'} onClick={()=>setView('table')} className={`p-1.5 ${view==='table'?'bg-sky-500 text-slate-950':'text-slate-500'}`}><List size={12}/></button></div></div>
 
     <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: 'minmax(340px, 41%) minmax(0, 1fr)' }}>

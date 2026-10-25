@@ -5,10 +5,11 @@ import {
   ArrowLeft, Plus, Upload, Music, Sparkles, Info, ChevronDown,
   FileVideo, FileAudio, FileImage, FileText, Check,
 } from 'lucide-react';
-import { uploadFile } from '../../api/uploads';
-import { uploadMediaAsset } from '../../api/media';
+import { GENERIC_UPLOAD_LIMIT_BYTES, uploadFile } from '../../api/uploads';
+import { MEDIA_UPLOAD_LIMIT_BYTES, isSupportedMediaFile, uploadMediaAsset, uploadMediaAssetWithProgress } from '../../api/media';
 import { base44 } from '../../api/base44Client';
 import { readLocalDemoSession } from '../lib/demoAccess';
+import { measureFileDuration } from '../lib/mediaDuration';
 import { pendingUploadEntries } from '../lib/ingestUploadPlan';
 
 const PROGRAMS = ['Jornal do Meio Dia', 'Jornal da Noite', 'Especial Enchentes RS', 'Documentário Turismo', 'Campanha Institucional'];
@@ -28,6 +29,7 @@ export default function IngestNewPackage() {
   const [audioDragOver, setAudioDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [progress, setProgress] = useState({});
   const fileInput = useRef(null);
   const audioInput = useRef(null);
   const navigate = useNavigate();
@@ -44,37 +46,101 @@ export default function IngestNewPackage() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
+  const updateEntry = (id, patch) => setFiles((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+
+  // Envia um arquivo. Vídeo, áudio e imagem vão para a rota real de mídia
+  // (POST /media/assets: grava o arquivo da empresa, sha256 e duração, e cria o
+  // Asset que toca nos editores); o pacote é anotado nesse mesmo registro.
+  // Documentos seguem por /uploads + Asset. Reenvio não duplica: se o arquivo
+  // já subiu (assetId), só os metadados são regravados.
+  async function uploadEntry(entry) {
+    const demo = Boolean(readLocalDemoSession());
+    const packageData = {
+      package_name: name.trim() || null, folder: folder.trim() || null, program_name: program || null,
+      ai_status: aiEnabled ? 'pending' : 'disabled',
+    };
+    updateEntry(entry.id, { status: 'uploading', error: '' });
+    setProgress((current) => ({ ...current, [entry.id]: 0 }));
+    const onProgress = (value) => setProgress((current) => ({ ...current, [entry.id]: value }));
+    try {
+      if (!entry.file) throw new Error('O arquivo não está mais disponível nesta página. Remova a linha e adicione o arquivo de novo.');
+      const isMediaType = ['video', 'audio', 'image'].includes(entry.type);
+      if (demo && ['video', 'audio'].includes(entry.type)) {
+        const uploaded = await uploadMediaAsset(entry.file);
+        await base44.entities.Asset.create({
+          title: entry.name, filename: entry.name, asset_type: entry.type,
+          file_size: entry.file.size, file_url: uploaded.file_url || uploaded.stream_url,
+          file_sha256: uploaded.sha256, media_asset_id: uploaded.id || null, ...packageData,
+        });
+      } else if (isMediaType) {
+        if (!isSupportedMediaFile(entry.file)) {
+          throw new Error('Formato não aceito pelo Acervo. Use MP4, MOV, WEBM, AVI, MP3, WAV, M4A, AAC, OGG, JPG, PNG ou WEBP.');
+        }
+        if (entry.file.size > MEDIA_UPLOAD_LIMIT_BYTES) throw new Error('Arquivo maior que 4 GB, o limite de envio de mídia.');
+        let assetId = entry.assetId;
+        let measured = null;
+        let serverDuration = 0;
+        if (!assetId) {
+          // Duração lida do próprio arquivo enquanto sobe (o servidor sem ffprobe não mede).
+          const [uploaded, duration] = await Promise.all([
+            uploadMediaAssetWithProgress(entry.file, { origin: 'ingest' }, { onProgress }),
+            entry.type === 'image' ? null : measureFileDuration(entry.file).catch(() => null),
+          ]);
+          if (!uploaded?.id) throw new Error('O servidor não devolveu o registro da mídia.');
+          assetId = uploaded.id;
+          measured = duration;
+          serverDuration = Number(uploaded.duration) || 0;
+          updateEntry(entry.id, { assetId });
+        }
+        try {
+          await base44.entities.Asset.update(String(assetId), {
+            title: entry.name, ...packageData,
+            // Link de reprodução/download (o registro via /records não traz stream_url).
+            file_url: `/api/v1/media/assets/${encodeURIComponent(assetId)}/stream`,
+            ...(measured && !serverDuration ? { duration: measured, duration_source: 'browser' } : {}),
+          });
+        } catch (error) {
+          throw new Error(`Arquivo enviado, mas os dados do pacote não foram gravados: ${error?.message || 'erro desconhecido'}. Tente de novo para regravar só os dados.`);
+        }
+      } else {
+        if (entry.file.size > GENERIC_UPLOAD_LIMIT_BYTES) throw new Error('Documento maior que 100 MB, o limite de envio de documentos.');
+        const uploaded = await uploadFile(entry.file, { onProgress });
+        await base44.entities.Asset.create({
+          title: entry.name, filename: entry.name, asset_type: entry.type,
+          file_size: entry.file.size, file_url: uploaded.file_url, file_sha256: uploaded.sha256, ...packageData,
+        });
+      }
+      updateEntry(entry.id, { status: 'uploaded', error: '' });
+      setProgress((current) => ({ ...current, [entry.id]: 100 }));
+      return true;
+    } catch (error) {
+      updateEntry(entry.id, { status: 'failed', error: error?.message || 'Falha no envio.' });
+      return false;
+    }
+  }
+
   async function continueFlow() {
     if (step < 3) { setStep(step + 1); return; }
     if (files.length === 0 || uploading) return;
     setUploading(true);
     setUploadError('');
-    const queue = pendingUploadEntries(files);
-    for (const entry of queue) {
-      try {
-        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploading' } : item));
-        const isMedia = ['video', 'audio'].includes(entry.type);
-        const uploaded = readLocalDemoSession() && isMedia
-          ? await uploadMediaAsset(entry.file)
-          : await uploadFile(entry.file);
-        await base44.entities.Asset.create({
-          title: entry.name, filename: entry.name, asset_type: entry.type,
-          file_size: entry.file.size, file_url: uploaded.file_url || uploaded.stream_url,
-          file_sha256: uploaded.sha256,
-          media_asset_id: uploaded.id || null,
-          package_name: name.trim() || null, folder: folder.trim() || null, program_name: program || null,
-          ai_status: aiEnabled ? 'pending' : 'disabled',
-        });
-        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'uploaded' } : item));
-      } catch {
-        setFiles((current) => current.map((item) => item.id === entry.id ? { ...item, status: 'failed' } : item));
-        setUploadError('O envio foi interrompido. Os arquivos concluídos foram preservados; tente novamente para continuar dos restantes.');
-        setUploading(false);
-        return;
-      }
+    let failures = 0;
+    for (const entry of pendingUploadEntries(files)) {
+      if (!(await uploadEntry(entry))) failures += 1;
     }
     setUploading(false);
+    if (failures) {
+      setUploadError(`${failures} arquivo(s) não foram enviados. Veja o motivo em cada linha e use "Tentar de novo"; os concluídos foram preservados.`);
+      return;
+    }
     navigate('/ingest');
+  }
+
+  async function retryEntry(entry) {
+    if (uploading) return;
+    setUploading(true);
+    await uploadEntry(entry);
+    setUploading(false);
   }
 
   return (
@@ -209,12 +275,17 @@ export default function IngestNewPackage() {
                 {files.map((f) => {
                   const Icon = FILE_ICONS[f.type] || FileText;
                   return (
-                    <div key={f.id} className="group flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
-                      <Icon size={15} className="text-slate-400" />
-                      <span className="flex-1 text-sm text-slate-200">{f.name}</span>
-                      <span className="text-xs text-slate-500">{f.size}</span>
-                      <span className={`text-[10px] uppercase ${f.status === 'failed' ? 'text-rose-400' : 'text-sky-400'}`}>{f.status === 'uploaded' ? 'Enviado' : f.status === 'uploading' ? 'Enviando' : f.status === 'failed' ? 'Falhou · tentar novamente' : 'Pendente'}</span>
-                      <button onClick={() => removeFile(f.id)} className="text-slate-600 hover:text-rose-400">✕</button>
+                    <div key={f.id} className="group rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        <Icon size={15} className="text-slate-400" />
+                        <span className="flex-1 text-sm text-slate-200">{f.name}</span>
+                        <span className="text-xs text-slate-500">{f.size}</span>
+                        <span className={`text-[10px] uppercase ${f.status === 'failed' ? 'text-rose-400' : f.status === 'uploaded' ? 'text-emerald-400' : 'text-sky-400'}`}>{f.status === 'uploaded' ? 'Enviado' : f.status === 'uploading' ? `Enviando ${progress[f.id] ?? 0}%` : f.status === 'failed' ? 'Falhou' : 'Pendente'}</span>
+                        {f.status === 'failed' && <button type="button" onClick={() => retryEntry(f)} disabled={uploading} aria-label={`Tentar de novo ${f.name}`} className="rounded border border-rose-700 px-2 py-0.5 text-[10px] font-semibold text-rose-300 hover:bg-rose-950/40 disabled:opacity-50">Tentar de novo</button>}
+                        <button onClick={() => removeFile(f.id)} disabled={f.status === 'uploading'} aria-label={`Remover ${f.name}`} className="text-slate-600 hover:text-rose-400 disabled:opacity-40">✕</button>
+                      </div>
+                      {f.status === 'uploading' && <div role="progressbar" aria-label={`Progresso de ${f.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress[f.id] ?? 0} className="mt-1.5 h-1 overflow-hidden rounded bg-slate-800"><div className="h-full bg-sky-500 transition-all" style={{ width: `${progress[f.id] ?? 0}%` }} /></div>}
+                      {f.status === 'failed' && f.error && <p className="mt-1 text-[11px] text-rose-300">{f.error}</p>}
                     </div>
                   );
                 })}

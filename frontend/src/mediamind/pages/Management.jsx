@@ -5,6 +5,7 @@ import {
   CheckCircle2, Activity, ScrollText,
 } from 'lucide-react';
 import { Panel, Stat, Tabs, Badge, InfoRow, Loading } from '../ui';
+import { ErrorState } from '../components/shared';
 import { getManagementOverview } from '../../api/management';
 import { PUBLICATION_PLATFORM_LABELS, formatBytes } from '../data';
 import ManagementProcessamentosTab from '../components/management/ManagementProcessamentosTab';
@@ -64,18 +65,24 @@ export function DashboardsTab({ localDemo = false }) {
   const [overview, setOverview] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailNote, setDetailNote] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setLoadError('');
     if (localDemo) {
       setOverview(DEMO_MANAGEMENT_OVERVIEW);
       return () => { active = false; };
     }
+    // Exemplo só na sessão demo: erro real aparece com "Tentar de novo".
     withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW)
       .then((data) => { if (active) setOverview(data); })
+      .catch((error) => { if (active) setLoadError(error?.message || 'Não foi possível carregar a visão gerencial.'); });
     return () => { active = false; };
-  }, [localDemo]);
+  }, [localDemo, attempt]);
 
+  if (loadError && !overview) return <ErrorState description={loadError} onRetry={() => setAttempt((value) => value + 1)} retryLabel="Tentar de novo" />;
   if (!overview) return <Loading label="Carregando visão gerencial..." />;
 
   const summary = overview.publications;
@@ -171,8 +178,11 @@ export function ReportsTab({ localDemo = false }) {
   const [overview, setOverview] = useState(null);
   const [memberships, setMemberships] = useState([]);
   const projects = useProducaoProjetos();
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
+    setLoadError('');
     if (localDemo) {
       setOverview(DEMO_MANAGEMENT_OVERVIEW);
       setMemberships(DEMO_MEMBERSHIPS);
@@ -180,11 +190,13 @@ export function ReportsTab({ localDemo = false }) {
     }
     Promise.all([
       withDemoFallback(getManagementOverview, DEMO_MANAGEMENT_OVERVIEW),
-      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS),
+      // Lista de usuários pode não estar liberada para o perfil: fica vazia.
+      withDemoFallback(listMemberships, DEMO_MEMBERSHIPS).catch(() => []),
     ])
       .then(([data, users]) => { if (active) { setOverview(data); setMemberships(users); } })
+      .catch((error) => { if (active) setLoadError(error?.message || 'Não foi possível carregar os relatórios.'); });
     return () => { active = false; };
-  }, [localDemo]);
+  }, [localDemo, attempt]);
   const subTabs = [
     { key: 'equipe', label: 'Equipe' },
     { key: 'setores', label: 'Setor(es)' },
@@ -196,7 +208,8 @@ export function ReportsTab({ localDemo = false }) {
 
   return (
     <div className="space-y-4">
-      {!overview && <Loading label="Carregando relatórios..." />}
+      {loadError && !overview && <ErrorState description={loadError} onRetry={() => setAttempt((value) => value + 1)} retryLabel="Tentar de novo" />}
+      {!overview && !loadError && <Loading label="Carregando relatórios..." />}
 
       {/* Sub-tabs */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">

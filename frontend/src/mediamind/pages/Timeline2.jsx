@@ -10,13 +10,14 @@ import {
 import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
-  addMarker, addMediaClip, addPropertyKeyframe, addTextClip, addTrack, createTimeline2Document, deleteClips, duplicateClip, moveClip, removePropertyKeyframe, removeTrack, rippleDelete,
+  addMarker, addMediaClip, addPropertyKeyframe, addTextClip, addTrack, createTimeline2Document, deleteClips, duplicateClip, removePropertyKeyframe, removeTrack, rippleDelete,
   clearTimelineRange, separateClipAudio, setPlayhead, setTimelineIn, setTimelineOut, setZoom, splitClip, toggleSnapping, toggleTrackState, trimClip,
   getActiveClips, getClipPropertiesAtTime, getTimelineDisplayTracks, getTimelineGeometry, pointerToTimelineTime, updateClipProperties, updateKeyframeCurve,
   addClipOnFreeTrack, copyClips, duplicateClips, extractRange, formatTimecode, getClipFilterCss, getClipsInRegion, getPlacementError, getPreviousAdjacentClip, getTimelineSpan,
   getZoomToFit, moveClipsBy, moveTrack, pasteClips, pastedClipId, renameTrack, setClipSpeed, setClipTransition, setFrameRate, splitClipsAtTime, stepFrames,
-  toggleRippleEditing, TIMELINE2_FRAME_RATES, TIMELINE2_TRANSITIONS,
+  toggleRippleEditing, TIMELINE2_FRAME_RATES, TIMELINE2_TRANSITIONS, expandLinkedClipIds, moveClipWithLinked,
 } from '../lib/timeline2Model';
+import { ensureAssetDurations, uploadWithDuration } from '../lib/mediaDuration';
 import { CAPTION_PRESETS, captionPresetToProperties, getCaptionPreset } from '../lib/captionPresets';
 import { TIMELINE2_FILTER_PRESETS, TIMELINE2_STICKERS, TIMELINE2_TEXT_PRESETS, getPipPlacement } from '../lib/timeline2Presets';
 import { describeTimelineExport } from '../lib/timeline2Export';
@@ -56,7 +57,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
       return workspaceDraft?.tracks ? workspaceDraft : INITIAL_DOCUMENT;
     } catch { return INITIAL_DOCUMENT; }
   }, [storagePrefix, editingProjectId]);
-  const { document, commit, updateTransient, beginGesture, finishGesture, undo, redo, canUndo, canRedo } = useTimeline2Project(initial, `mm_timeline2_project:${initial.id}`);
+  const { document, save, commit, updateTransient, beginGesture, finishGesture, undo, redo, canUndo, canRedo } = useTimeline2Project(initial, `mm_timeline2_project:${initial.id}`);
   const formatTime = (seconds) => formatTimecode(seconds, document.fps);
   const [selection, setSelection] = useState([]);
   const selectedClipId = selection.at(-1) ?? null;
@@ -84,6 +85,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
   const [autoKeyframe, setAutoKeyframe] = useState(false);
   const [notice, setNotice] = useState('Importe um arquivo ou adicione uma mídia do acervo.');
   const [uploadReceipts, setUploadReceipts] = useState([]);
+  const [saveStatus, setSaveStatus] = useState(null);
   const fileInputRef = useRef(null);
   const mediaRefs = useRef(new Map());
   const pointerGestureRef = useRef(null);
@@ -118,6 +120,15 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
     [document.tracks],
   );
 
+  const saveProject = () => {
+    const result = save();
+    if (result.ok) {
+      const time = result.savedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      setSaveStatus({ ok: true, message: `Salvo neste navegador às ${time}` });
+    } else {
+      setSaveStatus({ ok: false, message: result.quota ? 'Não foi possível salvar: o espaço deste navegador está cheio. Exporte ou remova projetos antigos.' : `Não foi possível salvar: ${result.error?.message || 'erro desconhecido'}` });
+    }
+  };
   const applySplit = () => {
     if (selectedIds.length > 1) { commit((current) => splitClipsAtTime(current, selectedIds, current.playhead)); setNotice(`${selectedIds.length} clipes divididos no playhead.`); return; }
     if (selected) commit((current) => splitClip(current, selected.id, current.playhead));
@@ -196,7 +207,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
     }
     setUploading(true);
     try {
-      const uploaded = await Promise.all(accepted.map((file) => uploadMediaAsset(file)));
+      const uploaded = await Promise.all(accepted.map((file) => uploadWithDuration(file, uploadMediaAsset)));
       setUploadReceipts(uploaded);
       setAssets((current) => [...uploaded, ...current.filter((item) => !uploaded.some((next) => next.id === item.id))]);
       const imported = uploaded.map(assetToMedia);
@@ -322,7 +333,10 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
   useEffect(() => {
     let active = true;
     listMediaAssets()
-      .then((items) => { if (active) setAssets(items); })
+      .then((items) => { if (active) setAssets(items); return items; })
+      // Sem ffprobe no servidor: mede a duração no navegador e grava no Asset.
+      .then((items) => ensureAssetDurations(items.map((asset) => ({ ...asset, stream_url: mediaStreamUrl(asset) }))))
+      .then((measured) => { if (active) setAssets((current) => current.map((asset) => { const found = measured.find((item) => item.id === asset.id); return found && Number(found.duration) > 0 ? { ...asset, duration: found.duration } : asset; })); })
       .catch((error) => { if (active) setNotice(error?.message || 'Não foi possível carregar o Acervo.'); });
     return () => { active = false; };
   }, []);
@@ -402,7 +416,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
     if (clipId) {
       const bounds = event.currentTarget.getBoundingClientRect();
       const time = pointerToTimelineTime(event.clientX, bounds, scaleDuration);
-      commit((current) => moveClip(current, clipId, { start: time, trackId: track.id }));
+      commit((current) => moveClipWithLinked(current, clipId, { start: time, trackId: track.id }));
       setSelectedClipId(clipId); setNotice(`Clipe movido para ${track.name} em ${formatTime(time)}.`); return;
     }
     try {
@@ -449,7 +463,8 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
     try { event.currentTarget.setPointerCapture?.(event.pointerId); } catch { /* gesture remains usable without capture */ }
     const canvasBounds = canvas.getBoundingClientRect();
     const pointerTime = pointerToTimelineTime(event.clientX, canvasBounds, scaleDuration);
-    const group = mode === 'move' && selectedIds.length > 1 && selectedIds.includes(clip.id) ? selectedIds : null;
+    // Seleção múltipla arrasta junto o áudio/vídeo vinculado de cada clipe.
+    const group = mode === 'move' && selectedIds.length > 1 && selectedIds.includes(clip.id) ? expandLinkedClipIds(document, selectedIds) : null;
     pointerGestureRef.current = {
       clipId: clip.id,
       bounds: { left: canvasBounds.left, width: canvasBounds.width },
@@ -473,7 +488,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
       updateTransient(() => moveClipsBy(gesture.origin, gesture.group, delta));
     } else if (gesture.mode === 'move') {
       const hoveredTrack = globalThis.document.elementFromPoint?.(event.clientX, event.clientY)?.closest?.('[data-track-id]');
-      updateTransient((current) => moveClip(current, gesture.clipId, { start: pointerTime - gesture.offset, trackId: hoveredTrack?.dataset.trackId }));
+      updateTransient((current) => moveClipWithLinked(current, gesture.clipId, { start: pointerTime - gesture.offset, trackId: hoveredTrack?.dataset.trackId }));
     } else updateTransient((current) => trimClip(current, gesture.clipId, { edge: gesture.mode, time: pointerTime }));
   };
   const endClipGesture = () => {
@@ -538,7 +553,8 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
         <div className="ml-auto flex flex-wrap gap-2">
           <button type="button" onClick={undo} disabled={!canUndo} aria-label="Desfazer" className="w2-button disabled:opacity-40"><Undo2 size={14} /> Desfazer</button>
           <button type="button" onClick={redo} disabled={!canRedo} aria-label="Refazer" className="w2-button disabled:opacity-40"><Redo2 size={14} /> Refazer</button>
-          <button type="button" onClick={() => localStorage.setItem(storagePrefix + 'mm_timeline2_project', JSON.stringify(document))} className="w2-button"><Save size={14} /> Salvar projeto</button>
+          <button type="button" onClick={saveProject} className="w2-button"><Save size={14} /> Salvar projeto</button>
+          {saveStatus && <span role="status" className={`self-center text-[11px] ${saveStatus.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{saveStatus.message}</span>}
           <button type="button" onClick={exportSelected} disabled={exporting || selected?.kind !== 'video' || !selected?.assetId} title="Renderiza os cortes do clipe selecionado em MP4" className="w2-button border-emerald-600 text-emerald-300 disabled:opacity-40"><Download size={14} /> {exporting ? 'Renderizando…' : 'Exportar clipe'}</button>
           <button type="button" onClick={exportSequence} disabled={exporting || !document.tracks.find((track) => track.id === 'v1')?.clips.some((clip) => clip.assetId)} title={`Renderiza os cortes da trilha principal (${exportSummary.mainTrack?.id || 'v1'}) em um MP4. Outras trilhas, textos e efeitos ficam só no preview.`} className="w2-button border-violet-600 text-violet-300 disabled:opacity-40"><Download size={14} /> Exportar sequência</button>
           <button type="button" onClick={() => setShowExportInfo((current) => !current)} aria-pressed={showExportInfo} aria-label="O que entra no MP4" title="Mostra o que a exportação da sequência inclui hoje" className="w2-button"><Info size={14} /> O que entra no MP4</button>
@@ -643,7 +659,7 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
           {selectedIds.length > 1 && <div className="mt-3 flex items-center justify-between rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-200"><span><Layers size={12} className="mr-1 inline" />{selectedIds.length} clipes selecionados · o inspetor mostra o último</span><button type="button" onClick={() => setSelection([])} className="text-amber-300 hover:text-white">Limpar</button></div>}
           {selected ? <div className="mt-3 space-y-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"><p className="text-sm font-bold">{selected.name}</p><p className="text-[10px] text-slate-500">{selected.id} · {selected.trackId}</p></div>
-            <label className="block text-xs text-slate-400">Posição na timeline<input aria-label="Posição do clipe" type="number" step="0.001" value={Number(selected.start.toFixed(3))} onChange={(event) => commit((current) => moveClip(current, selected.id, { start: Number(event.target.value) }))} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
+            <label className="block text-xs text-slate-400">Posição na timeline<input aria-label="Posição do clipe" type="number" step="0.001" value={Number(selected.start.toFixed(3))} onChange={(event) => commit((current) => moveClipWithLinked(current, selected.id, { start: Number(event.target.value) }))} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
             <label className="block text-xs text-slate-400">Início do conteúdo (trim)<input aria-label="Início do clipe" type="number" step="0.001" value={Number(selected.start.toFixed(3))} onChange={(event) => changeTrim('start', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
             <label className="block text-xs text-slate-400">Fim na timeline<input aria-label="Fim do clipe" type="number" step="0.001" value={Number((selected.start + selected.duration).toFixed(3))} onChange={(event) => changeTrim('end', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-slate-100" /></label>
             <dl className="grid grid-cols-2 gap-2 text-xs"><dt className="text-slate-500">Source IN</dt><dd>{formatTime(selected.sourceIn)}</dd><dt className="text-slate-500">Source OUT</dt><dd>{formatTime(selected.sourceOut)}</dd></dl>

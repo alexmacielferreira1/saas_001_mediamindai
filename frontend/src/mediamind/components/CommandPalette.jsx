@@ -4,7 +4,7 @@ import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, CornerDownLeft, ArrowUp, ArrowDown, Home, Briefcase, Film, Calendar,
-  Layers, ShieldCheck, BarChart3, Send, AlertCircle, Hash, FolderOpen, CheckSquare,
+  Layers, ShieldCheck, BarChart3, Send, AlertCircle, Hash,
   FileText, Newspaper, MessageSquare, Users, Clapperboard, Sparkles, Command as CommandIcon,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
@@ -38,17 +38,14 @@ const NAV = [
   { to: '/assistente', label: 'Assistente IA', icon: Sparkles },
 ];
 
-// Fontes de registros (uma entidade por grupo). `param` = aba do Corp (filtrada
+// Fontes de registros (uma entidade por grupo). Só entidades existentes na API
+// de registros do servidor (records.py → ALLOWED_TYPES). `param` = aba do Corp (filtrada
 // por permissão); `to` = rota aberta. `keywords` vira um campo peso 1 pra que
 // digitar o tipo (ex.: "producao") surfaced os registros.
 const SOURCES = [
   { entity: 'ProducaoProjeto', group: 'Produções', icon: Clapperboard, label: (r) => r.titulo || 'Produção', hint: (r) => `${r.programa || ''} ${r.episodio ? `· ${r.episodio}` : ''} · ${r.etapa || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/corp', param: 'producao', keywords: 'producao podcast episodio programa gravacao edicao entrega rascunho materia reportagem' },
   { entity: 'Asset', group: 'Acervo', icon: Film, label: (r) => r.title || r.filename, hint: (r) => `${r.filename || ''} · ${r.asset_type || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/search', keywords: 'midia video audio imagem arquivo acervo filme clipe reportagem materia entrevista documento' },
-  { entity: 'Project', group: 'Projetos', icon: FolderOpen, label: (r) => r.name, hint: (r) => `${r.status || ''} · ${r.asset_count || 0} arquivos`, to: '/workspace', keywords: 'projeto' },
-  { entity: 'Task', group: 'Tarefas', icon: CheckSquare, label: (r) => r.title, hint: (r) => `${r.project_name || ''} · ${r.status || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/workspace', keywords: 'tarefa pendencia pendente atividade fazer entrega' },
   { entity: 'Script', group: 'Roteiros', icon: FileText, label: (r) => r.title, hint: (r) => `${r.project_name || ''} · ${r.status || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/workspace', keywords: 'roteiro' },
-  { entity: 'Library', group: 'Bibliotecas', icon: ShieldCheck, label: (r) => r.name, hint: (r) => `${r.status || ''} · ${r.asset_count || 0} itens`, to: '/acervo', keywords: 'biblioteca' },
-  { entity: 'IngestPackage', group: 'Ingest', icon: Layers, label: (r) => r.name, hint: (r) => `${r.status || ''} · ${r.file_count || 0} arquivos`, to: '/ingest', keywords: 'ingest pacote' },
   { entity: 'Clip', group: 'Clipes', icon: Film, label: (r) => r.title, hint: (r) => `${r.program_name || ''} · ${r.status || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/social', keywords: 'clip corte publicacao social viral reels tiktok instagram youtube short' },
   { entity: 'ComentarioRevisao', group: 'Comentários', icon: MessageSquare, label: (r) => (r.texto || '').slice(0, 60), hint: (r) => `${r.asset_title || ''} · ${r.timecode_label || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/workspace', keywords: 'comentario revisao' },
   { entity: 'AgendaEvento', group: 'Agenda', icon: Calendar, label: (r) => r.titulo, hint: (r) => `${r.programa || ''} · dia ${r.day || ''} ${r.horario || ''}`.replace(/^·\s*|·\s*$/g, '').trim(), to: '/corp', param: 'producao', keywords: 'agenda evento gravacao' },
@@ -74,20 +71,19 @@ export default function CommandPalette({ open, onClose }) {
   const [data, setData] = useState({});
   const [query, setQuery] = useState('');
 
-  // Carga: resolve o tenant ativo e filtra cada entidade por empresa_id.
-  // Visão "all" (admin) não aplica filtro. Erros silenciosos mantêm dados
-  // anteriores. Cache key = empresa ativa; invalidado ao trocar (dep current).
+  // Carga: o servidor já isola os registros pela empresa da sessão, então não
+  // filtramos por empresa_id (mídias enviadas não têm esse campo). Erros
+  // (ex.: 403 de tela restrita) deixam só aquele grupo vazio. Recarrega ao
+  // trocar de empresa (deps current/isGlobal).
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    const filterObj = isGlobal || !current ? null : { empresa_id: current };
     const names = [...SOURCES.map((s) => s.entity), 'PendenciaCorp'];
     Promise.all(
       names.map((n) => {
         const e = base44.entities[n];
         if (!e) return Promise.resolve([n, []]);
-        const p = filterObj ? e.filter(filterObj, '-created_date', 200) : e.list('-created_date', 200);
-        return p.then((r) => [n, r || []]).catch(() => [n, []]);
+        return e.list('-created_date', 200).then((r) => [n, r || []]).catch(() => [n, []]);
       })
     )
       .then((pairs) => {

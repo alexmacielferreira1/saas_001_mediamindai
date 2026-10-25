@@ -12,7 +12,9 @@ import runpy
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+import os  # noqa: E402
+
+ROOT = Path(os.environ.get("E2E_BACKEND_ROOT") or Path(__file__).resolve().parents[2])
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core import config  # noqa: E402

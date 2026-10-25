@@ -4,25 +4,28 @@ import { toast } from '@/components/ui/use-toast';
 import { MOCK_CORP_PRODUCAO_PROJETOS } from '../data';
 import { getAdjacentProductionStage, PRODUCTION_STAGE_ORDER } from './productionWorkflow';
 import { isDemoRecord, markDemoRecords } from './demoCatalog';
+import { getCurrentTenantId } from './currentTenant';
+import { readLocalDemoSession } from './demoAccess';
 
 // Memória compartilhada dos projetos de Produção — o coração do pipeline
 // (Rascunhos, Gravações, Kanban e Em edição leem e escrevem aqui).
 //
 // Antes: seed em memória do mock, perdia a cada reload.
-// Agora: a entidade ProducaoProjeto é a fonte de verdade. O seed do mock só
-// preenche o primeiro render (pra não piscar tela vazia) e é substituído pelos
-// registros reais assim que a carga termina; se a entidade estiver vazia, o
-// mock continua na tela como demonstração e nunca é gravado. Toda mutação atualiza a memória na hora (UX instantânea,
+// Agora: a entidade ProducaoProjeto é a fonte de verdade. Na sessão de
+// demonstração local o mock preenche a tela (nunca é gravado); numa empresa
+// real a lista começa vazia e só mostra registros do servidor. Toda mutação atualiza a memória na hora (UX instantânea,
 // API síncrona preservada) e persiste em background. A gravação devolve uma
 // Promise<boolean>; falhas não são engolidas: ficam em useProducaoSaveState
 // ('error') e geram aviso. Falha na carga não cai para o mock.
 
-// Id da empresa ativa (tenant) — lido do localStorage (mesma chave do EmpresaProvider).
+// Id da empresa ativa (tenant) — o da sessão, publicado pelo EmpresaProvider.
+// O servidor isola os registros por empresa; o campo é só referência.
 function currentEmpresaId() {
-  try { return localStorage.getItem('mm_current_empresa_v1') || ''; } catch { return ''; }
+  return getCurrentTenantId();
 }
 
-let projetos = seedMock();
+// Começa vazia; exemplos só entram na carga, e só na sessão de demonstração.
+let projetos = [];
 let loaded = false;
 let loadingPromise = null;
 let loadError = null;
@@ -106,7 +109,9 @@ function fromEntity(r) {
     edicao_obs: r.edicao_obs || '',
     prazo_edicao: r.prazo_edicao || '',
     historico: r.historico || [],
+    tarefas: r.tarefas || [],
     _entityId: r.id,
+    _updatedDate: r.updated_date || null,
   };
 }
 
@@ -142,6 +147,7 @@ function toEntityData(p) {
     edicao_obs: p.edicao_obs || '',
     prazo_edicao: p.prazo_edicao || '',
     historico: p.historico || [],
+    tarefas: p.tarefas || [],
   };
 }
 
@@ -190,13 +196,28 @@ function rememberConfirmed(localId, data) {
 async function runWrite(localId, snapshot) {
   const p = projetos.find((x) => x.id === localId);
   if (!p) return null;
-  if (p._entityId) return base44.entities.ProducaoProjeto.update(p._entityId, snapshot);
+  if (p._entityId) {
+    // If-Match com a versão lida: outra tela/pessoa que gravou antes gera 409 em vez de ser sobrescrita.
+    const saved = await base44.entities.ProducaoProjeto.update(p._entityId, snapshot, { ifMatch: p._updatedDate || undefined });
+    rememberVersion(localId, saved);
+    return saved;
+  }
   const created = await base44.entities.ProducaoProjeto.create({ ...snapshot, ordem: Number(p.id) || 0 });
   if (!created?.id) throw new Error('o servidor não devolveu o registro criado');
   // Amarra o id da entidade ao id local, sem trocar o id local.
-  projetos = projetos.map((x) => (x.id === localId ? { ...x, _entityId: created.id } : x));
+  projetos = projetos.map((x) => (x.id === localId ? { ...x, _entityId: created.id, _updatedDate: created.updated_date || null } : x));
   return created;
 }
+
+function rememberVersion(localId, saved) {
+  if (!saved?.updated_date) return;
+  projetos = projetos.map((x) => (x.id === localId ? { ...x, _updatedDate: saved.updated_date } : x));
+}
+
+function isVersionConflict(error) {
+  return error?.status === 409 && error?.code === 'RECORD_VERSION_CONFLICT';
+}
+const VERSION_CONFLICT_MESSAGE = 'Esta produção foi alterada em outra tela ou por outra pessoa depois que você a abriu. Recarregue a página para ver a versão atual; sua alteração não foi gravada.';
 
 function revertRejectedStage(localId, queue) {
   const conf = confirmed.get(localId);
@@ -249,6 +270,11 @@ function persist(localId) {
       return true;
     } catch (error) {
       if (epoch !== storeEpoch) return false;
+      if (isVersionConflict(error)) {
+        setSaveState(localId, { status: 'error', error: VERSION_CONFLICT_MESSAGE });
+        toast({ title: 'Produção alterada em outro lugar', description: VERSION_CONFLICT_MESSAGE, variant: 'destructive' });
+        return false;
+      }
       const rejected = isStageRejection(error);
       if (rejected) revertRejectedStage(localId, queue);
       const message = rejected
@@ -301,6 +327,9 @@ async function loadOrSeed() {
     if (existing.length > 0) {
       projetos = existing.map(fromEntity);
       for (const p of projetos) rememberConfirmed(p.id, p);
+    } else {
+      // Empresa sem produções: lista vazia; exemplos só na sessão demo local.
+      projetos = readLocalDemoSession() ? seedMock() : [];
     }
     loadError = null;
   } catch (error) {
