@@ -66,7 +66,6 @@ export default function Corp() {
   // Não limpa o param aqui — a ProdutoraPage lê, cria o rascunho e limpa.
   useEffect(() => {
     if (searchParams.get('novo') === 'producao') setActiveTab('producao');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Guarda a aba ativa: se o papel não tem acesso à aba atual (ex.: trocou de

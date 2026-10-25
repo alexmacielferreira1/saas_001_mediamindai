@@ -364,7 +364,6 @@ function ThumbnailStudioEditor({ darkChannelId = "", darkScriptId = "", workspac
       const sameTitle = projects.find((project) => (project.titulo || project.title) === draft.title);
       selectProject(String((requestedProject || sameTitle || projects[0]).id));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectKey, manualCreation]);
 
   const selectedProject = projects.find((project) => String(project.id) === draft.projectId);
@@ -559,8 +558,8 @@ function ThumbnailStudioEditor({ darkChannelId = "", darkScriptId = "", workspac
   async function saveProjectStyle() {
     try {
       if (!draft.projectId) return;
-      await base44.entities.ProducaoProjeto.update(draft.projectId, { thumbnail_style: draft.style, thumbnail_channel_logo: draft.channelLogo?.startsWith('blob:') ? undefined : draft.channelLogo });
-      mergePersistedProject(draft.projectId, { thumbnail_style: draft.style });
+      const saved = await base44.entities.ProducaoProjeto.update(draft.projectId, { thumbnail_style: draft.style, thumbnail_channel_logo: draft.channelLogo?.startsWith('blob:') ? undefined : draft.channelLogo });
+      mergePersistedProject(draft.projectId, { thumbnail_style: draft.style, ...(saved?.updated_date ? { _updatedDate: saved.updated_date } : {}) });
       setNotice('Fontes e efeitos definidos como padrão do projeto.');
     } catch (e) { setNotice(e.message); }
   }

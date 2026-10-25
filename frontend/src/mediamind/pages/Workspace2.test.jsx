@@ -45,7 +45,22 @@ describe('Workspace 2 flow', () => {
     expect(screen.getByRole('complementary', { name: 'Roteiro editável' })).toBeInTheDocument();
   }, 10000);
 
-  it('shows demonstrative media and numbered script blocks when the archive is unavailable', async () => {
+  it('shows an error with retry (no demo data) when the archive fails outside the demo session', async () => {
+    mediaApi.listMediaAssets.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([{ id: 'real-1', title: 'Mídia real', asset_type: 'video', duration: 8, stream_url: '/real.mp4' }]);
+    render(<MemoryRouter><Workspace2 /></MemoryRouter>);
+
+    expect(await screen.findByText('Não foi possível carregar o Acervo: offline')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /2\s*Montar roteiro/i }));
+    expect(screen.queryByText('Entrevista Prefeito')).not.toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: /Abertura — Apresentador/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect((await screen.findAllByText('Mídia real')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Não foi possível carregar o Acervo:/)).not.toBeInTheDocument();
+  });
+
+  it('shows demonstrative media and numbered script blocks when the archive is unavailable (demo session only)', async () => {
+    localStorage.setItem('mm_demo_session_v1', JSON.stringify({ id: 'demo' }));
     mediaApi.listMediaAssets.mockRejectedValueOnce(new Error('offline'));
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
 
@@ -97,7 +112,7 @@ describe('Workspace 2 flow', () => {
   });
 
   it('makes search results draggable to the active Workspace area', async () => {
-    mediaApi.listMediaAssets.mockRejectedValueOnce(new Error('offline'));
+    mediaApi.listMediaAssets.mockResolvedValueOnce([{ id: 'real-1', title: 'Entrevista real', filename: 'entrevista.mp4', asset_type: 'video', duration: 12, stream_url: '/real.mp4' }]);
     render(<MemoryRouter><Workspace2 /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /2\s*Montar roteiro/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir pesquisa lateral' }));

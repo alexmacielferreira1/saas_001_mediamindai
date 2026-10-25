@@ -73,7 +73,9 @@ function entityClient(entity) {
       for (const record of records) emit(entity, { type: 'create', data: record });
       return records;
     },
-    async update(id, data) {
+    // `ifMatch`: updated_date lido do registro; o servidor recusa com 409
+    // RECORD_VERSION_CONFLICT se outra gravação chegou antes (sem perda por sobrescrita).
+    async update(id, data, /** @type {{ ifMatch?: string }} */ { ifMatch } = {}) {
       if (readLocalDemoSession()) {
         const current = demoList().find((record) => String(record.id) === String(id)) || { id };
         const record = { ...current, ...data, id: current.id };
@@ -83,7 +85,9 @@ function entityClient(entity) {
         emit(entity, { type: 'update', data: record });
         return record;
       }
-      const record = await request(`${path}/${encodeURIComponent(id)}`, { method: 'PATCH', body: { data } });
+      const record = await request(`${path}/${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: { data }, ...(ifMatch ? { headers: { 'If-Match': String(ifMatch) } } : {}),
+      });
       emit(entity, { type: 'update', data: record });
       return record;
     },

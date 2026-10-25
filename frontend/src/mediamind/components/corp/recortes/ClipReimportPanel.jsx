@@ -36,7 +36,7 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
     if (!realId) return;
     try { setVersions(await listVersions(clip.id)); } catch { /* silencioso */ }
   }
-  useEffect(() => { loadVersions(); /* eslint-disable-next-line */ }, [clip.id]);
+  useEffect(() => { loadVersions(); }, [clip.id]);
   useEffect(() => () => { if (download?.url) URL.revokeObjectURL(download.url); }, [download]);
 
   async function exportMp4() {

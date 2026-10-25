@@ -20,10 +20,11 @@ test.describe('2. Inserir mídia (Ingest → Acervo → busca)', () => {
     await expect(page.getByText(imageName)).toBeVisible();
     await page.getByRole('button', { name: 'Criar pacote e continuar →' }).click();
     const uploads = [];
-    page.on('response', (r) => { if (r.request().method() === 'POST' && /\/api\/v1\/(uploads|records\/Asset)/.test(r.url())) uploads.push(r.status()); });
+    // Fluxo corrigido (B3): POST /media/assets (arquivo + Asset do servidor) e PATCH do Asset com os dados do pacote.
+    page.on('response', (r) => { if (['POST', 'PATCH'].includes(r.request().method()) && /\/api\/v1\/(uploads|media\/assets|records\/Asset)/.test(r.url())) uploads.push(r.status()); });
     await page.getByRole('button', { name: 'Iniciar envio' }).click();
     await expect.poll(() => uploads.length, { timeout: 30_000 }).toBe(4);
-    expect(uploads.every((s) => s === 201)).toBe(true);
+    expect(uploads.every((s) => s === 200 || s === 201)).toBe(true);
 
     // Persistência: o registro existe no servidor, com tipo, tamanho e pacote.
     const list = await api(page, 'GET', '/records/Asset?limit=200');

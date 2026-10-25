@@ -303,8 +303,16 @@ describe("Canais Dark · revisão, publicação e canal", () => {
     }));
     expect(await screen.findByRole("status")).toHaveTextContent("Etapa salva no registro próprio do Canais Dark.");
 
-    api.updateDarkChannelScript.mockRejectedValueOnce(new Error("Revisão recusada."));
+    // Sem alteração não há PATCH (cada parte exige a sua permissão no servidor).
+    const calls = api.updateDarkChannelScript.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Salvar revisão e programação" }));
+    expect(await screen.findByText("Nada mudou nesta etapa.")).toBeInTheDocument();
+    expect(api.updateDarkChannelScript).toHaveBeenCalledTimes(calls);
+
+    api.updateDarkChannelScript.mockRejectedValueOnce(new Error("Revisão recusada."));
+    fireEvent.change(screen.getByLabelText("Tags do vídeo"), { target: { value: "história" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar revisão e programação" }));
+    await waitFor(() => expect(api.updateDarkChannelScript).toHaveBeenLastCalledWith("channel-1", "script-1", { workflow: { tags: ["história"] } }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Revisão recusada.");
     fireEvent.click(screen.getByRole("button", { name: "Enviar para validação" }));
     await waitFor(() => expect(api.updateDarkChannelScript).toHaveBeenLastCalledWith("channel-1", "script-1", { status: "in_review" }));

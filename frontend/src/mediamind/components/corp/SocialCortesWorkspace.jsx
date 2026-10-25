@@ -31,13 +31,11 @@ export default function SocialCortesWorkspace({ onProsseguir, newClipSignal = 0,
   // Sinal do botão "Novo" (/social?novo=publicacao): abre o dialog de novo corte.
   useEffect(() => {
     if (newClipSignal > 0) setNewDialogOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newClipSignal]);
 
   // Pré-seleção de asset (vinda do Acervo/Workspace via /social?asset=<id>).
   useEffect(() => {
     if (preselectedAssetId) setNewDialogOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedAssetId]);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { request } from './httpClient';
+import { sendFormWithProgress } from './uploadProgress';
 
 function mediaPrefix() {
   try {
@@ -10,7 +11,7 @@ export async function listMediaAssets() {
   return (await request(`${mediaPrefix()}/assets`)).assets;
 }
 
-export function uploadMediaAsset(file, metadata = {}) {
+function mediaForm(file, metadata = {}) {
   const body = new FormData();
   body.append('file', file);
   for (const key of ['origin', 'project_id', 'recording_id']) {
@@ -18,11 +19,51 @@ export function uploadMediaAsset(file, metadata = {}) {
       body.append(key, String(metadata[key]));
     }
   }
-  return request(`${mediaPrefix()}/assets`, { method: 'POST', body });
+  return body;
+}
+
+export function uploadMediaAsset(file, metadata = {}) {
+  return request(`${mediaPrefix()}/assets`, { method: 'POST', body: mediaForm(file, metadata) });
+}
+
+// Mesmo endpoint de mídia (grava storage_key, sha256, mime e roda ffprobe),
+// com progresso do envio. O servidor cria o registro Asset da empresa.
+export function uploadMediaAssetWithProgress(file, metadata = {}, { onProgress } = {}) {
+  return sendFormWithProgress(`${mediaPrefix()}/assets`, mediaForm(file, metadata), { onProgress });
+}
+
+// Extensões/tipos aceitos por POST /media/assets (backend/app/api/v1/media.py,
+// ALLOWED_MEDIA) e limite padrão do servidor (media_max_upload_bytes = 4 GB).
+export const MEDIA_UPLOAD_TYPES = {
+  '.aac': ['audio/aac', 'audio/x-aac'], '.avi': ['video/x-msvideo'], '.jpeg': ['image/jpeg'], '.jpg': ['image/jpeg'],
+  '.m4a': ['audio/mp4', 'audio/x-m4a'], '.mov': ['video/quicktime'], '.mp3': ['audio/mpeg'], '.mp4': ['video/mp4', 'application/mp4'],
+  '.ogg': ['audio/ogg', 'video/ogg'], '.png': ['image/png'], '.wav': ['audio/wav', 'audio/x-wav'], '.webm': ['video/webm', 'audio/webm'],
+  '.webp': ['image/webp'],
+};
+export const MEDIA_UPLOAD_LIMIT_BYTES = 4 * 1024 * 1024 * 1024;
+
+export function isSupportedMediaFile(file) {
+  const name = String(file?.name || '').toLowerCase();
+  const suffix = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+  return Boolean(MEDIA_UPLOAD_TYPES[suffix]?.includes(file?.type || ''));
 }
 
 export function mediaStreamUrl(asset) {
   return resolveMediaUrl(asset?.stream_url || asset?.file_url || '');
+}
+
+// Asset lido por /records não traz stream_url. Os arquivos gravados pela rota
+// de mídia (POST /media/assets) têm campos que só o servidor grava (sha256,
+// mime_type, storage_key): para eles a reprodução é o stream autenticado do
+// próprio id. Cadastros antigos apontam para a mídia em media_asset_id ou
+// guardam só file_url.
+export function assetPlaybackUrl(asset) {
+  if (!asset) return '';
+  if (asset.stream_url) return resolveMediaUrl(asset.stream_url);
+  const stored = Boolean(asset.sha256 || asset.mime_type || asset.storage_key);
+  if (stored && asset.id) return resolveMediaUrl(`/api/v1${mediaPrefix()}/assets/${encodeURIComponent(asset.id)}/stream`);
+  if (asset.media_asset_id) return resolveMediaUrl(`/api/v1${mediaPrefix()}/assets/${encodeURIComponent(asset.media_asset_id)}/stream`);
+  return resolveMediaUrl(asset.file_url || asset.source_url || '');
 }
 
 export async function removeThumbnailBackground(file) {

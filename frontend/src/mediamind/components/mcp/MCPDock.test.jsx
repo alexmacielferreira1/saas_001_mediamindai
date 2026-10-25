@@ -247,4 +247,54 @@ describe("MCPDock", () => {
     expect(await screen.findByRole("heading", { name: /Centro MCP MediaMind/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Configuração de IA/i })).toBeInTheDocument();
   });
+
+  it("A6: base commands are the same shared list used by MCP Express (Express ⊂ Dock)", async () => {
+    const { MCP_APP_COMMANDS } = await import("../../lib/mcpCommands");
+    const source = await import("./MCPExpress?raw").catch(() => null);
+    for (const [appId, commands] of Object.entries(MCP_APP_COMMANDS)) {
+      expect(commands.length, appId).toBeGreaterThan(0);
+      expect(new Set(commands).size, appId).toBe(commands.length);
+    }
+    if (source?.default) expect(source.default).not.toMatch(/actions: \[/);
+  });
+
+  it("A6: the Planejado badge explains what is missing", async () => {
+    sessionStorage.clear();
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=photocraft"]}><MCPDock /></MemoryRouter>);
+    const mmphoto = await screen.findByRole("button", { name: "MMPhoto — planejado" });
+    await waitFor(() => expect(mmphoto).toHaveAttribute("title", expect.stringMatching(/falta instalar a ponte local do MMPhoto/)));
+    fireEvent.click(mmphoto);
+    expect(await screen.findByText(/Planejado: falta instalar a ponte local do MMPhoto/)).toBeInTheDocument();
+  });
+
+  it("A7: reopens the last MCP panel after navigating between tools in the same session", async () => {
+    sessionStorage.clear();
+    const first = render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=photocraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMPhoto/ }));
+    expect(sessionStorage.getItem("mm_mcp_dock_active_v1")).toBe("mmphoto");
+    first.unmount();
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=photocraft"]}><MCPDock /></MemoryRouter>);
+    expect(await screen.findByRole("button", { name: "Fechar painel MCP" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar painel MCP" }));
+    expect(sessionStorage.getItem("mm_mcp_dock_active_v1")).toBeNull();
+  });
+});
+
+describe("MCPDock · fila em execução", () => {
+  it("bloqueia o segundo clique e explica o 409 MCP_QUEUE_RUNNING", async () => {
+    const { listMCPQueues } = await import("../../lib/mcpApi");
+    listMCPQueues.mockResolvedValue({ queues: [{ id: "q1", name: "Fila 1", status: "draft", module: "mmfilm", target_projects: [], create_projects: [], output_mode: "internal", results: [] }] });
+    let release;
+    mcpApi.executeMCPQueue.mockReset().mockImplementationOnce(() => new Promise((_, reject) => { release = () => reject(Object.assign(new Error("Esta fila já está em execução."), { status: 409, code: "MCP_QUEUE_RUNNING" })); }));
+    sessionStorage.clear();
+    render(<MemoryRouter initialEntries={["/ferramentas-graficas?tool=filmcraft"]}><MCPDock /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /MMFilm/ }));
+    const button = await screen.findByRole("button", { name: "Executar fila" });
+    fireEvent.click(button);
+    expect(await screen.findByRole("button", { name: "Executando…" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Executando…" }));
+    expect(mcpApi.executeMCPQueue).toHaveBeenCalledTimes(1);
+    await act(async () => { release(); });
+    expect(await screen.findByText(/já está em execução. Aguarde o resultado/)).toBeInTheDocument();
+  });
 });

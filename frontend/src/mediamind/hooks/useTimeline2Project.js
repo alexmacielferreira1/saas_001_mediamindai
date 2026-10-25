@@ -17,8 +17,29 @@ export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_
   const [state, setState] = useWorkDraftState(`timeline:${storageKey}`, () => ({ past: [], present: readSaved(storageKey, initialDocument), future: [] }));
   const gestureStartRef = useRef(null);
 
+  // Autosave neste navegador. Falha (ex.: cota cheia) não derruba o editor:
+  // fica registrada para o botão "Salvar projeto" informar o usuário.
+  const lastSaveErrorRef = useRef(null);
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(state.present));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(state.present));
+      lastSaveErrorRef.current = null;
+    } catch (error) {
+      lastSaveErrorRef.current = error;
+    }
+  }, [state.present, storageKey]);
+
+  // "Salvar projeto": grava na mesma chave do autosave (a que o editor lê ao abrir).
+  const save = useCallback(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(state.present));
+      lastSaveErrorRef.current = null;
+      return { ok: true, savedAt: new Date() };
+    } catch (error) {
+      lastSaveErrorRef.current = error;
+      const quota = error?.name === 'QuotaExceededError' || /quota/i.test(String(error?.message || ''));
+      return { ok: false, quota, error };
+    }
   }, [state.present, storageKey]);
 
   const commit = useCallback((change) => {
@@ -65,5 +86,5 @@ export function useTimeline2Project(initialDocument, storageKey = 'mm_timeline2_
 
   const reset = useCallback(() => setState({ past: [], present: initialDocument, future: [] }), [initialDocument]);
 
-  return { document: state.present, commit, updateTransient, beginGesture, finishGesture, undo, redo, reset, canUndo: state.past.length > 0, canRedo: state.future.length > 0 };
+  return { document: state.present, save, commit, updateTransient, beginGesture, finishGesture, undo, redo, reset, canUndo: state.past.length > 0, canRedo: state.future.length > 0 };
 }

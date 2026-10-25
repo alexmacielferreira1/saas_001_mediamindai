@@ -131,13 +131,13 @@ export default function RascunhosPage({ newDraftSignal = 0 }) {
   // Sinal do botão "Novo" (/corp?novo=producao): cria um rascunho novo.
   useEffect(() => {
     if (newDraftSignal > 0) addDraft();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newDraftSignal]);
 
   if (!selected) {
     return (
-      <div className="flex h-full items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40 text-sm text-slate-500">
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 text-sm text-slate-500">
         Nenhum rascunho. Crie um novo projeto pra começar.
+        <button onClick={addDraft} className="flex min-h-9 items-center gap-1 rounded-md bg-sky-500 px-3 text-[10px] font-bold text-slate-950 hover:bg-sky-400"><Plus size={11} /> Novo rascunho</button>
       </div>
     );
   }

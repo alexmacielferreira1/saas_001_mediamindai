@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Search, Film, Sparkles, FileVideo, AlertTriangle } from 'lucide-react';
 import { useEmpresa } from '../../../lib/empresaContext';
 import { listAssets, getAsset } from '../../../lib/clipEngineService';
+import { assetPlaybackUrl } from '../../../../api/media';
 import { Loading, EmptyState } from '../../shared';
 import { fmt } from './clipModel';
 
@@ -28,6 +29,9 @@ const PROFILES = [
   { id: 'documental', label: 'Documental' },
 ];
 
+// Duração do Asset vem do servidor em segundos (ffprobe ou medida no navegador).
+const secondsToMs = (seconds) => Math.max(0, Math.round((Number(seconds) || 0) * 1000));
+
 // Dialog "Novo corte" — seleção de Asset real do Acervo + configurações de
 // análise. Não usa vídeo demo: a origem é sempre um Asset do MediaMind.
 export default function NewClipDialog({ open, onClose, onCreated, preselectedAssetId }) {
@@ -51,17 +55,21 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
   useEffect(() => {
     if (!open) return;
     setLoading(true); setErr('');
-    listAssets(eid ? { empresa_id: eid } : {})
-      .then((list) => setAssets(list.filter((a) => a.asset_type === 'video' || a.asset_type === 'audio')))
+    // O servidor já devolve só as mídias da empresa da sessão; as enviadas pela
+    // rota de mídia não têm empresa_id, então não filtramos por ele.
+    listAssets({})
+      .then((list) => setAssets(list
+        .filter((a) => a.asset_type === 'video' || a.asset_type === 'audio')
+        .map((a) => ({ ...a, stream_url: assetPlaybackUrl(a) }))))
       .catch((e) => setErr(e.message || String(e)))
       .finally(() => setLoading(false));
-  }, [open, eid]);
+  }, [open]);
 
   // Pré-seleção via ?asset=<id> (vinda do Acervo/Workspace).
   useEffect(() => {
     if (open && preselectedAssetId) {
       setAssetId(preselectedAssetId);
-      getAsset(preselectedAssetId).then((a) => setDurationMs(a?.duration || 0)).catch(() => {});
+      getAsset(preselectedAssetId).then((a) => setDurationMs(secondsToMs(a?.duration))).catch(() => {});
     }
   }, [open, preselectedAssetId]);
 
@@ -75,8 +83,8 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
 
   function choose(a) {
     setAssetId(String(a.id));
-    setDurationMs(a.duration || 0);
-    setOutMs(a.duration || 0);
+    setDurationMs(secondsToMs(a.duration));
+    setOutMs(secondsToMs(a.duration));
   }
 
   function processar() {
@@ -87,7 +95,7 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
       titulo: prompt ? `Corte — ${prompt.slice(0, 40)}` : `Corte — ${asset.title || asset.filename || 'asset'}`,
       source_asset_id: String(asset.id),
       source_url: asset.stream_url || asset.source_url || asset.path || '',
-      duration_ms: durationMs || asset.duration || 0,
+      duration_ms: durationMs || secondsToMs(asset.duration),
       stage: mode === 'ia' ? 'ia' : 'selecao',
       in_ms: inMs || 0,
       out_ms: outMs || durationMs || 0,
@@ -132,7 +140,7 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-400"><Film size={15} /></span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-medium text-slate-200">{a.title || a.filename}</p>
-                    <p className="text-[10px] text-slate-500">{a.program_name || '—'} · {fmt(a.duration || 0)} · {a.asset_type}</p>
+                    <p className="text-[10px] text-slate-500">{a.program_name || '—'} · {fmt(secondsToMs(a.duration))} · {a.asset_type}</p>
                   </div>
                   {assetId === String(a.id) && <Sparkles size={13} className="shrink-0 text-sky-300" />}
                 </button>
@@ -150,7 +158,7 @@ export default function NewClipDialog({ open, onClose, onCreated, preselectedAss
               <div className="space-y-3.5">
                 <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
                   <p className="truncate text-xs font-semibold text-slate-200">{sel.title || sel.filename}</p>
-                  <p className="text-[10px] text-slate-500">{fmt(sel.duration || 0)} · {sel.asset_type}</p>
+                  <p className="text-[10px] text-slate-500">{fmt(secondsToMs(sel.duration))} · {sel.asset_type}</p>
                 </div>
 
                 {/* Modo */}

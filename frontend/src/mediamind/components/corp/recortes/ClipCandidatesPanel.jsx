@@ -154,7 +154,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [assetId, analysisMode]);
+  useEffect(() => { load(); }, [assetId, analysisMode]);
 
   const selectedCount = candidates.filter((c) => c.selected).length;
 
