@@ -4,12 +4,15 @@ import {
   leftPart,
   linkRoot,
   mergeRanges,
+  moveClips,
+  overwriteItems,
   placeClip,
   removeRanges,
   rightPart,
   sliceKeys,
   splitAtTimes,
   timeAfterRemoval,
+  trackOverlaps,
 } from "./mmfilmEdits";
 
 const clip = (id, track, start, duration, extra = {}) => ({ id, track, start, duration, sourceIn: 0, speed: 100, keyframes: [], ...extra });
@@ -139,5 +142,90 @@ describe("remoção de trechos com ripple", () => {
     ]);
     expect(result.filter((item) => item.track === "A2")).toHaveLength(1);
     expect(splitAtTimes([clip("a", "V1", 0, 2)], [1])).toHaveLength(2);
+  });
+});
+
+// Invariante da timeline: nunca dois clipes ocupando o mesmo trecho da mesma faixa.
+function expectNoOverlap(list) {
+  expect(trackOverlaps(list)).toEqual([]);
+}
+const geometry = (list, track) =>
+  list
+    .filter((item) => item.track === track)
+    .sort((a, b) => a.start - b.start)
+    .map(({ start, duration, sourceIn }) => [start, duration, sourceIn]);
+
+describe("sobrescrever como no Premiere (overwriteItems/moveClips)", () => {
+  const pair = (id, start, duration, extra = {}) => [
+    clip(`${id}v`, "V1", start, duration, { linkId: id, ...extra }),
+    clip(`${id}a`, "A1", start, duration, { linkId: id, ...extra }),
+  ];
+
+  it("detecta clipes sobrepostos na mesma faixa (e ignora faixas diferentes e encostados)", () => {
+    expect(trackOverlaps([clip("a", "V1", 0, 4), clip("b", "V1", 4, 2), clip("c", "V2", 1, 2)])).toEqual([]);
+    expect(trackOverlaps([clip("a", "V1", 0, 4), clip("b", "V1", 3, 2)])).toEqual([["a", "b"]]);
+  });
+
+  it("soltar B em 4 s sobre A[0-8] apara A em V1 e em A1", () => {
+    const result = overwriteItems(pair("A", 0, 8), pair("B", 4, 8));
+    expect(geometry(result, "V1")).toEqual([[0, 4, 0], [4, 8, 0]]);
+    expect(geometry(result, "A1")).toEqual([[0, 4, 0], [4, 8, 0]]);
+    expectNoOverlap(result);
+  });
+
+  it("B no meio de A divide A em dois com a entrada certa e pares vinculados coerentes", () => {
+    const result = overwriteItems(pair("A", 0, 8, { sourceIn: 1 }), pair("B", 3, 2));
+    expect(geometry(result, "V1")).toEqual([[0, 3, 1], [3, 2, 0], [5, 3, 6]]);
+    expect(geometry(result, "A1")).toEqual([[0, 3, 1], [3, 2, 0], [5, 3, 6]]);
+    const tailV = result.find((item) => item.track === "V1" && item.start === 5);
+    const tailA = result.find((item) => item.track === "A1" && item.start === 5);
+    const headV = result.find((item) => item.id === "Av");
+    expect(tailV.linkId).toBe(tailA.linkId);
+    expect(tailV.linkId).not.toBe(headV.linkId);
+    expect(new Set(result.map((item) => item.id)).size).toBe(result.length);
+    expectNoOverlap(result);
+  });
+
+  it("modo inserção empurra o que vem depois nas duas faixas", () => {
+    const result = overwriteItems(pair("A", 0, 8), pair("B", 4, 2), "insert");
+    expect(geometry(result, "V1")).toEqual([[0, 4, 0], [4, 2, 0], [6, 4, 4]]);
+    expect(geometry(result, "A1")).toEqual([[0, 4, 0], [4, 2, 0], [6, 4, 4]]);
+    expectNoOverlap(result);
+  });
+
+  it("mover B sobre A sobrescreve; o grupo movido sai da posição antiga antes", () => {
+    const base = [...pair("A", 0, 8), ...pair("B", 10, 4)];
+    const result = moveClips(base, ["Bv", "Ba"], { delta: -8 });
+    expect(geometry(result, "V1")).toEqual([[0, 2, 0], [2, 4, 0], [6, 2, 6]]);
+    expect(geometry(result, "A1")).toEqual([[0, 2, 0], [2, 4, 0], [6, 2, 6]]);
+    expectNoOverlap(result);
+    // Mover só um pouco sobre si mesmo não corta o próprio clipe.
+    const self = moveClips(base, ["Bv", "Ba"], { delta: 1 });
+    expect(geometry(self, "V1")).toEqual([[0, 8, 0], [11, 4, 0]]);
+  });
+
+  it("mover troca de faixa, não passa do zero, insere com Ctrl e duplica com Alt", () => {
+    const base = [...pair("A", 0, 8), ...pair("B", 10, 4)];
+    const up = moveClips(base, ["Bv", "Ba"], { delta: -20, tracks: { Bv: "V2" } });
+    expect(geometry(up, "V2")).toEqual([[0, 4, 0]]);
+    expect(geometry(up, "A1")).toEqual([[0, 4, 0], [4, 4, 4]]);
+    expectNoOverlap(up);
+    const inserted = moveClips(base, ["Bv", "Ba"], { delta: -8 }, "insert");
+    expect(geometry(inserted, "V1")).toEqual([[0, 2, 0], [2, 4, 0], [6, 6, 2]]);
+    expectNoOverlap(inserted);
+    const copies = moveClips(base, ["Bv", "Ba"], { delta: 6, duplicate: true });
+    expect(geometry(copies, "V1")).toEqual([[0, 8, 0], [10, 4, 0], [16, 4, 0]]);
+    const copyV = copies.find((item) => item.track === "V1" && item.start === 16);
+    const copyA = copies.find((item) => item.track === "A1" && item.start === 16);
+    expect(copyV.id).not.toBe("Bv");
+    expect(copyV.linkId).toBe(copyA.linkId);
+    expect(copyV.linkId).not.toBe("B");
+    expectNoOverlap(copies);
+  });
+
+  it("sem itens a lista volta igual", () => {
+    const base = pair("A", 0, 8);
+    expect(overwriteItems(base, [])).toBe(base);
+    expect(moveClips(base, [], { delta: 2 })).toBe(base);
   });
 });

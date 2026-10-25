@@ -106,6 +106,52 @@ export function placeClip(clips, item, mode) {
   return [...next, item];
 }
 
+/**
+ * Coloca vários itens (ex.: o par vídeo + áudio) como no Premiere: "overwrite" apara/divide o que estiver
+ * embaixo em cada faixa; "insert" divide no ponto e empurra o resto da faixa.
+ */
+export function overwriteItems(clips, items, mode = "overwrite") {
+  if (!items.length) return clips;
+  return items.reduce((list, item) => placeClip(list, item, mode), clips);
+}
+
+/**
+ * Move (ou duplica) um grupo de clipes: o grupo sai da posição antiga antes de ser colocado, então nunca
+ * corta a si mesmo. `tracks` troca a faixa de clipes específicos; o início nunca passa do zero.
+ */
+export function moveClips(clips, ids, { delta = 0, tracks = {}, duplicate = false } = {}, mode = "overwrite") {
+  const group = clips.filter((clip) => ids.includes(clip.id));
+  if (!group.length) return clips;
+  const applied = Math.max(delta, -Math.min(...group.map((clip) => clip.start)));
+  let moved = group.map((clip) => ({ ...clip, start: clip.start + applied, track: tracks[clip.id] || clip.track }));
+  if (duplicate) {
+    const links = new Map();
+    moved = moved.map((clip) => {
+      let linkId = clip.linkId;
+      if (linkId) {
+        if (!links.has(linkId)) links.set(linkId, crypto.randomUUID());
+        linkId = links.get(linkId);
+      }
+      return { ...clip, id: crypto.randomUUID(), linkId };
+    });
+  }
+  const rest = duplicate ? clips : clips.filter((clip) => !ids.includes(clip.id));
+  return overwriteItems(rest, moved, mode);
+}
+
+/** Pares [id, id] de clipes que ocupam o mesmo trecho da mesma faixa (deve ser sempre vazio). */
+export function trackOverlaps(clips) {
+  const pairs = [];
+  const sorted = [...clips].sort((a, b) => a.start - b.start);
+  sorted.forEach((clip, index) => {
+    for (const other of sorted.slice(index + 1)) {
+      if (other.start >= clipEnd(clip) - EPSILON) break;
+      if (other.track === clip.track) pairs.push([clip.id, other.id]);
+    }
+  });
+  return pairs;
+}
+
 /** Junta trechos [início, fim] sobrepostos ou encostados e descarta os vazios. */
 export function mergeRanges(ranges) {
   const sorted = ranges

@@ -49,16 +49,15 @@ function dropMedia(container, { id, name, seconds = 0, track = "V1", kind = "vid
   const payload = { id, name, kind, src: `/api/v1/media/assets/${id}/stream`, duration, mimeType };
   fireWithX("drop", lane(container, track), seconds, { dataTransfer: payloadData(payload) });
 }
-// Arrasta um clipe da timeline: agarra em `grab` segundos do início e solta em `at` segundos na faixa.
+// Arrasta um clipe da timeline (pointer events): agarra em `grab` segundos do início e solta em `at` segundos.
+// No jsdom a faixa começa em x = 0 e o topo da timeline em y = 0 (régua de 74 px, faixas de 56 px).
+const TRACK_ROWS = ["V3", "V2", "V1", "A1", "A2", "A3"];
 function dragClip(container, node, { grab, at, track = "V1" }) {
-  const data = {};
   const left = Number.parseFloat(node.style.left);
-  const event = createEvent.dragStart(node, { dataTransfer: { setData: (type, value) => { data[type] = value; } } });
-  Object.defineProperty(event, "clientX", { value: left + grab * PX });
-  // getBoundingClientRect do clipe no jsdom é zero: posiciona o retângulo onde o clipe está.
-  vi.spyOn(node, "getBoundingClientRect").mockReturnValue({ left, right: left + 10, top: 0, bottom: 10, width: 10, height: 10 });
-  fireEvent(node, event);
-  fireWithX("drop", lane(container, track), at, { dataTransfer: { getData: (type) => data[type] ?? "" } });
+  const y = 74 + TRACK_ROWS.indexOf(track) * 56 + 20;
+  fireEvent.pointerDown(node, { button: 0, pointerId: 1, clientX: left + grab * PX, clientY: y });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: at * PX, clientY: y });
+  fireEvent.pointerUp(window, { pointerId: 1, clientX: at * PX, clientY: y });
 }
 function seek(container, seconds) {
   fireEvent.pointerDown(ruler(container), { clientX: seconds * PX, button: 0 });
@@ -151,6 +150,61 @@ describe("MMFilm timeline — vídeo com áudio vinculado (P1)", () => {
     });
     expect(FakeAudioContext.instances[0].sources).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Reproduzir" }));
+  });
+});
+
+describe("MMFilm timeline — som no navegador (gesto, plano B e avisos)", () => {
+  it("Reproduzir retoma o AudioContext dentro do próprio clique (Safari/tablet)", () => {
+    const calls = [];
+    let inClick = false;
+    class SuspendedContext extends FakeAudioContext {
+      constructor(options) {
+        super(options);
+        this.state = "suspended";
+        this.resume = vi.fn(() => {
+          calls.push(inClick);
+          this.state = "running";
+          return Promise.resolve();
+        });
+      }
+    }
+    vi.stubGlobal("AudioContext", SuspendedContext);
+    vi.stubGlobal("fetch", fakeMediaFetch());
+    const { container } = render(<FilmCraftWorkspace />);
+    dropMedia(container, { id: "cena", name: "Cena" });
+    const enter = () => {
+      inClick = true;
+    };
+    const leave = () => {
+      inClick = false;
+    };
+    document.addEventListener("click", enter, true);
+    window.addEventListener("click", leave);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Reproduzir" }));
+    } finally {
+      document.removeEventListener("click", enter, true);
+      window.removeEventListener("click", leave);
+    }
+    expect(calls[0]).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reproduzir" }));
+  });
+
+  it("som que não toca nem pelo plano B fica marcado no clipe (aviso persistente)", async () => {
+    vi.stubGlobal("AudioContext", FakeAudioContext);
+    vi.stubGlobal("fetch", fakeMediaFetch({ fail: ["/api/v1/media/assets/cena/stream"] }));
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("bloqueado"));
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    const { container } = render(<FilmCraftWorkspace />);
+    dropMedia(container, { id: "cena", name: "Cena" });
+    fireEvent.click(screen.getByRole("button", { name: "Reproduzir" }));
+    await waitFor(() => expect(clipsOn(container, "A1")[0].querySelector('[data-audio-issue="error"]')).not.toBeNull());
+    const badge = clipsOn(container, "A1")[0].querySelector('[data-audio-issue="error"]');
+    expect(badge.getAttribute("title")).toMatch(/Sem som/);
+    fireEvent.click(screen.getByRole("button", { name: "Reproduzir" }));
+    // Continua visível depois de parar (não é um aviso de 5 s).
+    expect(clipsOn(container, "A1")[0].querySelector('[data-audio-issue="error"]')).not.toBeNull();
   });
 });
 

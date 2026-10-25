@@ -1,5 +1,9 @@
 # Estado do projeto
 
+> 24/10/2026 — Pendências das Ferramentas Gráficas (MMFilm, MMVector, MMEffect, ToolRail): seção 10 de [RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md](RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md).
+
+> 23/10/2026 — Ferramentas Gráficas (timeline do MMFilm, textos editáveis, campos numéricos e barras de todos os clones Adobe) entregues no PR #11; correção do CI pós-merge e pendências em [RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md](RELATORIO_GRAFICOS_TIMELINE_2026-10-23.md).
+
 > Editor IA no MCP do MMFilm (20–23/10/2026, PRs #6, #10 e #19): 55 ferramentas em 14 abas no padrão das referências; histórico, decisões e como retomar em [HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md](HISTORICO_EDITOR_IA_MMFILM_2026-10-20_a_23.md); matriz em [expansao-editor-ia/checklists/MATRIZ_DE_GAPS.md](expansao-editor-ia/checklists/MATRIZ_DE_GAPS.md).
 
 > MCP em ícones nos 14 apps de Ferramentas Gráficas e documentos (20–23/10/2026, PR #8): histórico, decisões, pendências e como retomar em [HISTORICO_MCP_ICONES_2026-10-20_a_23.md](HISTORICO_MCP_ICONES_2026-10-20_a_23.md); guia técnico em [MCP_FERRAMENTAS_EM_ICONES.md](MCP_FERRAMENTAS_EM_ICONES.md).

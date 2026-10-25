@@ -5,7 +5,7 @@
 import { clipMediaTime } from "../../lib/mmfilmTimeline";
 import { animatedClip } from "../../lib/mmfilmMotion";
 import { effectiveVisual } from "../../lib/mmfilmMotionPresets";
-import { drawLookOverlays, lookFilter, transitionProgress, transitionState, transitionWindows } from "../../lib/mmfilmLooks";
+import { colorValue, drawLookOverlays, lookFilter, transitionProgress, transitionState, transitionWindows } from "../../lib/mmfilmLooks";
 import { drawAnimatedText, textAnimationState } from "../../lib/mmfilmTextAnimation";
 import { FilmcraftAudioEngine, audioContextClass, planAudioSegments } from "./filmcraftAudio";
 
@@ -71,8 +71,9 @@ export function fitRect(sourceWidth, sourceHeight, width, height, fit = "Ajustar
   return { x: (width - w) / 2, y: (height - h) / 2, width: w, height: h };
 }
 
+// Com a Correção básica do Lumetri desligada (`colorBypass.basic`), os campos voltam ao neutro.
 export const layerFilter = (clip) =>
-  `brightness(${100 + (clip.exposure ?? 0)}%) contrast(${clip.contrast ?? 100}%) saturate(${clip.saturation ?? 100}%)`;
+  `brightness(${100 + colorValue(clip, "exposure")}%) contrast(${colorValue(clip, "contrast")}%) saturate(${colorValue(clip, "saturation")}%)`;
 
 /** Transformação de uma camada no quadro de saída. Posição e ponto de ancoragem estão em pixels da sequência 1920×1080. */
 export function layerTransform(clip, width, height) {
@@ -418,6 +419,7 @@ export async function renderTimelineToWebm({
   bitrateMode,
   fit = "Ajustar ao quadro",
   onProgress = () => {},
+  onWarning = () => {},
   signal,
 }) {
   const support = exportSupport();
@@ -444,11 +446,15 @@ export async function renderTimelineToWebm({
     cleanups.push(() => canvasStream.getTracks().forEach((track) => track.stop()));
     let engine = null;
     let audioTracks = [];
+    // Nunca exportar mudo em silêncio: havendo som na sequência, qualquer perda vira aviso explícito.
+    const audible = includeAudio ? planAudioSegments({ clips, trackState, from: range.start, until: range.end }) : [];
+    if (audible.length && !support.audio) onWarning("o arquivo saiu sem áudio: este navegador não tem Web Audio");
     if (includeAudio && support.audio) {
       let streamDestination = null;
       const AudioContextClass = audioContextClass();
       engine = new FilmcraftAudioEngine({
         createContext: () => new AudioContextClass({ sampleRate }),
+        allowDirect: false,
         toDestination: (audioContext) => {
           streamDestination = audioContext.createMediaStreamDestination();
           return streamDestination;
@@ -459,6 +465,7 @@ export async function renderTimelineToWebm({
       await engine.preload(planAudioSegments({ clips, trackState, from: range.start, until: range.end }));
       audioTracks = streamDestination?.stream.getAudioTracks() || [];
       cleanups.push(() => engine.dispose());
+      if (audible.length && !audioTracks.length) onWarning("o arquivo saiu sem áudio: o navegador não entregou a faixa de som para a gravação");
     }
     if (signal?.aborted) throw abortError();
     const stream = new MediaStream([videoTrack, ...audioTracks]);
@@ -504,6 +511,8 @@ export async function renderTimelineToWebm({
         onProgress(elapsed / duration);
       }, 1000 / fps);
     });
+    const silent = engine ? [...engine.issues.values()].filter((issue) => issue.level === "error") : [];
+    if (silent.length) onWarning(`o arquivo saiu sem o som de ${silent.length} mídia(s): ${silent[0].message}`);
     engine?.stop();
     syncVideos(clips, sources, [], range.end, false);
     if (recorder.state !== "inactive") recorder.stop();

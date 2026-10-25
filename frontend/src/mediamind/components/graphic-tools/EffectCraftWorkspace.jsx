@@ -1081,7 +1081,6 @@ export default function EffectCraftWorkspace({
       },
       canUndo: () => toolActions.current.canUndo || history.current.undo.length > 0,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   function patchLayer(id, key) {
@@ -1155,6 +1154,26 @@ export default function EffectCraftWorkspace({
       const exists = frames.some(frame=>frame.time===time);
       return {...old,[selectedLayer]:{...layerFrames,[property]:exists?frames.filter(frame=>frame.time!==time):[...frames,{time,value:displayTransform[property],interpolation:"linear"}]}};
     });
+  }
+
+  // Alinhar à composição: usa a mesma geometria do canvas (caixa da camada em % da composição,
+  // posição deslocando (valor - centro) / tamanho da comp. da largura/altura da caixa e escala
+  // em torno da âncora). A rotação não entra na conta. O MMEffect só posiciona a camada
+  // selecionada (a transformação é única), por isso não há alinhamento entre camadas.
+  const alignBlocked = !activeLayer ? "Selecione uma camada para alinhar." : activeLayer.locked ? "A camada está bloqueada." : !showLayerBox ? "Esta composição de exemplo não tem caixa de camada para alinhar." : null;
+  function alignLayerToComposition(edge) {
+    if (alignBlocked) return setStatusMessage(alignBlocked);
+    const horizontal = ["left", "hcenter", "right"].includes(edge);
+    const start = horizontal ? canvasBox.x : canvasBox.y;
+    const size = horizontal ? canvasBox.w : canvasBox.h;
+    const anchor = ((horizontal ? activeLayer.anchor?.x : activeLayer.anchor?.y) ?? 50) / 100 * size;
+    const scale = (displayTransform.scale ?? 100) / 100;
+    const center = horizontal ? 960 : 540;
+    const full = horizontal ? 1920 : 1080;
+    const goal = { left: 0, top: 0, hcenter: 50 - size * scale / 2, vcenter: 50 - size * scale / 2, right: 100 - size * scale, bottom: 100 - size * scale }[edge];
+    const next = center + full * (goal - start - anchor * (1 - scale)) / size;
+    changeTransform(horizontal ? "x" : "y", Math.round(next * 100) / 100);
+    setStatusMessage(`${activeLayer.name} alinhada à composição.`);
   }
 
   function changeTransform(property, nextValue) {
@@ -1886,14 +1905,9 @@ export default function EffectCraftWorkspace({
           <PropertiesExtras activeLayer={activeLayer} onChange={(key,value)=>{if(!activeLayer||activeLayer.locked)return;mergeHistoryAs(`layer:${activeLayer.id}:${key}`);setLayerValue(activeLayer.id,key,value)}} />
           <div className="border-t border-[#383838] p-3 text-[10px]">
             <div className="mb-3 flex items-center border-b border-[#383838] pb-2"><b>Alinhar</b><span className="ml-auto text-[#999]">☰</span></div>
-            <label className="mb-2 flex items-center gap-2 text-[#aaa]">Alinhar camadas a:<select aria-label="Alinhar camadas a" disabled defaultValue="Composição" title="Ainda não disponível: o MMEffect seleciona uma camada por vez, então os botões alinham sempre à composição." className="ml-auto rounded border border-[#444] bg-[#191919] px-2 py-1 text-white disabled:opacity-60"><option>Composição</option><option>Seleção</option></select></label>
+            <label className="mb-2 flex items-center gap-2 text-[#aaa]">Alinhar camadas a:<select aria-label="Alinhar camadas a" disabled defaultValue="Composição" title="Ainda não disponível: a posição no MMEffect é da camada selecionada (uma por vez), então os botões alinham as bordas dela à composição." className="ml-auto rounded border border-[#444] bg-[#191919] px-2 py-1 text-white disabled:opacity-60"><option>Composição</option><option>Seleção</option></select></label>
             <div className="grid grid-cols-6 gap-1">
-              <button aria-label="Alinhar à esquerda" onClick={()=>changeTransform("x",0)} className="rounded bg-[#292929] py-2">▏←</button>
-              <button aria-label="Centralizar horizontalmente" onClick={()=>changeTransform("x",960)} className="rounded bg-[#292929] py-2">↔</button>
-              <button aria-label="Alinhar à direita" onClick={()=>changeTransform("x",1920)} className="rounded bg-[#292929] py-2">→▕</button>
-              <button aria-label="Alinhar ao topo" onClick={()=>changeTransform("y",0)} className="rounded bg-[#292929] py-2">▔↑</button>
-              <button aria-label="Centralizar verticalmente" onClick={()=>changeTransform("y",540)} className="rounded bg-[#292929] py-2">↕</button>
-              <button aria-label="Alinhar à base" onClick={()=>changeTransform("y",1080)} className="rounded bg-[#292929] py-2">↓▁</button>
+              {[["left","Alinhar à esquerda","▏←"],["hcenter","Centralizar horizontalmente","↔"],["right","Alinhar à direita","→▕"],["top","Alinhar ao topo","▔↑"],["vcenter","Centralizar verticalmente","↕"],["bottom","Alinhar à base","↓▁"]].map(([edge,label,symbol])=><button key={edge} aria-label={label} title={alignBlocked || `${label} (bordas da camada na composição)`} disabled={Boolean(alignBlocked)} onClick={()=>alignLayerToComposition(edge)} className="rounded bg-[#292929] py-2 disabled:opacity-40">{symbol}</button>)}
             </div>
           </div>
           <div className="border-t border-[#383838] p-3 text-[10px]">

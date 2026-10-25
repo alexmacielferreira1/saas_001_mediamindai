@@ -150,6 +150,27 @@ describe("filtro e sobreposições", () => {
     expect(lookOverlays({ look: { tint: { color: "#000", alpha: 0 } } })).toEqual([]);
   });
 
+  it("interruptores do Lumetri: Correção básica e Criativo desligados saem do filtro e das sobreposições", () => {
+    const clip = {
+      ...baseClip,
+      exposure: 20,
+      saturation: 0,
+      highlights: 20,
+      temperature: 50,
+      look: { filters: { sepia: 30 }, tint: { color: "#123456", alpha: 0.2, blend: "multiply" } },
+    };
+    const neutral = "brightness(100%) contrast(100%) saturate(100%)";
+    expect(lookFilter({ ...clip, colorBypass: { basic: true } })).toBe(`${neutral} sepia(30%)`);
+    expect(layerFilter({ ...clip, colorBypass: { basic: true } })).toBe(neutral);
+    expect(lookOverlays({ ...clip, colorBypass: { basic: true } })).toEqual([{ color: "#123456", alpha: 0.2, blend: "multiply" }]);
+    expect(lookFilter({ ...clip, colorBypass: { creative: true } })).toBe(
+      "brightness(120%) contrast(100%) saturate(0%) brightness(103%)",
+    );
+    expect(lookOverlays({ ...clip, colorBypass: { creative: true } })).toEqual([{ color: "#ff8a00", alpha: 0.075, blend: "soft-light" }]);
+    expect(lookFilter({ ...clip, colorBypass: { basic: true, creative: true } })).toBe(neutral);
+    expect(lookOverlays({ ...clip, colorBypass: { basic: true, creative: true } })).toEqual([]);
+  });
+
   it("desenha as sobreposições no canvas e gera estilos da prévia", () => {
     const clip = applyLook({ ...baseClip, temperature: 20 }, "sombrio");
     const context = fakeContext({ alpha: 0.5 });

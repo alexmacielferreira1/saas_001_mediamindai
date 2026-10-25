@@ -74,6 +74,19 @@ describe("MMFilm — exportação WebM", () => {
     expect(render$.downloadBlob).toHaveBeenCalledWith(blob, "Entrega final.webm");
   });
 
+  it("exportação que perdeu o som avisa na fila (nunca sai muda em silêncio)", async () => {
+    const blob = new Blob(["webm"], { type: "video/webm" });
+    vi.mocked(render$.renderTimelineToWebm).mockImplementation(async (options) => {
+      options.onWarning("o arquivo saiu sem áudio: este navegador não tem Web Audio");
+      return blob;
+    });
+    setup();
+    fireEvent.click(exportButton());
+    await screen.findByText("Concluído");
+    expect(screen.getByRole("alert")).toHaveTextContent("Aviso: o arquivo saiu sem áudio");
+    expect(render$.downloadBlob).toHaveBeenCalledWith(blob, "Sequência 01.webm");
+  });
+
   it("Parar cancela a renderização em curso e a fila mostra Cancelado", async () => {
     vi.mocked(render$.renderTimelineToWebm).mockImplementation(
       ({ signal }) =>

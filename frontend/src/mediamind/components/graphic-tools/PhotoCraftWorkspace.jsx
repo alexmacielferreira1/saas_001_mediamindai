@@ -6,6 +6,7 @@ import { segmentPersonCanvas } from "../../lib/personSegmentation";
 import { segmentObjectCanvas } from "../../lib/objectSegmentation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import NumericField from "./NumericField";
+import ToolRail from "./ToolRail";
 import { useTextPrompt } from "./FilmCraftTextPrompt";
 import {
   Brush,
@@ -653,6 +654,7 @@ const TOOL_SLOTS = [
   { tools: ["Zoom"] },
 ];
 const TOOL_BY_NAME = Object.fromEntries(TOOLS.map(([shortcut, name, Icon]) => [name, { shortcut, name, Icon }]));
+const RAIL_SLOTS = TOOL_SLOTS.map((slot) => ({ ...slot, tools: slot.tools.map((name) => TOOL_BY_NAME[name]) }));
 
 // Foca um editor recém-criado no próximo quadro, depois do mousedown padrão do navegador
 // (que, no mesmo gesto, tiraria o foco dele). Devolve a limpeza do agendamento.
@@ -729,8 +731,6 @@ export default function PhotoCraftWorkspace({
   // O texto nasce no pointerdown do documento; o mousedown padrão que vem em seguida tira o foco
   // do span editável. O blur só fecha a edição depois que o span recebeu foco ou digitação.
   const textEditArmed = useRef(false);
-  const [openSlot, setOpenSlot] = useState(null);
-  const [slotChoice, setSlotChoice] = useState({});
   const [askText, textPromptDialog] = useTextPrompt();
   const [message, setMessage] = useState("");
   const [future, setFuture] = useState([]);
@@ -1039,12 +1039,6 @@ export default function PhotoCraftWorkspace({
       }
     });
   }, [editingText]);
-
-  // O slot lembra a última ferramenta escolhida no grupo (inclusive por atalho).
-  useEffect(() => {
-    const index = TOOL_SLOTS.findIndex((slot) => slot.tools.includes(tool));
-    if (index >= 0) setSlotChoice((old) => (old[index] === tool ? old : { ...old, [index]: tool }));
-  }, [tool]);
 
   function sourceReady() {
     const image = sourceImgRef.current;
@@ -1553,7 +1547,6 @@ export default function PhotoCraftWorkspace({
       },
       canUndo: () => toolActions.current.canUndo,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   // ------------------------------ ferramentas no documento ------------------------------
@@ -1815,7 +1808,6 @@ export default function PhotoCraftWorkspace({
     if (ctrl && key === "Enter") return pathToSelection(workPath.length ? closeWorkPath() : paths.at(-1));
     if (key === "Enter" && tool === "Caneta") return closeWorkPath();
     if (key === "Escape") {
-      setOpenSlot(null);
       setWorkPath([]);
       setCropRect(null);
       return;
@@ -1926,72 +1918,7 @@ export default function PhotoCraftWorkspace({
       </div>
       <div className="grid min-h-[720px] grid-cols-[54px_230px_minmax(600px,1fr)_300px] gap-2">
         <aside aria-label="Ferramentas do MMPhoto" className="flex flex-col items-center gap-1 rounded border border-slate-800 bg-[#242424] p-1">
-          {TOOL_SLOTS.map((slot, index) => {
-            const shown = TOOL_BY_NAME[slot.tools.includes(tool) ? tool : slotChoice[index] || slot.tools[0]];
-            const Icon = shown.Icon;
-            const label = `${shown.name} (${shown.shortcut})`;
-            const open = openSlot === index;
-            return (
-              <div key={shown.name + index} className="relative">
-                <button
-                  type="button"
-                  aria-label={label}
-                  aria-pressed={tool === shown.name}
-                  title={slot.label ? `${label} · clique com o botão direito para ${slot.label.toLowerCase()}` : label}
-                  onClick={() => {
-                    setTool(shown.name);
-                    setOpenSlot(null);
-                  }}
-                  onContextMenu={(event) => {
-                    if (!slot.label) return;
-                    event.preventDefault();
-                    setOpenSlot(open ? null : index);
-                  }}
-                  className={`grid h-9 w-9 place-items-center rounded ${tool === shown.name ? "bg-blue-500 text-white" : "text-slate-300 hover:bg-slate-700"}`}
-                >
-                  <Icon size={17} />
-                </button>
-                {slot.label && (
-                  <button
-                    type="button"
-                    aria-label={`Abrir grupo: ${slot.label}`}
-                    title={slot.label}
-                    aria-haspopup="true"
-                    aria-expanded={open}
-                    onClick={() => setOpenSlot(open ? null : index)}
-                    className="absolute bottom-0 right-0 h-2.5 w-2.5 text-slate-400 hover:text-white"
-                  >
-                    <span aria-hidden="true" className="absolute bottom-0.5 right-0.5 h-0 w-0 border-l-[4px] border-t-[4px] border-l-transparent border-t-current" style={{ transform: "rotate(-90deg)" }} />
-                  </button>
-                )}
-                {open && (
-                  <div role="group" aria-label={slot.label} className="absolute left-full top-0 z-50 ml-1 min-w-44 border border-[#555] bg-[#292929] py-1 shadow-xl">
-                    {slot.tools.map((name) => {
-                      const item = TOOL_BY_NAME[name];
-                      const ItemIcon = item.Icon;
-                      return (
-                        <button
-                          key={name}
-                          type="button"
-                          aria-label={`${name} (${item.shortcut})`}
-                          aria-pressed={tool === name}
-                          onClick={() => {
-                            setTool(name);
-                            setOpenSlot(null);
-                          }}
-                          className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-[11px] hover:bg-blue-600 ${tool === name ? "text-white" : "text-slate-300"}`}
-                        >
-                          <ItemIcon size={14} />
-                          <span className="flex-1">{name}</span>
-                          <span className="text-slate-500">{item.shortcut}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <ToolRail slots={RAIL_SLOTS} activeTool={tool} onSelect={setTool} />
           <span className="my-1 h-px w-8 bg-slate-700" />
           <span className="relative h-9 w-9">
             <i className="absolute left-0 top-0 h-7 w-7 border-2 border-white bg-black" style={{ backgroundColor: colors.fg }}>
