@@ -53,11 +53,34 @@ CONTENT_WRITE_PERMISSIONS = (
 # Auditoria 2026-10-23, achados #1/#2 e refatoração A.
 # ``Asset.file_size`` fica de fora: o cadastro legado de pacotes (IngestNewPackage) o envia
 # só como metadado de exibição. ``mime_type`` vira o Content-Type do stream.
+# ``CreativeDocument.approved_revision`` só é gravado pela rota de aprovação, e o vínculo da
+# exportação (documento, revisão e estado) só pela rota de exportação (revisão geral
+# 2026-10-24, achado 3).
 SERVER_OWNED_FIELDS: dict[str, frozenset[str]] = {
     "Asset": frozenset({"storage_key", "sha256", "mime_type"}),
-    "CreativeExport": frozenset({"relative_path", "sha256", "size"}),
+    "CreativeDocument": frozenset({"approved_revision"}),
+    "CreativeExport": frozenset(
+        {"relative_path", "sha256", "size", "status", "document_id", "revision"}
+    ),
+}
+
+# Estados que não são decisão de revisão: pela API genérica, mudar ``status`` para qualquer
+# outro valor exige ``review.write`` (antes bastava ``production.write`` para aprovar).
+# ``draft`` é o estado gravado pelas telas de criação.
+REVIEW_FREE_STATUSES: dict[str, frozenset[str]] = {
+    "CreativeDocument": frozenset({"draft"}),
 }
 
 
 def server_owned_fields(entity_type: str) -> frozenset[str]:
     return SERVER_OWNED_FIELDS.get(entity_type, frozenset())
+
+
+def requires_review_permission(entity_type: str, data: dict, current: dict | None = None) -> bool:
+    """``True`` quando a alteração muda o estado de revisão para uma decisão."""
+    free = REVIEW_FREE_STATUSES.get(entity_type)
+    if free is None or "status" not in data:
+        return False
+    if current is not None and current.get("status") == data["status"]:
+        return False
+    return data["status"] not in free

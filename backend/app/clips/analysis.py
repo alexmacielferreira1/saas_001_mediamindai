@@ -87,6 +87,8 @@ class RemoteAnalysisAdapter:
     def __init__(self, connection: dict, api_key: str):
         self.connection = connection
         self.api_key = api_key
+        # Tokens informados pelo provedor na última chamada (registro de uso de IA).
+        self.usage: dict = {}
 
     def suggest(
         self,
@@ -149,6 +151,7 @@ class RemoteAnalysisAdapter:
             )
             response.raise_for_status()
             payload = response.json()
+            self.usage = payload.get("usage") or {}
             content = payload["choices"][0]["message"]["content"]
             proposals = json.loads(content)["candidates"]
         except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:

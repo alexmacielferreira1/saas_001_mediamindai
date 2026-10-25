@@ -22,7 +22,13 @@ from app.repositories.identity import (
 from app.schemas.auth import LoginRequest as LoginBody
 from app.schemas.auth import MembershipResponse, SessionResponse, UserResponse
 from app.security.sessions import hash_session_token
-from app.services.auth import authenticate, create_session_for_user, normalize_email
+from app.services.auth import (
+    account_allows_sign_in,
+    authenticate,
+    create_session_for_user,
+    is_locked,
+    normalize_email,
+)
 from app.services.google_oauth import authorization_url, exchange_google_code
 from app.tenancy.context import CurrentSession, get_current_session
 
@@ -172,7 +178,8 @@ async def google_callback(
     if (
         not profile.get("email_verified")
         or user is None
-        or not user.is_active
+        or not account_allows_sign_in(user)
+        or is_locked(user, datetime.now(UTC))
         or not list_active_memberships(session, user.id)
     ):
         return failed("account_not_allowed")

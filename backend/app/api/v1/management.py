@@ -18,6 +18,29 @@ Authenticated = Annotated[CurrentSession, Depends(get_current_session)]
 OVERVIEW_ENTITIES = ("Publicacao", "Asset", "ProcessamentoJob")
 
 
+def _text(value: Any) -> str:
+    """Campo livre exibido como texto; números viram texto e o resto fica vazio."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+def _size(value: Any) -> int:
+    """Tamanho em bytes de um campo livre; valores inválidos contam como zero."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int | float):
+        return max(0, int(value))
+    if isinstance(value, str):
+        try:
+            return max(0, int(float(value)))
+        except ValueError:
+            return 0
+    return 0
+
+
 def _status(data: dict[str, Any]) -> str:
     return str(data.get("status") or data.get("situacao") or "").strip().lower()
 
@@ -99,7 +122,7 @@ def management_overview(current: Authenticated, session: DbSession):
             {
                 "id": str(row.id),
                 "title": row.data.get("titulo") or row.data.get("title") or "Publicação",
-                "date": row.data.get("data_agendada") or row.data.get("scheduled_at") or "",
+                "date": _text(row.data.get("data_agendada") or row.data.get("scheduled_at")),
                 "platform": row.data.get("plataforma") or row.data.get("platform") or "",
                 "status": row.data.get("status") or row.data.get("situacao") or "Pendente",
             }
@@ -111,9 +134,7 @@ def management_overview(current: Authenticated, session: DbSession):
         _status(row.data) in {"indexado", "indexed", "concluido", "completed"} for row in assets
     )
     failures = sum(_status(row.data) in {"falha", "failed", "erro", "error"} for row in assets)
-    storage_bytes = sum(
-        int(row.data.get("file_size") or row.data.get("size") or 0) for row in assets
-    )
+    storage_bytes = sum(_size(row.data.get("file_size") or row.data.get("size")) for row in assets)
 
     return {
         "publications": {

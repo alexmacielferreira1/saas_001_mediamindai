@@ -1,12 +1,16 @@
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.v1.uploads import delete_upload, stored_name_from_url
+from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session
+from app.media.storage import LocalMediaStorage
 from app.models.identity import TenantRecord
 from app.observability.context import current_correlation_id
 from app.schemas.records import (
@@ -22,7 +26,11 @@ from app.services.production_workflow import check_creation_stage, check_stage_t
 from app.tenancy.access_policy import require_entity_read, require_entity_screens
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
-from app.tenancy.record_policies import RECORD_WRITE_PERMISSIONS, server_owned_fields
+from app.tenancy.record_policies import (
+    RECORD_WRITE_PERMISSIONS,
+    requires_review_permission,
+    server_owned_fields,
+)
 
 router = APIRouter(prefix="/records", tags=["records"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -110,6 +118,59 @@ def reject_server_owned(
             422,
             "SERVER_OWNED_FIELD",
             f"Campo controlado pelo servidor não pode ser alterado: {', '.join(blocked)}.",
+        )
+
+
+def require_review_decision(
+    session: Session,
+    current: CurrentSession,
+    entity_type: str,
+    data: dict[str, Any],
+    stored: dict[str, Any] | None = None,
+) -> None:
+    """Aprovar/reprovar pela API genérica exige ``review.write`` (achado 3 de 2026-10-24)."""
+    if requires_review_permission(entity_type, data, stored):
+        require_permission(session, current, "review.write")
+
+
+def invalidate_approval(
+    entity_type: str, stored: dict[str, Any], patch: dict[str, Any]
+) -> dict[str, Any]:
+    """Editar um documento criativo aprovado o devolve a rascunho (como a rota própria)."""
+    if (
+        entity_type != "CreativeDocument"
+        or stored.get("status") != "approved"
+        or "status" in patch
+        or all(stored.get(key) == value for key, value in patch.items())
+    ):
+        return patch
+    return {**patch, "status": "draft"}
+
+
+def as_utc(value: datetime) -> datetime:
+    # O SQLite devolve datas sem fuso; o PostgreSQL, com fuso. As duas representam UTC.
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def require_expected_version(record: TenantRecord, if_match: str | None) -> None:
+    """Controle otimista opcional: ``If-Match`` com o ``updated_date`` lido pelo cliente.
+
+    Sem o cabeçalho (clientes atuais) ou com ``*``, a gravação segue; com uma versão
+    diferente da atual, responde 409 em vez de sobrescrever a alteração de outra pessoa.
+    """
+    if if_match is None or if_match.strip() == "*":
+        return
+    try:
+        expected = as_utc(datetime.fromisoformat(if_match.strip().removeprefix("W/").strip('"')))
+    except ValueError as error:
+        raise PublicError(
+            422, "INVALID_IF_MATCH", "Versão do registro inválida no cabeçalho If-Match."
+        ) from error
+    if expected != as_utc(record.updated_at):
+        raise PublicError(
+            409,
+            "RECORD_VERSION_CONFLICT",
+            "O registro foi alterado por outra pessoa. Recarregue antes de salvar.",
         )
 
 
@@ -210,30 +271,49 @@ def matches(record: TenantRecord, filters: dict[str, Any]) -> bool:
     return all(record.data.get(key) == value for key, value in filters.items())
 
 
-def load_records(session: Session, tenant_id: UUID, entity_type: str) -> list[TenantRecord]:
-    return list(
-        session.scalars(
-            select(TenantRecord).where(
-                TenantRecord.tenant_id == tenant_id,
-                TenantRecord.entity_type == entity_type,
-            )
-        )
+def load_records(
+    session: Session, tenant_id: UUID, entity_type: str, *, lock: bool = False
+) -> list[TenantRecord]:
+    statement = select(TenantRecord).where(
+        TenantRecord.tenant_id == tenant_id,
+        TenantRecord.entity_type == entity_type,
     )
+    if lock:
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    return list(session.scalars(statement))
 
 
 def find_record(
-    session: Session, tenant_id: UUID, entity_type: str, record_id: UUID
+    session: Session, tenant_id: UUID, entity_type: str, record_id: UUID, *, lock: bool = False
 ) -> TenantRecord:
-    record = session.scalar(
-        select(TenantRecord).where(
-            TenantRecord.id == record_id,
-            TenantRecord.tenant_id == tenant_id,
-            TenantRecord.entity_type == entity_type,
-        )
+    statement = select(TenantRecord).where(
+        TenantRecord.id == record_id,
+        TenantRecord.tenant_id == tenant_id,
+        TenantRecord.entity_type == entity_type,
     )
+    if lock:
+        # ``SELECT ... FOR UPDATE`` no PostgreSQL (o SQLite ignora): duas edições da mesma
+        # linha ficam em fila e o merge parte do estado gravado, sem perder campos.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    record = session.scalar(statement)
     if record is None:
         raise PublicError(404, "RECORD_NOT_FOUND", "Registro não encontrado.")
     return record
+
+
+def mixed_sort_key(value: Any) -> tuple[int, Any]:
+    """Chave de ordenação para campos livres (JSON): números, depois textos, outros e vazio.
+
+    ``sorted`` com tipos misturados (``2`` e ``"1"``) levantava ``TypeError`` e derrubava a
+    listagem inteira com 500 (revisão geral 2026-10-24, achado 12).
+    """
+    if isinstance(value, bool | int | float):
+        return (0, float(value))
+    if isinstance(value, str):
+        return (1, value)
+    if value is None:
+        return (3, "")
+    return (2, "")
 
 
 def ordered(records: list[TenantRecord], sort: str, limit: int) -> list[TenantRecord]:
@@ -245,8 +325,7 @@ def ordered(records: list[TenantRecord], sort: str, limit: int) -> list[TenantRe
             return item.created_at
         if field == "updated_date":
             return item.updated_at
-        value = item.data.get(field)
-        return (value is None, value)
+        return mixed_sort_key(item.data.get(field))
 
     return sorted(records, key=key, reverse=descending)[:limit]
 
@@ -317,6 +396,7 @@ def bulk_create(
     # Valida todos os itens antes de gravar (sem inserção parcial).
     for item in body.items:
         reject_server_owned(entity_type, item)
+        require_review_decision(session, current, entity_type, item)
         creation_stage(entity_type, item, imported=seeding)
     rows = [
         TenantRecord(tenant_id=membership.tenant_id, entity_type=entity_type, data=item)
@@ -337,15 +417,16 @@ def bulk_update(
     require_write(session, current, entity_type)
     membership = require_membership(current)
     reject_server_owned(entity_type, body.data)
+    require_review_decision(session, current, entity_type, body.data)
     rows = [
         item
-        for item in load_records(session, membership.tenant_id, entity_type)
+        for item in load_records(session, membership.tenant_id, entity_type, lock=True)
         if matches(item, body.filters)
     ]
     # Valida todas as transições antes de alterar qualquer registro (sem gravação parcial).
     transitions = [(item, stage_transition(entity_type, item, body.data)) for item in rows]
     for item in rows:
-        item.data = {**item.data, **body.data}
+        item.data = {**item.data, **invalidate_approval(entity_type, item.data, body.data)}
     add_audit(session, current, "records.bulk_updated", entity_type, "bulk", {"count": len(rows)})
     for item, transition in transitions:
         audit_stage_transition(session, current, entity_type, item, transition)
@@ -359,6 +440,7 @@ def create_record(entity_type: str, body: RecordCreate, current: Authenticated, 
     require_write(session, current, entity_type)
     membership = require_membership(current)
     reject_server_owned(entity_type, body.data)
+    require_review_decision(session, current, entity_type, body.data)
     creation_stage(entity_type, body.data)
     record = TenantRecord(tenant_id=membership.tenant_id, entity_type=entity_type, data=body.data)
     session.add(record)
@@ -378,19 +460,48 @@ def get_record(entity_type: str, record_id: UUID, current: Authenticated, sessio
 
 @router.patch("/{entity_type}/{record_id}")
 def update_record(
-    entity_type: str, record_id: UUID, body: RecordPatch, current: Authenticated, session: DbSession
+    entity_type: str,
+    record_id: UUID,
+    body: RecordPatch,
+    current: Authenticated,
+    session: DbSession,
+    if_match: Annotated[str | None, Header()] = None,
 ):
     validate_type(entity_type)
     require_write(session, current, entity_type)
     membership = require_membership(current)
-    record = find_record(session, membership.tenant_id, entity_type, record_id)
+    record = find_record(session, membership.tenant_id, entity_type, record_id, lock=True)
+    require_expected_version(record, if_match)
     reject_server_owned(entity_type, body.data, record.data)
+    require_review_decision(session, current, entity_type, body.data, record.data)
     transition = stage_transition(entity_type, record, body.data)
-    record.data = {**record.data, **body.data}
+    record.data = {**record.data, **invalidate_approval(entity_type, record.data, body.data)}
     add_audit(session, current, "record.updated", entity_type, str(record.id))
     audit_stage_transition(session, current, entity_type, record, transition)
     session.commit()
     return serialize(record)
+
+
+def remove_asset_files(session: Session, tenant_id: UUID, asset_id: UUID, data: dict) -> None:
+    """Apaga do disco os arquivos de um ``Asset`` já excluído do banco.
+
+    Original/derivados ficam em ``MEDIA_ROOT/<empresa>/<asset>``; anexos genéricos
+    (``/uploads``) só são apagados quando nenhum outro ``Asset`` da empresa aponta para eles.
+    Falha ao apagar (arquivo em uso) não desfaz a exclusão: o arquivo fica para limpeza.
+    """
+    try:
+        LocalMediaStorage(get_settings().media_root).delete_asset(tenant_id, asset_id)
+        stored_name = stored_name_from_url(data.get("file_url"))
+        if stored_name is None:
+            return
+        still_used = any(
+            item.data.get("file_url") == data["file_url"]
+            for item in load_records(session, tenant_id, "Asset")
+        )
+        if not still_used:
+            delete_upload(tenant_id, stored_name)
+    except OSError:
+        return
 
 
 @router.delete("/{entity_type}/{record_id}", status_code=204)
@@ -399,7 +510,10 @@ def delete_record(entity_type: str, record_id: UUID, current: Authenticated, ses
     require_write(session, current, entity_type)
     membership = require_membership(current)
     record = find_record(session, membership.tenant_id, entity_type, record_id)
+    data = dict(record.data or {})
     session.delete(record)
     add_audit(session, current, "record.deleted", entity_type, str(record.id))
     session.commit()
+    if entity_type == "Asset":
+        remove_asset_files(session, membership.tenant_id, record_id, data)
     return Response(status_code=204)

@@ -148,9 +148,10 @@ def test_every_mutable_record_type_has_an_explicit_write_policy():
     assert "LogAuditoria" not in RECORD_WRITE_PERMISSIONS
 
 
-def test_upload_requires_the_assets_write_permission(permission_client, monkeypatch, tmp_path):
+def test_upload_requires_the_assets_write_permission(
+    permission_client, monkeypatch, tmp_path, media_root
+):
     client, _ = permission_client
-    monkeypatch.setattr("app.api.v1.uploads.UPLOAD_ROOT", tmp_path)
     login(client, "viewer@mediamind.ai")
 
     response = client.post(
@@ -170,10 +171,11 @@ def test_record_from_other_tenant_is_not_visible(permission_client):
     assert response.status_code == 404
 
 
-def test_authenticated_upload_round_trip_and_validation(permission_client, monkeypatch, tmp_path):
+def test_authenticated_upload_round_trip_and_validation(
+    permission_client, monkeypatch, tmp_path, media_root
+):
     client, _ = permission_client
     login(client)
-    monkeypatch.setattr("app.api.v1.uploads.UPLOAD_ROOT", tmp_path)
 
     uploaded = client.post("/api/v1/uploads", files={"file": ("audio.mp3", b"media", "audio/mpeg")})
     assert uploaded.status_code == 201

@@ -42,3 +42,25 @@ def offline_dns(monkeypatch):
 
     monkeypatch.setattr(outbound, "resolve_host", fake_resolve)
     return fake_resolve
+
+
+@pytest.fixture
+def media_root(monkeypatch, tmp_path):
+    """MEDIA_ROOT isolado por teste (uploads, ZIPs criativos e mídia usam a mesma raiz).
+
+    As raízes legadas (``.runtime/uploads`` e ``.runtime/creative-exports``, anteriores à
+    revisão geral de 2026-10-24) também apontam para a pasta temporária: nenhum teste
+    grava no checkout.
+    """
+    from app.core.config import get_settings
+
+    root = tmp_path / "media"
+    monkeypatch.setenv("MEDIA_ROOT", str(root))
+    monkeypatch.setattr("app.api.v1.uploads.LEGACY_UPLOAD_ROOT", tmp_path / "legacy-uploads")
+    monkeypatch.setattr(
+        "app.api.v1.creative_tools.LEGACY_CREATIVE_EXPORT_ROOT",
+        tmp_path / "legacy-creative-exports",
+    )
+    get_settings.cache_clear()
+    yield root
+    get_settings.cache_clear()

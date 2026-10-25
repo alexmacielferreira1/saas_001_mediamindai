@@ -572,15 +572,44 @@ def _find_channel(session: Session, tenant_id: UUID, channel_id: UUID) -> Tenant
     return record
 
 
+SCRIPT_REVIEW_FIELDS = frozenset({"status", "validation_status"})
+SCRIPT_CONTENT_FIELDS = frozenset({"topic", "title", "script"})
+WORKFLOW_PUBLISHING_FIELDS = frozenset(
+    {"scheduled_at", "target_channels", "publication_url", "published_at"}
+)
+
+
+def script_patch_permissions(changes: dict) -> list[str]:
+    """Permissões exigidas por um PATCH de roteiro, uma por parte alterada."""
+    workflow = changes.get("workflow") or {}
+    required = []
+    if SCRIPT_REVIEW_FIELDS & changes.keys():
+        required.append("review.write")
+    if WORKFLOW_PUBLISHING_FIELDS & workflow.keys():
+        required.append("publishing.write")
+    if SCRIPT_CONTENT_FIELDS & changes.keys() or workflow.keys() - WORKFLOW_PUBLISHING_FIELDS:
+        required.append("production.write")
+    # ``workflow`` vazio ({}) não altera nada além do carimbo: vale como edição de produção.
+    return required or ["production.write"]
+
+
 def _find_script(
-    session: Session, tenant_id: UUID, channel_id: UUID, script_id: UUID
+    session: Session,
+    tenant_id: UUID,
+    channel_id: UUID,
+    script_id: UUID,
 ) -> TenantRecord:
+    # Usado só na edição: ``FOR UPDATE`` põe duas edições do mesmo roteiro em fila
+    # (PostgreSQL) e o merge parte da linha gravada, sem perder campos.
     record = session.scalar(
-        select(TenantRecord).where(
+        select(TenantRecord)
+        .where(
             TenantRecord.id == script_id,
             TenantRecord.tenant_id == tenant_id,
             TenantRecord.entity_type == "RoteiroCanalDark",
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if record is None or record.data.get("channel_id") != str(channel_id):
         raise PublicError(404, "DARK_SCRIPT_NOT_FOUND", "Roteiro não encontrado neste canal.")
@@ -1123,28 +1152,17 @@ def update_script(
     changes = body.model_dump(exclude_unset=True, exclude_none=True)
     if not changes:
         raise PublicError(422, "EMPTY_UPDATE", "Informe ao menos uma alteração.")
-    requires_review = "status" in changes or "validation_status" in changes
-    workflow = changes.get("workflow")
-    requires_publishing = bool(
-        workflow
-        and {"scheduled_at", "target_channels", "publication_url", "published_at"}.intersection(
-            workflow
-        )
-    )
-    permission = (
-        "review.write"
-        if requires_review
-        else "publishing.write"
-        if requires_publishing
-        else "production.write"
-    )
-    require_permission(session, current, permission)
+    # Cada parte da alteração exige a sua permissão (revisão geral 2026-10-24, achado 5):
+    # aprovar e publicar no mesmo PATCH exige review.write E publishing.write.
+    for permission in script_patch_permissions(changes):
+        require_permission(session, current, permission)
     channel = _find_channel(session, membership.tenant_id, channel_id)
     record = _find_script(session, membership.tenant_id, channel_id, script_id)
     workflow_patch = changes.get("workflow") or {}
     folder_name = workflow_patch.get("folder_name")
     if folder_name and folder_name not in channel.data.get("topic_folders", []):
         raise PublicError(422, "DARK_FOLDER_NOT_FOUND", "A pasta precisa pertencer a este canal.")
+    workflow = changes.get("workflow")
     if workflow:
         existing_workflow = record.data.get("workflow", {})
         merged_workflow = {**existing_workflow, **workflow}
@@ -1154,9 +1172,17 @@ def update_script(
                 **workflow["metrics"],
             }
         changes["workflow"] = merged_workflow
+    content_changed = any(
+        key in changes and changes[key] != record.data.get(key) for key in SCRIPT_CONTENT_FIELDS
+    )
+    was_approved = record.data.get("status") == "approved"
     record.data = {**record.data, **changes}
     if changes.get("status") == "approved":
         record.data["validation_status"] = "passed"
+    elif was_approved and content_changed and "status" not in changes:
+        # Texto alterado depois da aprovação: a aprovação não vale para o texto novo.
+        record.data["status"] = "in_review"
+        record.data["validation_status"] = "pending"
     _audit(
         session,
         current,

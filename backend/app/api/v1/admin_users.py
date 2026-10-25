@@ -192,6 +192,19 @@ def reactivate_admin_user(
     if _status(membership, user) != "suspended":
         raise PublicError(409, "USER_STATUS_CONFLICT", "A conta não está suspensa.")
     ensure_can_manage_target(session, current, membership)
+    if user.account_status == "suspended" and session.scalar(
+        select(Membership.id)
+        .where(Membership.user_id == user.id, Membership.tenant_id != selected.tenant_id)
+        .limit(1)
+    ):
+        # Suspensão gravada na conta vale para todas as empresas do usuário: o gestor de uma
+        # delas não pode desfazê-la sozinho (revisão geral 2026-10-24, achado 18).
+        raise PublicError(
+            409,
+            "ACCOUNT_SUSPENSION_GLOBAL",
+            "A suspensão vale para a conta em todas as empresas. "
+            "Peça à administração da plataforma para reativá-la.",
+        )
     membership.is_active = True
     if user.account_status == "suspended":
         # Suspensões antigas eram gravadas na conta; a reativação também as desfaz.

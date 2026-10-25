@@ -149,12 +149,11 @@ def test_creative_document_rejects_unknown_tool_type(permission_client):
 
 
 def test_creative_export_is_immutable_downloadable_and_tenant_scoped(
-    permission_client, monkeypatch, tmp_path
+    permission_client, monkeypatch, tmp_path, media_root
 ):
     client, _ = permission_client
     login(client)
     created = create_document(client)
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
 
     exported = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
@@ -174,14 +173,13 @@ def test_creative_export_is_immutable_downloadable_and_tenant_scoped(
 
 
 def test_creative_export_rejects_stale_revision_and_storage_failure(
-    permission_client, monkeypatch, tmp_path
+    permission_client, monkeypatch, tmp_path, media_root
 ):
     client, _ = permission_client
     login(client)
     created = create_document(client)
     changed = carousel_content("Revisão 2")
     client.patch(f"/api/v1/creative-documents/{created['id']}", json={"content": changed})
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
 
     stale = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
@@ -206,11 +204,12 @@ def test_creative_export_rejects_stale_revision_and_storage_failure(
     assert exports == []
 
 
-def test_creative_export_rejects_invalid_payloads(permission_client, monkeypatch, tmp_path):
+def test_creative_export_rejects_invalid_payloads(
+    permission_client, monkeypatch, tmp_path, media_root
+):
     client, _ = permission_client
     login(client)
     created = create_document(client)
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
 
     invalid_type = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
@@ -234,11 +233,12 @@ def test_creative_export_rejects_invalid_payloads(permission_client, monkeypatch
     assert too_large.status_code == 413
 
 
-def test_creative_export_reports_missing_stored_file(permission_client, monkeypatch, tmp_path):
+def test_creative_export_reports_missing_stored_file(
+    permission_client, monkeypatch, tmp_path, media_root
+):
     client, ids = permission_client
     login(client)
     created = create_document(client)
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path)
     exported = client.post(
         f"/api/v1/creative-documents/{created['id']}/exports",
         data={"revision": "1", "preset": "4:5"},
@@ -246,7 +246,7 @@ def test_creative_export_reports_missing_stored_file(permission_client, monkeypa
     )
     with ids["session_factory"]() as session:
         record = session.query(TenantRecord).filter_by(entity_type="CreativeExport").one()
-        (tmp_path / record.data["relative_path"]).unlink()
+        (media_root / "creative-exports" / record.data["relative_path"]).unlink()
     missing = client.get(f"/api/v1/creative-exports/{exported.json()['id']}/download")
     assert missing.status_code == 404
 
@@ -262,12 +262,11 @@ def export_carousel(client, document_id):
 
 
 def test_generic_records_api_cannot_set_creative_export_path(
-    permission_client, monkeypatch, tmp_path
+    permission_client, monkeypatch, tmp_path, media_root
 ):
     """Auditoria #1: relative_path é do servidor; /records não pode criá-lo nem trocá-lo."""
     client, ids = permission_client
     login(client)
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", tmp_path / "exports")
     secret = tmp_path / "segredo.txt"
     secret.write_text("conteudo sigiloso")
 
@@ -309,13 +308,12 @@ def test_generic_records_api_cannot_set_creative_export_path(
 
 
 def test_creative_export_download_is_confined_to_tenant_directory(
-    permission_client, monkeypatch, tmp_path
+    permission_client, monkeypatch, tmp_path, media_root
 ):
     """Defesa em profundidade: mesmo um caminho adulterado no banco não sai da pasta da empresa."""
     client, ids = permission_client
     login(client)
-    root = tmp_path / "exports"
-    monkeypatch.setattr("app.api.v1.creative_tools.CREATIVE_EXPORT_ROOT", root)
+    root = media_root / "creative-exports"
     secret = tmp_path / "segredo.txt"
     secret.write_text("conteudo sigiloso")
     other_tenant_file = root / str(ids["other"]) / "outra.zip"
