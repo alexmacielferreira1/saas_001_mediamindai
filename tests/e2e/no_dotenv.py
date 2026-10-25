@@ -8,11 +8,10 @@ nunca entrem no processo de teste.
 Uso: ``python tests/e2e/no_dotenv.py api|migrate|seed``.
 """
 
+import os  # noqa: E402
 import runpy
 import sys
 from pathlib import Path
-
-import os  # noqa: E402
 
 ROOT = Path(os.environ.get("E2E_BACKEND_ROOT") or Path(__file__).resolve().parents[2])
 sys.path.insert(0, str(ROOT / "backend"))
