@@ -262,7 +262,8 @@ describe("GraphicTools", () => {
     fireEvent.click(screen.getByRole("tab", { name: /MMEffect/ }));
     fireEvent.change(screen.getByLabelText("X da camada"), { target: { value: "300" } });
     fireEvent.click(screen.getByRole("button", { name: "Centralizar horizontalmente" }));
-    expect(screen.getByLabelText("X da camada")).toHaveValue("960");
+    // Centraliza a caixa real da camada (não a âncora): a caixa do exemplo não começa no centro.
+    expect(screen.getByLabelText("X da camada")).toHaveValue("896");
   });
 
   it("expands layer properties and edits parenting and blend modes", () => {
