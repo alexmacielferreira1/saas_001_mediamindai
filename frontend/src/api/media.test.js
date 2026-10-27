@@ -1,8 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { assetPlaybackUrl, exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from './media';
+import { assetPlaybackUrl, exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, transcribeMediaAsset, uploadMediaAsset } from './media';
 
 describe('media API', () => {
   beforeEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+
+  it('pede a transcrição da mídia ao servidor (Whisper local)', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(
+      JSON.stringify({ segments: 3, reused: false }), { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(transcribeMediaAsset('a b', { force: true })).resolves.toEqual({ segments: 3, reused: false });
+    expect(fetchMock.mock.calls[0][0]).toContain('/media/assets/a%20b/transcription');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ force: true });
+    await transcribeMediaAsset('x');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ force: false });
+  });
 
   it('lists persisted media assets', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(

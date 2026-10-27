@@ -1,19 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FileAudio, Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { transcribeMediaAsset } from '../../api/media';
 import { formatTime } from '../data';
 
 // Painel de transcrição ligado ao player.
 // - Lista segmentos reais (TranscricaoSegmento) do asset ativo.
 // - Clique no trecho posiciona o preview (onSeek) no timecode exato.
-// - "Transcrever" envia um áudio real (UploadPublicFile) e dispara a backend
-//   function transcrever_asset, que chama Whisper e grava os segmentos.
+// - "Transcrever" pede ao servidor a transcrição da própria mídia do asset com o
+//   Whisper local (POST /media/assets/{id}/transcription), que grava os segmentos.
 export default function WorkspaceTranscricaoPanel({ asset, onSeek }) {
   const [segments, setSegments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     if (!asset) return;
@@ -30,28 +30,18 @@ export default function WorkspaceTranscricaoPanel({ asset, onSeek }) {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file || !asset) return;
+  async function transcribe() {
+    if (!asset) return;
     setBusy(true);
-    setStatus('Enviando áudio...');
+    setStatus('Transcrevendo com o Whisper local… (pode levar alguns minutos)');
     try {
-      const up = await base44.integrations.Core.UploadPublicFile({ file });
-      const audioUrl = up.file_url;
-      setStatus('Transcrevendo com Whisper...');
-      const res = await base44.functions.invoke('transcrever_asset', {
-        asset_id: asset.id,
-        asset_title: asset.title,
-        audio_url: audioUrl,
-        duration_seconds: asset.duration || 0,
-      });
-      setStatus(res.data?.segments != null ? `${res.data.segments} trechos transcritos` : 'Concluído');
+      const result = await transcribeMediaAsset(asset.media_asset_id || asset.id, { force: segments.length > 0 });
+      setStatus(`${result.segments} trechos transcritos`);
       await load();
     } catch (err) {
       setStatus('Falha: ' + (err?.message || 'erro na transcrição'));
     } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -70,14 +60,13 @@ export default function WorkspaceTranscricaoPanel({ asset, onSeek }) {
           )}
         </div>
         <button
-          onClick={() => fileRef.current?.click()}
+          onClick={transcribe}
           disabled={busy}
           className="flex items-center gap-1 rounded-md bg-violet-500/20 px-2 py-1 text-[10px] font-bold text-violet-300 hover:bg-violet-500/30 disabled:opacity-50"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <FileAudio size={12} />}
-          {busy ? 'Processando' : 'Transcrever'}
+          {busy ? 'Processando' : segments.length > 0 ? 'Transcrever de novo' : 'Transcrever'}
         </button>
-        <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={handleFile} />
       </div>
 
       {status && <div className="px-3 py-1.5 text-[11px] text-slate-400">{status}</div>}
@@ -85,7 +74,7 @@ export default function WorkspaceTranscricaoPanel({ asset, onSeek }) {
       <div className="max-h-44 space-y-1 overflow-y-auto px-3 py-2">
         {loading && <p className="text-[11px] text-slate-500">Carregando…</p>}
         {!loading && segments.length === 0 && (
-          <p className="text-[11px] text-slate-600">Nenhuma transcrição. Envie um áudio para transcrever.</p>
+          <p className="text-[11px] text-slate-600">Nenhuma transcrição. Clique em Transcrever.</p>
         )}
         {segments.map((s) => (
           <button

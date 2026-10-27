@@ -82,6 +82,25 @@ describe('Ingest › pacotes reais do servidor', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('erro desconhecido');
   });
 
+  it('mostra a transcrição de cada pacote e retoma a que ficou pendente', async () => {
+    listIngestPackages.mockResolvedValue([
+      { ...PACKAGES[2], id: 'p1', name: 'Pendente', transcription_pending: 2 },
+      { ...PACKAGES[2], id: 'p2', name: 'Falhou', items: [{ status: 'imported', transcription: 'failed', transcription_error: 'Nenhum transcritor foi configurado.' }] },
+      { ...PACKAGES[2], id: 'p3', name: 'Feito', items: [{ status: 'imported', transcription: 'done' }, { status: 'imported', transcription: 'failed' }] },
+      { ...PACKAGES[2], id: 'p4', name: 'Feito 2', items: [{ status: 'imported', transcription: 'done' }] },
+    ]);
+    runIngestPackage.mockResolvedValue({ ...PACKAGES[2], id: 'p1', transcription_pending: 0 });
+    open('Concluídas');
+    expect(await screen.findByText('Transcrição pendente: 2 arquivo(s)')).toBeInTheDocument();
+    expect(screen.getByText('Transcrição falhou em 1: Nenhum transcritor foi configurado.')).toBeInTheDocument();
+    expect(screen.getByText('Transcrição falhou em 1: erro desconhecido')).toBeInTheDocument();
+    expect(screen.getByText('Transcrito: 1 arquivo(s)')).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: /Continuar/ });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    await waitFor(() => expect(runIngestPackage).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), expect.anything()));
+  });
+
   it('na demonstração sem banco mantém os pacotes de exemplo e não chama o servidor', () => {
     localStorage.setItem('mm_demo_session_v1', JSON.stringify({ id: 'demo' }));
     open('Concluídas');

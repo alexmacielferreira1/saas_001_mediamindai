@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
-import { assetPlaybackUrl } from '../../api/media';
+import { transcribeMediaAsset } from '../../api/media';
+import { readLocalDemoSession } from './demoAccess';
 
 // ============================================================================
 // clipEngineService — camada única de orquestração do MediaMind AI Clip Engine.
@@ -23,23 +24,15 @@ export async function getAsset(assetId) {
 }
 
 // Garante transcrição do asset: se já existem segmentos, reutiliza ("uma vez,
-// reutiliza para sempre"). Senão invoca o backend transcrever_asset.
-export async function ensureTranscription(asset, { empresaId = '', durationSeconds = 0 } = {}) {
+// reutiliza para sempre"). Senão o servidor transcreve com o Whisper local
+// (POST /media/assets/{id}/transcription) e grava os segmentos.
+export async function ensureTranscription(asset) {
   const existing = await base44.entities.TranscricaoSegmento.filter({ asset_id: String(asset.id) }, 'start_ms', 500);
   if (existing.length > 0) return { segments: existing, reused: true };
-  const audioUrl = assetPlaybackUrl(asset) || asset.path || '';
-  if (!audioUrl) {
-    throw new Error('Asset sem mídia (path) para transcrever. Anexe um arquivo de áudio/vídeo ao asset no Acervo.');
-  }
-  const res = await base44.functions.invoke('transcrever_asset', {
-    asset_id: String(asset.id),
-    asset_title: asset.title || asset.filename || '',
-    audio_url: audioUrl,
-    duration_seconds: durationSeconds || Number(asset.duration) || 0,
-    empresa_id: empresaId,
-  });
+  if (readLocalDemoSession()) throw new Error('A transcrição precisa do servidor: entre com uma conta real (o modo demonstração não transcreve).');
+  await transcribeMediaAsset(asset.media_asset_id || asset.id);
   const segments = await base44.entities.TranscricaoSegmento.filter({ asset_id: String(asset.id) }, 'start_ms', 500);
-  return { segments, reused: false, jobId: res?.data?.job_id };
+  return { segments, reused: false };
 }
 
 // Lista candidatos já persistidos para um asset (reutiliza análise anterior).

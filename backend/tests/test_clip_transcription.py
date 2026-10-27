@@ -47,7 +47,9 @@ def test_command_adapter_converts_timestamped_provider_json_to_segments(monkeypa
     assert str(source) in seen
 
 
-def test_adapter_without_a_configured_command_is_explicitly_unavailable(tmp_path):
+def test_adapter_without_a_configured_command_is_explicitly_unavailable(tmp_path, monkeypatch):
+    # Máquina sem o faster-whisper (ex.: Render): sem comando e sem o Whisper local.
+    monkeypatch.setattr("app.clips.transcription.local_whisper_command", lambda: None)
     with pytest.raises(TranscriptionUnavailable):
         CommandTranscriptionAdapter.from_environment().transcribe(tmp_path / "source.mp4")
 

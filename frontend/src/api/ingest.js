@@ -19,6 +19,10 @@ export function importNextIngestFile(packageId) {
   return request(`/ingest/packages/${encodeURIComponent(packageId)}/import-next`, { method: 'POST' });
 }
 
+export function transcribeNextIngestFile(packageId) {
+  return request(`/ingest/packages/${encodeURIComponent(packageId)}/transcribe-next`, { method: 'POST' });
+}
+
 export function retryIngestPackage(packageId) {
   return request(`/ingest/packages/${encodeURIComponent(packageId)}/retry`, { method: 'POST' });
 }
@@ -26,7 +30,8 @@ export function retryIngestPackage(packageId) {
 const hasPending = (pkg) => (pkg?.items || []).some((item) => item.status === 'pending');
 
 /**
- * Importa os arquivos pendentes um a um (cada chamada copia um arquivo) e avisa a cada passo.
+ * Importa os arquivos pendentes um a um (cada chamada copia um arquivo) e depois transcreve com o
+ * Whisper local os áudios/vídeos do pacote (IA ligada), avisando a cada passo.
  * Para quando não há mais pendentes; um arquivo "importing" de outra aba não prende o laço.
  */
 export async function runIngestPackage(pkg, { onUpdate } = {}) {
@@ -34,6 +39,12 @@ export async function runIngestPackage(pkg, { onUpdate } = {}) {
   while (current.status === 'processing' && hasPending(current)) {
     current = await importNextIngestFile(current.id);
     onUpdate?.(current);
+  }
+  while (current.transcription_pending > 0) {
+    const before = current.transcription_pending;
+    current = await transcribeNextIngestFile(current.id);
+    onUpdate?.(current);
+    if (!(current.transcription_pending < before)) break;
   }
   return current;
 }
