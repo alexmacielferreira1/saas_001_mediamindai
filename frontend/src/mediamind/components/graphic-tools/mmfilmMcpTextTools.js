@@ -66,7 +66,8 @@ function createCaptions(state, params, kit) {
   if (!cues.length) return { ok: true, count: 0, summary: "Nenhuma palavra para legendar." };
   const style = { ...captionTemplate(params.template), ...styleOverrides(params) };
   const created = captionClips(cues, { template: style, track: params.track, idPrefix: `legenda-${Date.now().toString(36)}` });
-  const kept = state.clips.filter((clip) => !(clip.caption && clip.type === TITLE_TYPE));
+  // Legendas antigas em faixas bloqueadas ficam (o bloqueio protege a faixa inteira).
+  const kept = state.clips.filter((clip) => !(clip.caption && clip.type === TITLE_TYPE && !kit.lockedTrack(state, clip.track)));
   return {
     ok: true,
     count: created.length,
@@ -170,6 +171,9 @@ function animatedTitles(state, params, kit) {
   const free = chosen.filter(
     (phrase) => !state.clips.some((clip) => clip.track === params.track && clip.start < phrase.end && clipEnd(clip) > phrase.start),
   );
+  if (chosen.length && !free.length)
+    throw new kit.ToolError(`A faixa ${params.track} já tem conteúdo nos trechos das ${chosen.length} frase(s) escolhida(s): escolha outra faixa dos títulos.`);
+  if (!chosen.length) return { ok: true, count: 0, headline: { count: phrases.length, text: "frase(s) de impacto" }, items, summary: "Nenhuma frase marcada: marque na lista as frases que viram título." };
   const created = free.map((phrase, index) => ({
     id: `titulo-${Date.now().toString(36)}-${index}`,
     name: phrase.text.slice(0, 40),

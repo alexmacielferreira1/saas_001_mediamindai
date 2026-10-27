@@ -341,7 +341,7 @@ export function GraphicToolsContent({ requestedTool, onChoose }) {
       ) : id === "mmsom" ? (
         <SoundCraft active={active === id} />
       ) : ["word", "excel", "powerpoint"].includes(id) ? (
-        <OfficeCraft active={active === id} initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} />
+        <OfficeCraft active={active === id} initialApp={id === "word" ? "Word" : id === "excel" ? "Excel" : "PowerPoint"} showAppSwitcher={false} />
       ) : (
         <FilmCraftWorkspace />
       )}

@@ -74,7 +74,7 @@ describe('page MCP catalogues', () => {
     const ingest = provider('ingest', env);
     expect((await ingest.apply('duplicados', {})).details).toEqual(['lgpd.mp4 · 2 cópias']);
     expect((await ingest.apply('sem-duracao', {})).count).toBe(1);
-    expect((await ingest.apply('midias-por-tipo', { days: '7' })).details).toEqual(['video: 1', 'image: 1']);
+    expect((await ingest.apply('midias-por-tipo', { days: '7' })).details).toEqual(['Vídeo: 1', 'Imagem: 1']);
 
     const search = provider('search', env);
     expect((await search.apply('buscar-acervo', { q: '  ' })).ok).toBe(false);

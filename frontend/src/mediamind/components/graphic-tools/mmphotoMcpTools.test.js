@@ -79,9 +79,13 @@ describe("filtros de pixels", () => {
 
     const selection = { type: "rect", rect: { x: 0, y: 0, w: 10.4, h: 20 } };
     expect(run("filter.sharpen", state({ selection })).summary).toBe('Nitidez (quantidade 0,6) em "Pessoa" · seleção 10 × 20 px');
+    // Imagem lisa não tem borda para realçar: em vez de anunciar sucesso, a operação explica (o app vira ok:false).
     const sharp = pixels(9);
-    run("filter.sharpen", state(), { amount: 1 }).pixels(sharp, 3, 3);
+    expect(() => run("filter.sharpen", state(), { amount: 1 }).pixels(sharp, 3, 3)).toThrow('nada mudou nos pixels de "Pessoa"');
     expect(sharp[0]).toBe(100);
+    const edge = new Uint8ClampedArray([50, 50, 50, 255, 150, 150, 150, 255, 50, 50, 50, 255]);
+    run("filter.sharpen", state(), { amount: 1 }).pixels(edge, 3, 1);
+    expect(edge[4]).toBeGreaterThan(150);
 
     const noisy = pixels(4);
     run("filter.noise", state(), { amount: 80 }).pixels(noisy, 2, 2);

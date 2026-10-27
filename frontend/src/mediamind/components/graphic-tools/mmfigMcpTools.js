@@ -39,6 +39,7 @@ import {
   unionBounds,
   wrapSelection,
 } from "./FigCraftWorkspace";
+import { nothingChanged, sameData } from "./mcpToolGuards";
 
 export const MMFIG_TABS = [
   { id: "alinhar", label: "Alinhar" },
@@ -802,7 +803,10 @@ export function runMMFigTool(toolId, state, params) {
   const tool = catalogue.tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) });
+    const result = tool.run(state, { ...defaultsOf(tool), ...(params || {}) });
+    // Documento igual ao atual (já alinhado, já ordenado, mesmo estilo...) não é sucesso nem passo de desfazer.
+    if (result.ok && result.doc && sameData(result.doc, state.doc)) return nothingChanged(tool.label);
+    return result;
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

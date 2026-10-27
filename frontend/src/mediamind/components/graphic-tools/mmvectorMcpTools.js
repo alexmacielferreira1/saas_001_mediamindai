@@ -21,6 +21,7 @@ import {
   SendToBack,
 } from "lucide-react";
 import { ARTBOARD_H, ARTBOARD_W, rotateHue } from "./VectorCraftWorkspace";
+import { nothingChanged, sameData } from "./mcpToolGuards";
 
 export const MMVECTOR_TABS = [
   { id: "alinhar", label: "Alinhar" },
@@ -276,7 +277,10 @@ export function runMMVectorTool(toolId, state, params) {
   const tool = mmvectorCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run({ newId: () => crypto.randomUUID(), ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    const result = tool.run({ newId: () => crypto.randomUUID(), ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    // Objetos iguais aos atuais (já alinhados, já na frente, mesma opacidade...) não são sucesso nem passo de desfazer.
+    if (result.ok && sameData(result.objects, state.objects)) return nothingChanged(tool.label);
+    return result;
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

@@ -284,12 +284,14 @@ describe("camadas", () => {
 
   it("ordena camadas da página, de um frame, de irmãos e no auto layout", () => {
     const { add, state, pageId, doc } = setup();
-    const b = add("rect", { name: "B 10", x: 0, y: 300 });
     const a = add("rect", { name: "B 9", x: 0, y: 0 });
+    const b = add("rect", { name: "B 10", x: 0, y: 300 });
     const page = run("layers.sort", state(), { by: "name" });
     expect(page.summary).toBe("2 camada(s) ordenada(s) por nome (A–Z) na página");
     expect(page.doc.roots[pageId]).toEqual([b, a]);
     expect(run("layers.sort", state([a])).doc.roots[pageId]).toEqual([b, a]);
+    // Já ordenado: não finge sucesso nem cria passo de desfazer.
+    expect(run("layers.sort", { ...state(), doc: page.doc }, { by: "name" })).toEqual({ ok: false, summary: "Ordenar camadas: nada a alterar, o resultado seria igual ao estado atual." });
 
     const group = add("group", { name: "Lista" });
     const g1 = add("rect", { x: 0, y: 50 }, group);

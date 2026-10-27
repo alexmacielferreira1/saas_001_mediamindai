@@ -167,12 +167,15 @@ function easing(state, params) {
   const layerFrames = state.propertyKeyframes[layer.id] || {};
   let count = 0;
   const next = { ...layerFrames };
+  let total = 0;
   for (const property of TRANSFORM_PROPERTIES) {
     if (!layerFrames[property]?.length) continue;
     next[property] = layerFrames[property].map((item) => ({ ...item, interpolation: params.mode }));
-    count += layerFrames[property].length;
+    total += layerFrames[property].length;
+    count += layerFrames[property].filter((item) => item.interpolation !== params.mode).length;
   }
-  if (!count) return { ok: false, summary: `"${layer.name}" não tem quadros-chave: crie uma animação primeiro.` };
+  if (!total) return { ok: false, summary: `"${layer.name}" não tem quadros-chave: crie uma animação primeiro.` };
+  if (!count) return { ok: false, summary: `Os ${total} quadro(s)-chave de "${layer.name}" já estão com a interpolação ${EASING_LABELS[params.mode]}.` };
   return {
     ok: true,
     count,

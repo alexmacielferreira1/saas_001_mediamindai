@@ -65,6 +65,7 @@ import {
 } from "../../lib/mmfilmTimeline";
 import {
   FilmcraftAudioEngine,
+  audioBufferFailure,
   clipVolumeToDb,
   dbToClipVolume,
   emptyMixer,
@@ -485,7 +486,10 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
         return [url, buffer];
       }),
     );
-    return new Map(entries.filter(([, buffer]) => buffer));
+    // Motivo de cada URL que não abriu (HTTP 404, rede, formato…) para as ferramentas explicarem a falha.
+    return Object.assign(new Map(entries.filter(([, buffer]) => buffer)), {
+      failures: new Map(entries.filter(([, buffer]) => !buffer).map(([url]) => [url, audioBufferFailure(url) || { kind: "decode" }])),
+    });
   }
   // Mudança de cena: compara quadros reduzidos (32×18) a cada 0,25 s nos clipes de vídeo de V1.
   async function detectSceneChanges(list, { sensitivity = 5 } = {}, onProgress) {
@@ -649,7 +653,12 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
       const toolByKey = Object.fromEntries(
         EDIT_TOOLS.map(([shortcut, name]) => [shortcut.toLowerCase(), name]),
       );
-      if (toolByKey[key]) setEditTool(toolByKey[key]);
+      if (toolByKey[key]) {
+        setEditTool(toolByKey[key]);
+        // C só escolhe a navalha (como no Premiere); o corte acontece no clique no clipe.
+        if (toolByKey[key] === "Razor" && !event.ctrlKey && !event.metaKey)
+          notify("Navalha: clique no clipe onde quer cortar (Shift+clique corta todas as faixas; Ctrl+K corta no indicador).", 6000);
+      }
       if (key === "delete" || key === "backspace")
         removeSelected(event.shiftKey);
       if (key === "arrowleft")

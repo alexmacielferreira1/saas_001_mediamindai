@@ -21,6 +21,7 @@ import {
   Type,
 } from "lucide-react";
 import { countWords, documentHtmlToText, fontFamilies, sanitizeDocumentHtml } from "../../pages/OfficeCraft";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const WORD_TABS = [
   { id: "estilos", label: "Estilos" },
@@ -547,7 +548,8 @@ export function runWordTool(toolId, state, params) {
   const tool = wordCatalogue(state).tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, tool);
+    const result = tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, tool);
+    return refuseIfUnchanged(result, state, ["html"], "Nada a aplicar: o documento já está assim.", (_key, html) => parse(html).innerHTML);
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

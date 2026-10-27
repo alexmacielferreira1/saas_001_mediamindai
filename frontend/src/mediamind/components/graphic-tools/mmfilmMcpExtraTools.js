@@ -25,6 +25,7 @@ export function segmentsToCues(clip, segments) {
 }
 
 async function transcribe(state, params, env, kit) {
+  if (kit.lockedTrack(state, params.track)) throw new kit.ToolError(`A faixa ${params.track} está bloqueada.`);
   const sources = kit
     .soundClips(state, ["A1", "A2", "A3", "V1", "V2", "V3"])
     .filter((clip) => !clip.sfx && isPersistedAssetId(clip.assetId) && !(params.musicTracks || []).includes(clip.track));
@@ -47,7 +48,8 @@ async function transcribe(state, params, env, kit) {
   if (!cues.length) return { ok: true, count: 0, summary: "A transcrição voltou sem falas no trecho usado na timeline." };
   cues.sort((a, b) => a.start - b.start);
   const created = captionClips(cues, { template: captionTemplate(params.template), track: params.track, idPrefix: `transcricao-${Date.now().toString(36)}` });
-  const kept = params.replace ? state.clips.filter((clip) => !(clip.caption && clip.type === TITLE_TYPE)) : state.clips;
+  // Legendas antigas em faixas bloqueadas ficam (o bloqueio protege a faixa inteira).
+  const kept = params.replace ? state.clips.filter((clip) => !(clip.caption && clip.type === TITLE_TYPE && !kit.lockedTrack(state, clip.track))) : state.clips;
   return {
     ok: true,
     count: created.length,

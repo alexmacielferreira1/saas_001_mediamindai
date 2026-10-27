@@ -2,6 +2,7 @@
 // `run` é pura sobre { docKey, docName, page, annotations, newId } e devolve { ok, summary, annotations } —
 // o app grava `annotations` (camada de anotação do MMPDF, a mesma das ferramentas do painel; o arquivo PDF
 // não é reescrito). O que exige um mecanismo de edição de PDF fica "em breve", sem botão falso.
+import { refuseIfUnchanged } from "./mcpResultGuard";
 import { FileOutput, Files, Highlighter, Link, Lock, PanelTop, ScanText, Send, Signature, Stamp, StickyNote, Trash2, Type, Droplets } from "lucide-react";
 
 export const MMPDF_TABS = [
@@ -261,10 +262,8 @@ export function runMMPdfTool(toolId, state, params) {
   const tool = mmpdfCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(
-      { annotations: {}, page: 1, newId: () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...state },
-      { ...defaultsOf(tool), ...(params || {}) },
-    );
+    const current = { annotations: {}, page: 1, newId: () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ...state };
+    return refuseIfUnchanged(tool.run(current, { ...defaultsOf(tool), ...(params || {}) }), current, ["annotations"], "Nada a aplicar: as anotações já estão assim.");
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

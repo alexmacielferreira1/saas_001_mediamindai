@@ -185,7 +185,9 @@ describe("material e mundo", () => {
       summary: "Mundo ajustado: Noite (exposição 0.6, grade desligada)",
       world: { exposure: 0.6, grid: false, aspect: "16:9", background: "#0b1030" },
     });
-    expect(run("world.lighting", state()).summary).toBe("Mundo ajustado: Estúdio (exposição 1.0, grade ligada)");
+    expect(run("world.lighting", state({ world: result.world })).summary).toBe("Mundo ajustado: Estúdio (exposição 1.0, grade ligada)");
+    // O mundo já está em Estúdio com grade: nada muda, então não é sucesso.
+    expect(run("world.lighting", state())).toEqual({ ok: false, summary: "Nada a aplicar: a cena já está assim." });
   });
 });
 

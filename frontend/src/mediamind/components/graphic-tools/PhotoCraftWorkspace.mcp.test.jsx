@@ -79,10 +79,14 @@ describe("MMPhoto · ferramentas de um clique do MCP", () => {
     render(<PhotoCraftWorkspace {...props} />);
     const provider = currentMCPActions();
 
-    const pixels = await act(() => provider.apply("filter.pixelate", { size: 4 }));
-    expect(pixels).toMatchObject({ ok: true, summary: 'Pixelização (blocos de 4 px) em "Pessoa recortada" · camada inteira' });
+    // Camada lisa (cinza 200): pixelizar não muda nada visível, então não pode anunciar sucesso.
+    const flat = await act(() => provider.apply("filter.pixelate", { size: 4 }));
+    expect(flat).toEqual({ ok: false, summary: 'Não foi possível aplicar pixelização: nada mudou nos pixels de "Pessoa recortada" (camada vazia ou transparente, ou já com esse resultado).' });
+
+    const pixels = await act(() => provider.apply("filter.noise", { amount: 40 }));
+    expect(pixels).toMatchObject({ ok: true, summary: 'Ruído (quantidade 40) em "Pessoa recortada" · camada inteira' });
     expect(puts.length).toBeGreaterThan(0);
-    expect(screen.getByRole("status")).toHaveTextContent("MCP · Pixelização");
+    expect(screen.getByRole("status")).toHaveTextContent("MCP · Ruído");
 
     const opacity = await act(() => provider.apply("layer.opacity", { opacity: 30 }));
     expect(opacity.summary).toBe('Opacidade de "Pessoa recortada": 100% → 30%');
@@ -112,7 +116,9 @@ describe("MMPhoto · ferramentas de um clique do MCP", () => {
     expect((await act(() => provider.apply("doc.crop", {}))).ok).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Selecionar" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Selecionar tudo" }).at(-1));
-    expect(await act(() => provider.apply("doc.crop", {}))).toMatchObject({ ok: true, summary: "Recortar na seleção: 400 × 400 → 400 × 400 px" });
+    // Seleção do documento inteiro: recortar não mudaria nada (o recorte real pelo app já foi feito pelo Formato redes acima).
+    expect(await act(() => provider.apply("doc.crop", {}))).toEqual({ ok: false, summary: "A seleção cobre o documento inteiro: não há o que recortar." });
+    expect(screen.getByText("Doc: 400 × 400 px")).toBeInTheDocument();
   });
 
   it("duplica o fundo pelo app, recorta para redes e avisa quando o automático não muda nada", async () => {

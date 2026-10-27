@@ -85,6 +85,19 @@ describe("MMFilm — ferramentas da timeline", () => {
     expect(clipsOn(container)).toHaveLength(1);
   });
 
+  it("C escolhe a Navalha, explica como cortar e o clique no clipe corta", () => {
+    const { container } = render(<FilmCraftWorkspace />);
+    drop(container, { id: "a", name: "Entrevista", seconds: 0 });
+    fireEvent.keyDown(window, { key: "c" });
+    expect(screen.getByText(/Navalha: clique no clipe onde quer cortar/)).toBeInTheDocument();
+    const clip = clipNamed(container, "Entrevista");
+    // Sequência real do mouse: pressionar, soltar e clicar.
+    fireEvent.pointerDown(clip, { clientX: 3 * PX, button: 0 });
+    fireEvent.pointerUp(window, { clientX: 3 * PX });
+    fireEvent.click(clip, { clientX: 3 * PX });
+    expect(clipsOn(container)).toHaveLength(2);
+  });
+
   it("Edição ripple apara a saída no clique e puxa os clipes seguintes", () => {
     const { container } = render(<FilmCraftWorkspace />);
     drop(container, { id: "a", name: "Plano A", seconds: 0 });

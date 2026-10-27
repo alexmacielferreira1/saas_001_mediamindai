@@ -18,6 +18,10 @@ const TABS = {
 };
 const tabs = (...ids) => ids.map((id) => TABS[id]);
 
+// Rótulos em português para categorias que o servidor guarda em inglês.
+const ASSET_TYPE_LABELS = { video: 'Vídeo', audio: 'Áudio', image: 'Imagem', document: 'Documento' };
+const USER_STATUS_LABELS = { active: 'Ativo', invited: 'Convite pendente', suspended: 'Suspenso', blocked: 'Bloqueado', disabled: 'Desativado', expired: 'Expirado' };
+const assetTypeLabel = (type) => ASSET_TYPE_LABELS[type] || type || 'Sem tipo';
 const stageLabel = (id) => PRODUCTION_STAGES.find((stage) => stage.id === id)?.label || id;
 // Etapa como a tela mostra (registros antigos usam 'gravacao' etc.).
 const projectStage = (project) => stageLabel(resolveProjectProductionStage(project));
@@ -39,7 +43,7 @@ const describeProject = (project) => `${nameOf(project)} · ${projectStage(proje
 
 const assetRow = (asset) => [nameOf(asset), asset.filename || '', asset.asset_type || '', asset.file_size || '', asset.duration || '', asset.origin || '', dateOf(asset)];
 const ASSET_HEADERS = ['Título', 'Arquivo', 'Tipo', 'Tamanho (bytes)', 'Duração (s)', 'Origem', 'Criado em'];
-const describeAsset = (asset) => `${nameOf(asset)} · ${asset.asset_type || 'mídia'}${asset.duration ? ` · ${Math.round(asset.duration)} s` : ''}`;
+const describeAsset = (asset) => `${nameOf(asset)} · ${assetTypeLabel(asset.asset_type)}${asset.duration ? ` · ${Math.round(asset.duration)} s` : ''}`;
 
 function projectsTool({ id, tab = 'consultar', label, icon, description, select, empty, found }) {
   return {
@@ -137,7 +141,7 @@ const CATALOGUES = {
         id: 'midias-por-tipo', tab: 'consultar', label: 'Mídias por tipo', icon: BarChart3,
         description: 'Quantidade de mídias por tipo (vídeo, áudio, imagem, documento) no período.',
         params: [DAYS_PARAM],
-        analyze: false, applyLabel: 'Consultar', run: async ({ days }, env) => countBy(recent(await env.assets(), Number(days)), (a) => a.asset_type || 'sem tipo', 'mídia(s)'),
+        analyze: false, applyLabel: 'Consultar', run: async ({ days }, env) => countBy(recent(await env.assets(), Number(days)), (a) => assetTypeLabel(a.asset_type), 'mídia(s)'),
       },
       {
         id: 'duplicados', tab: 'conferir', label: 'Possíveis duplicados', icon: Copy,
@@ -262,7 +266,7 @@ const CATALOGUES = {
       {
         id: 'usuarios-por-status', tab: 'consultar', label: 'Usuários por status', icon: Users,
         description: 'Conta os usuários do tenant por status (ativo, convite, suspenso, bloqueado).',
-        analyze: false, applyLabel: 'Consultar', run: async (_p, env) => countBy(await env.adminUsers(), (u) => u.status, 'usuário(s)'),
+        analyze: false, applyLabel: 'Consultar', run: async (_p, env) => countBy(await env.adminUsers(), (u) => USER_STATUS_LABELS[u.status] || u.status || 'Sem status', 'usuário(s)'),
       },
       {
         id: 'sem-perfil', tab: 'conferir', label: 'Usuários sem perfil', icon: UserX,

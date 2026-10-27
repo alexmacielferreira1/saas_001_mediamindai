@@ -22,6 +22,7 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const MMLIBS_TABS = [
   { id: "filtrar", label: "Filtrar" },
@@ -82,6 +83,8 @@ export function tagCounts(state) {
 }
 
 class ToolError extends Error {}
+
+const LIBRARY_FIELDS = ["category", "section", "view", "query", "favorites", "folders", "openFolder", "folderAssets", "assetTags", "trashed"];
 
 const categoryOf = (asset) => LIBRARY_CATEGORIES.slice(1).find((category) => filterAssets([asset], category, "").length);
 const listOf = (assets) => assets.map((asset) => ({ id: asset.id, label: asset.name, badge: categoryOf(asset) }));
@@ -492,7 +495,8 @@ export function runMMLibsTool(toolId, state, params) {
   const tool = mmlibsCatalogue(state).tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run({ newId: () => crypto.randomUUID(), ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    const current = { newId: () => crypto.randomUUID(), ...state };
+    return refuseIfUnchanged(tool.run(current, { ...defaultsOf(tool), ...(params || {}) }), current, LIBRARY_FIELDS, "Nada a aplicar: a biblioteca já está assim.");
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

@@ -63,15 +63,15 @@ describe("GraphicTools", () => {
     expect(screen.getByText("MMSOM 0.5")).toBeInTheDocument();
     const programs = screen.getByRole("tablist", { name: "Programas das Ferramentas Gráficas" });
     fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(3)'));
-    expect(screen.getByText("Ferramentas de documentos")).toBeInTheDocument();
     expect(within(programs).getByRole("tab", { name: "Word" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("tab", { name: "Word" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(programs.querySelector('[role="tab"]:nth-last-child(2)'));
-    expect(within(programs).getByRole("tab", { name: "Excel" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("tab", { name: "Excel" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(programs.querySelector('[role="tab"]:last-child'));
-    expect(within(programs).getByRole("tab", { name: "PowerPoint" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByRole("tab", { name: "PowerPoint" }).find((tab) => !programs.contains(tab))).toHaveAttribute("aria-selected", "true");
+    // O menu principal já escolhe o aplicativo: sem o submenu repetido Word/Excel/PowerPoint.
+    expect(screen.queryByRole("tablist", { name: "Aplicativos de documentos" })).toBeNull();
+    expect(screen.queryByText("Ferramentas de documentos")).toBeNull();
+    for (const [position, name] of [[2, "Excel"], [1, "PowerPoint"], [3, "Word"]]) {
+      fireEvent.click(programs.querySelector(`[role="tab"]:nth-last-child(${position})`));
+      expect(within(programs).getByRole("tab", { name })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getAllByRole("tab", { name })).toHaveLength(1);
+    }
   });
 
   it("keeps the MM program switcher visible inside desktop editors", () => {
