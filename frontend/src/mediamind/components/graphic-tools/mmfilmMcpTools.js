@@ -145,6 +145,8 @@ export function audioFailureReason(failure) {
   if (failure?.kind === "http") return `o servidor respondeu ${failure.status ?? "com erro"}.`;
   if (failure?.kind === "network") return "sem conexão com o servidor.";
   if (failure?.kind === "large") return "o arquivo é grande demais para analisar no navegador.";
+  if (failure?.kind === "no-audio") return "a mídia não tem faixa de áudio.";
+  if (failure?.kind === "too-long") return "o áudio é longo demais para analisar no navegador (mais de 4 h).";
   if (failure?.kind === "decode") return "formato sem áudio ou não suportado.";
   return null;
 }
