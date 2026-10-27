@@ -63,6 +63,7 @@ import {
   clipsInsideMarquee,
   timelineTimeFromPointer,
 } from "../../lib/mmfilmTimeline";
+import { analysisAudioFailure, loadAnalysisAudio } from "../../lib/analysisAudio";
 import {
   FilmcraftAudioEngine,
   audioBufferFailure,
@@ -478,18 +479,27 @@ export default function FilmCraftWorkspace({ active = true, previewAsset = null 
     const urls = [...new Set(list.map((clip) => clip.url))];
     let done = 0;
     onProgress?.(0, `Lendo o áudio (0 de ${urls.length})`);
+    const reasons = new Map();
     const entries = await Promise.all(
       urls.map(async (url) => {
-        const buffer = await engine.buffer(url);
+        let buffer = await engine.buffer(url);
+        const failure = buffer ? null : audioBufferFailure(url);
+        // Arquivo grande (>150 MB) ou codec que o decodeAudioData recusa: lê em pedaços só para a análise.
+        // 404, rede etc. não melhoram lendo de outro jeito: o motivo original segue para a mensagem.
+        if (!buffer && (!failure || failure.kind === "large" || failure.kind === "decode")) {
+          onProgress?.(done / urls.length, `Lendo o áudio em partes (${done + 1} de ${urls.length})`);
+          buffer = await loadAnalysisAudio(url, {
+            onProgress: (part) => onProgress?.((done + part) / urls.length, `Lendo o áudio em partes (${done + 1} de ${urls.length})`),
+          });
+          if (!buffer) reasons.set(url, analysisAudioFailure(url) || failure || { kind: "decode" });
+        } else if (!buffer) reasons.set(url, failure);
         done += 1;
         onProgress?.(done / urls.length, `Lendo o áudio (${done} de ${urls.length})`);
         return [url, buffer];
       }),
     );
     // Motivo de cada URL que não abriu (HTTP 404, rede, formato…) para as ferramentas explicarem a falha.
-    return Object.assign(new Map(entries.filter(([, buffer]) => buffer)), {
-      failures: new Map(entries.filter(([, buffer]) => !buffer).map(([url]) => [url, audioBufferFailure(url) || { kind: "decode" }])),
-    });
+    return Object.assign(new Map(entries.filter(([, buffer]) => buffer)), { failures: reasons });
   }
   // Mudança de cena: compara quadros reduzidos (32×18) a cada 0,25 s nos clipes de vídeo de V1.
   async function detectSceneChanges(list, { sensitivity = 5 } = {}, onProgress) {

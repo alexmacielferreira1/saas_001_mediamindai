@@ -21,3 +21,7 @@ The above copyright notice and this permission notice shall be included in all c
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+
+## mediabunny (MPL-2.0)
+
+A leitura de áudio em pedaços do MMFilm (`frontend/src/mediamind/lib/analysisAudio.js`) usa a biblioteca mediabunny (https://github.com/Vanilagy/mediabunny) como dependência npm, sem alterações. Ela é licenciada sob a Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/); o código-fonte está disponível no repositório oficial e no pacote publicado no npm.
