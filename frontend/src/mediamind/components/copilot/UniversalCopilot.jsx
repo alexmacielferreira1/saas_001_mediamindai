@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Bot, ChevronRight, Plus, Play, ListPlus, MessageSquare, History, Lightbulb,  Wrench, X, FolderOpen, Paperclip, Settings2, ChevronDown } from 'lucide-react';
 import { createMCPQueue, listMCPTools } from '../../lib/mcpApi';
 import { isPersistedAssetId, useMCPContext } from '../../lib/mcpTargetContext';
 import { useMCPActions } from '../../lib/mcpActions';
 import MCPToolPanel from '../mcp/MCPToolPanel';
+import { usePageMCPProvider } from './pageMcpEnv';
 import { useAuth } from '../../auth';
 import CopilotAISettings from './CopilotAISettings';
 import { request } from '../../../api/httpClient';
@@ -69,6 +70,13 @@ const detectGroup=(location)=>{
  const tool=(q.get('tool')||'').toLowerCase();
  if(path.includes('agencia-video'))return AGENCY_GUIDES[q.get('guia')]||'agency_command';
  if(path.includes('administration'))return 'admin';
+ if(path.startsWith('/search')||path.startsWith('/acervo'))return 'search';
+ if(path.startsWith('/ingest'))return 'ingest';
+ if(path.startsWith('/workspace'))return 'workspace';
+ if(path.startsWith('/roteiro2'))return 'script';
+ if(path.startsWith('/social'))return 'publication';
+ if(path.startsWith('/dash-ias'))return 'analytics';
+ if(path.startsWith('/ferramentas-office'))return 'office';
  if(path.includes('thumb')||path.includes('estudio-de-arte'))return 'image';
  if(path.includes('ferramentas-graficas'))return GRAPHIC_APPS[tool] ? `graphic:${tool}` : 'graphic:filmcraft';
  if(path.includes('clipsfree'))return 'clips';
@@ -116,7 +124,12 @@ export default function UniversalCopilot(){
  const mcpContext=useMCPContext();
  // Ferramentas de um clique da ferramenta aberta (ex.: MMFilm): executam no navegador, com desfazer.
  const actions=useMCPActions(); const [showServerOps,setShowServerOps]=useState(false);
- useEffect(()=>{if(actions)setShowMcp(true)},[actions]);
+ // Sem ferramenta aberta, a própria página oferece o catálogo dela (consultar, conferir, exportar, abrir).
+ const navigate=useNavigate();
+ const pageProvider=usePageMCPProvider({group,label:catalogue.label,cards:catalogue.cards,location,navigate,ask:(text)=>{setInput(text);setTab('execute');}});
+ const provider=actions||pageProvider;
+ // Abre o MCP quando muda a ferramenta/página (não a cada troca de filtro na URL).
+ useEffect(()=>{if(provider)setShowMcp(true)},[provider?.source]);
  useEffect(()=>{setExpanded('');setStatus('');setAssetPicker(false)},[group]);
  useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(data))}catch{setStatus('Armazenamento local indisponível ou cheio.')}} ,[data]);
  useEffect(()=>{try{localStorage.setItem('mm_copilot_open',open?'1':'0')}catch{}},[open]);
@@ -163,15 +176,15 @@ export default function UniversalCopilot(){
  }
  const patchOperation=(queueId,id,changes)=>setData(s=>({...s,queues:s.queues.map(q=>q.id===queueId?{...q,operations:q.operations.map(o=>o.id===id?{...o,...changes}:o)}:q)}));
  function enqueueLocal({tool,params,description}){
-   const op={id:String(Date.now()+Math.random()),label:tool.label,mode:'later',status:'queued',queueId:queue.id,projectMode:queue.projectMode,projectName:queue.projectName,targetMode:'selected',targetName:'',assets:[],settings:{instruction:description},local:{source:actions.source,label:actions.label,toolId:tool.id,params},sourcePage:location.pathname+location.search,createdAt:new Date().toISOString()};
-   patchQueue({operations:[...queue.operations,op]});history({title:`${actions.label} · ${tool.label}`,state:'queued',details:`Na ${queue.name}: ${description||'parâmetros padrão'}`,operation:op});
+   const op={id:String(Date.now()+Math.random()),label:tool.label,mode:'later',status:'queued',queueId:queue.id,projectMode:queue.projectMode,projectName:queue.projectName,targetMode:'selected',targetName:'',assets:[],settings:{instruction:description},local:{source:provider.source,label:provider.label,toolId:tool.id,params},sourcePage:location.pathname+location.search,createdAt:new Date().toISOString()};
+   patchQueue({operations:[...queue.operations,op]});history({title:`${provider.label} · ${tool.label}`,state:'queued',details:`Na ${queue.name}: ${description||'parâmetros padrão'}`,operation:op});
  }
- function recordLocal({tool,outcome}){history({title:`${actions.label} · ${tool.label}`,state:outcome.ok?'completed':'failed',details:outcome.summary});}
+ function recordLocal({tool,outcome}){history({title:`${provider.label} · ${tool.label}`,state:outcome.ok?'completed':'failed',details:outcome.summary});}
  async function runLocal(op){
-   if(!actions||actions.source!==op.local.source){patchOperation(op.queueId,op.id,{status:'blocked'});setStatus(`Abra ${op.local.label} para executar “${op.label}”.`);return false;}
+   if(!provider||provider.source!==op.local.source){patchOperation(op.queueId,op.id,{status:'blocked'});setStatus(`Abra ${op.local.label} para executar “${op.label}”.`);return false;}
    patchOperation(op.queueId,op.id,{status:'submitted'});
    try{
-     const outcome=await actions.apply(op.local.toolId,op.local.params);
+     const outcome=await provider.apply(op.local.toolId,op.local.params);
      const state=outcome.ok?'completed':'failed';
      patchOperation(op.queueId,op.id,{status:state,result:outcome.summary});history({title:`${op.local.label} · ${op.label}`,state,details:outcome.summary,operation:op});setStatus(`${op.label}: ${outcome.summary}`);
      return outcome.ok;
@@ -197,16 +210,16 @@ export default function UniversalCopilot(){
     {tab==='execute'&&<div className="space-y-2"><div className="min-h-[175px] max-h-[300px] space-y-2 overflow-y-auto rounded-lg bg-slate-900 p-3 text-xs">{data.chat.length===0?<p className="text-slate-400">Descreva o que deseja fazer. Se houver um modelo Assistente configurado, a IA responderá; ações no sistema ainda exigem ferramentas conectadas.</p>:data.chat.slice(-7).map((m,i)=><p key={i} className={m.role==='user'?'text-sky-200':'text-slate-400'}>{m.text}</p>)}</div>{contextItem&&<div className="flex items-center justify-between rounded bg-sky-950 p-2 text-xs">Histórico: {contextItem.title}<button onClick={()=>setContextItem(null)}><X size={14}/></button></div>}<form onSubmit={chatSubmit} className="space-y-2"><textarea rows={4} className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm" value={input} onChange={e=>setInput(e.target.value)} placeholder="Converse, planeje ou descreva uma alteração. Pode escrever um comando longo..."/><button className="w-full rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold">{busy?'Consultando…':'Enviar à IA'}</button></form></div>}
     <div className="border-t border-slate-700 pt-3"><div className="mb-2 flex items-center justify-between"><button onClick={()=>setShowMcp(v=>!v)} className="flex items-center gap-2 text-sm font-bold"><Wrench size={15}/> MCP · {catalogue.label} <ChevronDown size={14} className={showMcp?'':'-rotate-90'}/></button></div>
      {showMcp&&<>
-     {mcpMode!=='creative'&&<div className="mb-3 space-y-2">
+     {mcpMode!=='creative'&&!pageProvider&&<div className="mb-3 space-y-2">
       <p className="text-[11px] text-slate-400">{mcpMode==='essential'?'Atalhos simples desta página. Para tarefas complexas, converse com o Copiloto.':'Ações frequentes da área. Operações em lote ficam recolhidas para não ocupar espaço.'}</p>
       <div className="grid grid-cols-2 gap-2">{catalogue.cards.slice(0,4).map(label=><button type="button" key={label} onClick={()=>quickCommand(label)} className="min-h-[58px] rounded-lg border border-slate-700 bg-slate-900 p-2 text-left text-xs text-slate-200 hover:border-sky-600 hover:bg-slate-800"><span className="mb-1 block text-sky-400">↗</span>{label}</button>)}</div>
       {mcpMode==='operational'&&<button type="button" className="w-full rounded-lg border border-slate-700 p-2 text-xs text-sky-200 hover:bg-slate-800" onClick={()=>setShowBatch(v=>!v)}>{showBatch?'Recolher operações em lote':'Mostrar operações em lote e filas'} <ChevronDown size={12} className="inline"/></button>}
       {status&&<p role="status" className="rounded bg-slate-800 p-2 text-[11px] text-amber-200">{status}</p>}
      </div>}
-     {actions&&<MCPToolPanel provider={actions} onEnqueue={enqueueLocal} onExecuted={recordLocal}/>}
-     {(mcpMode==='creative'||(mcpMode==='operational'&&showBatch)||actions)&&<>
+     {provider&&<MCPToolPanel provider={provider} onEnqueue={enqueueLocal} onExecuted={recordLocal}/>}
+     {(mcpMode==='creative'||(mcpMode==='operational'&&showBatch)||provider)&&<>
      <div className="mb-2 flex flex-wrap items-center gap-1">{data.queues.map(q=><button key={q.id} onClick={()=>setData(s=>({...s,active:q.id}))} className={`rounded-lg px-2 py-1 text-xs ${data.active===q.id?'bg-sky-700':'bg-slate-800'}`}>{q.name} ({q.operations.length})</button>)}<button title="Nova fila" onClick={addQueue} className="rounded-lg bg-slate-800 p-1.5"><Plus size={14}/></button></div>
-     <details className="mb-2 text-xs"><summary className="cursor-pointer text-slate-400">Renomear {queue.name}</summary><input aria-label="Nome da fila" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.name} onChange={e=>patchQueue({name:e.target.value})}/></details>{(!actions||showServerOps)&&<><div className="mb-2 flex items-center gap-2 text-xs font-semibold"><FolderOpen size={14}/> Projeto e destino</div>
+     <details className="mb-2 text-xs"><summary className="cursor-pointer text-slate-400">Renomear {queue.name}</summary><input aria-label="Nome da fila" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.name} onChange={e=>patchQueue({name:e.target.value})}/></details>{(!provider||showServerOps)&&<><div className="mb-2 flex items-center gap-2 text-xs font-semibold"><FolderOpen size={14}/> Projeto e destino</div>
      <label className="mb-1 block text-xs text-slate-400">Projeto</label><select className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.projectMode} onChange={e=>patchQueue({projectMode:e.target.value,projectName:''})}><option value="current">Usar projeto atual</option><option value="existing">Outro projeto existente</option><option value="new">Criar novo projeto</option></select>
      {queue.projectMode!=='current'&&<div className="mb-2"><input className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" placeholder={queue.projectMode==='new'?'Nome do novo projeto':'ID/nome do projeto existente'} value={queue.projectName} onChange={e=>patchQueue({projectName:e.target.value})}/><p className="mt-1 text-[10px] text-amber-300">{queue.projectMode==='new'?'A criação do projeto ainda requer integração ao cadastro.':'Confirme o projeto no seletor real antes de executar.'}</p></div>}
      <label className="mb-1 block text-xs text-slate-400">Onde trabalhar</label><select className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs" value={queue.targetMode} onChange={e=>patchQueue({targetMode:e.target.value})}><option value="selected">{group==='edit'||group==='graphic:filmcraft'?'Timeline/clipe selecionado':group.startsWith('graphic:')?'Seleção atual de '+catalogue.label:group==='image'?'Prancheta ou camada atual':group==='video'?'Projeto/cena atual':'Contexto da página atual'}</option>{(['edit','video','graphic:filmcraft','graphic:effectcraft'].includes(group))&&<><option value="timeline">Outra timeline existente</option><option value="new-timeline">Nova timeline</option></>}{(group==='image'||group==='edit'||['graphic:photocraft','graphic:vectorcraft','graphic:designcraft','graphic:effectcraft'].includes(group))&&<option value="board">Prancheta / camada</option>}<option value="media">Mídias vinculadas</option></select>
@@ -215,10 +228,10 @@ export default function UniversalCopilot(){
      {queue.assets.map(a=><div key={a.id} className="mb-1 flex items-center gap-2 rounded bg-slate-900 p-2 text-xs"><span className="min-w-0 flex-1 truncate">{a.name} {a.attached?'':'(não enviado)'}</span><button onClick={()=>patchQueue({assets:queue.assets.filter(x=>x.id!==a.id)})}><X size={12}/></button></div>)}
      <div className="mb-2 flex flex-wrap gap-2"><button onClick={()=>setAssetPicker(v=>!v)} className="rounded border border-slate-700 px-2 py-1 text-xs">+ Do acervo</button><label className="cursor-pointer rounded border border-slate-700 px-2 py-1 text-xs">+ Computador<input type="file" multiple className="hidden" onChange={e=>{if(e.target.files?.length)addAssets(e.target.files);e.target.value=''}}/></label></div>
      {assetPicker&&<div className="mb-2 rounded-lg border border-slate-700 p-2 text-xs"><div className="mb-2 flex items-center justify-between"><b>Acervo MediaMindAI</b><button onClick={()=>setAssetPicker(false)}><X size={13}/></button></div><p className="text-slate-400">Conecte o seletor do acervo para pesquisar e vincular arquivos reais. Não adicionamos IDs não verificados.</p></div>}<div className="grid grid-cols-2 gap-2">{items.map(label=><div key={label} className="space-y-2 rounded-lg border border-slate-700 p-2"><div className="flex items-center gap-1 text-xs font-semibold"><Wrench size={13}/><span>{label}</span></div><button onClick={()=>setExpanded(expanded===label?'':label)} className="w-full rounded border border-slate-600 px-2 py-1 text-[11px]"><Settings2 size={12} className="mr-1 inline"/>Configurar</button>{expanded===label&&<div className="space-y-2 rounded bg-slate-900 p-2 text-[11px]"><label className="block">Alvo desta operação<select value={(toolSettings[`${queue.id}:${label}`]||{}).target||'queue'} onChange={e=>changeSettings(label,{target:e.target.value})} className="mt-1 w-full rounded bg-slate-800 p-1"><option value="queue">Usar destino da fila</option><option value="selection">Seleção atual da tela</option><option value="assets">Mídias vinculadas</option></select></label><label className="block">Instruções específicas<textarea value={(toolSettings[`${queue.id}:${label}`]||{}).instruction||''} onChange={e=>changeSettings(label,{instruction:e.target.value})} placeholder="Ex.: IN 00:00:10, OUT 00:00:25" rows={2} className="mt-1 w-full rounded bg-slate-800 p-2"/></label><p className="text-slate-400">As ferramentas conectadas definem seus parâmetros técnicos adicionais.</p></div>}<button disabled={busy||!chooseTool(label)} onClick={()=>run(label,'now')} title={chooseTool(label)?'Solicitar execução ao backend MCP':'Executor MCP indisponível'} className="flex w-full items-center justify-center gap-1 rounded bg-sky-700 p-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"><Play size={11}/> Executar agora</button><button onClick={()=>run(label,'later')} className="flex w-full items-center justify-center gap-1 rounded border border-slate-600 p-1.5 text-[11px]"><ListPlus size={12}/> Adicionar à fila</button></div>)}</div></>}
-     {actions&&<button type="button" onClick={()=>setShowServerOps(v=>!v)} className="mb-2 w-full rounded-lg border border-slate-700 p-1.5 text-[11px] text-slate-400 hover:bg-slate-800">{showServerOps?'Recolher':'Mostrar'} destino, mídias e ferramentas do servidor <ChevronDown size={12} className={`inline ${showServerOps?'rotate-180':''}`}/></button>}
+     {provider&&<button type="button" onClick={()=>setShowServerOps(v=>!v)} className="mb-2 w-full rounded-lg border border-slate-700 p-1.5 text-[11px] text-slate-400 hover:bg-slate-800">{showServerOps?'Recolher':'Mostrar'} destino, mídias e ferramentas do servidor <ChevronDown size={12} className={`inline ${showServerOps?'rotate-180':''}`}/></button>}
      <div className="mt-3 rounded-lg border border-slate-700 p-2"><div className="mb-2 flex items-center justify-between gap-2"><h4 className="text-xs font-bold">Operações · {queue.name}</h4>{pendingLocal>0&&<button type="button" disabled={busy} onClick={runLocalQueue} className="flex items-center gap-1 rounded bg-amber-500 px-2 py-1 text-[11px] font-semibold text-slate-950 disabled:opacity-50"><Play size={11}/> Executar fila ({pendingLocal})</button>}</div>{queue.operations.length===0?<p className="text-[11px] text-slate-500">Fila vazia</p>:queue.operations.map(op=><div key={op.id} className="mb-1 rounded bg-slate-900 p-1.5 text-[11px]"><div className="flex gap-2"><span className="min-w-0 flex-1 truncate" title={op.settings?.instruction||op.label}>{op.local?`${op.local.label} · `:''}{op.label}</span><span className={statusStyle[op.status]||''}>{op.status}</span>{op.local&&op.status!=='completed'&&<button title={`Executar ${op.label}`} aria-label={`Executar ${op.label}`} disabled={busy} onClick={async()=>{setBusy(true);try{await runLocal(op)}finally{setBusy(false)}}}><Play size={12}/></button>}<button title="Conversar" onClick={()=>discuss({title:op.label,details:JSON.stringify({project:op.projectName,target:op.targetMode,assets:op.assets.map(a=>a.name)})})}><MessageSquare size={12}/></button><button title="Remover da fila" aria-label={`Remover ${op.label} da fila`} onClick={()=>patchQueue({operations:queue.operations.filter(o=>o.id!==op.id)})}><X size={12}/></button></div>{op.local&&(op.result||op.settings?.instruction)&&<p className="mt-1 truncate text-[10px] text-slate-500" title={op.result||op.settings.instruction}>{op.result||op.settings.instruction}</p>}</div>)}</div>
      {status&&<p role="status" className="mt-2 rounded bg-slate-800 p-2 text-xs text-amber-200">{status}</p>}
-     <p className="mt-2 text-[10px] text-slate-500">{actions?`Ações de ${actions.label} executam aqui no navegador, em ordem, com Desfazer. `:''}Filas locais não executam automaticamente. Arquivos do computador não são enviados ainda. Os MCPs antigos permanecem no código como referência.</p></>}</>}
+     <p className="mt-2 text-[10px] text-slate-500">{provider?`Ações de ${provider.label} executam aqui no navegador, em ordem${actions?', com Desfazer':''}. `:''}Filas locais não executam automaticamente. Arquivos do computador não são enviados ainda. Os MCPs antigos permanecem no código como referência.</p></>}</>}
     </div>
    </div>
  </aside>;

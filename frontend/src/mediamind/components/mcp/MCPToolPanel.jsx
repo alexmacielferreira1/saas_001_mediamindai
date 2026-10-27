@@ -108,7 +108,8 @@ export default function MCPToolPanel({ provider, onEnqueue, onExecuted }) {
       setResult({ ...outcome, kind });
       if (kind === "analyze" && outcome.items) setSelection(outcome.items.filter((item) => item.selected !== false).map((item) => item.id));
       if (kind === "apply") {
-        if (outcome.ok && outcome.count !== 0) recordLastAction(provider.source, tool.label);
+        // Provedores sem desfazer (consultas e exportações das páginas) não mostram "Última ação · Desfazer".
+        if (outcome.ok && outcome.count !== 0 && provider.tracksLastAction !== false) recordLastAction(provider.source, tool.label);
         onExecuted?.({ tool, params: finalParams, outcome });
       }
     } catch (error) {
@@ -327,9 +328,11 @@ export default function MCPToolPanel({ provider, onEnqueue, onExecuted }) {
                   <ListPlus size={12} /> Adicionar à fila
                 </button>
               )}
-              <button type="button" disabled={busy || !provider.canUndo()} onClick={undo} className="flex items-center justify-center gap-1 rounded border border-slate-600 p-1.5 text-[11px] disabled:opacity-40">
-                <Undo2 size={12} /> Desfazer
-              </button>
+              {provider.tracksLastAction !== false && (
+                <button type="button" disabled={busy || !provider.canUndo()} onClick={undo} className="flex items-center justify-center gap-1 rounded border border-slate-600 p-1.5 text-[11px] disabled:opacity-40">
+                  <Undo2 size={12} /> Desfazer
+                </button>
+              )}
             </div>
           )}
         </div>
