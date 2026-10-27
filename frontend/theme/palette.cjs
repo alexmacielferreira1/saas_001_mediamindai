@@ -36,6 +36,8 @@ const LIGHT_ACCENT_SURFACE_SOURCE = { 800: '200', 900: '100', 950: '50' };
 const SURFACES = {
   'mm-page': ['#020817', defaultColors.slate[50]],
   'mm-drawer': ['#041326', '#ffffff'],
+  // Painéis da Administração (antes bg-[#031225] em cada guia).
+  'mm-admin-panel': ['#031225', '#ffffff'],
   'mm-studio': ['#07111f', defaultColors.slate[100]],
   'mm-bar': ['#081421', '#ffffff'],
   // Diálogos dos editores (ex.: FilmCraftTextPrompt): cinzas estilo NLE no escuro.

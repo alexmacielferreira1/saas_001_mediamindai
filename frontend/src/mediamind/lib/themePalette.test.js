@@ -29,6 +29,8 @@ describe('paleta temática', () => {
     expect(dark['--mm-drawer']).toBe(channels('#041326'));
     expect(dark['--mm-studio']).toBe(channels('#07111f'));
     expect(dark['--mm-bar']).toBe(channels('#081421'));
+    expect(dark['--mm-admin-panel']).toBe(channels('#031225'));
+    expect(light['--mm-admin-panel']).toBe(channels('#ffffff'));
   });
 
   it('mantém os cinzas dos diálogos dos editores no escuro e clareia no claro', () => {

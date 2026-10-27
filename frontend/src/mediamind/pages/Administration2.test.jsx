@@ -35,6 +35,12 @@ vi.mock('../components/corp/roles/AdminAcessosPage', () => ({
 
 import Administration2 from './Administration2';
 import { ApiError } from '../../api/httpClient';
+import { listPermissionGroups } from '../../api/permissions';
+
+const GROUPS = [
+  { id: 'g-editors', name: 'Editores Reais', description: 'Grupo do tenant', is_active: true, permission_codes: ['users.manage', 'assets.view'] },
+  { id: 'g-readers', name: 'Leitura Real', description: '', is_active: false, permission_codes: ['assets.view'] },
+];
 
 const USER = {
   id: 'user-1',
@@ -324,6 +330,213 @@ describe('Administration2 preview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Formulários' }));
     expect(await screen.findByRole('heading', { name: 'Formulários' })).toBeInTheDocument();
     expect(screen.queryByTestId('admin-data-seal')).not.toBeInTheDocument();
+  });
+
+  it('opens the matching tab from an overview indicator', async () => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Perfis.*Ver perfis/s }));
+    expect(await screen.findByRole('heading', { name: 'Matriz resumida de permissões' })).toBeInTheDocument();
+  });
+
+  it('keeps the previous users view with server-side filters and the reserved detail tabs', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Versão anterior' }));
+    fireEvent.change(screen.getByLabelText('Filtrar por status'), { target: { value: 'suspended' } });
+    fireEvent.change(screen.getByPlaceholderText('Buscar nome ou e-mail'), { target: { value: 'editor' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Filtrar' }));
+    await waitFor(() => expect(listAdminUsersMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 100, search: 'editor', status: 'suspended' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver Editor Local' }));
+    expect(await screen.findByRole('heading', { name: 'Editor Local' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Atividade' }));
+    expect(screen.getByText('Área em preparação')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '← Voltar para usuários' }));
+    expect(await screen.findByLabelText('Filtrar por status')).toBeInTheDocument();
+  });
+
+  it('filters the previous users view locally in the demo session', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter initialEntries={['/administration2?tab=users']}><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Versão anterior' }));
+    fireEvent.change(screen.getByPlaceholderText('Buscar nome ou e-mail'), { target: { value: 'administrador demo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Filtrar' }));
+    expect(await screen.findByRole('button', { name: 'Ver Administrador Demo' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Ver / })).toHaveLength(1);
+    expect(listAdminUsersMock).not.toHaveBeenCalled();
+  });
+
+  it('never shows invented overview numbers for a real tenant', async () => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Ações rápidas')).toBeInTheDocument();
+    expect(screen.getAllByText('—')).toHaveLength(3);
+    expect(screen.queryByText('1 usuário ainda não está vinculado a uma equipe')).not.toBeInTheDocument();
+    // 3 indicadores sem fonte (equipes, formulários, importações) + MFA, sessões e senha.
+    expect(screen.getAllByText('Não integrado')).toHaveLength(6);
+    expect(screen.getByText('Operacional')).toBeInTheDocument();
+  });
+
+  it('follows the reference overview layout with honest quick actions', async () => {
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Ações rápidas' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Administração' })).not.toBeInTheDocument();
+    ['Novo usuário', 'Convidar usuário', 'Novo perfil', 'Nova importação', 'Novo formulário'].forEach((name) => {
+      expect(screen.getByRole('button', { name: new RegExp(name) })).toBeDisabled();
+    });
+  });
+
+  it('does not present zeros as real when the users list could not be loaded', async () => {
+    listAdminUsersMock.mockRejectedValueOnce(new ApiError({ status: 403, code: 'FORBIDDEN', message: 'Sem acesso.' }));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/Convites, bloqueios e acessos não verificados/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhuma conta bloqueada no tenant')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhum convite pendente')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Não verificado').length).toBeGreaterThanOrEqual(3);
+    fireEvent.click(screen.getByRole('button', { name: 'Ver perfis' }));
+    expect(await screen.findByRole('heading', { name: 'Matriz resumida de permissões' })).toBeInTheDocument();
+  });
+
+  it('says profiles are unavailable when the permission groups fail to load', async () => {
+    listPermissionGroups.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter initialEntries={['/administration2?tab=profiles']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText(/Perfis indisponíveis/)).toBeInTheDocument();
+    expect(screen.queryByText('Nenhum perfil cadastrado neste tenant.')).not.toBeInTheDocument();
+  });
+
+  it('ignores an unknown status filter in the URL instead of hiding every user', async () => {
+    render(<MemoryRouter initialEntries={['/administration2?tab=users&status=xyz']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByLabelText('Filtrar usuários por status')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Ver Editor Local' })).toBeInTheDocument();
+  });
+
+  it('counts only active users as active and opens the audit history', async () => {
+    listAdminUsersMock.mockResolvedValue({ items: [{ ...USER, status: 'suspended' }], total: 1, page: 1, page_size: 25 });
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    const indicator = await screen.findByRole('button', { name: /Usuários ativos/ });
+    expect(indicator).toHaveTextContent('Usuários ativos0');
+  });
+
+  it('opens the users tab already filtered from an overview alert', async () => {
+    listAdminUsersMock.mockResolvedValue({
+      items: [USER, { ...USER, id: 'user-3', full_name: 'Bloqueado Real', email: 'bloq@mediamind.ai', status: 'blocked' }],
+      total: 2, page: 1, page_size: 25,
+    });
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /1 conta\(s\) bloqueada\(s\)/ }));
+    expect(await screen.findByLabelText('Filtrar usuários por status')).toHaveValue('blocked');
+    expect(screen.getByRole('button', { name: 'Ver Bloqueado Real' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ver Editor Local' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Usuários' }));
+    expect(await screen.findByLabelText('Filtrar usuários por status')).toHaveValue('');
+  });
+
+  it('names the actor of each recent administrative action', async () => {
+    listAdminActivityMock.mockResolvedValue([
+      { id: 'a1', action: 'user.suspended', entity_type: 'User', user_id: 'user-1', created_date: new Date(Date.now() - 5 * 60000).toISOString() },
+      { id: 'a2', action: 'custom.event', entity_type: '', user_id: 'desconhecido', created_date: null },
+    ]);
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('suspendeu o usuário')).toBeInTheDocument();
+    expect(screen.getByText('Editor Local')).toBeInTheDocument();
+    expect(screen.getByText('Há 5 min')).toBeInTheDocument();
+    expect(screen.getByText('Sistema')).toBeInTheDocument();
+    expect(screen.getByText('horário não informado')).toBeInTheDocument();
+  });
+
+  it('marks the audit status as unverified when the activity feed fails', async () => {
+    listAdminActivityMock.mockRejectedValueOnce(new Error('offline'));
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Não verificada')).toBeInTheDocument();
+    expect(screen.queryByText('Operacional')).not.toBeInTheDocument();
+  });
+
+  it('keeps the demonstration overview numbers only in the local demo session', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('1 usuário ainda não está vinculado a uma equipe')).toBeInTheDocument();
+    expect(screen.getByText('9')).toBeInTheDocument();
+  });
+
+  it('shows only tenant data in security outside the demo session', async () => {
+    listAdminUsersMock.mockResolvedValue({
+      items: [USER, { ...USER, id: 'user-2', full_name: 'Convidada Real', email: 'convite@mediamind.ai', status: 'invited' }, { ...USER, id: 'user-3', full_name: 'Bloqueado Real', email: 'bloq@mediamind.ai', status: 'blocked' }],
+      total: 3, page: 1, page_size: 25,
+    });
+    render(<MemoryRouter initialEntries={['/administration2?tab=security']}><Administration2 /></MemoryRouter>);
+    const indicators = await screen.findByLabelText('Indicadores de segurança');
+    await waitFor(() => expect(indicators).toHaveTextContent('Usuários bloqueados1'));
+    expect(indicators).toHaveTextContent('Convites pendentes1');
+    expect(indicators).toHaveTextContent('MFA Ativo—');
+    expect(screen.queryByText('78%')).not.toBeInTheDocument();
+    expect(screen.queryByText('189.124.5.10')).not.toBeInTheDocument();
+    expect(screen.queryByText('Encerrar todas as sessões')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'MFA para Superadmin' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Configurar MFA' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Convites pendentes/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Convites pendentes' });
+    expect(dialog).toHaveTextContent('Convidada Real');
+    expect(screen.getByRole('button', { name: 'Reenviar' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }));
+
+    // Fora do demo, o que não tem dado real fica desabilitado com o motivo (não abre painel vazio).
+    for (const name of ['Ver todas as sessões', 'Ver todos os logs', 'Ver mais']) {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: /Ver auditoria de segurança/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /MFA Ativo/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Usuários bloqueados/ })).toBeEnabled();
+  });
+
+  it('keeps the security demonstration data inside the local demo session', async () => {
+    readLocalDemoSessionMock.mockReturnValue({ id: 'demo-superadmin', selected_tenant_id: 'mediamind-demo' });
+    render(<MemoryRouter initialEntries={['/administration2?tab=security']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('78%')).toBeInTheDocument();
+    expect(screen.getAllByText('189.124.5.10').length).toBeGreaterThan(0);
+    expect(screen.getByRole('switch', { name: 'MFA para Superadmin' })).toBeEnabled();
+  });
+
+  it('lists the real permission groups in profiles with their linked users', async () => {
+    listPermissionGroups.mockResolvedValueOnce(GROUPS);
+    listAdminUsersMock.mockResolvedValue({ items: [{ ...USER, profile_id: 'g-editors', tenant_role: 'editor' }], total: 1, page: 1, page_size: 25 });
+    render(<MemoryRouter initialEntries={['/administration2?tab=profiles']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Editores Reais' })).toBeInTheDocument();
+    expect(screen.queryByText('Editor Broadcast')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Novo perfil' })).toBeDisabled();
+    expect(screen.getAllByText('users')).toHaveLength(2);
+    expect(screen.getByText('manage')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Ver usuários/ }));
+    expect(screen.getByRole('dialog', { name: 'Usuários de Editores Reais' })).toHaveTextContent('Editor Local');
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /Leitura Real/ }));
+    expect(screen.getByRole('heading', { name: 'Leitura Real' })).toBeInTheDocument();
+    expect(screen.getByText('Inativo')).toBeInTheDocument();
+    expect(screen.getByText('Nenhum usuário vinculado a este perfil.')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Buscar perfil...'), { target: { value: 'inexistente' } });
+    expect(screen.getByText('Nenhum perfil corresponde à busca.')).toBeInTheDocument();
+  });
+
+  it('builds the permission matrix from the real groups and their critical codes', async () => {
+    listPermissionGroups.mockResolvedValueOnce(GROUPS);
+    render(<MemoryRouter initialEntries={['/administration2?tab=permissions']}><Administration2 /></MemoryRouter>);
+    expect(await screen.findByText('Perfil: Editores Reais')).toBeInTheDocument();
+    expect(screen.queryByText('Gestor de Acervo')).not.toBeInTheDocument();
+    expect(screen.getAllByText('✓ Permitido')).toHaveLength(2);
+
+    fireEvent.change(screen.getByLabelText('Perfil'), { target: { value: 'g-readers' } });
+    expect(screen.getByText('Perfil: Leitura Real')).toBeInTheDocument();
+    expect(screen.getByText('users.manage').nextSibling).toHaveTextContent('Negado');
+
+    fireEvent.change(screen.getByLabelText('Módulo'), { target: { value: 'assets' } });
+    expect(screen.queryByRole('button', { name: 'Permissões de users' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Permissões de assets' }));
+    expect(screen.getByRole('dialog', { name: 'Permissões de assets' })).toHaveTextContent('assets.view');
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }));
+
+    fireEvent.change(screen.getByPlaceholderText('Buscar permissão, módulo ou ação...'), { target: { value: 'zzz' } });
+    expect(screen.getByText('Nenhum módulo corresponde aos filtros.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '↻ Limpar filtros' }));
+    expect(screen.getByRole('button', { name: 'Permissões de users' })).toBeInTheDocument();
   });
 
   it('loads, validates and persists organization settings through the backend', async () => {

@@ -4,9 +4,7 @@ import {
   FileSpreadsheet, FileText, FolderInput, HelpCircle, RefreshCw, Save, Upload,
   X,
 } from 'lucide-react';
-
-const panel = 'rounded-xl border border-sky-900/70 bg-[#031225]/90 shadow-[0_12px_32px_rgba(0,0,0,.2)]';
-const outline = 'rounded-lg border border-sky-600 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950';
+import { outline, panel } from './ui/styles';
 
 const previewRows = [
   ['1', 'Ana Clara Souza', 'ana.souza@empresa.com', 'Produto', '01/09/2024', 'Analista'],

@@ -399,6 +399,51 @@ def test_admin_users_filter_by_other_account_status_stays_in_tenant(admin_users_
     assert [item["email"] for item in items] == ["editor@mediamind.ai"]
 
 
+def login_as(client, email):
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    assert response.status_code == 200
+
+
+def test_member_without_users_manage_cannot_use_admin_user_routes(admin_users_client):
+    client, ids = admin_users_client
+    login_as(client, "editor@mediamind.ai")
+
+    listing = client.get("/api/v1/admin/users")
+    detail = client.get(f"/api/v1/admin/users/{ids['target']}")
+    suspend = client.post(
+        f"/api/v1/admin/users/{ids['target']}/suspend", json={"reason": "Sem permissão"}
+    )
+
+    assert listing.status_code == 403
+    assert detail.status_code == 403
+    assert suspend.status_code == 403
+    with ids["session_factory"]() as session:
+        assert get_active_membership(session, ids["target"], ids["tenant"]) is not None
+
+
+def test_member_reads_only_own_company_settings_and_cannot_change_them(admin_users_client):
+    client, ids = admin_users_client
+    login(client)
+    client.patch("/api/v1/admin/settings", json={"timezone": "America/Recife"})
+    client.post("/api/v1/auth/logout")
+
+    # Leitura liberada a qualquer membro: só nome, idioma, fuso e formato de data da empresa.
+    login_as(client, "editor@mediamind.ai")
+    own = client.get("/api/v1/admin/settings")
+    change = client.patch("/api/v1/admin/settings", json={"timezone": "America/Manaus"})
+    client.post("/api/v1/auth/logout")
+    login_as(client, "fora@mediamind.ai")
+    other = client.get("/api/v1/admin/settings")
+
+    assert own.status_code == 200
+    assert set(own.json()) == {"organization_name", "locale", "timezone", "date_format"}
+    assert own.json()["timezone"] == "America/Recife"
+    assert change.status_code == 403
+    assert other.status_code == 200
+    assert other.json()["organization_name"] == "Outra"
+    assert other.json()["timezone"] == "America/Sao_Paulo"
+
+
 def test_admin_settings_second_update_keeps_name_and_previous_fields(admin_users_client):
     client, _ids = admin_users_client
     login(client)
