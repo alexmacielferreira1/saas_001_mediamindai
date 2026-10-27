@@ -131,12 +131,12 @@ class RecordingOp:
         return record
 
 
-def test_head_migration_only_creates_the_composite_index():
+def test_index_migration_only_creates_the_composite_index():
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    head = script.get_revision(script.get_current_head())
     # alembic_version.version_num é VARCHAR(32) no PostgreSQL.
-    assert len(head.revision) <= 32
-    spec = importlib.util.spec_from_file_location("head_migration", head.path)
+    assert len(script.get_current_head()) <= 32
+    head = script.get_revision("0009_tenant_records_list_index")
+    spec = importlib.util.spec_from_file_location("index_migration", head.path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     recorder = RecordingOp()

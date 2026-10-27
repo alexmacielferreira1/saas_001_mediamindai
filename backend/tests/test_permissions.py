@@ -53,6 +53,24 @@ def current_for(user, tenant, membership):
     )
 
 
+def test_superadmin_sees_the_whole_catalog_only_in_its_own_tenant(permission_session):
+    # Checagens que leem effective_permissions direto (auditoria, IA) concordam com
+    # require_permission; um vínculo de outra empresa não vale como superadmin aqui.
+    session, user, tenant, other_tenant, membership = permission_session
+    session.add_all([Permission(code="assets.write"), Permission(code="users.manage")])
+    membership.role = "superadmin"
+    session.commit()
+
+    assert effective_permissions(session, current_for(user, tenant, membership)) == {
+        "assets.write",
+        "users.manage",
+    }
+    forged = current_for(user, other_tenant, membership)
+    assert effective_permissions(session, forged) == set()
+    with pytest.raises(PublicError):
+        require_permission(session, forged, "assets.write")
+
+
 def test_permissions_deny_by_default(permission_session):
     session, user, tenant, _, membership = permission_session
 
@@ -111,16 +129,18 @@ def test_permission_requires_selected_membership(permission_session):
     assert exc.value.code == "TENANT_ACCESS_DENIED"
 
 
-def test_superadmin_is_not_implicitly_granted_unknown_permissions(permission_session):
+def test_superadmin_is_granted_every_permission_in_the_selected_tenant(permission_session):
+    # Decisão de 27/10/2026 (DECISIONS.md): superadmin tem acesso total na própria empresa,
+    # sem depender do grupo de permissões. Antes ele precisava de um grupo com cada código.
     session, user, tenant, _, membership = permission_session
     membership.role = "superadmin"
+    membership.permission_group_id = None
     session.commit()
 
     current = current_for(user, tenant, membership)
 
-    with pytest.raises(PublicError) as exc:
-        require_permission(session, current, "unknown.execute")
-    assert exc.value.code == "PERMISSION_DENIED"
+    assert require_permission(session, current, "assets.write") is current
+    assert require_permission(session, current, "unknown.execute") is current
 
 
 def test_permission_context_rejects_inconsistent_membership(permission_session):
