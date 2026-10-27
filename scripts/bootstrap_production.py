@@ -10,6 +10,7 @@ from app.models.identity import (
     User,
 )
 from app.security.passwords import hash_password
+from app.tenancy.record_policies import PERMISSION_CATALOG
 from sqlalchemy import select
 
 TENANT_NAME = "MediaMind AI"
@@ -78,25 +79,11 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> None:
             tenant.is_active = True
             print("Tenant existente reutilizado.")
 
-        # 2. Permissões administrativas
-        permission_definitions = (
-            (
-                "permissions.manage",
-                "Gerenciar grupos e atribuições de permissões",
-            ),
-            (
-                "users.manage",
-                "Gerenciar vínculos e cargos de usuários",
-            ),
-            (
-                "users.manage_admin",
-                "Conceder cargos administrativos",
-            ),
-        )
-
+        # 2. Catálogo completo de permissões (antes só as 3 administrativas: os códigos de
+        # conteúdo não existiam em produção e toda gravação de conteúdo dava 403).
         permissions = []
 
-        for code, description in permission_definitions:
+        for code, description in PERMISSION_CATALOG.items():
             permission = session.scalar(select(Permission).where(Permission.code == code))
 
             if permission is None:

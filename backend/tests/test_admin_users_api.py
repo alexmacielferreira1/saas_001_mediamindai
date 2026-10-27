@@ -412,3 +412,44 @@ def test_admin_settings_second_update_keeps_name_and_previous_fields(admin_users
     assert payload["organization_name"] == "Empresa"
     assert payload["timezone"] == "America/Recife"
     assert payload["date_format"] == "DD/MM/YYYY"
+
+
+def _set_role_without_group(ids, email, role):
+    with ids["session_factory"]() as session:
+        user = session.scalar(select(User).where(User.email_normalized == email))
+        membership = session.scalar(
+            select(Membership).where(
+                Membership.user_id == user.id, Membership.tenant_id == ids["tenant"]
+            )
+        )
+        membership.role = role
+        membership.permission_group_id = None
+        session.commit()
+
+
+def test_superadmin_passes_permission_checks_without_a_permission_group(admin_users_client):
+    # Superadmin acessa tudo da própria empresa mesmo sem grupo de permissões
+    # (antes recebia "Você não possui permissão para esta ação." ao enviar mídia).
+    client, ids = admin_users_client
+    _set_role_without_group(ids, "editor@mediamind.ai", "superadmin")
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "editor@mediamind.ai", "password": PASSWORD}
+    )
+    assert response.status_code == 200
+
+    listing = client.get("/api/v1/admin/users")
+    outside = client.get(f"/api/v1/admin/users/{ids['outsider']}")
+
+    assert listing.status_code == 200
+    assert outside.status_code == 404
+
+
+def test_admin_role_without_group_still_needs_the_permission(admin_users_client):
+    client, ids = admin_users_client
+    _set_role_without_group(ids, "editor@mediamind.ai", "admin")
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "editor@mediamind.ai", "password": PASSWORD}
+    )
+    assert response.status_code == 200
+
+    assert client.get("/api/v1/admin/users").status_code == 403
