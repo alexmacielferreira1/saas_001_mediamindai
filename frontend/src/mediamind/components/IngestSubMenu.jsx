@@ -1,6 +1,5 @@
 import React from 'react';
 import { Plus, Clock, CheckCircle2, AlertCircle, Settings, Package } from 'lucide-react';
-import { MOCK_INGEST_PACKAGES } from '../data';
 
 const MENU_ITEMS = [
   { key: 'andamento', label: 'Em andamento', icon: Clock, filter: 'processing' },
@@ -8,7 +7,7 @@ const MENU_ITEMS = [
   { key: 'falhas', label: 'Falhas', icon: AlertCircle, filter: 'failed' },
 ];
 
-export default function IngestSubMenu({ view, onChange, onNew }) {
+export default function IngestSubMenu({ view, onChange, onNew, packages = [] }) {
   return (
     <div className="flex h-full w-52 shrink-0 flex-col rounded-xl border border-slate-800 bg-slate-900/40">
       <div className="p-3">
@@ -32,7 +31,7 @@ export default function IngestSubMenu({ view, onChange, onNew }) {
         <div className="flex flex-col gap-1">
           {MENU_ITEMS.map((item) => {
             const Icon = item.icon;
-            const count = MOCK_INGEST_PACKAGES.filter((p) => p.status === item.filter).length;
+            const count = packages.filter((p) => p.status === item.filter).length;
             const isActive = view === item.key;
             return (
               <button

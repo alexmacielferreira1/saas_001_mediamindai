@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Settings, HardDrive, Cpu, Volume2, Scan } from 'lucide-react';
 import IngestSubMenu from '../components/IngestSubMenu';
@@ -7,7 +7,8 @@ import IngestList from '../components/IngestList';
 import { getManagementOverview } from '../../api/management';
 import { DEMO_MANAGEMENT_OVERVIEW } from '../lib/managementDemoData';
 import { readLocalDemoSession } from '../lib/demoAccess';
-import { formatBytes } from '../data';
+import { MOCK_INGEST_PACKAGES, formatBytes } from '../data';
+import { listIngestPackages, retryIngestPackage, runIngestPackage } from '../../api/ingest';
 
 // Pipelines de IA da ingestão e a chave do serviço correspondente em
 // /management/overview → services. Sem serviço publicado = não configurado.
@@ -110,6 +111,38 @@ export function ConfigView() {
 export default function Ingest() {
   const [view, setView] = useState('nova');
   const [params, setParams] = useSearchParams();
+  // Pacotes reais do servidor; a sessão de demonstração (sem banco) continua com os de exemplo.
+  const demo = Boolean(readLocalDemoSession());
+  const [packages, setPackages] = useState(() => (demo ? MOCK_INGEST_PACKAGES : []));
+  const [packagesError, setPackagesError] = useState('');
+  const [runningId, setRunningId] = useState(null);
+
+  const loadPackages = useCallback(() => {
+    if (demo) return;
+    listIngestPackages()
+      .then((list) => { setPackages(list); setPackagesError(''); })
+      .catch((error) => setPackagesError(error?.message || 'Não foi possível carregar os pacotes.'));
+  }, [demo]);
+
+  useEffect(() => { loadPackages(); }, [view, loadPackages]);
+
+  // "Continuar" retoma a cópia de onde parou; "Reprocessar" devolve as falhas para a fila antes.
+  async function resumePackage(pkg, { retry = false } = {}) {
+    setRunningId(pkg.id);
+    setPackagesError('');
+    const replace = (updated) => setPackages((list) => list.map((item) => (item.id === updated.id ? updated : item)));
+    try {
+      const start = retry ? await retryIngestPackage(pkg.id) : pkg;
+      replace(start);
+      await runIngestPackage(start, { onUpdate: replace });
+    } catch (error) {
+      setPackagesError(`Não foi possível continuar "${pkg.name}": ${error?.message || 'erro desconhecido'}`);
+    } finally {
+      setRunningId(null);
+      loadPackages();
+    }
+  }
+  const listProps = { packages, error: packagesError, runningId, onResume: demo ? undefined : resumePackage, onNew: () => setView('nova') };
 
   // Gatilho do botão "Novo": /ingest?novo=pacote abre o formulário de criação.
   useEffect(() => {
@@ -125,12 +158,13 @@ export default function Ingest() {
         view={view}
         onChange={setView}
         onNew={() => setView('nova')}
+        packages={packages}
       />
       <div className="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-900/40">
         {view === 'nova' && <IngestNewPackage />}
-        {view === 'andamento' && <IngestList view="andamento" onNew={() => setView('nova')} />}
-        {view === 'concluidas' && <IngestList view="concluidas" onNew={() => setView('nova')} />}
-        {view === 'falhas' && <IngestList view="falhas" onNew={() => setView('nova')} />}
+        {view === 'andamento' && <IngestList view="andamento" {...listProps} />}
+        {view === 'concluidas' && <IngestList view="concluidas" {...listProps} />}
+        {view === 'falhas' && <IngestList view="falhas" {...listProps} />}
         {view === 'config' && <ConfigView />}
       </div>
     </div>

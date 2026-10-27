@@ -68,8 +68,23 @@ class LocalMediaStorage:
         mime_type: str,
     ) -> StoredMedia:
         destination_dir = self.asset_root(tenant_id, asset_id) / "derived"
+        return self._copy_file(source, destination_dir / Path(filename).name, mime_type)
+
+    def save_original_from_path(
+        self, tenant_id: UUID, asset_id: UUID, source: Path, *, mime_type: str
+    ) -> StoredMedia:
+        """Copia um arquivo do servidor (pasta de referência do Ingest) como original do asset.
+
+        Mesmo destino e mesma gravação atômica do envio pelo navegador; a origem não muda.
+        """
+        destination_dir = self.asset_root(tenant_id, asset_id) / "original"
+        return self._copy_file(
+            source, destination_dir / f"source{source.suffix.lower()}", mime_type
+        )
+
+    def _copy_file(self, source: Path, destination: Path, mime_type: str) -> StoredMedia:
+        destination_dir = destination.parent
         destination_dir.mkdir(parents=True, exist_ok=True)
-        destination = destination_dir / Path(filename).name
         temporary = destination.with_suffix(f"{destination.suffix}.part")
         digest = sha256()
         size = 0

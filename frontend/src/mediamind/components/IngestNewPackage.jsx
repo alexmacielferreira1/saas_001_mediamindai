@@ -11,6 +11,8 @@ import { base44 } from '../../api/base44Client';
 import { readLocalDemoSession } from '../lib/demoAccess';
 import { measureFileDuration } from '../lib/mediaDuration';
 import { pendingUploadEntries } from '../lib/ingestUploadPlan';
+import { createIngestPackage, runIngestPackage } from '../../api/ingest';
+import IngestFolderPicker from './IngestFolderPicker';
 
 const PROGRAMS = ['Jornal do Meio Dia', 'Jornal da Noite', 'Especial Enchentes RS', 'Documentário Turismo', 'Campanha Institucional'];
 const STEPS = ['Criar pacote', 'Adicionar arquivos', 'Revisar e iniciar'];
@@ -24,6 +26,10 @@ export default function IngestNewPackage() {
   const [program, setProgram] = useWorkDraftState("ingest:program", '');
   const [files, setFiles] = useWorkDraftState("ingest:files", []);
   const [audioFile, setAudioFile] = useWorkDraftState("ingest:audioFile", null);
+  // Arquivos escolhidos na pasta de referência do servidor (caminhos relativos à entrada).
+  const [folderFiles, setFolderFiles] = useWorkDraftState("ingest:folderFiles", []);
+  const [folderPackage, setFolderPackage] = useState(null);
+  const demoSession = Boolean(readLocalDemoSession());
   const [aiEnabled, setAiEnabled] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [audioDragOver, setAudioDragOver] = useState(false);
@@ -119,11 +125,41 @@ export default function IngestNewPackage() {
     }
   }
 
+  // Pacote da pasta de referência: o servidor copia cada arquivo para o destino e cria o Asset.
+  // Retomar um pacote já criado continua dele em vez de criar outro.
+  async function importFolderFiles() {
+    try {
+      const created = folderPackage || await createIngestPackage({
+        name: name.trim() || `Pacote ${new Date().toLocaleString('pt-BR')}`,
+        folder: folder.trim() || null, program_name: program || null, ai_enabled: aiEnabled, files: folderFiles,
+      });
+      setFolderPackage(created);
+      const done = await runIngestPackage(created, { onUpdate: setFolderPackage });
+      if (done.status === 'failed') {
+        setFolderPackage(null);
+        return `${done.failed_count} arquivo(s) da pasta não foram importados; veja em Ingest › Falhas e use "Reprocessar".`;
+      }
+      setFolderFiles([]);
+      setFolderPackage(null);
+      return '';
+    } catch (error) {
+      return `Importação da pasta interrompida: ${error?.message || 'erro desconhecido'}. Clique de novo para continuar.`;
+    }
+  }
+
   async function continueFlow() {
     if (step < 3) { setStep(step + 1); return; }
-    if (files.length === 0 || uploading) return;
+    if ((files.length === 0 && folderFiles.length === 0) || uploading) return;
     setUploading(true);
     setUploadError('');
+    if (folderFiles.length) {
+      const folderError = await importFolderFiles();
+      if (folderError) {
+        setUploading(false);
+        setUploadError(folderError);
+        return;
+      }
+    }
     let failures = 0;
     for (const entry of pendingUploadEntries(files)) {
       if (!(await uploadEntry(entry))) failures += 1;
@@ -248,6 +284,22 @@ export default function IngestNewPackage() {
           {/* Section: Drag-and-drop files */}
           <div>
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Arquivos do pacote</h2>
+            {!demoSession && (
+              <div className="mb-3">
+                <IngestFolderPicker selected={folderFiles} onChange={setFolderFiles} disabled={uploading} />
+                {folderPackage && (
+                  <div className="mt-2" aria-live="polite">
+                    <div className="mb-1 flex justify-between text-xs text-slate-400">
+                      <span>Copiando para a pasta de destino…</span>
+                      <span className="font-bold text-sky-300">{folderPackage.progress}%</span>
+                    </div>
+                    <div role="progressbar" aria-label="Progresso da pasta de referência" aria-valuemin={0} aria-valuemax={100} aria-valuenow={folderPackage.progress} className="h-1.5 overflow-hidden rounded bg-slate-800">
+                      <div className="h-full bg-sky-500 transition-all" style={{ width: `${folderPackage.progress}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -376,7 +428,7 @@ export default function IngestNewPackage() {
         </button>
         <button
           onClick={continueFlow}
-          disabled={uploading || (step === 3 && files.length === 0)}
+          disabled={uploading || (step === 3 && files.length === 0 && folderFiles.length === 0)}
           className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-sky-400"
         >
           {uploading ? 'Enviando…' : step === 3 ? uploadError ? 'Continuar envio' : 'Iniciar envio' : 'Criar pacote e continuar →'}

@@ -3,7 +3,6 @@ import {
   Package, Clock, CheckCircle2, AlertCircle, ChevronRight,
   Loader2, RefreshCw, Plus,
 } from 'lucide-react';
-import { MOCK_INGEST_PACKAGES } from '../data';
 import { StatusBadge } from '../ui';
 
 const CONFIG = {
@@ -12,11 +11,24 @@ const CONFIG = {
   falhas: { title: 'Falhas', icon: AlertCircle, filter: 'failed', tone: 'text-amber-300' },
 };
 
-export default function IngestList({ view, onNew }) {
+// Data do pacote: o servidor manda ``created_date`` (ISO); os pacotes de demonstração, ``created_at``.
+function packageDate(pkg) {
+  if (pkg.created_at) return pkg.created_at;
+  const date = new Date(pkg.created_date);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function failureText(pkg) {
+  const failed = (pkg.items || []).filter((item) => item.status === 'failed');
+  if (!failed.length) return 'Falha no processamento';
+  return `${failed.length} arquivo(s) com falha: ${failed[0].error || 'erro desconhecido'}`;
+}
+
+export default function IngestList({ view, onNew, packages = [], error = '', runningId = null, onResume }) {
   const cfg = CONFIG[view];
   if (!cfg) return null;
   const Icon = cfg.icon;
-  const filtered = MOCK_INGEST_PACKAGES.filter((p) => p.status === cfg.filter);
+  const filtered = packages.filter((p) => p.status === cfg.filter);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -39,6 +51,7 @@ export default function IngestList({ view, onNew }) {
 
       {/* List */}
       <div className="flex-1 px-6 py-4">
+        {error && <p role="alert" className="mb-3 rounded-md bg-rose-950/30 px-3 py-2 text-xs text-rose-300">{error}</p>}
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
             <Icon size={36} className="text-slate-700" />
@@ -60,14 +73,14 @@ export default function IngestList({ view, onNew }) {
                         <span className="text-slate-700">•</span>
                         <span>{p.owner}</span>
                         <span className="text-slate-700">•</span>
-                        <span className="font-mono">{p.created_at}</span>
+                        <span className="font-mono">{packageDate(p)}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    {view === 'falhas' && (
-                      <button className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800">
-                        <RefreshCw size={12} /> Reprocessar
+                    {onResume && view !== 'concluidas' && (
+                      <button type="button" disabled={Boolean(runningId)} onClick={() => onResume(p, { retry: view === 'falhas' })} className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
+                        {runningId === p.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} {view === 'falhas' ? 'Reprocessar' : 'Continuar'}
                       </button>
                     )}
                     <StatusBadge status={p.status} />
@@ -78,7 +91,7 @@ export default function IngestList({ view, onNew }) {
                   <div className="mt-3">
                     <div className="mb-1 flex justify-between text-xs">
                       <span className="flex items-center gap-1.5 text-slate-500">
-                        <Loader2 size={11} className="animate-spin text-violet-400" /> Transcrição + OCR + indexação
+                        <Loader2 size={11} className={`${runningId === p.id ? 'animate-spin ' : ''}text-violet-400`} /> {runningId === p.id ? 'Copiando para a pasta de destino' : 'Parado — clique em Continuar'}
                       </span>
                       <span className="font-bold text-violet-300">{p.progress}%</span>
                     </div>
@@ -89,7 +102,7 @@ export default function IngestList({ view, onNew }) {
                 )}
                 {view === 'falhas' && (
                   <div className="mt-2 flex items-center gap-1.5 rounded-md bg-rose-950/30 px-2 py-1 text-xs text-rose-300">
-                    <AlertCircle size={11} /> Falha no processamento — arquivo corrompido
+                    <AlertCircle size={11} /> {failureText(p)}
                   </div>
                 )}
               </div>

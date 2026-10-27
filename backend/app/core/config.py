@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     outbound_allow_private_networks: bool = False
     hub_product_id: str = "mediamind-ai"
     media_root: Path = ROOT / ".runtime" / "media"
+    # Pasta de referência do Ingest (entrada). Cada empresa usa a subpasta com o próprio slug;
+    # o arquivo é copiado para MEDIA_ROOT (destino) e o original na entrada não é alterado.
+    ingest_source_root: Path | None = None
     media_max_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, ge=1)
     ffmpeg_path: Path | None = None
     thumbnail_secret_key: SecretStr | None = None
@@ -64,6 +67,7 @@ class Settings(BaseSettings):
         "outbound_allow_private_networks",
         "csrf_trusted_origins",
         "hub_admin_scopes",
+        "ingest_source_root",
         mode="before",
     )
     @classmethod

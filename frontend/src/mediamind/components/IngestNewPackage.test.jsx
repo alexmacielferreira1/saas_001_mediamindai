@@ -7,6 +7,9 @@ const updateAsset = vi.fn();
 const uploadMediaAsset = vi.fn();
 const uploadMediaAssetWithProgress = vi.fn();
 const uploadFile = vi.fn();
+const getIngestSource = vi.fn();
+const createIngestPackage = vi.fn();
+const runIngestPackage = vi.fn();
 
 vi.mock('../../api/media', async (importOriginal) => {
   const actual = await importOriginal();
@@ -17,6 +20,11 @@ vi.mock('../../api/media', async (importOriginal) => {
     uploadMediaAssetWithProgress: (...args) => uploadMediaAssetWithProgress(...args),
   };
 });
+vi.mock('../../api/ingest', () => ({
+  getIngestSource: (...args) => getIngestSource(...args),
+  createIngestPackage: (...args) => createIngestPackage(...args),
+  runIngestPackage: (...args) => runIngestPackage(...args),
+}));
 vi.mock('../../api/uploads', () => ({ GENERIC_UPLOAD_LIMIT_BYTES: 100 * 1024 * 1024, uploadFile: (...args) => uploadFile(...args) }));
 vi.mock('../../api/base44Client', () => ({ base44: { entities: { Asset: { create: (...args) => createAsset(...args), update: (...args) => updateAsset(...args) } } } }));
 
@@ -33,7 +41,8 @@ function startUpload(files) {
 describe('nova ingestão funcional', () => {
   beforeEach(() => {
     localStorage.clear();
-    for (const mock of [createAsset, updateAsset, uploadMediaAsset, uploadMediaAssetWithProgress, uploadFile]) mock.mockReset();
+    for (const mock of [createAsset, updateAsset, uploadMediaAsset, uploadMediaAssetWithProgress, uploadFile, getIngestSource, createIngestPackage, runIngestPackage]) mock.mockReset();
+    getIngestSource.mockResolvedValue({ source_folder: 'D:/Entrada/empresa', truncated: false, files: [] });
     createAsset.mockResolvedValue({ id: 'asset-1' });
     updateAsset.mockResolvedValue({ id: 'media-1' });
   });
@@ -115,5 +124,55 @@ describe('nova ingestão funcional', () => {
     startUpload([doc]);
     await waitFor(() => expect(createAsset).toHaveBeenCalledWith(expect.objectContaining({ asset_type: 'document', file_url: '/api/v1/uploads/doc.pdf' })));
     expect(uploadFile).toHaveBeenCalledWith(doc, expect.objectContaining({ onProgress: expect.any(Function) }));
+  });
+
+  describe('pasta de referência do servidor', () => {
+    const FOLDER = { source_folder: 'D:/Entrada/empresa', truncated: false, files: [{ path: 'Pauta/entrevista.mp4', size: 4096, asset_type: 'video', imported_asset_id: null }] };
+
+    async function startFolderImport() {
+      getIngestSource.mockResolvedValue(FOLDER);
+      render(<MemoryRouter><IngestNewPackage /></MemoryRouter>);
+      fireEvent.click(await screen.findByLabelText('Incluir Pauta/entrevista.mp4'));
+      fireEvent.click(screen.getByRole('button', { name: /Criar pacote e continuar/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Criar pacote e continuar/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Iniciar envio/i }));
+    }
+
+    it('cria o pacote com os arquivos escolhidos, mostra o progresso e não usa o envio do navegador', async () => {
+      createIngestPackage.mockResolvedValue({ id: 'pkg-1', status: 'processing', progress: 0 });
+      let finish;
+      runIngestPackage.mockImplementation((_pkg, { onUpdate }) => {
+        onUpdate({ id: 'pkg-1', status: 'processing', progress: 50 });
+        return new Promise((resolve) => { finish = resolve; });
+      });
+      await startFolderImport();
+
+      await waitFor(() => expect(createIngestPackage).toHaveBeenCalledWith({
+        name: expect.stringMatching(/^Pacote /), folder: null, program_name: null, ai_enabled: true, files: ['Pauta/entrevista.mp4'],
+      }));
+      expect(await screen.findByRole('progressbar', { name: 'Progresso da pasta de referência' })).toHaveAttribute('aria-valuenow', '50');
+      await act(async () => finish({ id: 'pkg-1', status: 'completed', progress: 100 }));
+      expect(uploadMediaAssetWithProgress).not.toHaveBeenCalled();
+      expect(screen.queryByText(/não foram importados/)).toBeNull();
+    });
+
+    it('informa falhas do pacote e retoma o mesmo pacote depois de uma interrupção', async () => {
+      createIngestPackage.mockResolvedValue({ id: 'pkg-2', status: 'processing', progress: 0 });
+      runIngestPackage.mockRejectedValueOnce(new Error('Falha de rede'));
+      await startFolderImport();
+      expect(await screen.findByText(/Importação da pasta interrompida: Falha de rede/)).toBeInTheDocument();
+
+      runIngestPackage.mockResolvedValueOnce({ id: 'pkg-2', status: 'failed', failed_count: 1 });
+      fireEvent.click(screen.getByRole('button', { name: /Continuar envio/i }));
+      expect(await screen.findByText(/1 arquivo\(s\) da pasta não foram importados/)).toBeInTheDocument();
+      expect(createIngestPackage).toHaveBeenCalledTimes(1);
+      expect(runIngestPackage.mock.calls[1][0]).toEqual(expect.objectContaining({ id: 'pkg-2' }));
+    });
+
+    it('mensagem padrão quando a importação cai sem motivo', async () => {
+      createIngestPackage.mockRejectedValue({});
+      await startFolderImport();
+      expect(await screen.findByText(/Importação da pasta interrompida: erro desconhecido/)).toBeInTheDocument();
+    });
   });
 });
