@@ -95,7 +95,16 @@ Sem desfazer próprio (MMLight, PDF, MM3D, Bibliotecas, Excel, PowerPoint): o MC
 - **Excel (15)** — `excelMcpTools.js`: Ordenar, Filtrar (para planilha nova), Remover duplicadas, Limpar espaços, Totais da coluna (fórmulas reais), Total por linha, Fórmulas em valores, Resumo, Formato de número, Negrito/itálico, Limpar formatos, Preencher série, Preencher para baixo (ajusta referências). Cores das células (fundo/texto), Formatação condicional dinâmica (`sheet.rules`: maior/menor/entre/igual/contém/N maiores/N menores, sobre o valor calculado), Gráfico de barras/linhas em SVG próprio (`sheet.charts`, relê o intervalo) e os removedores correspondentes. A grade cresce até a área usada (mínimo A–F/1–18; até 52 colunas × 500 linhas).
 - **PowerPoint (15)** — `powerpointMcpTools.js`: Novo slide, Duplicar, Reordenar, Excluir (confirma), Tópicos em slides, Agenda, Aplicar layout, Padronizar layouts, Negrito/itálico, Caixa dos títulos, Substituir texto, Marcadores. Tema (6 prontos ou personalizado), Alinhar (auto/esquerda/centro/direita/justificado) e Anotações (painel no editor; tecla N no modo apresentação) — campos `theme`, `align`, `notes` por slide, também na aba Design.
 
+## Páginas fora das Ferramentas Gráficas (2026-10-27)
+Quando nenhuma ferramenta registrou provedor, o Copiloto monta um provedor da própria página (`components/copilot/pageMcpEnv.js` + `lib/mcpPageCatalogues.js` + `lib/mcpPageTools.js`), na mesma grade de ícones. Antes eram 4 botões que só preenchiam o chat.
+- Páginas: Início, Ingest, Pesquisa, Workspace, Rascunhos, Gravações, Edição, Revisão, Publicação, Analytics, Administração, ClipsFree, Geração de vídeo, Estúdio de Arte, Documentos e as 12 guias da Agência (9 a 29 ferramentas cada). `detectGroup` passou a reconhecer `/search`, `/acervo`, `/ingest`, `/workspace`, `/roteiro2`, `/social`, `/dash-ias` e `/ferramentas-office`.
+- Guias: **Abrir** (navega para a guia certa; em `/corp` mantém `?tab=` da função), **Consultar** e **Conferir** (leem dados reais do tenant: produções, mídias, publicações, aprovações, cortes, roteiros, usuários, auditoria), **Exportar** (CSV `;` com BOM, fórmulas neutralizadas, nunca arquivo vazio) e **Copiloto** (prepara o pedido no chat; nada é enviado).
+- Sem desfazer local: o provedor declara `tracksLastAction: false`, então não há barra "Última ação" nem botão Desfazer. "Nova produção" cria um rascunho no servidor e pede confirmação.
+- Agência: lê o protótipo salvo no navegador (`mediamind_agencia_video_prototipo_v1`), porque a área ainda não tem servidor.
+- Uma ferramenta aberta (MMFilm embutido em Edição, por exemplo) continua com prioridade sobre o catálogo da página.
+
 ## Pendências conhecidas
+- Páginas: cobertura de `mcpPageCatalogues.js` em 87% das linhas e 53% dos ramos (fora do `coverage.include`); ações de escrita reais (mudar etapa, aprovar) ainda não estão na grade.
 - MMFilm: pacotes próprios de sons livres (CC0) na biblioteca, prévia em vídeo de presets/transições, idioma PT/EN no painel.
 - MMFilm: Transcrever só funciona com mídias do Acervo (arquivos do computador não são enviados; para eles, Importar SRT).
 - MMFilm: rampa de velocidade remove o movimento (zoom/shake) do clipe ao dividir em degraus.
