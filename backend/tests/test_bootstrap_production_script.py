@@ -6,6 +6,7 @@ import pytest
 from app.db.session import Base
 from app.models.identity import Membership, Permission, PermissionGroup, User
 from app.security.passwords import verify_password
+from app.tenancy.record_policies import PERMISSION_CATALOG
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -55,6 +56,18 @@ def test_first_run_creates_superadmin_with_configured_password(bootstrap):
     with factory() as session:
         membership = session.scalar(select(Membership).where(Membership.user_id == user.id))
         assert membership.role == "superadmin"
+
+
+def test_first_run_creates_the_whole_permission_catalog_for_the_admin_group(bootstrap):
+    # Sem os códigos de conteúdo no banco, nenhum grupo podia receber assets.write etc.
+    module, factory, _ = bootstrap
+
+    module.main([], session_factory=factory)
+
+    with factory() as session:
+        assert set(session.scalars(select(Permission.code))) == set(PERMISSION_CATALOG)
+        group = session.scalar(select(PermissionGroup))
+        assert {permission.code for permission in group.permissions} == set(PERMISSION_CATALOG)
 
 
 def test_rerun_does_not_reset_password_or_unlock_by_default(bootstrap):
@@ -130,7 +143,8 @@ def test_rerun_preserves_extra_permissions_granted_to_admin_group(bootstrap):
     module, factory, _ = bootstrap
     module.main([], session_factory=factory)
     with factory() as session:
-        extra = Permission(code="assets.write", description="Ativos")
+        # Código fora do catálogo concedido depois por um administrador (o catálogo já vem todo).
+        extra = Permission(code="reports.export", description="Exportar relatórios")
         session.add(extra)
         group = session.scalar(select(PermissionGroup))
         group.permissions.append(extra)
@@ -141,7 +155,7 @@ def test_rerun_preserves_extra_permissions_granted_to_admin_group(bootstrap):
     with factory() as session:
         group = session.scalar(select(PermissionGroup))
         codes = {permission.code for permission in group.permissions}
-    assert {"assets.write", "permissions.manage", "users.manage"} <= codes
+    assert {"reports.export", "assets.write", "permissions.manage", "users.manage"} <= codes
 
 
 def suspend(factory, *, user=True, membership=True):
