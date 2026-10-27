@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str = "http://127.0.0.1:8000/api/v1/auth/google/callback"
     hub_admin_token: SecretStr | None = None
+    # Comandos locais dos cortes automáticos (transcrição/análise). Lidos também do .env:
+    # antes só os.getenv era consultado e o valor do .env era ignorado.
+    clips_transcriber_command: str | None = None
+    clips_analysis_command: str | None = None
     hub_admin_audience: str = "central"
     # Scopes granted to HUB_ADMIN_TOKEN, defined only on the server (space separated).
     # The default matches the Central contract (observe + dry-run commands); restrict with

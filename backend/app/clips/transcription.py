@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from app.clips.contracts import TranscriptSegment, TranscriptWord
+from app.core.config import ROOT, get_settings
 from app.security.outbound import OutboundUrlRejected, validate_outbound_url
 
 
@@ -28,7 +29,9 @@ class CommandTranscriptionAdapter:
 
     @classmethod
     def from_environment(cls) -> "CommandTranscriptionAdapter":
-        return cls(os.getenv("CLIPS_TRANSCRIBER_COMMAND"))
+        return cls(
+            os.getenv("CLIPS_TRANSCRIBER_COMMAND") or get_settings().clips_transcriber_command
+        )
 
     def transcribe(self, source: Path) -> list[TranscriptSegment]:
         if not self.command_template:
@@ -42,7 +45,7 @@ class CommandTranscriptionAdapter:
                 for part in shlex.split(self.command_template)
             ]
             try:
-                subprocess.run(command, check=True, capture_output=True, timeout=60 * 60)
+                subprocess.run(command, check=True, capture_output=True, cwd=ROOT, timeout=60 * 60)
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 raise TranscriptionUnavailable(
                     "O transcritor não conseguiu processar a mídia."

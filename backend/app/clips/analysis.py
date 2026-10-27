@@ -15,7 +15,20 @@ from app.clips.contracts import (
 )
 from app.clips.scoring import build_candidate
 from app.clips.transcription import TranscriptionUnavailable
+from app.core.config import ROOT, get_settings
 from app.security.outbound import OutboundUrlRejected, validate_outbound_url
+
+# Limite de saída da análise; o Claude exige o campo e o orçamento usa o mesmo valor.
+ANALYSIS_MAX_TOKENS = 4000
+
+
+def _strip_json_fence(content: str) -> str:
+    """Remove a cerca ```json``` que alguns modelos acrescentam mesmo sem pedido."""
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.rsplit("```", 1)[0]
+    return text.strip()
 
 
 class CommandAnalysisAdapter:
@@ -26,7 +39,7 @@ class CommandAnalysisAdapter:
 
     @classmethod
     def from_environment(cls) -> "CommandAnalysisAdapter":
-        return cls(os.getenv("CLIPS_ANALYSIS_COMMAND"))
+        return cls(os.getenv("CLIPS_ANALYSIS_COMMAND") or get_settings().clips_analysis_command)
 
     def suggest(self, segments: list[TranscriptSegment]) -> list[ClipCandidate]:
         if not self.command_template:
@@ -48,7 +61,7 @@ class CommandAnalysisAdapter:
                 for part in shlex.split(self.command_template)
             ]
             try:
-                subprocess.run(command, check=True, capture_output=True, timeout=15 * 60)
+                subprocess.run(command, check=True, capture_output=True, cwd=ROOT, timeout=15 * 60)
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                 raise TranscriptionUnavailable(
                     "O analisador não conseguiu avaliar a transcrição."
@@ -98,7 +111,8 @@ class RemoteAnalysisAdapter:
         maximum: int = 60,
         editorial_prompt: str = "",
     ) -> list[ClipCandidate]:
-        if self.connection.get("provider") != "compatible":
+        provider = self.connection.get("provider")
+        if provider not in ("compatible", "anthropic"):
             raise TranscriptionUnavailable(
                 "A IA escolhida ainda não oferece análise de cortes neste formato."
             )
@@ -123,7 +137,28 @@ class RemoteAnalysisAdapter:
             .replace("{minimum}", "{minimum}")
             .replace("{maximum}", "{maximum}")
         )
-        endpoint = f"{str(self.connection['base_url']).rstrip('/')}/chat/completions"
+        base_url = str(self.connection["base_url"]).rstrip("/")
+        system = "Você é um editor de vídeo rigoroso e baseado em evidências."
+        if provider == "anthropic":
+            endpoint = f"{base_url}/messages"
+            headers = {"x-api-key": self.api_key, "anthropic-version": "2023-06-01"}
+            body = {
+                "model": self.connection["model"],
+                "max_tokens": ANALYSIS_MAX_TOKENS,
+                "system": system,
+                "messages": [{"role": "user", "content": instructions}],
+            }
+        else:
+            endpoint = f"{base_url}/chat/completions"
+            headers = {"Authorization": f"Bearer {self.api_key}"}
+            body = {
+                "model": self.connection["model"],
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": instructions},
+                ],
+                "response_format": {"type": "json_object"},
+            }
         try:
             validate_outbound_url(endpoint)
         except OutboundUrlRejected as error:
@@ -131,29 +166,22 @@ class RemoteAnalysisAdapter:
                 "O endereço configurado para a IA não é permitido pelo servidor."
             ) from error
         try:
-            response = httpx.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.connection["model"],
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Você é um editor de vídeo rigoroso e baseado em evidências."
-                            ),
-                        },
-                        {"role": "user", "content": instructions},
-                    ],
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=60 * 5,
-            )
+            response = httpx.post(endpoint, headers=headers, json=body, timeout=60 * 5)
             response.raise_for_status()
             payload = response.json()
             self.usage = payload.get("usage") or {}
-            content = payload["choices"][0]["message"]["content"]
-            proposals = json.loads(content)["candidates"]
+            if provider == "anthropic":
+                # Resposta cortada no limite de saída teria JSON incompleto: falha honesta.
+                if payload.get("stop_reason") == "max_tokens":
+                    raise ValueError("resposta truncada")
+                content = "".join(
+                    block.get("text", "")
+                    for block in payload["content"]
+                    if block.get("type") == "text"
+                )
+            else:
+                content = payload["choices"][0]["message"]["content"]
+            proposals = json.loads(_strip_json_fence(content))["candidates"]
         except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise TranscriptionUnavailable(
                 "A IA selecionada não conseguiu propor cortes verificáveis."

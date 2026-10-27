@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.ai import ai_settings_record, connection_configuration, decrypt_ai_key
 from app.api.v1.ai_usage import guard_budget, record_usage
-from app.clips.analysis import CommandAnalysisAdapter, RemoteAnalysisAdapter
+from app.clips.analysis import (
+    ANALYSIS_MAX_TOKENS,
+    CommandAnalysisAdapter,
+    RemoteAnalysisAdapter,
+)
 from app.clips.captions import captions_for_candidate
 from app.clips.service import ClipAnalysisService
 from app.clips.transcription import (
@@ -41,10 +45,6 @@ class StartAnalysisBody(BaseModel):
         if self.minimum > self.maximum:
             raise ValueError("A duração mínima não pode superar a máxima.")
         return self
-
-
-# Estimativa conservadora de saída para a pré-checagem de limite por requisição.
-ANALYSIS_MAX_TOKENS = 4000
 
 
 def serialize_analysis(analysis: dict) -> dict:
@@ -162,7 +162,11 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         # Grava a análise como "queued" e devolve a conexão ao pool durante a transcrição
         # e a análise (minutos); o resultado é gravado numa nova transação.
         release_connection(session)
-        if connection:
+        if connection and connection.get("provider") == "anthropic":
+            # O Claude não transcreve áudio: a transcrição usa o transcritor local do
+            # servidor (CLIPS_TRANSCRIBER_COMMAND) e só a análise vai para o Claude.
+            segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
+        elif connection:
             transcriber = RemoteTranscriptionAdapter(connection, api_key)
             segments = call_provider(
                 session,
@@ -173,6 +177,7 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
                 model=connection.get("transcription_model", "whisper-1"),
                 work=lambda: (transcriber.transcribe(source), {}),
             )
+        if connection:
             analyzer = RemoteAnalysisAdapter(connection, api_key)
 
             def analyze():
