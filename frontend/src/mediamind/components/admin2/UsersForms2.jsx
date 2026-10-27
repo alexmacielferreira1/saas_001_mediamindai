@@ -4,10 +4,8 @@ import {
   Globe2, KeyRound, Layers3, LockKeyhole, Mail,
   Plus, Search, Settings, ShieldCheck, Sparkles, Upload, UserPlus, Users, X,
 } from 'lucide-react';
+import { outline, panel } from './ui/styles';
 import { getDemoUsers } from '../../lib/demoCatalog';
-
-const panel = 'rounded-xl border border-sky-900/70 bg-[#031225]/90 shadow-[0_12px_32px_rgba(0,0,0,.2)]';
-const outline = 'rounded-lg border border-sky-600 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950';
 
 function userRows(users) {
   return users.map((user, index) => [

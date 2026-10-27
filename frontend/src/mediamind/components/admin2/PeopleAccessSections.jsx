@@ -14,9 +14,12 @@ function Status({ value }) {
   return <span className={`rounded-full border px-2 py-1 text-xs ${colors}`}>{statusLabels[value] || value}</span>;
 }
 
-export function UsersSection({ users = [], total = 0, demoMode = false, onSuspend, onReactivate, onRevokeSessions, loadUser }) {
+export function UsersSection({ users = [], total = 0, demoMode = false, initialStatus = '', onSuspend, onReactivate, onRevokeSessions, loadUser }) {
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('');
+  // Status vindo da URL só vale se for uma das opções do filtro; senão a lista some sem motivo.
+  const validStatus = ['active', 'invited', 'suspended', 'blocked'].includes(initialStatus) ? initialStatus : '';
+  const [status, setStatus] = useState(validStatus);
+  useEffect(() => { setStatus(validStatus); }, [validStatus]);
   const [selectedId, setSelectedId] = useState(null);
   const [overrides, setOverrides] = useState({});
   const [notice, setNotice] = useState('');

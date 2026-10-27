@@ -1,29 +1,139 @@
 import { useMemo, useState } from 'react';
 import {
-  BarChart3, BriefcaseBusiness, Building2, ChevronRight, CircleUserRound,
-  Database, FileClock, FileText, KeyRound, Layers3, LockKeyhole, Pencil, Plus,
-  Search, Settings, ShieldCheck, Users, Video, X,
+  Building2, BriefcaseBusiness, ChevronRight, CircleUserRound, Database, FileClock, FileText,
+  KeyRound, Layers3, LockKeyhole, Pencil, Plus, Search, ShieldCheck, Users, Video, X,
 } from 'lucide-react';
+import { outline, panel } from './ui/styles';
 
-const panel = 'rounded-xl border border-sky-900/70 bg-[#031225]/90 shadow-[0_12px_32px_rgba(0,0,0,.2)]';
-const outline = 'rounded-lg border border-sky-600 px-3 py-2 text-xs font-semibold text-sky-300 transition hover:bg-sky-500 hover:text-slate-950';
+// Perfis e Permissões usam os grupos de permissão reais do tenant (GET /permission-groups).
+// Equipes continua demonstrativa até existir o modelo de equipes no servidor.
 
-const profiles = [
-  { name: 'Administrador', icon: ShieldCheck, description: 'Acesso total à plataforma.', permissions: 54, users: 3, functions: ['Administrador', 'Gestor'] },
-  { name: 'Editor Broadcast', icon: Video, description: 'Edição e finalização de conteúdos para veiculação.', permissions: 19, users: 8, functions: ['Editor de vídeo', 'Videomaker', 'Audiovisual'] },
-  { name: 'Gestor de Acervo', icon: Database, description: 'Gestão completa do acervo de mídia.', permissions: 28, users: 4, functions: ['CEDOC', 'Bibliotecário'] },
-  { name: 'Revisor', icon: FileText, description: 'Revisão de conteúdos e controle de qualidade.', permissions: 16, users: 5, functions: ['Revisor'] },
-  { name: 'Visualizador', icon: CircleUserRound, description: 'Acesso somente para consulta.', permissions: 6, users: 12, functions: ['Consulta'] },
-  { name: 'Social Media', icon: Users, description: 'Publicação e gestão de redes sociais.', permissions: 18, users: 3, functions: ['Social Media'] },
-];
+const UNAVAILABLE_REASON = 'Disponível na próxima etapa; nenhuma alteração é simulada.';
+const CRITICAL_ACTIONS = ['manage', 'delete', 'approve'];
 
-const modules = ['Visão geral', 'Pesquisa', 'Ingest', 'Workspace', 'Mídia Review', 'Rascunhos', 'Agendamento', 'Gravação', 'Pós-produção', 'Publicação', 'Análise'];
-const matrix = [
-  ['Acervo de Mídia', Database, ['Ler', 'Editar', 'Excluir']], ['Produção', Video, ['Ler', 'Criar', 'Editar']],
-  ['Pós-produção', Settings, ['Ler', 'Editar', 'Exportar']], ['Publicação', FileText, ['Ler', 'Criar', 'Aprovar']],
-  ['Relatórios', BarChart3, ['Ler', 'Exportar']], ['Usuários e Acessos', Users, ['Ler', 'Editar']],
-  ['Configurações', Settings, ['Ler', 'Editar']], ['Auditoria', ShieldCheck, ['Ler', 'Exportar']],
-];
+function splitCode(code) {
+  const [module, ...rest] = code.split(/[.:]/);
+  return [module, rest.join('.') || code];
+}
+
+function modulesOf(codes) {
+  return [...new Set(codes.map((code) => splitCode(code)[0]))].sort();
+}
+
+function linkedUsers(users, group) {
+  return users.filter((user) => user.profile_id === group.id);
+}
+
+export function Profiles2({ groups = [], users = [], available = true }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [drawer, setDrawer] = useState(null);
+  const visible = groups.filter((group) => group.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const selected = groups.find((group) => group.id === selectedId) || groups[0] || null;
+  const linked = selected ? linkedUsers(users, selected) : [];
+  const roles = [...new Set(linked.map((user) => user.tenant_role).filter(Boolean))];
+  const codes = selected?.permission_codes || [];
+  const modules = modulesOf(codes);
+  return (
+    <div className="space-y-4">
+      <Lead
+        title="Perfis e Funções"
+        description="Crie perfis reutilizáveis, vincule cargos e padronize acessos."
+        action={<Unavailable primary icon={Plus}>Novo perfil</Unavailable>}
+      />
+      <div className="grid items-start gap-4 xl:grid-cols-[360px_1fr]">
+        <section className={`${panel} p-3`}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-bold">Perfis cadastrados <Count>{groups.length}</Count></h3>
+          </div>
+          <SearchBox value={search} onChange={setSearch} placeholder="Buscar perfil..." />
+          <div className="mt-3 space-y-2">
+            {visible.map((group) => (
+              <ProfileCard
+                key={group.id}
+                group={group}
+                users={linkedUsers(users, group).length}
+                active={selected?.id === group.id}
+                onClick={() => setSelectedId(group.id)}
+              />
+            ))}
+            {!groups.length && <Empty>{available ? 'Nenhum perfil cadastrado neste tenant.' : 'Perfis indisponíveis: não foi possível carregar os grupos de permissão.'}</Empty>}
+            {groups.length > 0 && !visible.length && <Empty>Nenhum perfil corresponde à busca.</Empty>}
+          </div>
+        </section>
+        <div className="space-y-3">
+          {selected && (
+            <section className={`${panel} p-4`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="rounded-xl bg-sky-950 p-3 text-sky-400"><ShieldCheck size={26} /></span>
+                  <div>
+                    <h3 className="text-xl font-bold">{selected.name}</h3>
+                    <p className="text-sm text-slate-400">{selected.description || 'Perfil sem descrição.'}</p>
+                    <p className="mt-1 text-xs text-slate-500"><Badge active={selected.is_active}>{selected.is_active ? 'Ativo' : 'Inativo'}</Badge></p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Unavailable icon={Pencil}>Editar</Unavailable>
+                  <Unavailable>Duplicar perfil</Unavailable>
+                  <Action icon={Users} onClick={() => setDrawer({ title: `Usuários de ${selected.name}`, type: 'users' })}>Ver usuários</Action>
+                </div>
+              </div>
+            </section>
+          )}
+          <div className="grid gap-3 lg:grid-cols-[1fr_.72fr]">
+            <section className={`${panel} p-3`}>
+              <Title icon={KeyRound}>Resumo do perfil</Title>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Mini label="permissões liberadas" value={selected ? codes.length : '—'} />
+                <Mini label="usuários vinculados" value={selected ? linked.length : '—'} />
+                <Mini label="funções vinculadas" value={selected ? roles.length : '—'} />
+              </div>
+            </section>
+            <section className={`${panel} p-3`}>
+              <Title icon={BriefcaseBusiness}>Funções associadas</Title>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {roles.map((role) => <Tag key={role}>{role}</Tag>)}
+                {!roles.length && <Empty>Nenhum usuário vinculado a este perfil.</Empty>}
+              </div>
+            </section>
+          </div>
+          <section className={`${panel} p-3`}>
+            <Title icon={Layers3}>Módulos liberados</Title>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {modules.map((module) => <Tag key={module}>{module}</Tag>)}
+              {!modules.length && <Empty>Nenhum módulo liberado.</Empty>}
+            </div>
+          </section>
+          <section className={`${panel} p-3`}>
+            <Title icon={ShieldCheck}>Matriz resumida de permissões</Title>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {modules.map((module) => (
+                <div key={module} className="rounded-lg border border-slate-800 p-3">
+                  <strong className="text-sm">{module}</strong>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {codes.filter((code) => splitCode(code)[0] === module).map((code) => (
+                      <span key={code} className="rounded bg-emerald-950 px-2 py-1 text-[10px] text-emerald-300 ring-1 ring-emerald-700">{splitCode(code)[1]}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!modules.length && <Empty>Nenhuma permissão explícita.</Empty>}
+          </section>
+          <PendingHistory title="Histórico do perfil" />
+        </div>
+      </div>
+      {drawer && selected && (
+        <Drawer title={drawer.title} close={() => setDrawer(null)}>
+          {linked.length ? (
+            <SimpleTable headers={['Nome', 'E-mail', 'Função']} rows={linked.map((user) => [user.full_name || user.email, user.email, user.tenant_role || '—'])} />
+          ) : <Empty>Nenhum usuário vinculado a este perfil.</Empty>}
+        </Drawer>
+      )}
+    </div>
+  );
+}
 
 const teams = [
   ['Produção', '18 membros', 'Mariana Silva', Video], ['Jornalismo', '12 membros', 'Carlos Mendes', FileText],
@@ -31,29 +141,6 @@ const teams = [
   ['CEDOC', '6 membros', 'Ana Paula Ribeiro', Database], ['Comunicação', '9 membros', 'Felipe Martins', CircleUserRound],
 ];
 const members = [['Rafael Lima', 'Coordenador', 'Administrador'], ['Marina Souza', 'Videomaker', 'Usuário'], ['Bruno Carvalho', 'Editor de vídeo', 'Usuário'], ['Larissa Fernandes', 'Motion Designer', 'Usuário'], ['Thiago Pereira', 'Produtor de reportagem', 'Usuário']];
-
-const permissionRows = [
-  ['Produção', 'Gestão de produções audiovisuais, projetos e cronogramas.', ['allow','allow','allow','deny','allow','allow','deny']],
-  ['Acervo', 'Catálogo de obras, metadados, arquivos e revisões.', ['allow','allow','allow','deny','deny','allow','deny']],
-  ['Roteiros', 'Roteiros, tratamentos e desenvolvimento de conteúdo.', ['allow','allow','allow','deny','inherit','allow','deny']],
-  ['Publicações', 'Gestão de releases, materiais e publicações.', ['allow','allow','allow','deny','deny','allow','deny']],
-  ['Gestão', 'Indicadores, relatórios e gestão operacional.', ['allow','deny','inherit','deny','deny','allow','deny']],
-  ['Administração', 'Usuários, perfis, configurações e segurança.', ['allow','deny','deny','deny','deny','inherit','deny']],
-];
-const operations = ['Visualizar', 'Criar', 'Editar', 'Excluir', 'Aprovar', 'Exportar', 'Gerenciar'];
-
-export function Profiles2() {
-  const [selected, setSelected] = useState(profiles[1]);
-  const [drawer, setDrawer] = useState(null);
-  return <div className="space-y-4"><Lead title="Perfis e Funções" description="Crie perfis reutilizáveis, vincule cargos e padronize acessos." action={<button type="button" className="rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-bold text-slate-950" onClick={() => setDrawer({ title: 'Novo perfil', type: 'form' })}><Plus className="mr-1 inline" size={16}/>Novo perfil</button>} />
-    <div className="grid items-start gap-4 xl:grid-cols-[360px_1fr]"><section className={`${panel} p-3`}><div className="mb-3 flex items-center justify-between"><h3 className="font-bold">Perfis cadastrados <Count>{profiles.length}</Count></h3></div><SearchBox placeholder="Buscar perfil..." /> <div className="mt-3 space-y-2">{profiles.map((profile) => <ProfileCard key={profile.name} profile={profile} active={selected.name === profile.name} onClick={() => setSelected(profile)} />)}</div></section>
-      <div className="space-y-3"><section className={`${panel} p-4`}><div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="rounded-xl bg-sky-950 p-3 text-sky-400"><selected.icon size={26}/></span><div><h3 className="text-xl font-bold">{selected.name}</h3><p className="text-sm text-slate-400">{selected.description}</p><p className="mt-1 text-xs text-slate-500"><Badge>Ativo</Badge> · Criado em 12 de ago. de 2024 · Última alteração em 15 de set. de 2026</p></div></div><div className="flex gap-2"><Action onClick={() => setDrawer({title:`Editar ${selected.name}`, type:'form'})} icon={Pencil}>Editar</Action><Action onClick={() => setDrawer({title:'Duplicar perfil', type:'duplicate'})}>Duplicar perfil</Action><Action onClick={() => setDrawer({title:`Usuários de ${selected.name}`, type:'users'})} icon={Users}>Ver usuários</Action></div></div></section>
-        <div className="grid gap-3 lg:grid-cols-[1fr_.72fr]"><section className={`${panel} p-3`}><Title icon={KeyRound}>Resumo do perfil</Title><div className="mt-3 grid grid-cols-3 gap-2"><Mini label="permissões liberadas" value={selected.permissions}/><Mini label="usuários vinculados" value={selected.users}/><Mini label="funções vinculadas" value={selected.functions.length}/></div></section><section className={`${panel} p-3`}><div className="flex justify-between"><Title icon={BriefcaseBusiness}>Funções associadas</Title><button className={outline} onClick={() => setDrawer({title:'Gerenciar funções', type:'functions'})}>Gerenciar</button></div><div className="mt-4 flex flex-wrap gap-2">{selected.functions.map((item) => <Tag key={item}>{item}</Tag>)}</div></section></div>
-        <section className={`${panel} p-3`}><Title icon={Layers3}>Módulos liberados</Title><div className="mt-3 flex flex-wrap gap-2">{modules.map((item, index) => <button type="button" key={item} className={`rounded-md border px-4 py-2 text-xs ${index < 9 ? 'border-sky-600 text-sky-300' : 'border-slate-700 text-slate-500'}`}>{item}</button>)}</div></section>
-        <section className={`${panel} p-3`}><Title icon={ShieldCheck}>Matriz resumida de permissões</Title><div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">{matrix.map(([name, Icon, actions]) => <button type="button" onClick={() => setDrawer({title:name,type:'permissions'})} key={name} className="rounded-lg border border-slate-800 p-3 text-left hover:border-sky-600"><div className="flex items-center gap-2"><Icon className="text-sky-400" size={20}/><strong className="text-sm">{name}</strong></div><div className="mt-3 flex flex-wrap gap-2">{actions.map((action,index) => <span key={action} className={`rounded px-2 py-1 text-[10px] ${index < 2 ? 'bg-emerald-950 text-emerald-300 ring-1 ring-emerald-700' : 'bg-slate-800 text-slate-400'}`}>{action}</span>)}</div></button>)}</div></section>
-        <History title="Histórico do perfil" />
-      </div></div>{drawer && <Drawer title={drawer.title} close={() => setDrawer(null)}><DrawerBody type={drawer.type} /></Drawer>}</div>;
-}
 
 export function Teams2() {
   const [selected, setSelected] = useState('Audiovisual'); const [drawer,setDrawer]=useState(null);
@@ -65,29 +152,135 @@ export function Teams2() {
       </div></div>{drawer&&<Drawer title={drawer.title} close={()=>setDrawer(null)}><DrawerBody type={drawer.type}/></Drawer>}</div>;
 }
 
-export function Permissions2({ groups=[] }) {
-  const [profile,setProfile]=useState('Gestor de Acervo'); const [drawer,setDrawer]=useState(null); const [filter,setFilter]=useState('');
-  const shown=useMemo(()=>permissionRows.filter(row=>row[0].toLowerCase().includes(filter.toLowerCase())),[filter]);
-  return <div className="space-y-4"><Lead title="Permissões" description="Controle técnico de ações por módulo, operação e escopo." />
-    <div className="grid gap-4 xl:grid-cols-[1fr_300px]"><div className="space-y-3"><section className={`${panel} p-3`}><div className="grid gap-3 lg:grid-cols-[1.2fr_.65fr_.65fr_.65fr_auto]"><SearchBox value={filter} onChange={setFilter} placeholder="Buscar permissão, módulo ou ação..."/><Select label="Perfil" value={profile} setValue={setProfile} options={['Gestor de Acervo','Administrador','Editor Broadcast','Revisor']}/><Select label="Módulo" value="Todos os módulos" options={['Todos os módulos']}/><Select label="Escopo" value="Todos os escopos" options={['Todos os escopos']}/><button className={outline}>↻ Limpar filtros</button></div><div className="mt-3"><Tag>Perfil: {profile} ×</Tag></div><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[900px] text-left text-xs"><thead className="bg-sky-950/50"><tr><th className="p-3">Módulo</th><th className="p-3">Descrição</th>{operations.map(item=><th key={item} className="p-3 text-center">{item}</th>)}<th/></tr></thead><tbody>{shown.map(([module,description,values])=><tr key={module} className="border-t border-slate-800"><td className="p-3 font-bold text-slate-100">{module}</td><td className="max-w-52 p-3 text-slate-400">{description}</td>{values.map((value,index)=><td key={index} className="p-2 text-center"><Permission value={value}/></td>)}<td><button onClick={()=>setDrawer({title:`Permissões de ${module}`,type:'permissions'})}><ChevronRight/></button></td></tr>)}</tbody></table></div></section><History title="Alterações recentes" /></div>
-      <aside className="space-y-3"><section className={`${panel} p-4`}><Title icon={CircleUserRound}>Resumo do perfil</Title><h3 className="mt-2 font-bold">{profile}</h3><p className="text-xs text-slate-500">Visão consolidada das permissões deste perfil.</p><div className="mt-4 grid grid-cols-3 gap-2"><Summary value="27" label="Efetivas" tone="emerald"/><Summary value="18" label="Permitidas" tone="sky"/><Summary value="9" label="Negadas" tone="rose"/></div></section><section className={`${panel} p-4`}><Title icon={Layers3}>Origem das permissões</Title>{[['Perfil (direto)','22','81%','bg-sky-400'],['Função (herdado)','4','15%','bg-violet-400'],['Exceção','1','4%','bg-amber-400']].map(row=><div key={row[0]} className="mt-4"><div className="flex justify-between text-xs"><span>{row[0]}</span><span>{row[1]} · {row[2]}</span></div><div className="mt-1 h-2 rounded-full bg-slate-800"><div className={`h-full rounded-full ${row[3]}`} style={{width:row[2]}}/></div></div>)}</section><section className={`${panel} p-4`}><Title icon={LockKeyhole}>Permissões críticas</Title>{['Excluir itens do acervo','Gerenciar usuários','Aprovar publicações','Alterar configurações'].map(item=><button key={item} onClick={()=>setDrawer({title:item,type:'critical'})} className="flex w-full justify-between border-b border-slate-800 py-3 text-left text-xs"><span>{item}</span><span className="text-rose-400">Negado</span></button>)}</section></aside></div>{drawer&&<Drawer title={drawer.title} close={()=>setDrawer(null)}><DrawerBody type={drawer.type}/></Drawer>}</div>;
+export function Permissions2({ groups = [], available = true }) {
+  const [profileId, setProfileId] = useState('');
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [drawer, setDrawer] = useState(null);
+  const group = groups.find((item) => item.id === profileId) || groups[0] || null;
+  const catalog = useMemo(() => [...new Set(groups.flatMap((item) => item.permission_codes))].sort(), [groups]);
+  const actions = [...new Set(catalog.map((code) => splitCode(code)[1]))].sort();
+  const allModules = modulesOf(catalog);
+  const term = search.trim().toLowerCase();
+  const rows = allModules.filter((module) => (!moduleFilter || module === moduleFilter) && (!term || module.toLowerCase().includes(term)));
+  const granted = group ? group.permission_codes.length : 0;
+  const critical = catalog.filter((code) => CRITICAL_ACTIONS.some((word) => code.includes(word)));
+  const has = (code) => Boolean(group?.permission_codes.includes(code));
+  function clearFilters() { setSearch(''); setModuleFilter(''); setProfileId(''); }
+  return (
+    <div className="space-y-4">
+      <Lead title="Permissões" description="Controle técnico de ações por módulo, operação e escopo." />
+      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+        <div className="space-y-3">
+          <section className={`${panel} p-3`}>
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_.65fr_.65fr_.65fr_auto]">
+              <SearchBox value={search} onChange={setSearch} placeholder="Buscar permissão, módulo ou ação..." />
+              <Select label="Perfil" value={group?.id || ''} setValue={setProfileId} options={groups.map((item) => [item.id, item.name])} />
+              <Select label="Módulo" value={moduleFilter} setValue={setModuleFilter} options={[['', 'Todos os módulos'], ...allModules.map((module) => [module, module])]} />
+              <Select label="Escopo" value="tenant" options={[['tenant', 'Tenant selecionado']]} />
+              <button type="button" className={outline} onClick={clearFilters}>↻ Limpar filtros</button>
+            </div>
+            {group && <div className="mt-3"><Tag>Perfil: {group.name}</Tag></div>}
+            <div className="mt-3 overflow-x-auto">
+              {rows.length && actions.length ? (
+                <table className="w-full min-w-[640px] text-left text-xs">
+                  <thead className="bg-sky-950/50">
+                    <tr>
+                      <th className="p-3">Módulo</th>
+                      {actions.map((item) => <th key={item} className="p-3 text-center">{item}</th>)}
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((module) => (
+                      <tr key={module} className="border-t border-slate-800">
+                        <td className="p-3 font-bold text-slate-100">{module}</td>
+                        {actions.map((item) => {
+                          const code = catalog.find((entry) => splitCode(entry)[0] === module && splitCode(entry)[1] === item);
+                          return <td key={item} className="p-2 text-center">{code ? <Permission allowed={has(code)} /> : <span className="text-slate-600">—</span>}</td>;
+                        })}
+                        <td>
+                          <button type="button" aria-label={`Permissões de ${module}`} onClick={() => setDrawer({ title: `Permissões de ${module}`, module })}><ChevronRight /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <Empty>{!available ? 'Permissões indisponíveis: não foi possível carregar os grupos de permissão.' : catalog.length ? 'Nenhum módulo corresponde aos filtros.' : 'Nenhuma permissão cadastrada nos perfis deste tenant.'}</Empty>}
+            </div>
+          </section>
+          <PendingHistory title="Alterações recentes" />
+        </div>
+        <aside className="space-y-3">
+          <section className={`${panel} p-4`}>
+            <Title icon={CircleUserRound}>Resumo do perfil</Title>
+            <h3 className="mt-2 font-bold">{group?.name || 'Nenhum perfil'}</h3>
+            <p className="text-xs text-slate-500">Visão consolidada das permissões deste perfil.</p>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <Summary value={group ? granted : '—'} label="Permitidas" tone="emerald" />
+              <Summary value={group ? catalog.length - granted : '—'} label="Negadas" tone="rose" />
+              <Summary value={group ? modulesOf(group.permission_codes).length : '—'} label="Módulos" tone="sky" />
+            </div>
+          </section>
+          <section className={`${panel} p-4`}>
+            <Title icon={Layers3}>Origem das permissões</Title>
+            <div className="mt-4 flex justify-between text-xs"><span>Perfil (direto)</span><span>{group ? granted : '—'}</span></div>
+            <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Função (herdado)</span><span>Não integrado</span></div>
+            <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Exceção</span><span>Não integrado</span></div>
+          </section>
+          <section className={`${panel} p-4`}>
+            <Title icon={LockKeyhole}>Permissões críticas</Title>
+            {critical.map((code) => (
+              <div key={code} className="flex w-full justify-between border-b border-slate-800 py-3 text-left text-xs">
+                <span>{code}</span>
+                <span className={has(code) ? 'text-emerald-400' : 'text-rose-400'}>{has(code) ? 'Permitido' : 'Negado'}</span>
+              </div>
+            ))}
+            {!critical.length && <Empty>Nenhuma permissão crítica cadastrada.</Empty>}
+          </section>
+        </aside>
+      </div>
+      {drawer && (
+        <Drawer title={drawer.title} close={() => setDrawer(null)}>
+          <SimpleTable
+            headers={['Permissão', group ? group.name : 'Perfil']}
+            rows={catalog.filter((code) => splitCode(code)[0] === drawer.module).map((code) => [code, <Permission key={code} allowed={has(code)} />])}
+          />
+        </Drawer>
+      )}
+    </div>
+  );
 }
 
-function Lead({title,description,action}){return <header className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-3xl font-bold">{title}</h2><p className="text-sm text-slate-400">{description}</p></div>{action}</header>}
-function SearchBox({placeholder,value='',onChange=()=>{}}){return <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"><Search size={16} className="text-slate-500"/><input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-xs outline-none"/></label>}
-function ProfileCard({profile,active,onClick}){const Icon=profile.icon;return <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${active?'border-sky-400 bg-sky-950/40':'border-slate-800 hover:border-sky-700'}`}><span className="rounded-lg bg-sky-950 p-2 text-sky-400"><Icon/></span><span className="flex-1"><strong className="block text-sm">{profile.name}</strong><span className="block text-xs text-slate-500">{profile.description}</span></span><span className="text-right text-xs"><b className="text-sky-400">{profile.permissions}</b> permissões<br/><b className="text-sky-400">{profile.users}</b> usuários</span><ChevronRight size={16}/></button>}
-function Title({icon:Icon,children}){return <h3 className="flex items-center gap-2 font-bold"><Icon size={18} className="text-sky-400"/>{children}</h3>}
-function Count({children}){return <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">{children}</span>}
-function Badge({children}){return <span className="rounded-full bg-emerald-950 px-2 py-1 text-[10px] text-emerald-300 ring-1 ring-emerald-700">{children}</span>}
-function Tag({children}){return <span className="rounded-md border border-sky-600 px-3 py-1.5 text-xs text-sky-300">{children}</span>}
-function Mini({label,value}){return <div className="rounded-lg border border-slate-800 p-3"><strong className="block text-2xl">{value}</strong><span className="text-xs text-slate-500">{label}</span></div>}
-function Action({children,icon:Icon,onClick}){return <button type="button" onClick={onClick} className={outline}>{Icon&&<Icon className="mr-1 inline" size={14}/>} {children}</button>}
-function Info({icon:Icon,label,value}){return <div className="flex gap-3 rounded-lg border border-slate-800 p-3"><Icon className="text-sky-400"/><div><span className="text-xs text-slate-500">{label}</span><strong className="block text-sm">{value}</strong></div></div>}
-function Box({title,items}){return <section className={`${panel} p-3`}><h3 className="font-bold">{title}</h3><div className="mt-3 flex flex-wrap gap-2">{items.map(item=><Tag key={item}>{item}</Tag>)}</div></section>}
-function SimpleTable({headers,rows}){return <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="bg-sky-950/60"><tr>{headers.map(item=><th key={item} className="p-2">{item}</th>)}</tr></thead><tbody>{rows.map((row,index)=><tr key={index} className="border-t border-slate-800">{row.map((cell,i)=><td key={i} className="p-2">{cell}</td>)}</tr>)}</tbody></table></div>}
-function History({title}){return <section className={`${panel} p-3`}><Title icon={FileClock}>{title}</Title><div className="mt-3"><SimpleTable headers={['Data e hora','Usuário','Ação','Descrição']} rows={[['Hoje, 14:32','Alex Maciel Ferreira','Permissões atualizadas','Configuração revisada'],['Hoje, 11:18','Carla Mendes','Função vinculada','Vínculo atualizado'],['Ontem, 16:45','Rafael Lima','Escopo alterado','Equipe atualizada']]}/></div></section>}
-function Select({label,value,setValue=()=>{},options}){return <label className="text-[10px] text-slate-500">{label}<select value={value} onChange={e=>setValue(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-200">{options.map(item=><option key={item}>{item}</option>)}</select></label>}
-function Permission({value}){const cls=value==='allow'?'border-emerald-700 bg-emerald-950 text-emerald-300':value==='deny'?'border-rose-700 bg-rose-950 text-rose-300':'border-slate-600 bg-slate-800 text-slate-300';return <span className={`inline-flex min-w-20 justify-center rounded-md border px-2 py-1 ${cls}`}>{value==='allow'?'✓ Permitido':value==='deny'?'× Negado':'− Herdado'}</span>}
-function Summary({value,label,tone}){const cls={emerald:'border-emerald-700 text-emerald-300',sky:'border-sky-700 text-sky-300',rose:'border-rose-700 text-rose-300'}[tone];return <div className={`rounded-lg border p-2 text-center ${cls}`}><strong className="block text-xl">{value}</strong><span className="text-[10px]">{label}</span></div>}
-function Drawer({title,close,children}){return <div className="fixed inset-0 z-[80] flex justify-end bg-slate-950/55"><aside role="dialog" aria-label={title} className="h-full w-full max-w-xl overflow-y-auto border-l border-sky-800 bg-mm-drawer"><header className="flex items-center justify-between border-b border-slate-800 p-5"><div><p className="text-xs font-bold uppercase tracking-widest text-sky-400">Administração</p><h2 className="text-xl font-bold">{title}</h2></div><button aria-label="Fechar painel" onClick={close}><X/></button></header><div className="p-5">{children}</div></aside></div>}
-function DrawerBody({type}){return <div className="space-y-4"><p className="rounded-lg border border-sky-900 bg-sky-950/30 p-3 text-xs text-sky-300">Edição visual local. A integração e persistência serão conectadas na próxima etapa.</p>{type==='form'?<div className="space-y-3">{['Nome','Descrição','Responsável'].map(item=><label key={item} className="block text-xs text-slate-400">{item}<input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 p-3"/></label>)}<button className="w-full rounded-lg bg-sky-400 p-3 font-bold text-slate-950">Salvar localmente</button></div>:<div className="space-y-2">{['Resumo e estado','Vínculos relacionados','Permissões efetivas','Histórico recente'].map(item=><button key={item} className="flex w-full justify-between rounded-xl border border-slate-800 p-4 text-left">{item}<ChevronRight/></button>)}</div>}</div>}
+function Lead({ title, description, action }) { return <header className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-3xl font-bold">{title}</h2><p className="text-sm text-slate-400">{description}</p></div>{action}</header>; }
+function SearchBox({ placeholder, value = '', onChange = () => {} }) { return <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"><Search size={16} className="text-slate-500" /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-xs outline-none" /></label>; }
+function ProfileCard({ group, users, active, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${active ? 'border-sky-400 bg-sky-950/40' : 'border-slate-800 hover:border-sky-700'}`}>
+      <span className="rounded-lg bg-sky-950 p-2 text-sky-400"><ShieldCheck /></span>
+      <span className="flex-1"><strong className="block text-sm">{group.name}</strong><span className="block text-xs text-slate-500">{group.description || 'Sem descrição'}</span></span>
+      <span className="text-right text-xs"><b className="text-sky-400">{group.permission_codes.length}</b> permissões<br /><b className="text-sky-400">{users}</b> usuários</span>
+      <ChevronRight size={16} />
+    </button>
+  );
+}
+function Title({ icon: Icon, children }) { return <h3 className="flex items-center gap-2 font-bold"><Icon size={18} className="text-sky-400" />{children}</h3>; }
+function Count({ children }) { return <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">{children}</span>; }
+function Badge({ children, active = true }) { return <span className={`rounded-full px-2 py-1 text-[10px] ring-1 ${active ? 'bg-emerald-950 text-emerald-300 ring-emerald-700' : 'bg-rose-950 text-rose-300 ring-rose-700'}`}>{children}</span>; }
+function Tag({ children }) { return <span className="rounded-md border border-sky-600 px-3 py-1.5 text-xs text-sky-300">{children}</span>; }
+function Empty({ children }) { return <p className="text-xs text-slate-500">{children}</p>; }
+function Mini({ label, value }) { return <div className="rounded-lg border border-slate-800 p-3"><strong className="block text-2xl">{value}</strong><span className="text-xs text-slate-500">{label}</span></div>; }
+function Action({ children, icon: Icon, onClick }) { return <button type="button" onClick={onClick} className={outline}>{Icon && <Icon className="mr-1 inline" size={14} />} {children}</button>; }
+function Unavailable({ children, icon: Icon, primary = false }) {
+  const cls = primary ? 'rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-bold text-slate-950' : outline;
+  return <button type="button" disabled title={UNAVAILABLE_REASON} className={`${cls} disabled:cursor-not-allowed disabled:opacity-50`}>{Icon && <Icon className="mr-1 inline" size={primary ? 16 : 14} />}{children}</button>;
+}
+function Info({ icon: Icon, label, value }) { return <div className="flex gap-3 rounded-lg border border-slate-800 p-3"><Icon className="text-sky-400" /><div><span className="text-xs text-slate-500">{label}</span><strong className="block text-sm">{value}</strong></div></div>; }
+function Box({ title, items }) { return <section className={`${panel} p-3`}><h3 className="font-bold">{title}</h3><div className="mt-3 flex flex-wrap gap-2">{items.map((item) => <Tag key={item}>{item}</Tag>)}</div></section>; }
+function SimpleTable({ headers, rows }) { return <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="bg-sky-950/60"><tr>{headers.map((item) => <th key={item} className="p-2">{item}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-t border-slate-800">{row.map((cell, i) => <td key={i} className="p-2">{cell}</td>)}</tr>)}</tbody></table></div>; }
+function PendingHistory({ title }) { return <section className={`${panel} p-3`}><Title icon={FileClock}>{title}</Title><p className="mt-3 text-xs text-slate-500">Histórico por perfil ainda não integrado; as alterações já ficam registradas na auditoria do tenant.</p></section>; }
+function Select({ label, value, setValue = () => {}, options }) { return <label className="text-[10px] text-slate-500">{label}<select value={value} onChange={(e) => setValue(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-200">{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></label>; }
+function Permission({ allowed }) { return <span className={`inline-flex min-w-20 justify-center rounded-md border px-2 py-1 ${allowed ? 'border-emerald-700 bg-emerald-950 text-emerald-300' : 'border-rose-700 bg-rose-950 text-rose-300'}`}>{allowed ? '✓ Permitido' : '× Negado'}</span>; }
+function Summary({ value, label, tone }) { const cls = { emerald: 'border-emerald-700 text-emerald-300', sky: 'border-sky-700 text-sky-300', rose: 'border-rose-700 text-rose-300' }[tone]; return <div className={`rounded-lg border p-2 text-center ${cls}`}><strong className="block text-xl">{value}</strong><span className="text-[10px]">{label}</span></div>; }
+function Drawer({ title, close, children }) { return <div className="fixed inset-0 z-[80] flex justify-end bg-slate-950/55"><aside role="dialog" aria-label={title} className="h-full w-full max-w-xl overflow-y-auto border-l border-sky-800 bg-mm-drawer"><header className="flex items-center justify-between border-b border-slate-800 p-5"><div><p className="text-xs font-bold uppercase tracking-widest text-sky-400">Administração</p><h2 className="text-xl font-bold">{title}</h2></div><button aria-label="Fechar painel" onClick={close}><X /></button></header><div className="p-5">{children}</div></aside></div>; }
+function DrawerBody({ type }) { return <div className="space-y-4"><p className="rounded-lg border border-sky-900 bg-sky-950/30 p-3 text-xs text-sky-300">Edição visual local. A integração e persistência serão conectadas na próxima etapa.</p>{type === 'form' ? <div className="space-y-3">{['Nome', 'Descrição', 'Responsável'].map((item) => <label key={item} className="block text-xs text-slate-400">{item}<input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 p-3" /></label>)}<button className="w-full rounded-lg bg-sky-400 p-3 font-bold text-slate-950">Salvar localmente</button></div> : <div className="space-y-2">{['Resumo e estado', 'Vínculos relacionados', 'Permissões efetivas', 'Histórico recente'].map((item) => <button key={item} className="flex w-full justify-between rounded-xl border border-slate-800 p-4 text-left">{item}<ChevronRight /></button>)}</div>}</div>; }
