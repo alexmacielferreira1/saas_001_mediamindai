@@ -11,16 +11,32 @@ from app.models.identity import (
 )
 from app.tenancy.context import CurrentSession, require_membership
 
+# Mesmo valor de access_policy.SUPERADMIN_ROLE (importar de lá criaria import circular).
+SUPERADMIN_ROLE = "superadmin"
 
-def effective_permissions(session: Session, current: CurrentSession) -> set[str]:
+
+def _in_selected_tenant(current: CurrentSession) -> bool:
     membership = current.membership
     tenant = current.tenant
-    if (
-        membership is None
-        or tenant is None
-        or membership.tenant_id != tenant.id
-        or membership.permission_group_id is None
-    ):
+    return membership is not None and tenant is not None and membership.tenant_id == tenant.id
+
+
+def is_tenant_superadmin(current: CurrentSession) -> bool:
+    """Superadmin da empresa selecionada (o vínculo precisa ser dessa mesma empresa)."""
+    return _in_selected_tenant(current) and current.membership.role == SUPERADMIN_ROLE
+
+
+def effective_permissions(session: Session, current: CurrentSession) -> set[str]:
+    if not _in_selected_tenant(current):
+        return set()
+    # Superadmin tem todo o catálogo na própria empresa, mesmo sem grupo (decisão de 27/10/2026);
+    # assim as checagens que leem estas permissões direto (auditoria, IA) concordam com
+    # require_permission.
+    if is_tenant_superadmin(current):
+        return set(session.scalars(select(Permission.code)))
+    membership = current.membership
+    tenant = current.tenant
+    if membership.permission_group_id is None:
         return set()
 
     return set(
@@ -49,6 +65,10 @@ def require_permission(
     permission_code: str,
 ) -> CurrentSession:
     require_membership(current)
+    # Superadmin tem acesso total na própria empresa (como nas telas, em access_policy),
+    # inclusive a códigos que ainda não existam no catálogo; não depende do grupo.
+    if is_tenant_superadmin(current):
+        return current
     if permission_code not in effective_permissions(session, current):
         raise PublicError(403, "PERMISSION_DENIED", "Você não possui permissão para esta ação.")
     return current
