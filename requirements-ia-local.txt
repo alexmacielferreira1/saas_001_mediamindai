@@ -1,0 +1,6 @@
+# IA local opcional (transcrição gratuita com Whisper, sem serviço pago).
+# Instalar no mesmo venv da API:  .venv\Scripts\python -m pip install -r requirements-ia-local.txt
+# Versões testadas juntas em 27/10/2026 (Windows 11, CPU). O PyAV 19 removeu um parâmetro que o
+# faster-whisper 1.2.1 usa ("metadata_errors"): manter o av fixo até o faster-whisper acompanhar.
+faster-whisper==1.2.1
+av==16.1.0
