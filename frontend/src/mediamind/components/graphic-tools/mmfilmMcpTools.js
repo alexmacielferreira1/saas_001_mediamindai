@@ -138,13 +138,36 @@ function soundClips(state, tracks) {
   );
 }
 
+/** Motivo legível de uma falha ao abrir o áudio (`{ kind, status }` vindo do carregador). */
+export function audioFailureReason(failure) {
+  if (failure?.kind === "http" && (failure.status === 404 || failure.status === 410))
+    return `o arquivo não está mais no servidor (${failure.status}). Envie a mídia de novo pelo Ingest.`;
+  if (failure?.kind === "http") return `o servidor respondeu ${failure.status ?? "com erro"}.`;
+  if (failure?.kind === "network") return "sem conexão com o servidor.";
+  if (failure?.kind === "large") return "o arquivo é grande demais para analisar no navegador.";
+  if (failure?.kind === "decode") return "formato sem áudio ou não suportado.";
+  return null;
+}
+
+/**
+ * Mensagem quando nenhuma mídia pôde ser lida: cita a primeira mídia que falhou e o motivo (404, rede, formato…).
+ * Sem o motivo registrado pelo carregador, mantém a explicação genérica.
+ */
+export function unreadableAudioMessage(clips, buffers, fallback = "Não foi possível ler o áudio das mídias (formato sem áudio ou mídia indisponível).") {
+  const failed = clips.filter((clip) => !buffers.get(clip.url));
+  const urls = [...new Set(failed.map((clip) => clip.url))];
+  const first = failed.find((clip) => audioFailureReason(buffers.failures?.get(clip.url)));
+  if (!first) return fallback;
+  const others = urls.length - 1;
+  return `Não foi possível ler o áudio de “${first.name || "mídia"}”: ${audioFailureReason(buffers.failures.get(first.url))}${others > 0 ? ` (outra(s) ${others} mídia(s) também não abriram.)` : ""}`;
+}
+
 async function envelopeFor(state, params, env, tracks = params.analysisTracks) {
   const [from, to] = analysisRange(state, params);
   const clips = soundClips(state, tracks || []);
   if (!clips.length) throw new ToolError("Nenhum clipe com som (online) nas faixas analisadas. Confira as faixas escolhidas e se as mídias estão religadas.");
   const buffers = await env.loadBuffers(clips);
-  if (!clips.some((clip) => buffers.get(clip.url)))
-    throw new ToolError("Não foi possível ler o áudio das mídias (formato sem áudio ou mídia indisponível).");
+  if (!clips.some((clip) => buffers.get(clip.url))) throw new ToolError(unreadableAudioMessage(clips, buffers));
   const envelope = timelineEnvelope({ clips, buffers, from, to });
   const auto = autoThreshold(envelope.db, params.sensitivity);
   const threshold = params.thresholdMode === "manual" ? Number(params.threshold) : auto.threshold;
@@ -426,7 +449,11 @@ async function normalize(state, params, env) {
     changes.set(clip.id, volume);
     details.push(`${clip.name || "clipe"}: ${dbText(levels.rms)} → volume ${volume}%${limited ? ` (limitado pelo ${limited})` : ""}`);
   });
-  if (!changes.size) return { ok: true, count: 0, summary: "Nenhum clipe pôde ser medido.", details };
+  if (!changes.size) {
+    const unreadable = unreadableAudioMessage(clips, buffers, "");
+    if (unreadable) throw new ToolError(unreadable);
+    return { ok: true, count: 0, summary: "Nenhum clipe pôde ser medido.", details };
+  }
   return {
     ok: true,
     count: changes.size,
@@ -546,9 +573,9 @@ async function autoEdit(state, params, env, tools) {
     const tool = tools.find((item) => item.id === toolId);
     const toolParams = Object.fromEntries(Object.entries(overrides).filter(([name, value]) => value !== undefined && tool.params.some((param) => param.key === name)));
     try {
-      const outcome = await tool.run(current, { ...defaultsOf(tool), ...toolParams }, env, tools);
-      details.push(`${label}: ${outcome.summary}`);
-      if (outcome.clips) {
+      const outcome = withoutNoOp(current, await tool.run(current, { ...defaultsOf(tool), ...toolParams }, env, tools));
+      details.push(`${label}: ${outcome.ok ? "" : "pulado — "}${outcome.summary}`);
+      if (outcome.ok && outcome.clips) {
         current = { ...current, clips: outcome.clips, markers: outcome.markers || current.markers };
         changed = true;
       }
@@ -570,6 +597,16 @@ async function autoEdit(state, params, env, tools) {
 
 const defaultsOf = (tool) => Object.fromEntries(tool.params.map((param) => [param.key, param.default]));
 
+// Resultado "ok" que devolve a timeline idêntica (já aplicado, faixas bloqueadas, faixa ocupada) não é sucesso:
+// vira ok:false explicando, sem gravar um passo vazio de desfazer nem um backup inútil.
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function withoutNoOp(state, outcome) {
+  if (!outcome?.ok || !outcome.clips) return outcome;
+  if (!sameJson(outcome.clips, state.clips) || (outcome.markers && !sameJson(outcome.markers, state.markers))) return outcome;
+  const { clips: _clips, markers: _markers, ...rest } = outcome;
+  return { ...rest, ok: false, count: 0, summary: `Nada mudou na timeline (já estava assim ou as faixas estão bloqueadas): ${outcome.summary}` };
+}
+
 /** Catálogo com as opções do momento (sons importados no projeto). */
 export function mmfilmCatalogue(input = {}) {
   const state = { clips: [], markers: [], selectedIds: [], media: [], ...input };
@@ -584,6 +621,7 @@ export function mmfilmCatalogue(input = {}) {
     lockedTrack,
     envelopeFor,
     soundClips,
+    unreadableAudioMessage,
     backupParam,
     ALL_TRACKS,
     AUDIO_TRACKS,
@@ -892,7 +930,7 @@ export async function runMMFilmTool(toolId, state, params, env) {
   const tool = catalogue.tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return await tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, catalogue.tools);
+    return withoutNoOp(state, await tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, catalogue.tools));
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

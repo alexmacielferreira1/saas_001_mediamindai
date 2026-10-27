@@ -78,7 +78,7 @@ describe('catálogos de etapa e de mídia', () => {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 86400000);
     const env = fakeEnv({}, { assets: vi.fn(async () => [{ title: 'Hoje', created_date: `${localDate(now)}T12:00:00` }, { title: 'Ontem', created_date: `${localDate(yesterday)}T12:00:00` }]) });
-    expect((await page('ingest', env).apply('midias-recentes', { days: '1' })).details).toEqual(['Hoje · mídia']);
+    expect((await page('ingest', env).apply('midias-recentes', { days: '1' })).details).toEqual(['Hoje · Sem tipo']);
     expect((await page('ingest', env).apply('midias-recentes', { days: '7' })).count).toBe(2);
   });
 

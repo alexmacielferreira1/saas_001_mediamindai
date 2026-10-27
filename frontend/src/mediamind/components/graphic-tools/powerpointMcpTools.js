@@ -4,6 +4,7 @@
 import { AlignHorizontalJustifyCenter, Bold, CaseUpper, CopyPlus, LayoutList, LayoutTemplate, List, ListChecks, MoveVertical, Palette, Presentation, Split, StickyNote, TextSearch, Trash2 } from "lucide-react";
 import { isHexColor, moveItem, sameTheme, slideAligns, slideLayouts, slideThemeOf, slideThemes } from "../../pages/OfficeCraft";
 import { createCaseTransformer } from "./wordMcpTools";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const POWERPOINT_TABS = [
   { id: "slides", label: "Slides" },
@@ -336,7 +337,7 @@ export function runPowerPointTool(toolId, state, params, env = { newId: randomId
   const tool = powerpointCatalogue(state).tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, tool);
+    return refuseIfUnchanged(tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, tool), state, ["slides", "index"], "Nada a aplicar: os slides já estão assim.");
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

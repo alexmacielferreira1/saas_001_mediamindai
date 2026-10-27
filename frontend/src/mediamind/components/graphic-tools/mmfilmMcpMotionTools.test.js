@@ -88,11 +88,10 @@ describe("movimentos rápidos", () => {
     expect(byId(center, "v").motion.y.at(-1)[1]).toBe(50);
   });
 
-  it("clipe sem duração não recebe movimento (count 0)", async () => {
+  it("clipe sem duração não recebe movimento e não vira sucesso falso", async () => {
     const original = clip("v", "V1", 0, 0);
     const result = await run("motion.escala", state([original], { selectedIds: ["v"] }));
-    expect(result).toMatchObject({ ok: true, count: 0, summary: "Pulso de escala aplicado em 0 clipe(s)" });
-    expect(byId(result, "v")).toBe(original);
+    expect(result).toEqual({ ok: false, summary: "Pulso de escala: nenhum dos clipes selecionados pode receber o movimento (sem duração ou já centralizado)." });
   });
 });
 

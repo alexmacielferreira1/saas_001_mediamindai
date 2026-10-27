@@ -19,6 +19,7 @@ import {
   Copy,
   LogIn,
 } from "lucide-react";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const MM3D_TABS = [
   { id: "objetos", label: "Objetos" },
@@ -496,7 +497,8 @@ export function runMM3DTool(toolId, state, params) {
   const tool = mm3dCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run({ newId: () => crypto.randomUUID(), keyframes: {}, time: 0, ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    const current = { newId: () => crypto.randomUUID(), keyframes: {}, time: 0, ...state };
+    return refuseIfUnchanged(tool.run(current, { ...defaultsOf(tool), ...(params || {}) }), current, ["objects", "selectedId", "keyframes", "world"], "Nada a aplicar: a cena já está assim.");
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

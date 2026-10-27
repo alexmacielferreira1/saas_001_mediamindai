@@ -129,6 +129,7 @@ function quickMoveTool(kind, label, icon, description, kit) {
         count += 1;
         return { ...clip, motion: mergeMotion(clip.motion, curves) };
       });
+      if (!count) throw new kit.ToolError(`${label}: nenhum dos clipes selecionados pode receber o movimento (sem duração ou já centralizado).`);
       return { ok: true, count, clips, summary: `${label} aplicado em ${count} clipe(s)` };
     },
   };

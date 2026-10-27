@@ -20,6 +20,7 @@ import {
   Type,
 } from "lucide-react";
 import { PAGE_H, PAGE_W, STYLES } from "./DesignCraftWorkspace";
+import { nothingChanged, sameData } from "./mcpToolGuards";
 
 export const MMDESIGN_TABS = [
   { id: "texto", label: "Texto" },
@@ -259,7 +260,10 @@ export function runMMDesignTool(toolId, state, params) {
   const tool = mmdesignCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run({ newId: () => `f-${crypto.randomUUID()}`, ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    const result = tool.run({ newId: () => `f-${crypto.randomUUID()}`, ...state }, { ...defaultsOf(tool), ...(params || {}) });
+    // Documento igual ao atual (já centralizado, já na frente, mesmo tamanho...) não é sucesso nem passo de desfazer.
+    if (result.ok && sameData(result.doc, state.doc)) return nothingChanged(tool.label);
+    return result;
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

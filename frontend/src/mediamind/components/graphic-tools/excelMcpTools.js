@@ -22,6 +22,7 @@ import {
   parseCellKey,
   parseCellRange,
 } from "../../pages/OfficeCraft";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const EXCEL_TABS = [
   { id: "dados", label: "Dados" },
@@ -225,7 +226,8 @@ function removeDuplicates(state, params) {
     const signature = [];
     for (let col = range.c1; col <= range.c2; col += 1) signature.push(textValue(value(col, row)));
     const id = JSON.stringify(signature);
-    if (!seen.has(id)) keep.push(row);
+    // Linha em branco não é registro: não conta como duplicada (nem some do intervalo).
+    if (!seen.has(id) || signature.every((text) => text === "")) keep.push(row);
     seen.add(id);
   }
   const removed = range.r2 - start + 1 - keep.length;
@@ -567,11 +569,14 @@ function removeCharts(state, params) {
 export function excelCatalogue(state = { book: null, selected: "A1" }) {
   const { sheet } = context(state);
   const used = usedRange(sheet);
-  const usedEnd = parseRange(used).c2;
+  // Só a extensão da área preenchida (sem o limite de células das ferramentas): uma planilha larga
+  // (ex.: A1 e Z5000) não pode derrubar o catálogo; o limite vale quando a ferramenta roda.
+  const usedArea = parseCellRange(used);
+  const usedEnd = usedArea.c2;
   const letters = Array.from({ length: Math.max(usedEnd, 5) + 1 }, (_, index) => indexToColumn(index));
   const range = { key: "range", label: "Intervalo", type: "text", default: used, rows: 1, help: "Ex.: A1:C10. Começa com a área preenchida da planilha ativa." };
   const header = { key: "header", label: "A primeira linha é cabeçalho", type: "toggle", default: true };
-  const column = { key: "column", label: "Coluna", type: "select", default: indexToColumn(parseRange(used).c1), options: letters.map((letter) => [letter, letter]) };
+  const column = { key: "column", label: "Coluna", type: "select", default: indexToColumn(usedArea.c1), options: letters.map((letter) => [letter, letter]) };
   const tools = [
     { id: "dados.ordenar", tab: "dados", label: "Ordenar", icon: ArrowDownUp, description: "Ordena as linhas do intervalo por uma coluna.", how: "Números vêm antes de textos e células vazias vão para o fim. As linhas inteiras se movem juntas, com a formatação.", params: [range, column, { key: "order", label: "Ordem", type: "chips", default: "asc", options: [["asc", "Crescente (A→Z)"], ["desc", "Decrescente (Z→A)"]] }, header], run: sortRange },
     {
@@ -688,7 +693,8 @@ export function runExcelTool(toolId, state, params, env = { newId: randomId }) {
   const tool = excelCatalogue(state).tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, tool);
+    const result = tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env, tool);
+    return refuseIfUnchanged(result, state, ["book"], "Nada a aplicar: a planilha já está assim.", (_key, book) => normalizeWorkbook(book));
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

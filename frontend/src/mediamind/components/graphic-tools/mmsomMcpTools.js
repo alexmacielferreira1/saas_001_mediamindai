@@ -3,6 +3,7 @@
 // o estado anterior para desfazer. Condições não atendidas viram { ok: false, summary }.
 import { AlignStartVertical, Gauge, Headphones, ListEnd, MicOff, MicVocal, MoveHorizontal, Scale, SlidersVertical, Speaker, Volume1, VolumeX, Waves } from "lucide-react";
 import { DEFAULT_CLIP_START, TIMELINE_SECONDS } from "../../pages/SoundCraft";
+import { refuseIfUnchanged } from "./mcpResultGuard";
 
 export const MMSOM_TABS = [
   { id: "mix", label: "Mix" },
@@ -218,7 +219,7 @@ export function runMMSomTool(toolId, state, params) {
   const tool = mmsomCatalogue(state).tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) });
+    return refuseIfUnchanged(tool.run(state, { ...defaultsOf(tool), ...(params || {}) }), state, ["tracks"], "Nada a aplicar: as faixas já estão assim.");
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

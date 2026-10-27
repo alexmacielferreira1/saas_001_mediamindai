@@ -20,6 +20,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { DEFAULT_ADJUST, autoAdjust, isNeutral } from "./lightcraftPipeline";
+import { nothingChanged, sameData } from "./mcpToolGuards";
 
 export const LIGHT_FOLDERS = ["2026", "Fronteiras da Saúde", "Eventos", "Institucional"];
 export const LIGHT_COLLECTIONS = ["Selecionadas", "Publicação", "Retratos", "SIMERS"];
@@ -365,10 +366,11 @@ export function runMMLightTool(toolId, state, params) {
   const tool = mmlightCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(
-      { photos: {}, albums: {}, baseAdjust: DEFAULT_ADJUST, image: null, pickedIds: [], newId: (type) => `${type}-${Date.now()}`, ...state },
-      { ...defaultsOf(tool), ...(params || {}) },
-    );
+    const current = { photos: {}, albums: {}, baseAdjust: DEFAULT_ADJUST, image: null, pickedIds: [], newId: (type) => `${type}-${Date.now()}`, ...state };
+    const result = tool.run(current, { ...defaultsOf(tool), ...(params || {}) });
+    // Ação que deixa fotos e álbuns iguais aos atuais não é sucesso (nem entra no desfazer do MCP).
+    if (result.ok && sameData(result.photos, current.photos) && sameData(result.albums, current.albums)) return nothingChanged(tool.label);
+    return result;
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

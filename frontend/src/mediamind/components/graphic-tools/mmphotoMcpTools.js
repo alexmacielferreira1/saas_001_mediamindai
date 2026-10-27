@@ -53,6 +53,7 @@ import {
   selectionBounds,
   sharpen,
 } from "./PhotoCraftWorkspace";
+import { nothingChanged, pixelsVisiblyChanged, sameData } from "./mcpToolGuards";
 
 export const MMPHOTO_TABS = [
   { id: "auto", label: "Automático" },
@@ -143,6 +144,8 @@ function clearAdjustments(state) {
 }
 
 // ---------- filtros de pixels ----------
+// A operação roda nos pixels reais da camada no momento de aplicar. Se nada visível mudar (camada vazia ou
+// transparente, ou já com esse resultado), o erro chega ao app (applyPixelOperation) e vira ok:false com o motivo.
 function pixelTool(label, describe, operation) {
   return (state, params) => {
     const layer = pixelLayer(state);
@@ -151,7 +154,14 @@ function pixelTool(label, describe, operation) {
       count: 1,
       label,
       summary: `${label} (${describe(params)}) em "${layer.name}" · ${areaText(state)}`,
-      pixels: (data, width, height) => operation(data, width, height, params, state),
+      pixels: (data, width, height) => {
+        const before = data.slice();
+        operation(data, width, height, params, state);
+        if (!pixelsVisiblyChanged(before, data)) {
+          throw new Error(`nada mudou nos pixels de "${layer.name}" (camada vazia ou transparente, ou já com esse resultado).`);
+        }
+        return data;
+      },
     };
   };
 }
@@ -494,6 +504,7 @@ function cropToSelection(state) {
   if (!bounds) throw new ToolError("Faça uma seleção para recortar o documento nela.");
   const rect = clampRect(bounds, state.docSize.w, state.docSize.h);
   if (rect.w < 2 || rect.h < 2) throw new ToolError("A seleção está fora do documento ou é pequena demais para recortar.");
+  if (rect.w === state.docSize.w && rect.h === state.docSize.h) throw new ToolError("A seleção cobre o documento inteiro: não há o que recortar.");
   return { ok: true, count: 1, summary: `Recortar na seleção: ${state.docSize.w} × ${state.docSize.h} → ${rect.w} × ${rect.h} px`, document: { kind: "crop", rect } };
 }
 
@@ -875,7 +886,12 @@ export function runMMPhotoTool(toolId, state, params, env = { newId: () => crypt
   const tool = mmphotoCatalogue().tools.find((item) => item.id === toolId);
   if (!tool) return { ok: false, summary: `Ferramenta desconhecida: ${toolId}` };
   try {
-    return tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env);
+    const result = tool.run(state, { ...defaultsOf(tool), ...(params || {}) }, env);
+    // Edição de camadas que termina igual ao estado atual não é sucesso (nem passo de desfazer).
+    if (result.ok && result.layers && sameData(result.layers, state.layers) && (result.activeLayer === undefined || result.activeLayer === state.activeLayer)) {
+      return nothingChanged(tool.label);
+    }
+    return result;
   } catch (error) {
     if (error instanceof ToolError) return { ok: false, summary: error.message };
     throw error;

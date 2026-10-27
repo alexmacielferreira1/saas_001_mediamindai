@@ -21,7 +21,10 @@ async function syncSources(state, params, env, kit) {
   if (clips.length < 2) throw new kit.ToolError("Coloque pelo menos duas fontes com som na timeline (câmeras e/ou áudio externo), em qualquer posição.");
   const buffers = await env.loadBuffers(clips);
   const sources = clips.filter((clip) => buffers.get(clip.url)).map((clip) => ({ id: clip.id, name: clip.name || clip.id, clip, buffer: buffers.get(clip.url) }));
-  if (sources.length < 2) throw new kit.ToolError("Não foi possível ler o som de pelo menos duas fontes.");
+  if (sources.length < 2) {
+    const reason = kit.unreadableAudioMessage(clips, buffers, "");
+    throw new kit.ToolError(`Não foi possível ler o som de pelo menos duas fontes.${reason ? ` ${reason}` : ""}`);
+  }
   return sources;
 }
 
@@ -77,6 +80,8 @@ async function multicam(state, params, env, kit) {
     const clips = kit.soundClips(state, [person.mic]).filter((clip) => !clip.sfx);
     if (!clips.length) throw new kit.ToolError(`Pessoa ${person.number}: não há som na trilha ${person.mic}.`);
     const buffers = await env.loadBuffers(clips);
+    if (!clips.some((clip) => buffers.get(clip.url)))
+      throw new kit.ToolError(`Pessoa ${person.number} (${person.mic}): ${kit.unreadableAudioMessage(clips, buffers)}`);
     envelopes.push({ personId: person.id, envelope: timelineEnvelope({ clips, buffers, from: 0, to: end, useVolume: false }) });
   }
   const activity = speakerActivity(envelopes, { sensitivity: params.sensitivity });

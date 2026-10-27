@@ -195,8 +195,14 @@ const readyBuffers = new Map();
 export function loadAudioBuffer(context, url, fetcher = globalThis.fetch, { maxBytes = MAX_DECODE_BYTES } = {}) {
   if (!bufferCache.has(url)) {
     const pending = (async () => {
-      const response = await fetcher(url, { credentials: "include" });
-      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { kind: "http" });
+      let response;
+      try {
+        response = await fetcher(url, { credentials: "include" });
+      } catch (error) {
+        // fetch rejeitado = sem resposta do servidor (rede, CORS, servidor fora do ar), não é problema de formato.
+        throw Object.assign(new Error(error?.message || "sem conexão com o servidor"), { kind: "network" });
+      }
+      if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`), { kind: "http", status: response.status });
       const size = Number(response.headers?.get?.("content-length"));
       if (Number.isFinite(size) && size > maxBytes) {
         response.body?.cancel?.()?.catch?.(() => {});
@@ -212,7 +218,11 @@ export function loadAudioBuffer(context, url, fetcher = globalThis.fetch, { maxB
         return buffer;
       },
       (error) => {
-        bufferFailures.set(url, { kind: error?.kind || "decode", message: error?.message || "falha ao decodificar" });
+        bufferFailures.set(url, {
+          kind: error?.kind || "decode",
+          message: error?.message || "falha ao decodificar",
+          ...(error?.status !== undefined ? { status: error.status } : {}),
+        });
         if (bufferCache.get(url) === pending) bufferCache.delete(url);
         return null;
       },
@@ -223,7 +233,7 @@ export function loadAudioBuffer(context, url, fetcher = globalThis.fetch, { maxB
 }
 /** Buffer já decodificado (síncrono) ou undefined. */
 export const readyAudioBuffer = (url) => readyBuffers.get(url);
-/** Motivo da última falha ao decodificar a URL: { kind: "http" | "large" | "decode", message }. */
+/** Motivo da última falha ao decodificar a URL: { kind: "http" | "network" | "large" | "decode", message, status? }. */
 export const audioBufferFailure = (url) => bufferFailures.get(url);
 export function clearAudioBufferCache() {
   bufferCache.clear();
