@@ -28,6 +28,7 @@ from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session, release_connection
 from app.media.storage import LocalMediaStorage
+from app.media.transcripts import TRANSCRIBABLE, transcribe_asset
 from app.models.identity import TenantRecord
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -138,6 +139,16 @@ def find_package(session: Session, tenant_id: UUID, package_id: UUID) -> TenantR
     return record
 
 
+def needs_transcription(data: dict[str, Any], item: dict[str, Any]) -> bool:
+    """Arquivo copiado neste pacote, de áudio/vídeo, com IA ligada e ainda sem transcrição."""
+    return (
+        data.get("ai_status") == "pending"
+        and item["status"] == "imported"
+        and item.get("asset_type") in TRANSCRIBABLE
+        and not item.get("transcription")
+    )
+
+
 def summarize(data: dict[str, Any]) -> dict[str, Any]:
     items = data["items"]
     done = sum(item["status"] in FINISHED for item in items)
@@ -146,6 +157,7 @@ def summarize(data: dict[str, Any]) -> dict[str, Any]:
     status = "processing" if pending else "failed" if failed else "completed"
     return {
         **data,
+        "transcription_pending": sum(needs_transcription(data, item) for item in items),
         "status": status,
         "progress": round(100 * (done + failed) / len(items)),
         "file_count": len(items),
@@ -210,6 +222,7 @@ def create_package(payload: PackageCreate, current: Authenticated, session: DbSe
                 "path": source.relative_to(base).as_posix(),
                 "name": source.name,
                 "size": source.stat().st_size,
+                "asset_type": ALLOWED_MEDIA[source.suffix.lower()][0],
                 "status": "pending",
             }
         )
@@ -350,4 +363,43 @@ async def import_next(package_id: UUID, current: Authenticated, session: DbSessi
             # Sem registro, a cópia ficaria órfã no destino.
             storage.delete_asset(tenant_id, asset_id)
         raise
+    return serialize_package(record)
+
+
+@router.post("/packages/{package_id}/transcribe-next")
+async def transcribe_next(package_id: UUID, current: Authenticated, session: DbSession):
+    """Transcreve (Whisper local) o próximo arquivo importado do pacote que ainda não tem texto."""
+    require_permission(session, current, "assets.write")
+    tenant_id = current.tenant.id
+    record = find_package(session, tenant_id, package_id)
+    index = next(
+        (
+            i
+            for i, item in enumerate(record.data["items"])
+            if needs_transcription(record.data, item)
+        ),
+        None,
+    )
+    if index is None:
+        return serialize_package(record)
+    asset_id = UUID(record.data["items"][index]["asset_id"])
+    asset = session.scalar(
+        select(TenantRecord).where(
+            TenantRecord.id == asset_id,
+            TenantRecord.tenant_id == tenant_id,
+            TenantRecord.entity_type == "Asset",
+        )
+    )
+    outcome: dict[str, Any] = {"transcription": "failed", "transcription_error": None}
+    if asset is None:
+        outcome["transcription_error"] = "A mídia foi removida do acervo."
+    else:
+        try:
+            result = await transcribe_asset(session, asset)
+            outcome = {"transcription": "done", "transcription_segments": result["segments"]}
+        except PublicError as error:
+            outcome["transcription_error"] = error.message
+    record = find_package(session, tenant_id, package_id)
+    update_item(record, index, **outcome)
+    session.commit()
     return serialize_package(record)

@@ -7,6 +7,12 @@ function mediaPrefix() {
   } catch { return '/media'; }
 }
 
+// Transcrição com o Whisper local do servidor: grava os trechos (TranscricaoSegmento) do asset.
+// Reaproveita a transcrição existente; `force` refaz.
+export function transcribeMediaAsset(assetId, { force = false } = {}) {
+  return request(`/media/assets/${encodeURIComponent(assetId)}/transcription`, { method: 'POST', body: { force } });
+}
+
 export async function listMediaAssets() {
   return (await request(`${mediaPrefix()}/assets`)).assets;
 }

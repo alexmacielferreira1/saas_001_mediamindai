@@ -23,6 +23,7 @@ from app.db.session import get_session, release_connection
 from app.media import clip_render
 from app.media.assets import serialize_asset
 from app.media.storage import LocalMediaStorage
+from app.media.transcripts import transcribe_asset
 from app.models.identity import TenantRecord
 from app.services.background_removal import remove_image_background
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
@@ -694,6 +695,24 @@ def iter_file_range(path: Path, start: int, end: int, chunk_size: int = 1024 * 1
                 break
             remaining -= len(chunk)
             yield chunk
+
+
+class TranscriptionRequest(BaseModel):
+    force: bool = False
+
+
+@router.post("/assets/{asset_id}/transcription")
+async def transcribe_media_asset(
+    asset_id: UUID,
+    current: Authenticated,
+    session: DbSession,
+    payload: TranscriptionRequest | None = None,
+):
+    """Transcreve a mídia com o Whisper local e grava os trechos (TranscricaoSegmento)."""
+    membership = require_membership(current)
+    require_permission(session, current, "assets.write")
+    record = find_asset(session, membership.tenant_id, asset_id)
+    return await transcribe_asset(session, record, force=bool(payload and payload.force))
 
 
 @router.get("/assets/{asset_id}/stream")

@@ -1,7 +1,9 @@
+import importlib.util
 import json
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -14,6 +16,18 @@ from app.security.outbound import OutboundUrlRejected, validate_outbound_url
 
 class TranscriptionUnavailable(RuntimeError):
     """Raised when this installation has no real speech-to-text provider."""
+
+
+def local_whisper_command() -> str | None:
+    """Whisper local (scripts/transcribe_local.py) quando o faster-whisper está instalado.
+
+    Instalação local/intranet: ``pip install -r requirements-ia-local.txt``. Sem o pacote
+    (ex.: Render), continua "nenhum transcritor configurado" em vez de falhar no meio.
+    """
+    script = ROOT / "scripts" / "transcribe_local.py"
+    if importlib.util.find_spec("faster_whisper") is None or not script.is_file():
+        return None
+    return f'"{Path(sys.executable).as_posix()}" "{script.as_posix()}" {{input}} {{output}}'
 
 
 class CommandTranscriptionAdapter:
@@ -30,7 +44,9 @@ class CommandTranscriptionAdapter:
     @classmethod
     def from_environment(cls) -> "CommandTranscriptionAdapter":
         return cls(
-            os.getenv("CLIPS_TRANSCRIBER_COMMAND") or get_settings().clips_transcriber_command
+            os.getenv("CLIPS_TRANSCRIBER_COMMAND")
+            or get_settings().clips_transcriber_command
+            or local_whisper_command()
         )
 
     def transcribe(self, source: Path) -> list[TranscriptSegment]:

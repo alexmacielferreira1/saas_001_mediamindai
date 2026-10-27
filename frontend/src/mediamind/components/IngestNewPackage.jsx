@@ -290,7 +290,7 @@ export default function IngestNewPackage() {
                 {folderPackage && (
                   <div className="mt-2" aria-live="polite">
                     <div className="mb-1 flex justify-between text-xs text-slate-400">
-                      <span>Copiando para a pasta de destino…</span>
+                      <span>{folderPackage.status === 'processing' ? 'Copiando para a pasta de destino…' : `Transcrevendo com o Whisper local… (${folderPackage.transcription_pending} restante(s))`}</span>
                       <span className="font-bold text-sky-300">{folderPackage.progress}%</span>
                     </div>
                     <div role="progressbar" aria-label="Progresso da pasta de referência" aria-valuemin={0} aria-valuemax={100} aria-valuenow={folderPackage.progress} className="h-1.5 overflow-hidden rounded bg-slate-800">

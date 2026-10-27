@@ -141,7 +141,9 @@ describe('nova ingestão funcional', () => {
     it('cria o pacote com os arquivos escolhidos, mostra o progresso e não usa o envio do navegador', async () => {
       createIngestPackage.mockResolvedValue({ id: 'pkg-1', status: 'processing', progress: 0 });
       let finish;
+      let update;
       runIngestPackage.mockImplementation((_pkg, { onUpdate }) => {
+        update = onUpdate;
         onUpdate({ id: 'pkg-1', status: 'processing', progress: 50 });
         return new Promise((resolve) => { finish = resolve; });
       });
@@ -151,6 +153,9 @@ describe('nova ingestão funcional', () => {
         name: expect.stringMatching(/^Pacote /), folder: null, program_name: null, ai_enabled: true, files: ['Pauta/entrevista.mp4'],
       }));
       expect(await screen.findByRole('progressbar', { name: 'Progresso da pasta de referência' })).toHaveAttribute('aria-valuenow', '50');
+      expect(screen.getByText('Copiando para a pasta de destino…')).toBeInTheDocument();
+      act(() => update({ id: 'pkg-1', status: 'completed', progress: 100, transcription_pending: 1 }));
+      expect(screen.getByText('Transcrevendo com o Whisper local… (1 restante(s))')).toBeInTheDocument();
       await act(async () => finish({ id: 'pkg-1', status: 'completed', progress: 100 }));
       expect(uploadMediaAssetWithProgress).not.toHaveBeenCalled();
       expect(screen.queryByText(/não foram importados/)).toBeNull();

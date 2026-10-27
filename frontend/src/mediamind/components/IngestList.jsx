@@ -18,6 +18,16 @@ function packageDate(pkg) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+// Transcrição (Whisper local) dos áudios/vídeos do pacote, quando a IA está ligada.
+function transcriptionText(pkg) {
+  const items = (pkg.items || []).filter((item) => item.transcription);
+  const failed = items.filter((item) => item.transcription === 'failed');
+  if (pkg.transcription_pending > 0) return { tone: 'text-violet-300', text: `Transcrição pendente: ${pkg.transcription_pending} arquivo(s)` };
+  if (failed.length) return { tone: 'text-amber-300', text: `Transcrição falhou em ${failed.length}: ${failed[0].transcription_error || 'erro desconhecido'}` };
+  if (items.length) return { tone: 'text-emerald-300', text: `Transcrito: ${items.length} arquivo(s)` };
+  return null;
+}
+
 function failureText(pkg) {
   const failed = (pkg.items || []).filter((item) => item.status === 'failed');
   if (!failed.length) return 'Falha no processamento';
@@ -78,7 +88,7 @@ export default function IngestList({ view, onNew, packages = [], error = '', run
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    {onResume && view !== 'concluidas' && (
+                    {onResume && (view !== 'concluidas' || p.transcription_pending > 0) && (
                       <button type="button" disabled={Boolean(runningId)} onClick={() => onResume(p, { retry: view === 'falhas' })} className="flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-50">
                         {runningId === p.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} {view === 'falhas' ? 'Reprocessar' : 'Continuar'}
                       </button>
@@ -99,6 +109,9 @@ export default function IngestList({ view, onNew, packages = [], error = '', run
                       <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-violet-500" style={{ width: `${p.progress}%` }} />
                     </div>
                   </div>
+                )}
+                {transcriptionText(p) && (
+                  <p className={`mt-2 text-xs ${transcriptionText(p).tone}`}>{transcriptionText(p).text}</p>
                 )}
                 {view === 'falhas' && (
                   <div className="mt-2 flex items-center gap-1.5 rounded-md bg-rose-950/30 px-2 py-1 text-xs text-rose-300">
