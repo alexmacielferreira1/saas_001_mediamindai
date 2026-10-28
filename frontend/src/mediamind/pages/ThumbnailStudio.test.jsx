@@ -79,6 +79,7 @@ describe('Criar Thumbs', () => {
   });
 
   it('exports Dark thumbnails with a selected network preset or custom dimensions', async () => {
+    exportThumbnailElement.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
     renderDarkPage();
     await screen.findByLabelText('Formato de saída');
     fireEvent.change(screen.getByLabelText('Formato de saída'), { target: { value: 'instagram-feed' } });
@@ -95,6 +96,7 @@ describe('Criar Thumbs', () => {
     await waitFor(() => expect(exportThumbnailElement).toHaveBeenCalledWith(
       expect.anything(), expect.objectContaining({ width: 1000, height: 1000, filename: expect.stringMatching(/1000x1000\.png$/) }),
     ));
+    expect(await screen.findByText(/PNG exportado em 1000 × 1000 px\. · salvo no Acervo/)).toBeInTheDocument();
   });
 
   it('opens on Padrão SIMERS and exposes all functional modes', async () => {
@@ -125,6 +127,28 @@ describe('Criar Thumbs', () => {
     expect(projects[0].titulo).toBe('A trajetória do Preto na medicina');
     expect(screen.getByText('Dados carregados do MediaMind')).toBeInTheDocument();
     expect(screen.getByText('Foto do episódio')).toBeInTheDocument();
+  });
+
+  it('keeps exported PNGs in the library and destination folder, and says when it could not', async () => {
+    const { uploadMediaAsset } = await import('@/api/media');
+    exportThumbnailElement.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    uploadMediaAsset.mockClear();
+    uploadMediaAsset
+      .mockResolvedValueOnce({ id: 'thumb-h', export_path: 'empresa/2026-10-28/thumb-horizontal.png' })
+      .mockRejectedValueOnce(new Error('Sem espaço'))
+      .mockResolvedValueOnce({ id: 'thumb-one' });
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Projeto')).toHaveValue('54'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Baixar (2)' }));
+    expect(await screen.findByText(/horizontal · salvo no Acervo e na pasta de destino \(empresa\/2026-10-28\/thumb-horizontal\.png\); vertical · baixado, mas não foi salvo no Acervo: Sem espaço/)).toBeInTheDocument();
+    const [file, meta] = uploadMediaAsset.mock.calls[0];
+    expect(file).toMatchObject({ name: expect.stringMatching(/-horizontal\.png$/), type: 'image/png' });
+    expect(meta).toEqual({ origin: 'export' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Baixar PNG' })[0]);
+    expect(await screen.findByText(/PNG exportado: thumb-.*-horizontal\.png · salvo no Acervo$/)).toBeInTheDocument();
+    exportThumbnailElement.mockResolvedValue(undefined);
   });
 
   it('opens the pattern guide and exports both selected formats', async () => {
