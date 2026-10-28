@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     csrf_trusted_origins: str = ""
     # Local development only: let server-side calls reach private/loopback hosts.
     outbound_allow_private_networks: bool = False
+    # Servidores internos liberados pelo administrador do servidor (ex.: Ollama), separados por
+    # vírgula no formato host:porta ("127.0.0.1:11434"). Vale também em produção (intranet da
+    # emissora): só esses endereços exatos, nunca a rede interna inteira.
+    outbound_allowed_hosts: str = ""
     hub_product_id: str = "mediamind-ai"
     media_root: Path = ROOT / ".runtime" / "media"
     # Pasta de referência do Ingest (entrada). Cada empresa usa a subpasta com o próprio slug;
