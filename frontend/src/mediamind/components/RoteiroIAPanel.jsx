@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Sparkles, Wand2, Loader2, ChevronDown, ChevronUp, Plus, Scissors } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { generateScript } from '../../api/aiTools';
 import AudioPromptInput from './corp/roles/AudioPromptInput';
 
 // Painel de IA do Modo Roteiro: gera blocos de roteiro e ajustes de edição por
-// prompt de texto ou áudio (transcrito no backend). O usuário revisa e aplica
+// prompt de texto ou áudio (transcrito no servidor pelo Whisper local; texto pela IA
+// escolhida para Roteiro em Configuração de IA). O usuário revisa e aplica
 // ao roteiro ativo (onApply acrescenta blocos de texto).
 export default function RoteiroIAPanel({ onApply, context }) {
   const [open, setOpen] = useState(false);
@@ -20,10 +21,7 @@ export default function RoteiroIAPanel({ onApply, context }) {
     if (!prompt && !audioUrl) { setError('Escreva um prompt ou grave/envie um áudio.'); return; }
     setLoading(true);
     try {
-      const res = await base44.functions.invoke('gerar_roteiro_ia', { prompt, audioUrl, ...(context || {}) });
-      const data = res?.data || res;
-      if (data?.error) { setError(data.error); return; }
-      setResult(data);
+      setResult(await generateScript({ prompt, audioUrl, context: context || {} }));
     } catch (e) {
       setError('Falha na IA: ' + (e?.message || e));
     } finally {

@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { Mic, Square, Send, Check, X, Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { resolveTasks } from '../../../api/aiTools';
 
 // Modo Prompt do Corp: grava áudio (transcrito via Whisper) ou lê um comando
-// digitado, chama a backend function resolve_pendencias e apresenta as
+// digitado, pede à IA de Automação (POST /ai/tools/tasks) e apresenta as
 // sugestões da IA para aprovação. Reutilizado pelo PendenciasHub e pelo
 // launcher flutuante (visível em toda tela do Corp).
 export default function CorpPromptPanel({ segment, items, onApply }) {
@@ -43,10 +44,9 @@ export default function CorpPromptPanel({ segment, items, onApply }) {
         audio_url = up.file_url;
       }
       if (!prompt && !audio_url) { setError('Digite um prompt ou grave um áudio.'); setLoading(false); return; }
-      const res = await base44.functions.invoke('resolve_pendencias', { segment, prompt, audio_url, pendencias: items });
-      const data = res.data || {};
-      if (data.error) { setError(data.error); }
-      else { setSugestoes(data.sugestoes || []); if (data.sugestoes?.length === 0) setError('A IA não sugeriu ações para o pedido.'); }
+      const data = await resolveTasks({ segment, prompt, audioUrl: audio_url, pendencias: items });
+      setSugestoes(data.sugestoes || []);
+      if (!data.sugestoes?.length) setError('A IA não sugeriu ações para o pedido.');
     } catch (e) {
       setError(e.message || 'Falha ao chamar a IA.');
     }

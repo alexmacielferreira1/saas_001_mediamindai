@@ -45,6 +45,34 @@ def asset_segments(session: Session, tenant_id: UUID, asset_id: UUID) -> list[Te
     )
 
 
+def saved_segments(session: Session, tenant_id: UUID, asset_id: UUID) -> list | None:
+    """Transcrição salva do Asset no formato da análise de cortes, ou ``None``.
+
+    Só vale a gravada com palavras e tempos (Whisper local): trechos digitados ou antigos,
+    sem marcação por palavra, não servem de evidência para os cortes.
+    """
+    from app.clips.contracts import TranscriptSegment, TranscriptWord
+
+    rows = sorted(
+        (row.data for row in asset_segments(session, tenant_id, asset_id)),
+        key=lambda data: data.get("start_ms") or 0,
+    )
+    if not rows or not all(data.get("palavras") for data in rows):
+        return None
+    try:
+        return [
+            TranscriptSegment(
+                start=data["start_ms"] / 1000,
+                end=data["end_ms"] / 1000,
+                text=data["texto"],
+                words=[TranscriptWord(**word) for word in data["palavras"]],
+            )
+            for data in rows
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def is_running(data: dict[str, Any]) -> bool:
     if data.get("transcription_status") != "processing":
         return False

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useWorkDraftState } from '../lib/workProtection';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Send, Loader2, ArrowRight, Bot, User as UserIcon } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { askAssistant } from '../../api/aiTools';
 import { useAuth } from '../auth';
 import { filterTabsForUser } from '../lib/permissions';
 import { CORP_TABS } from '../lib/corpTabs';
@@ -62,17 +62,14 @@ export default function AssistenteIA() {
     setInput('');
     setLoading(true);
     try {
-      const res = await base44.functions.invoke('assistente_ia', {
+      const data = await askAssistant({
         message: content,
         audioUrl,
         history: hist.map((h) => ({ role: h.role, content: h.content })),
-        role: user?.role,
         roleLabel: roleLabels[user?.role] || user?.role,
         userName: user?.name,
         destinations,
       });
-      const data = res?.data || res;
-      if (data?.error) throw new Error(data.error);
       setMessages((m) => [...m.slice(0, -1), {
         role: 'assistant',
         content: data.reply || 'Não consegui processar agora.',

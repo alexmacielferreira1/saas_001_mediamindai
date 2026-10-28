@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Wand2, Loader2, Check } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { suggestAccess } from '../../../../api/aiTools';
 import { ROLE_CATALOG, setUserAccess } from '../../../lib/roleCatalog';
 import { CORP_SCREENS, SCREEN_NAME } from '../../../lib/corpTabs';
 import { MOCK_USERS } from '../../../data';
@@ -27,16 +27,13 @@ export default function AcessoIAPanel() {
     if (!prompt && !audioUrl) { setError('Escreva um prompt ou grave/envie um áudio.'); return; }
     setLoading(true);
     try {
-      const res = await base44.functions.invoke('configurar_acesso_ia', {
-        userId,
+      const data = await suggestAccess({
         userName: target?.name || '',
         prompt,
         audioUrl,
         screens: CORP_SCREENS,
         cargos: ROLE_CATALOG.map((c) => ({ id: c.id, name: c.name })),
       });
-      const data = res?.data || res;
-      if (data?.error) { setError(data.error); return; }
       const screenIds = new Set(CORP_SCREENS.map((s) => s.id));
       const cargoIds = new Set(ROLE_CATALOG.map((c) => c.id));
       const role = cargoIds.has(data.role) ? data.role : '';

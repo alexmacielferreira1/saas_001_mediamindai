@@ -174,7 +174,7 @@ export default function ClipCandidatesPanel({ clip, onChange, seekTo, onAvancar,
         interval: { start_ms: clip.in_ms, end_ms: clip.out_ms },
         empresaId: eid,
       });
-      setCandidates(cs);
+      setCandidates(cs.map(fromClipsAnalysis));
       setStep('');
     } catch (e) {
       setError(`Serviço de IA indisponível: nenhum candidato foi gerado.${e?.message ? ` (${e.message})` : ''}`);
