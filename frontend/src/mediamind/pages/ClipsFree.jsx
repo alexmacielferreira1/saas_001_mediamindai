@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard, Clock3, Download, Film, Link2, Play, Plus, Scissors, Sparkles, Upload, WandSparkles, X } from "lucide-react";
 import { exportMediaClip, uploadMediaAsset } from "../../api/media";
+import { savedNote } from "../lib/exportSaved";
 import { startClipAnalysis } from "../../api/clips";
 import { mcpErrorMessage } from "../lib/mcpErrors";
 import { downloadClipFcpxml } from "../lib/clipsfreeExport";
@@ -320,7 +321,7 @@ export default function ClipsFree({ darkChannelId = "", darkScriptId = "", works
       try {
         const result = await exportMediaClip({ asset_id: assetId, source_in: item.start, duration: item.end - item.start, properties: renderOptions ? { clip_render: renderOptions } : {} });
         const url = URL.createObjectURL(result.blob);
-        setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: "Pronto", url, filename: result.filename } : entry) }));
+        setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: `Pronto${savedNote(result)}`, url, filename: result.filename } : entry) }));
       } catch (error) {
         setBatch((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, status: `Falhou: ${error.message || "exportação"}` } : entry) }));
       }

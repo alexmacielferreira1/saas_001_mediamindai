@@ -8,6 +8,7 @@ import {
   Layers, PictureInPicture2, Blend,
 } from 'lucide-react';
 import { exportMediaClip, exportTimeline, listMediaAssets, mediaStreamUrl, uploadMediaAsset } from '../../api/media';
+import { savedNote } from '../lib/exportSaved';
 import { useTimeline2Project } from '../hooks/useTimeline2Project';
 import {
   addMarker, addMediaClip, addPropertyKeyframe, addTextClip, addTrack, createTimeline2Document, deleteClips, duplicateClip, removePropertyKeyframe, removeTrack, rippleDelete,
@@ -294,11 +295,12 @@ export default function Timeline2({ embedded = false, projectAssets = [], editin
     const withKeyframe = keyframeAtPlayhead(field) ? current : addPropertyKeyframe(current, selected.id, field, { value: selectedProperties[field] });
     return updateKeyframeCurve(withKeyframe, selected.id, field, current.playhead, { easing });
   });
-  const downloadExport = ({ blob, filename }) => {
+  const downloadExport = (result) => {
+    const { blob, filename } = result;
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement('a');
     anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
-    setNotice(`Exportação concluída: ${filename}`);
+    setNotice(`Exportação concluída: ${filename}${savedNote(result)}`);
   };
   const exportSelected = async () => {
     if (!selected?.assetId || selected.kind !== 'video') return;

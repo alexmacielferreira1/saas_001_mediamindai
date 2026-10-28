@@ -93,5 +93,21 @@ describe('media API', () => {
 
     expect(result.filename).toBe('timeline.mp4');
     expect(fetch).toHaveBeenCalledWith('/api/v1/media/exports/timeline', expect.objectContaining({ body: JSON.stringify(project) }));
+    expect(result).toMatchObject({ assetId: null, exportPath: null });
+  });
+
+  it('informa onde o servidor salvou a exportação (Acervo e pasta de destino)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('video', {
+      status: 200,
+      headers: {
+        'Content-Type': 'video/mp4',
+        'X-MediaMind-Asset-Id': 'salvo-1',
+        'X-MediaMind-Export-Path': encodeURIComponent('empresa/2026-10-28/Praça-editado.mp4'),
+      },
+    })));
+
+    const result = await exportMediaClip({ asset_id: 'asset-1', source_in: 0, duration: 1, properties: {} });
+
+    expect(result).toMatchObject({ filename: 'mediamind-editado.mp4', assetId: 'salvo-1', exportPath: 'empresa/2026-10-28/Praça-editado.mp4' });
   });
 });

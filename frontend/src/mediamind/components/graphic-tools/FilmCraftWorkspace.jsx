@@ -3,7 +3,7 @@ import { clearMCPContext, publishMCPContext, timelineContext } from "../../lib/m
 import { registerMCPActions } from "../../lib/mcpActions";
 import { ensureTranscription } from "../../lib/clipEngineService";
 import { leftPart, moveClips, overwriteItems, placeClip, rightPart } from "../../lib/mmfilmEdits";
-import { resolveMediaUrl } from "../../../api/media";
+import { resolveMediaUrl, uploadMediaAsset } from "../../../api/media";
 import { assetDragState, trackIndexAt, useTimelineDrag } from "./filmcraftTimelineDrag";
 import { animatedClip } from "../../lib/mmfilmMotion";
 import { captionStyleCss } from "../../lib/mmfilmCaptions";
@@ -4799,10 +4799,18 @@ function ExportWorkspace({
       });
       const name = exportFileName(job.name);
       downloadBlob(blob, name);
+      // A peça pronta também vai para o Acervo e para a pasta de destino do servidor.
+      let saved = "";
+      try {
+        const asset = await uploadMediaAsset(new File([blob], name, { type: "video/webm" }), { origin: "export" });
+        saved = asset?.export_path ? ` e salvo no Acervo e na pasta de destino (${asset.export_path})` : " e salvo no Acervo";
+      } catch (error) {
+        warnings.push(`baixado, mas não foi salvo no Acervo: ${error?.message || "erro desconhecido"}`);
+      }
       setJob(job.id, { status: "Concluído", warning: warnings.join(" · ") });
       if (warnings.length) notify(`Exportação concluída com aviso: ${warnings.join(" · ")}`, 9000);
       else notify(
-        `Exportação concluída: ${name} (WebM, ${(blob.size / 1_000_000).toFixed(1).replace(".", ",")} MB) enviado para os downloads do navegador`,
+        `Exportação concluída: ${name} (WebM, ${(blob.size / 1_000_000).toFixed(1).replace(".", ",")} MB) enviado para os downloads do navegador${saved}`,
         6000,
       );
       return true;

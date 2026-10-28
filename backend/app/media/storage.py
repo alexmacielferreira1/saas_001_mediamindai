@@ -82,6 +82,28 @@ class LocalMediaStorage:
             source, destination_dir / f"source{source.suffix.lower()}", mime_type
         )
 
+    def adopt_original(
+        self, tenant_id: UUID, asset_id: UUID, source: Path, *, mime_type: str
+    ) -> StoredMedia:
+        """Move um arquivo gerado no próprio armazenamento (ex.: exportação) para original do asset.
+
+        Mover (e não copiar) evita dobrar o espaço de vídeos grandes; a origem deixa de existir.
+        """
+        destination_dir = self.asset_root(tenant_id, asset_id) / "original"
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / f"source{source.suffix.lower()}"
+        digest = sha256()
+        with source.open("rb") as input_file:
+            while chunk := input_file.read(1024 * 1024):
+                digest.update(chunk)
+        source.replace(destination)
+        return StoredMedia(
+            relative_key=destination.relative_to(self.root).as_posix(),
+            size=destination.stat().st_size,
+            sha256=digest.hexdigest(),
+            mime_type=mime_type,
+        )
+
     def _copy_file(self, source: Path, destination: Path, mime_type: str) -> StoredMedia:
         destination_dir = destination.parent
         destination_dir.mkdir(parents=True, exist_ok=True)
