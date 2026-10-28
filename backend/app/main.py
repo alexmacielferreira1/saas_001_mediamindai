@@ -1,11 +1,13 @@
 import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from starlette.exceptions import HTTPException
 
 from app.api.v1 import router as api_v1_router
@@ -145,7 +147,34 @@ def create_app() -> FastAPI:
             )
         return {"status": "ready", "service": settings.app_name, "database": "ok"}
 
+    if settings.frontend_dist is not None:
+        serve_frontend(app, settings.frontend_dist)
     return app
+
+
+def serve_frontend(app: FastAPI, dist: Path) -> None:
+    """Serve a tela compilada (Vite build) na mesma origem da API.
+
+    Arquivo existente em ``dist`` é entregue como está (``assets/`` com cache longo, pois o
+    nome muda a cada build); qualquer outra rota da tela recebe ``index.html`` (rotas do React
+    Router). Caminhos de API desconhecidos continuam respondendo 404 em JSON.
+    """
+    root = dist.resolve()
+    index = root / "index.html"
+    if not index.is_file():
+        raise RuntimeError(f"FRONTEND_DIST não tem index.html: {root} (rode npm run build)")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str):
+        if path == "api" or path.startswith("api/"):
+            raise PublicError(404, "NOT_FOUND", "Recurso não encontrado.")
+        candidate = (root / path).resolve()
+        if path and root in candidate.parents and candidate.is_file():
+            cache = (
+                "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+            )
+            return FileResponse(candidate, headers={"Cache-Control": cache})
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 app = create_app()
