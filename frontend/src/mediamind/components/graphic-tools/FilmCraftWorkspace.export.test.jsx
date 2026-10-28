@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import FilmCraftWorkspace from "./FilmCraftWorkspace";
 import * as render$ from "./filmcraftRender";
+import * as media$ from "../../../api/media";
 
 // jsdom não grava canvas: substituímos só o suporte e o gravador; o restante (intervalo, nomes, camadas) é real.
 vi.mock("./filmcraftRender", async (importOriginal) => {
@@ -14,11 +15,16 @@ vi.mock("./filmcraftRender", async (importOriginal) => {
   };
 });
 
+// A peça exportada também é enviada ao Acervo (origin "export").
+vi.mock("../../../api/media", async (importOriginal) => ({ ...(await importOriginal()), uploadMediaAsset: vi.fn() }));
+
 beforeAll(() => {
   URL.createObjectURL = vi.fn(() => "blob:preview");
   URL.revokeObjectURL = vi.fn();
 });
 beforeEach(() => {
+  vi.mocked(media$.uploadMediaAsset).mockReset();
+  vi.mocked(media$.uploadMediaAsset).mockResolvedValue({ id: "salvo-1" });
   localStorage.clear();
   vi.mocked(render$.renderTimelineToWebm).mockReset();
   vi.mocked(render$.downloadBlob).mockReset();
@@ -72,6 +78,34 @@ describe("MMFilm — exportação WebM", () => {
     finish();
     await screen.findByText("Concluído");
     expect(render$.downloadBlob).toHaveBeenCalledWith(blob, "Entrega final.webm");
+    const [file, meta] = vi.mocked(media$.uploadMediaAsset).mock.calls[0];
+    expect(file).toMatchObject({ name: "Entrega final.webm", type: "video/webm" });
+    expect(meta).toEqual({ origin: "export" });
+  });
+
+  it("salva no Acervo e na pasta de destino, e avisa se o Acervo recusar", async () => {
+    const blob = new Blob(["webm"], { type: "video/webm" });
+    vi.mocked(render$.renderTimelineToWebm).mockResolvedValue(blob);
+    vi.mocked(media$.uploadMediaAsset)
+      .mockResolvedValueOnce({ id: "salvo-1", export_path: "empresa/2026-10-28/Seq.webm" })
+      .mockRejectedValueOnce(new Error("Sem espaço no servidor"));
+    setup();
+    fireEvent.click(exportButton());
+    expect(await screen.findByText(/salvo no Acervo e na pasta de destino \(empresa\/2026-10-28\/Seq\.webm\)/)).toBeInTheDocument();
+
+    fireEvent.click(exportButton());
+    expect((await screen.findAllByText(/baixado, mas não foi salvo no Acervo: Sem espaço no servidor/)).length).toBeGreaterThan(0);
+    expect(render$.downloadBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("sem pasta de destino configurada diz só que ficou no Acervo", async () => {
+    vi.mocked(render$.renderTimelineToWebm).mockResolvedValue(new Blob(["webm"], { type: "video/webm" }));
+    vi.mocked(media$.uploadMediaAsset).mockRejectedValueOnce({}).mockResolvedValueOnce({ id: "salvo-2" });
+    setup();
+    fireEvent.click(exportButton());
+    expect((await screen.findAllByText(/não foi salvo no Acervo: erro desconhecido/)).length).toBeGreaterThan(0);
+    fireEvent.click(exportButton());
+    expect(await screen.findByText(/downloads do navegador e salvo no Acervo$/)).toBeInTheDocument();
   });
 
   it("exportação que perdeu o som avisa na fila (nunca sai muda em silêncio)", async () => {

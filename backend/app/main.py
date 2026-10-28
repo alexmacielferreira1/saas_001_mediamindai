@@ -42,6 +42,8 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # A tela mostra onde a exportação foi salva (Acervo e pasta de destino).
+        expose_headers=["Content-Disposition", "X-MediaMind-Asset-Id", "X-MediaMind-Export-Path"],
     )
 
     app.include_router(api_v1_router)

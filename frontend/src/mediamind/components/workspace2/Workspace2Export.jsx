@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Archive, Captions, CheckCircle2, Clock3, Download, FileCode2, Layers3, Play, Save, Sparkles, Video } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { exportMediaClip, exportTimeline } from '../../../api/media';
+import { savedNote } from '../../lib/exportSaved';
 import { gerarXmlPremiere } from '../../lib/premiereXml';
 import FinalTimelinePlayer from './FinalTimelinePlayer';
 
@@ -130,7 +131,7 @@ export default function Workspace2Export({ project, timeline, onSave, onNotice }
         : await exportTimeline(timelineRenderPayload(project, timeline));
       const url = URL.createObjectURL(result.blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click(); URL.revokeObjectURL(url);
       const next = queue.map((item) => item.id === job.id ? { ...item, status: 'completed', completedAt: new Date().toISOString(), filename: result.filename } : item);
-      persistQueue(next); onNotice(`Processamento concluído: ${result.filename}`);
+      persistQueue(next); onNotice(`Processamento concluído: ${result.filename}${savedNote(result)}`);
     } catch (error) {
       persistQueue(queue.map((item) => item.id === job.id ? { ...item, status: 'failed', error: error?.message } : item));
       onNotice(error?.message || 'O item da fila falhou e pode ser tentado novamente.');
@@ -143,8 +144,8 @@ export default function Workspace2Export({ project, timeline, onSave, onNotice }
     try {
       const result = await exportTimeline(timelineRenderPayload(project, timeline));
       const url = URL.createObjectURL(result.blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = result.filename; anchor.click(); URL.revokeObjectURL(url);
-      setRenderStatus({ tone: 'success', text: `Render concluído: ${result.filename}` });
-      onNotice(`Render concluído: ${result.filename}`);
+      setRenderStatus({ tone: 'success', text: `Render concluído: ${result.filename}${savedNote(result)}` });
+      onNotice(`Render concluído: ${result.filename}${savedNote(result)}`);
     } catch (error) {
       const message = error?.message || 'Não foi possível renderizar a sequência.';
       setRenderStatus({ tone: 'error', text: message });

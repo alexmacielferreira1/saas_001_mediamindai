@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, CheckCircle2, Send, FileVideo, FileText, History, Loader2, Check, Download } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { exportMediaClip } from '../../../../api/media';
+import { savedNote } from '../../../lib/exportSaved';
 import { useAuth } from '../../../auth';
 import { useEmpresa } from '../../../lib/empresaContext';
 import { baixarXmlPremiereClip, baixarSrtClip, baixarTexto } from '../../../lib/premiereXml';
@@ -48,7 +49,7 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
       if (!assetId) throw new Error('Não foi possível enviar o vídeo de origem.');
       const renderOptions = buildClipRenderOptions(clip, { aspect, burnCaptions, burnTitles, applyCuts });
       const result = await exportMediaClip({ asset_id: assetId, source_in: clip.in_ms / 1000, duration: (clip.out_ms - clip.in_ms) / 1000, properties: renderOptions ? { clip_render: renderOptions } : {} });
-      setDownload({ url: URL.createObjectURL(result.blob), filename: result.filename, clipId: clip.id, inMs: clip.in_ms, outMs: clip.out_ms, optionsKey: JSON.stringify(renderOptions) });
+      setDownload({ url: URL.createObjectURL(result.blob), filename: result.filename, saved: savedNote(result).replace(/^ · /, ''), clipId: clip.id, inMs: clip.in_ms, outMs: clip.out_ms, optionsKey: JSON.stringify(renderOptions) });
     } catch (error) {
       setExportError(error.message || 'Não foi possível gerar o MP4.');
     } finally { setExporting(false); }
@@ -109,6 +110,7 @@ export default function ClipReimportPanel({ clip, onChange, onProsseguir, onEnsu
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" onClick={exportMp4} disabled={(!clip.source_asset_id && !onEnsureAsset) || clip.out_ms <= clip.in_ms || exporting} className="flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"><Download size={12} /> {exporting ? 'Gerando MP4...' : 'Gerar MP4 do trecho'}</button>
           {download && download.clipId === clip.id && download.inMs === clip.in_ms && download.outMs === clip.out_ms && download.optionsKey === currentOptionsKey && <a href={download.url} download={download.filename} className="flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-[11px] font-bold text-emerald-300"><Download size={12} /> Baixar MP4 gerado</a>}
+          {download && download.clipId === clip.id && download.saved && <span className="text-[10px] text-emerald-300">{download.saved}</span>}
           {clip.source_url && <a href={clip.source_url} download className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[11px] text-slate-300"><Download size={12} /> Baixar vídeo original</a>}
           <button
             onClick={() => baixarXmlPremiereClip(clip, { legendas: clip.legendas || [], cgs: clip.cgs || [] })}

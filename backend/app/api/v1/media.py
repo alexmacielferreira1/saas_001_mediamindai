@@ -22,6 +22,7 @@ from app.core.errors import PublicError
 from app.db.session import get_session, release_connection
 from app.media import clip_render
 from app.media.assets import serialize_asset
+from app.media.exports import export_headers, record_export_copy, save_export
 from app.media.storage import LocalMediaStorage
 from app.media.transcripts import transcribe_asset
 from app.models.identity import TenantRecord
@@ -613,6 +614,13 @@ async def upload_asset(
             **media_metadata,
         },
     )
+    if origin == "export":
+        # Peça pronta renderizada no navegador (MMFilm): também vai para a pasta de destino.
+        record_export_copy(
+            record,
+            current.tenant.slug,
+            storage.resolve(stored.relative_key, tenant_id=membership.tenant_id),
+        )
     session.add(record)
     try:
         session.commit()
@@ -772,10 +780,18 @@ def export_clip(payload: ClipExportRequest, current: Authenticated, session: DbS
         duration=payload.duration,
         properties=payload.properties,
     )
-    return FileResponse(
+    filename = f"{Path(record.data['filename']).stem}-editado.mp4"
+    saved, path = save_export(
+        session,
+        current,
         destination,
-        media_type="video/mp4",
-        filename=f"{Path(record.data['filename']).stem}-editado.mp4",
+        filename=filename,
+        kind="clip",
+        source_asset_ids=[str(payload.asset_id)],
+        probe=probe_media,
+    )
+    return FileResponse(
+        path, media_type="video/mp4", filename=filename, headers=export_headers(saved)
     )
 
 
@@ -816,8 +832,16 @@ def export_timeline(payload: TimelineExportRequest, current: Authenticated, sess
     release_connection(session)
     render_timeline(segments, destination)
     safe_name = re.sub(r"[^\w.-]+", "-", payload.name, flags=re.UNICODE).strip("-.")
-    return FileResponse(
+    filename = f"{safe_name or 'MediaMind'}-editado.mp4"
+    saved, path = save_export(
+        session,
+        current,
         destination,
-        media_type="video/mp4",
-        filename=f"{safe_name or 'MediaMind'}-editado.mp4",
+        filename=filename,
+        kind="timeline",
+        source_asset_ids=list(dict.fromkeys(str(clip.get("assetId")) for clip in clips)),
+        probe=probe_media,
+    )
+    return FileResponse(
+        path, media_type="video/mp4", filename=filename, headers=export_headers(saved)
     )

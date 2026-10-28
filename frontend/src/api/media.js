@@ -100,7 +100,14 @@ async function requestMediaExport(path, payload) {
   }
   const disposition = response.headers.get('Content-Disposition') || '';
   const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'mediamind-editado.mp4';
-  return { blob: await response.blob(), filename };
+  // O servidor guarda a peça no Acervo e copia para a pasta de destino (EXPORT_ROOT).
+  const exportPath = response.headers.get('X-MediaMind-Export-Path');
+  return {
+    blob: await response.blob(),
+    filename,
+    assetId: response.headers.get('X-MediaMind-Asset-Id') || null,
+    exportPath: exportPath ? decodeURIComponent(exportPath) : null,
+  };
 }
 
 export function exportMediaClip(payload) {

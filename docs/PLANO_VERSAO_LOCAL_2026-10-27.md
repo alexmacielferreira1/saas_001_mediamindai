@@ -52,7 +52,13 @@ Tudo funcionando no computador local, igual ao que vai para o servidor:
      - 3b: Copiloto e Assistente (rápidos, ~10 s);
      - 8b: Roteiro, Automação (pendências e acesso) e Cortes; o 3b erra ids e formato nessas.
    - a rota antiga `/ai/functions/*` (em `ai.py`, arquivo protegido) ficou sem uso; pode ser removida depois.
-5. **Processamentos e exportação na pasta de destino:** exportar clipe/timeline do MMFilm e cortes do ClipsFree gravando no destino (hoje são apagados em 24 h); thumbnails e remoção de fundo locais.
+5. **Processamentos e exportação na pasta de destino:**
+   - feito em 28/10:
+     - toda exportação (Timeline, Workspace, ClipsFree, Recortes e MMFilm) vira Asset do Acervo (`origin: export`);
+     - a exportação ganha uma cópia em `EXPORT_ROOT/<empresa>/<AAAA-MM-DD>/<nome>`, que nunca sobrescreve um arquivo existente;
+     - a tela mostra onde o arquivo ficou salvo.
+   - testado com ffmpeg real: clipe de 8 s e sequência de 10 s salvos em `MEDIAMIND_DESTINO`.
+   - pendente: thumbnails e remoção de fundo gravando no destino.
 6. **Intranet:** acesso pelo nome/IP do servidor na rede (CORS/CSRF para essas origens), instalação e atualização simples, backup local.
 7. **Ingest remoto (futuro):** tela mínima com login e envio que retoma, sem expor o resto.
 
