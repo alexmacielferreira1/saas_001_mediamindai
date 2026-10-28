@@ -25,8 +25,15 @@ def main(source: str, destination: str) -> int:
     raw_segments, _info = model.transcribe(source, word_timestamps=True, vad_filter=True)
     segments = []
     for segment in raw_segments:
+        # O Whisper às vezes marca uma palavra/símbolo com duração zero (início == fim, ex.:
+        # "$" num valor falado); o contrato exige fim posterior ao início. Ajusta 10 ms em
+        # vez de descartar a transcrição inteira.
         words = [
-            {"text": word.word.strip(), "start": float(word.start), "end": float(word.end)}
+            {
+                "text": word.word.strip(),
+                "start": float(word.start),
+                "end": max(float(word.end), float(word.start) + 0.01),
+            }
             for word in segment.words or []
             if word.word.strip()
         ]

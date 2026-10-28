@@ -11,6 +11,9 @@ Every URL that a tenant can configure and that the server will call must pass
 
 ``OUTBOUND_ALLOW_PRIVATE_NETWORKS=true`` relaxes the network rules for local
 development only (e.g. a model server on 127.0.0.1); it is refused in production.
+``OUTBOUND_ALLOWED_HOSTS`` lists exact ``host:porta`` destinations the server administrator
+trusts (e.g. Ollama on ``127.0.0.1:11434`` in the station intranet); it also works in
+production and never opens any other internal address.
 Residual risk: DNS rebinding between this check and the connection is not pinned.
 """
 
@@ -49,6 +52,40 @@ def is_public_address(value: str) -> bool:
     )
 
 
+def allowed_hosts() -> set[tuple[str, int]]:
+    """Pares (host, porta) de OUTBOUND_ALLOWED_HOSTS; itens sem porta válida são ignorados."""
+    pairs = set()
+    for item in get_settings().outbound_allowed_hosts.split(","):
+        host, separator, port = item.strip().lower().rpartition(":")
+        if separator and host and port.isdigit():
+            pairs.add((host.strip("[]").rstrip("."), int(port)))
+    return pairs
+
+
+def is_local_destination(url: str) -> bool:
+    """Destino na própria máquina ou na rede interna (ex.: Ollama), liberado ou não.
+
+    Servidores locais de modelo não têm os serviços de áudio dos provedores públicos: quem
+    chama usa isto para transcrever no próprio servidor (Whisper local).
+    """
+    parts = urlsplit(str(url).strip())
+    host = (parts.hostname or "").rstrip(".").lower()
+    if not host:
+        return False
+    if host in BLOCKED_NAMES or host.endswith(BLOCKED_SUFFIXES):
+        return True
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return False
+    if (host, port) in allowed_hosts():
+        return True
+    try:
+        return not is_public_address(host)
+    except ValueError:
+        return False
+
+
 def validate_outbound_url(url: str) -> str:
     parts = urlsplit(str(url).strip())
     if parts.scheme not in {"http", "https"}:
@@ -63,7 +100,7 @@ def validate_outbound_url(url: str) -> str:
     except ValueError as error:
         raise OutboundUrlRejected("Porta inválida no endereço.") from error
 
-    if get_settings().outbound_allow_private_networks:
+    if get_settings().outbound_allow_private_networks or (host, port) in allowed_hosts():
         return str(url)
 
     if host in BLOCKED_NAMES or host.endswith(BLOCKED_SUFFIXES):

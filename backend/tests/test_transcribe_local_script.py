@@ -61,6 +61,31 @@ def test_script_output_is_readable_by_the_local_adapter(tmp_path, monkeypatch):
     assert result[0].words[1].text == "mundo"
 
 
+def test_zero_length_word_from_whisper_does_not_discard_the_transcript(tmp_path, monkeypatch):
+    # Caso real (reportagem com valor em reais): o Whisper marcou "$" com início == fim.
+    def segments(w):
+        return [
+            w(
+                start=33.0,
+                end=35.0,
+                text=" dois milhões de $ reais",
+                words=[w(word=" dois", start=33.5, end=33.9), w(word="$", start=33.98, end=33.98)],
+            )
+        ]
+
+    module = _load(monkeypatch, segments)
+    source = tmp_path / "video.mp4"
+    source.write_bytes(b"video")
+
+    def run(command, **_kwargs):
+        module.main(command[-2], command[-1])
+
+    monkeypatch.setattr("app.clips.transcription.subprocess.run", run)
+    result = CommandTranscriptionAdapter("transcrever {input} {output}").transcribe(source)
+    assert result[0].words[1].start == 33.98
+    assert result[0].words[1].end > result[0].words[1].start
+
+
 def test_script_fails_instead_of_inventing_text_without_speech(tmp_path, monkeypatch):
     module = _load(monkeypatch, lambda _w: [])
     output = tmp_path / "out.json"

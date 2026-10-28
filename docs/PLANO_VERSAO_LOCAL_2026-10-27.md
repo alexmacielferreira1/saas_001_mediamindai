@@ -36,10 +36,15 @@ Tudo funcionando no computador local, igual ao que vai para o servidor:
 3. **Transcrição local (Whisper):**
    - script-ponte com faster-whisper (ou whisper.cpp) que produz o JSON `segments/words` que o sistema já entende;
    - ligado a Ingest, ClipsFree, legendas e Transcrição do Workspace.
-4. **Llama local (Ollama):** *depende de assumir a configuração de IA, que hoje é do outro chat*
-   - conexão local cadastrada e mapeada por ferramenta (Copiloto, Video Studio, roteiro, análise de cortes);
-   - análise de cortes com transcrição local + análise pelo Llama;
-   - as 6 telas presas em `/ai/functions` ligadas a rotas reais.
+4. **Llama local (Ollama):**
+   - feito em 28/10:
+     - `OUTBOUND_ALLOWED_HOSTS=127.0.0.1:11434` libera só o Ollama, e vale também em produção na intranet;
+     - conexões "Llama local rápido (3b)" e "Llama local preciso (8b)" cadastradas (endereço `http://127.0.0.1:11434/v1`, chave qualquer);
+     - análise de cortes com o Whisper local + Llama.
+   - testado com o Llama real:
+     - o Copiloto (3b) responde;
+     - os cortes (8b) geram 5 cortes numa reportagem de 77 s (em cerca de 3 min).
+   - pendente: as 6 telas presas em `/ai/functions` (Roteiro, Assistente IA, Prompt, Acessos…) ainda precisam ser ligadas a rotas reais.
 5. **Processamentos e exportação na pasta de destino:** exportar clipe/timeline do MMFilm e cortes do ClipsFree gravando no destino (hoje são apagados em 24 h); thumbnails e remoção de fundo locais.
 6. **Intranet:** acesso pelo nome/IP do servidor na rede (CORS/CSRF para essas origens), instalação e atualização simples, backup local.
 7. **Ingest remoto (futuro):** tela mínima com login e envio que retoma, sem expor o resto.

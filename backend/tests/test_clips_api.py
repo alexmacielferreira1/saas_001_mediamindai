@@ -28,7 +28,8 @@ def test_starting_analysis_returns_an_honest_unavailable_state_without_a_provide
     assert response.status_code == 202
     assert response.json()["status"] == "unavailable"
     assert response.json()["candidates"] == []
-    assert "transcrição" in response.json()["message"].lower()
+    # O motivo real chega à tela (antes: sempre "transcrição não configurada").
+    assert response.json()["message"] == "Mídia não encontrada."
 
 
 def test_clip_analysis_is_not_visible_to_other_tenant(permission_client):

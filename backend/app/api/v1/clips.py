@@ -25,6 +25,7 @@ from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session, release_connection
 from app.media.storage import LocalMediaStorage
+from app.security.outbound import is_local_destination
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
 
@@ -162,9 +163,13 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
         # Grava a análise como "queued" e devolve a conexão ao pool durante a transcrição
         # e a análise (minutos); o resultado é gravado numa nova transação.
         release_connection(session)
-        if connection and connection.get("provider") == "anthropic":
-            # O Claude não transcreve áudio: a transcrição usa o transcritor local do
-            # servidor (CLIPS_TRANSCRIBER_COMMAND) e só a análise vai para o Claude.
+        if connection and (
+            connection.get("provider") == "anthropic"
+            or is_local_destination(connection.get("base_url", ""))
+        ):
+            # O Claude e os servidores locais de modelo (Ollama/Llama) não transcrevem áudio:
+            # a transcrição usa o transcritor local do servidor (Whisper) e só a análise vai
+            # para a IA escolhida.
             segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
         elif connection:
             transcriber = RemoteTranscriptionAdapter(connection, api_key)
@@ -214,14 +219,25 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
             candidates,
             [captions_for_candidate(candidate) for candidate in candidates],
         )
-    except (PublicError, TranscriptionUnavailable, FileNotFoundError, KeyError, InvalidToken):
-        service.set_state(
-            record.id,
-            membership.tenant_id,
-            "unavailable",
-            "A transcrição ainda não está configurada para esta empresa. "
-            "Configure um provedor para analisar esta mídia.",
-        )
+    except (
+        PublicError,
+        TranscriptionUnavailable,
+        FileNotFoundError,
+        KeyError,
+        InvalidToken,
+    ) as error:
+        # O motivo real (transcritor sem fala, IA sem resposta válida, chave ilegível...) vai
+        # para a tela; antes tudo virava "transcrição não configurada" e escondia a causa.
+        if isinstance(error, PublicError):
+            reason = error.message
+        elif isinstance(error, TranscriptionUnavailable) and str(error):
+            reason = str(error)
+        else:
+            reason = (
+                "A transcrição ainda não está configurada para esta empresa. "
+                "Configure um provedor para analisar esta mídia."
+            )
+        service.set_state(record.id, membership.tenant_id, "unavailable", reason)
     except Exception:
         # A análise já foi gravada antes do trabalho longo: não deixá-la presa em "queued".
         session.rollback()

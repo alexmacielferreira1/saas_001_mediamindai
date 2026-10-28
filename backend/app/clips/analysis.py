@@ -94,6 +94,30 @@ class CommandAnalysisAdapter:
         )
 
 
+def fit_to_minimum(
+    proposal: dict, segments: list[TranscriptSegment], minimum: float, maximum: float
+) -> dict:
+    """Estende uma proposta curta até o fim das frases seguintes da transcrição real.
+
+    Modelos locais menores costumam indicar só a frase de abertura de um trecho. O fim avança
+    de frase em frase (limites reais da transcrição, nada inventado) até atingir o mínimo; se
+    não couber no máximo ou a mídia acabar antes, a proposta segue como veio e é recusada
+    pela validação.
+    """
+    start, end = float(proposal["start"]), float(proposal["end"])
+    if end - start >= minimum:
+        return proposal
+    for segment in sorted(segments, key=lambda item: item.end):
+        if segment.end <= end:
+            continue
+        end = segment.end
+        if end - start >= minimum:
+            break
+    if minimum <= end - start <= maximum:
+        return {**proposal, "end": end}
+    return proposal
+
+
 class RemoteAnalysisAdapter:
     """Ask the selected AI for proposals, then validate every one locally."""
 
@@ -125,6 +149,8 @@ class RemoteAnalysisAdapter:
             (
                 "Analise esta transcrição temporizada e proponha apenas trechos viralizáveis "
                 f"entre {minimum} e {maximum} segundos. "
+                "Um trecho pode juntar várias frases consecutivas da transcrição: "
+                f"end - start precisa ficar entre {minimum} e {maximum}. "
                 "Retorne JSON estrito, sem Markdown, no formato "
                 '{"candidates":[{"start":number,"end":number,"hook":0-25,"flow":0-25,'
                 '"value":0-25,"shareability":0-25}]}. Não invente palavras ou tempos.\n\n'
@@ -186,9 +212,17 @@ class RemoteAnalysisAdapter:
             raise TranscriptionUnavailable(
                 "A IA selecionada não conseguiu propor cortes verificáveis."
             ) from error
-        try:
-            return [CommandAnalysisAdapter._candidate(proposal, words) for proposal in proposals]
-        except (KeyError, TypeError, ValueError) as error:
+        # Cada proposta é validada sozinha: modelos locais menores às vezes erram uma duração
+        # ou um tempo; descarta-se só a proposta inválida, não a análise inteira.
+        candidates = []
+        for proposal in proposals if isinstance(proposals, list) else []:
+            try:
+                fitted = fit_to_minimum(proposal, segments, minimum, maximum)
+                candidates.append(CommandAnalysisAdapter._candidate(fitted, words))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if proposals and not candidates:
             raise TranscriptionUnavailable(
                 "A IA selecionada retornou cortes sem evidências utilizáveis."
-            ) from error
+            )
+        return candidates
