@@ -25,6 +25,7 @@ from app.core.config import get_settings
 from app.core.errors import PublicError
 from app.db.session import get_session, release_connection
 from app.media.storage import LocalMediaStorage
+from app.media.transcripts import saved_segments
 from app.security.outbound import is_local_destination
 from app.tenancy.context import CurrentSession, get_current_session, require_membership
 from app.tenancy.permissions import require_permission
@@ -160,10 +161,15 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
             asset.data.get("storage_key"), tenant_id=asset.tenant_id
         )
         api_key = decrypt_ai_key(connection) if connection else None
+        # Transcrição já salva (Ingest, Workspace, MMFilm): reaproveita em vez de transcrever
+        # a mesma mídia de novo, que leva minutos e, num provedor pago, custa outra vez.
+        segments = saved_segments(session, membership.tenant_id, asset.id)
         # Grava a análise como "queued" e devolve a conexão ao pool durante a transcrição
         # e a análise (minutos); o resultado é gravado numa nova transação.
         release_connection(session)
-        if connection and (
+        if segments is not None:
+            pass
+        elif connection and (
             connection.get("provider") == "anthropic"
             or is_local_destination(connection.get("base_url", ""))
         ):
@@ -204,7 +210,8 @@ def start_analysis(body: StartAnalysisBody, current: Authenticated, session: DbS
                 work=analyze,
             )
         else:
-            segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
+            if segments is None:
+                segments = CommandTranscriptionAdapter.from_environment().transcribe(source)
             candidates = CommandAnalysisAdapter.from_environment().suggest(segments)
         # Duration constraints are enforced server-side, including command-based providers.
         candidates = [

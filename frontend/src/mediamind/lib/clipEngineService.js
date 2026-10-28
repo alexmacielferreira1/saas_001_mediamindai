@@ -1,5 +1,6 @@
 import { base44 } from '@/api/base44Client';
 import { transcribeMediaAsset } from '../../api/media';
+import { startClipAnalysis } from '../../api/clips';
 import { readLocalDemoSession } from './demoAccess';
 
 // ============================================================================
@@ -40,18 +41,19 @@ export async function listCandidates(assetId) {
   return base44.entities.ClipCandidate.filter({ asset_id: String(assetId) }, '-overall_score', 100);
 }
 
-// Executa análise IA real (backend analisar_clipes_ia). Não usa Math.random.
-export async function runAnalysis({ asset, segments, prompt, purpose, durationLabel, aspectRatio, scoreProfile, interval, empresaId }) {
-  const res = await base44.functions.invoke('analisar_clipes_ia', {
-    asset_id: String(asset.id),
-    asset_title: asset.title || asset.filename || '',
-    segments: segments.map((s) => ({ start_ms: s.start_ms, end_ms: s.end_ms, texto: s.texto, speaker_label: s.speaker_label })),
-    interval_start_ms: interval?.start_ms || 0,
-    interval_end_ms: interval?.end_ms || 0,
-    prompt, purpose, duration_label: durationLabel, aspect_ratio: aspectRatio,
-    score_profile: scoreProfile, empresa_id: empresaId,
-  });
-  return res?.data?.candidates || [];
+// Faixas de duração do Novo corte → mínimo/máximo aceitos pela análise (15 a 60 s no servidor).
+export const DURATION_RANGES = {
+  auto: [15, 60], '<30s': [15, 30], '30-60s': [30, 60], '60-90s': [45, 60], '90s-3min': [45, 60],
+};
+
+// Análise IA real (POST /clips/analyses): reaproveita a transcrição salva do asset e usa a IA
+// escolhida para Cortes automáticos. Devolve os candidatos do servidor; nada é inventado aqui.
+export async function runAnalysis({ asset, prompt = '', purpose = '', durationLabel = 'auto' }) {
+  const [minimum, maximum] = DURATION_RANGES[durationLabel] || DURATION_RANGES.auto;
+  const editorial = [prompt, purpose ? `Finalidade: ${purpose}` : ''].filter(Boolean).join('\n').slice(0, 2000);
+  const result = await startClipAnalysis(asset.media_asset_id || asset.id, null, { minimum, maximum, editorial_prompt: editorial });
+  if (result?.status !== 'completed') throw new Error(result?.message || 'A análise não terminou.');
+  return result.candidates || [];
 }
 
 export async function updateCandidate(id, patch) {

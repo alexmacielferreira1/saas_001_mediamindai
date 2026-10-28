@@ -44,7 +44,14 @@ Tudo funcionando no computador local, igual ao que vai para o servidor:
    - testado com o Llama real:
      - o Copiloto (3b) responde;
      - os cortes (8b) geram 5 cortes numa reportagem de 77 s (em cerca de 3 min).
-   - pendente: as 6 telas presas em `/ai/functions` (Roteiro, Assistente IA, Prompt, Acessos…) ainda precisam ser ligadas a rotas reais.
+   - telas ligadas em 28/10 (rotas `/ai/tools/*` e `/clips/analyses`):
+     - Roteiro IA, Assistente IA, Prompt de pendências, Acesso por IA e Clip Engine;
+     - pedido por áudio transcrito pelo Whisper local;
+     - a análise de cortes reaproveita a transcrição salva.
+   - modelo recomendado por ferramenta (teste real):
+     - 3b: Copiloto e Assistente (rápidos, ~10 s);
+     - 8b: Roteiro, Automação (pendências e acesso) e Cortes; o 3b erra ids e formato nessas.
+   - a rota antiga `/ai/functions/*` (em `ai.py`, arquivo protegido) ficou sem uso; pode ser removida depois.
 5. **Processamentos e exportação na pasta de destino:** exportar clipe/timeline do MMFilm e cortes do ClipsFree gravando no destino (hoje são apagados em 24 h); thumbnails e remoção de fundo locais.
 6. **Intranet:** acesso pelo nome/IP do servidor na rede (CORS/CSRF para essas origens), instalação e atualização simples, backup local.
 7. **Ingest remoto (futuro):** tela mínima com login e envio que retoma, sem expor o resto.
