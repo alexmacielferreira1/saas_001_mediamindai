@@ -58,7 +58,8 @@ Tudo funcionando no computador local, igual ao que vai para o servidor:
      - a exportação ganha uma cópia em `EXPORT_ROOT/<empresa>/<AAAA-MM-DD>/<nome>`, que nunca sobrescreve um arquivo existente;
      - a tela mostra onde o arquivo ficou salvo.
    - testado com ffmpeg real: clipe de 8 s e sequência de 10 s salvos em `MEDIAMIND_DESTINO`.
-   - pendente: thumbnails e remoção de fundo gravando no destino.
+   - thumbnails (Estúdio de Thumbs e Canais Dark): o PNG exportado também vai para o Acervo e para a pasta de destino, testado em 28/10.
+   - a remoção de fundo gera uma camada intermediária da composição; o que vai para o destino é a thumbnail final.
 6. **Intranet:**
    - feito em 28/10: `ENVIRONMENT=intranet` e tela servida pela própria API (mesma origem) com `scripts/intranet.ps1`;
    - guia de instalação, atualização e backup em `docs/INTRANET.md`;

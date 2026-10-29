@@ -11,6 +11,7 @@ import {
   DEFAULT_COLORS, SIMERS_PRESETS, SIMERS_PROGRAMS, createThumbnailDraft, presetFor, validateSimersDraft, normalizePerson, projectPeople, PROGRAM_LOGOS, restoreThumbnailStyle, personNameFromFilename,
 } from '../lib/thumbnailStudio';
 import { exportThumbnailElement, thumbnailBlob } from '../lib/thumbnailExport';
+import { saveExportToLibrary, savedNote } from '../lib/exportSaved';
 import { createLocalCutout } from '../lib/thumbnailImage';
 import { thumbnailLayers } from '../lib/thumbnailRenderer';
 import ThumbnailCanvas from '../components/thumbnails/ThumbnailCanvas';
@@ -600,9 +601,20 @@ function ThumbnailStudioEditor({ darkChannelId = "", darkScriptId = "", workspac
     } catch (e) { setNotice(`Não foi possível concluir o salvamento: ${e.message}`); }
     finally { setSaving(false); }
   }
+  // PNG baixado também vai para o Acervo e para a pasta de destino; se o Acervo recusar, o
+  // download já foi feito e a mensagem diz o motivo.
+  async function keepExport(blob, filename) {
+    try { return savedNote(await saveExportToLibrary(blob, filename)); }
+    catch (error) { return ` · baixado, mas não foi salvo no Acervo: ${error?.message || 'erro desconhecido'}`; }
+  }
+
   async function downloadOne(format) {
     setExporting(true); setNotice('');
-    try { await exportThumbnailElement(format === 'horizontal' ? horizontalRef.current : verticalRef.current, { width: format === 'vertical' ? 1080 : 1920, height: format === 'vertical' ? 1920 : 1080, filename: `thumb-${draft.projectId || 'livre'}-${draft.episode || 'episodio'}-${format}.png` }); }
+    const filename = `thumb-${draft.projectId || 'livre'}-${draft.episode || 'episodio'}-${format}.png`;
+    try {
+      const blob = await exportThumbnailElement(format === 'horizontal' ? horizontalRef.current : verticalRef.current, { width: format === 'vertical' ? 1080 : 1920, height: format === 'vertical' ? 1920 : 1080, filename });
+      setNotice(`PNG exportado: ${filename}${await keepExport(blob, filename)}`);
+    }
     catch (e) { setNotice(e.message); } finally { setExporting(false); }
   }
 
@@ -613,17 +625,21 @@ function ThumbnailStudioEditor({ darkChannelId = "", darkScriptId = "", workspac
     try {
       if (darkChannelMode) {
         if (!darkOutputValid) throw new Error('Use dimensões inteiras de 64 a 7680 px, com área máxima de 20 megapixels.');
-        await exportThumbnailElement(darkPreviewRef.current, {
-          width: outputWidth,
-          height: outputHeight,
-          filename: `thumb-${draft.channelName || 'canal'}-${outputWidth}x${outputHeight}.png`.toLowerCase().replace(/[^a-z0-9.-]+/g, '-'),
-        });
-        setNotice(`PNG exportado em ${outputWidth} × ${outputHeight} px.`);
+        const filename = `thumb-${draft.channelName || 'canal'}-${outputWidth}x${outputHeight}.png`.toLowerCase().replace(/[^a-z0-9.-]+/g, '-');
+        const blob = await exportThumbnailElement(darkPreviewRef.current, { width: outputWidth, height: outputHeight, filename });
+        setNotice(`PNG exportado em ${outputWidth} × ${outputHeight} px.${await keepExport(blob, filename)}`);
         return;
       }
-      if (formats.horizontal) await exportThumbnailElement(horizontalRef.current, { width: 1920, height: 1080, filename: `${slug}-horizontal.png` });
-      if (formats.vertical) await exportThumbnailElement(verticalRef.current, { width: 1080, height: 1920, filename: `${slug}-vertical.png` });
-      setNotice('Imagem(ns) gerada(s) em PNG.');
+      const notes = [];
+      if (formats.horizontal) {
+        const blob = await exportThumbnailElement(horizontalRef.current, { width: 1920, height: 1080, filename: `${slug}-horizontal.png` });
+        notes.push(`horizontal${await keepExport(blob, `${slug}-horizontal.png`)}`);
+      }
+      if (formats.vertical) {
+        const blob = await exportThumbnailElement(verticalRef.current, { width: 1080, height: 1920, filename: `${slug}-vertical.png` });
+        notes.push(`vertical${await keepExport(blob, `${slug}-vertical.png`)}`);
+      }
+      setNotice(`Imagem(ns) gerada(s) em PNG: ${notes.join('; ')}.`);
     } catch (error) {
       setNotice(error.message || 'Não foi possível gerar a imagem.');
     } finally { setExporting(false); }
