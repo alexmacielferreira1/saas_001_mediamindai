@@ -22,7 +22,9 @@ class Settings(BaseSettings):
     app_name: str = PRODUCT
     # Sem padrão (auditoria 2026-10-23, #5): um deploy sem ENVIRONMENT não pode subir como
     # ``local``. Desenvolvimento local define ENVIRONMENT=local no .env (copiado do exemplo).
-    environment: Literal["local", "test", "staging", "production"] | None = None
+    # "intranet": servidor da emissora acessado pela rede interna em HTTP. Sem login demo nem
+    # rotas locais sem autenticação (como production), mas sem exigir HTTPS.
+    environment: Literal["local", "test", "staging", "intranet", "production"] | None = None
     database_url: SecretStr = SecretStr(
         f"postgresql+psycopg://{PRODUCT}:local_dev_only@127.0.0.1:{DEFAULT_DB_PORT}/{PRODUCT}"
     )
@@ -61,6 +63,9 @@ class Settings(BaseSettings):
     # Pasta de referência do Ingest (entrada). Cada empresa usa a subpasta com o próprio slug;
     # o arquivo é copiado para MEDIA_ROOT (destino) e o original na entrada não é alterado.
     ingest_source_root: Path | None = None
+    # Tela já compilada (frontend/dist) servida pela própria API: tela e API na mesma origem,
+    # então o acesso pelo IP ou nome do servidor funciona sem configurar CORS/CSRF por endereço.
+    frontend_dist: Path | None = None
     # Pasta de destino legível das peças prontas (exportações): <EXPORT_ROOT>/<slug>/<data>/.
     # O arquivo também fica no Acervo (MEDIA_ROOT); esta é a cópia para a equipe/servidor.
     export_root: Path | None = None
@@ -75,6 +80,7 @@ class Settings(BaseSettings):
         "csrf_trusted_origins",
         "hub_admin_scopes",
         "ingest_source_root",
+        "frontend_dist",
         "export_root",
         mode="before",
     )
@@ -97,7 +103,8 @@ class Settings(BaseSettings):
     def require_explicit_environment(self) -> "Settings":
         if self.environment is None:
             raise ValueError(
-                "ENVIRONMENT deve ser definido explicitamente (local, test, staging ou production)"
+                "ENVIRONMENT deve ser definido explicitamente "
+                "(local, test, staging, intranet ou production)"
             )
         if self.environment in {"local", "test"}:
             host = (urlsplit(self.database_url.get_secret_value()).hostname or "").lower()
@@ -122,6 +129,22 @@ class Settings(BaseSettings):
         if value is not None and value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value
+
+    @model_validator(mode="after")
+    def validate_intranet(self) -> "Settings":
+        if self.environment != "intranet":
+            return self
+        if self.outbound_allow_private_networks:
+            raise ValueError(
+                "OUTBOUND_ALLOW_PRIVATE_NETWORKS não é permitido em intranet; "
+                "libere só os servidores internos em OUTBOUND_ALLOWED_HOSTS"
+            )
+        if self.ai_secret_key is None or not self.ai_secret_key.get_secret_value().strip():
+            raise ValueError(
+                "AI_SECRET_KEY deve ser configurada em intranet "
+                "(sem ela as chaves de IA cadastradas ficam ilegíveis ao mudar de pasta)"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_production_auth(self) -> "Settings":

@@ -60,7 +60,10 @@ Tudo funcionando no computador local, igual ao que vai para o servidor:
    - testado com ffmpeg real: clipe de 8 s e sequência de 10 s salvos em `MEDIAMIND_DESTINO`.
    - thumbnails (Estúdio de Thumbs e Canais Dark): o PNG exportado também vai para o Acervo e para a pasta de destino, testado em 28/10.
    - a remoção de fundo gera uma camada intermediária da composição; o que vai para o destino é a thumbnail final.
-6. **Intranet:** acesso pelo nome/IP do servidor na rede (CORS/CSRF para essas origens), instalação e atualização simples, backup local.
+6. **Intranet:**
+   - feito em 28/10: `ENVIRONMENT=intranet` e tela servida pela própria API (mesma origem) com `scripts/intranet.ps1`;
+   - guia de instalação, atualização e backup em `docs/INTRANET.md`;
+   - testado pelo IP da rede (`http://172.20.40.95:8080`): a tela abre, o login responde e o login de demonstração fica bloqueado.
 7. **Ingest remoto (futuro):** tela mínima com login e envio que retoma, sem expor o resto.
 
 ## O que instalar fora (no computador/servidor)
